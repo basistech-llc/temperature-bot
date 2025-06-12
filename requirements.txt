@@ -3,3 +3,7 @@ google-auth-oauthlib
 google-auth-httplib2
 google-api-python-client
 websockets
+fastapi
+uvicorn[standard]
+jinja2
+tinydb  # Optional: remove if not using TinyDB

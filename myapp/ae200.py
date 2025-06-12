@@ -119,29 +119,37 @@ class AE200Functions:
     def send(self, address, deviceId, attributes):
         return asyncio.run(self.sendAsync(address, deviceId, attributes))
 
+AE200_ADDRESS = "10.2.1.20"
+ERVS = {'kitchen':'12',
+        'bathroom':'13'}
+
+SPEEDS = {1:'LOW',
+          2: 'MID2',
+          3: 'MID1',
+          4: 'HIGH'}
+
+async def set_erv_speed(device,speed):
+    d = AE200Functions()
+    if speed==0:
+        await d.sendAsync(AE200_ADDRESS, device, { "Drive" : "OFF" })
+    else:
+        await d.sendAsync(AE200_ADDRESS, device, { "Drive": "ON"})
+        await d.sendAsync(AE200_ADDRESS, device, { "FanSpeed": SPEEDS[speed]})
 
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser(description='Set the BasisTech ERVs',
                                      formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('--level', help='Specify level 0-4. 0 is off',type=int,default=0)
-    parser.add_argument('devices',help='Device. Should be "kitchen" or "bathroom"',nargs='+')
+    parser.add_argument('devices',help='Device. Should be "kitchen" or "bathroom"',nargs='*')
     args = parser.parse_args()
 
 
     d = AE200Functions()
-    address = "10.2.1.20"
+    address = AE200_ADDRESS
 
     # Test reading device list
-    #pprint(d.getDevices(address))
-
-    ERVS = {'kitchen':'12',
-            'bathroom':'13'}
-
-    SPEEDS = {1:'LOW',
-              2: 'MID2',
-              3: 'MID1',
-              4: 'HIGH'}
+    pprint(d.getDevices(address))
 
     for dev in args.devices:
         try:

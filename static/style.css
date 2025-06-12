@@ -1,0 +1,14 @@
+body {
+  padding: 2em;
+  font-family: sans-serif;
+}
+
+table {
+  width: 100%;
+}
+
+button {
+  width: 100%;
+  padding: 0.5em;
+  font-weight: bold;
+}
