@@ -36,12 +36,12 @@ AQI_URL = 'https://www.airnowapi.org/aq/observation/zipCode/current/?format=appl
 SECRETS_PATH = join(dirname(__file__), 'secrets.json')
 
 # https://docs.airnowapi.org/aq101
-AQI_TABLE = [ (0,50,'Good','Green','00e400',1),
-              (51, 100,'Moderate','Yellow', 'ffff00', 2),
-              (101, 150,'Unhealthy for Sensitive Groups','Orange','ff7e00', 3),
-              (151, 200,'Unhealthy','Red', 'ff0000', 4),
-              (201, 300,'Very Unhealthy', 'Purple','8f3f97', 5),
-              (301, 500,'Hazardous','Maroon', '7e0023', 6)]
+AQI_TABLE = [ (0,50,'Good','Green','#00e400',1),
+              (51, 100,'Moderate','Yellow', '#ffff00', 2),
+              (101, 150,'Unhealthy for Sensitive Groups','Orange','#ff7e00', 3),
+              (151, 200,'Unhealthy','Red', '#ff0000', 4),
+              (201, 300,'Very Unhealthy', 'Purple','#8f3f97', 5),
+              (301, 500,'Hazardous','Maroon', '#7e0023', 6)]
 
 def get_secrets():
     with open(SECRETS_PATH,'r') as f:
@@ -76,12 +76,16 @@ async def set_speed(req: SpeedRequest):
     await ae200.set_erv_speed( req.unit, req.speed )
     return {"status": "ok", "unit": req.unit, "speed": req.speed}
 
-    
 @api_v1.get('/status')
 async def status():
     aqi = get_aqi()
-    return {'AQI':aqi,
-            'AQI color':aqi_color(aqi)}
+    erv = await ae200.get_erv_status()
+    (name, color) = aqi_color(aqi)
+    return {'AQI':{'value':aqi,
+                   'color':color,
+                   'name':name},
+            'ERV':erv }
+
 
 @api_v1.get("/system_map")
 async def system_map():

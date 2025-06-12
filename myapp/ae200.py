@@ -128,6 +128,27 @@ SPEEDS = {1:'LOW',
           3: 'MID1',
           4: 'HIGH'}
 
+def drive_speed_to_val(drive,speed):
+    if drive=='OFF':
+        return 0 
+    for (n,v) in SPEEDS.items():
+        if speed==v:
+            return n
+    raise InvalidValue(str((drive,speed)))
+
+
+async def get_erv_status():
+    ret = {}
+    d = AE200Functions()
+    for (name,dev) in ERVS.items():
+        data = await d.getDeviceInfoAsync(AE200_ADDRESS, dev)
+        
+        ret[dev] = {'name':name,
+                    'drive':data['Drive'],
+                    'speed':data['FanSpeed'],
+                    'val':drive_speed_to_val(data['Drive'],data['FanSpeed'])}
+    return ret
+        
 async def set_erv_speed(device,speed):
     d = AE200Functions()
     if speed==0:
@@ -135,6 +156,7 @@ async def set_erv_speed(device,speed):
     else:
         await d.sendAsync(AE200_ADDRESS, device, { "Drive": "ON"})
         await d.sendAsync(AE200_ADDRESS, device, { "FanSpeed": SPEEDS[speed]})
+
 
 if __name__ == "__main__":
     import argparse
