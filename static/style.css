@@ -7,6 +7,14 @@ table {
   width: 100%;
 }
 
+th {
+    background-color: beige;
+}
+
+td.speed {
+    text-align: center;
+}
+
 button {
   width: 100%;
   padding: 0.5em;
