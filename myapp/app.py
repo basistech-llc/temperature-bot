@@ -1,62 +1,46 @@
 # app.py
+from os.path import dirname,abspath,join
+import json
+import asyncio
 import logging
+
+from pydantic import BaseModel, conint
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI, Request, APIRouter
+from fastapi.responses import HTMLResponse,FileResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
+from livereload import Server
+
+import requests
+
+from . import ae200
+from . import aqi
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(levelname)s [%(name)s] %(message)s"
 )
 logger = logging.getLogger("air")
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    logger.info("Application is starting up.")
+    yield
+    logger.info("Application is shutting down.")
 
-from fastapi import FastAPI, Request, APIRouter
-from fastapi.responses import HTMLResponse
-from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
-from pydantic import BaseModel, conint
-import json
-from os.path import dirname,abspath,join
-
-import requests
-
-from . import ae200
-
-app = FastAPI()
+app = FastAPI(lifespan=lifespan)
+templates = Jinja2Templates(directory="templates")
 
 # Serve static files
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-# Jinja2 template loader
-templates = Jinja2Templates(directory="templates")
 
 # System map dictionary
 # SYSTEM_MAP = {i: f"Unit {i} - Description" for i in range(21)}
 SYSTEM_MAP = {12:'Kitchen ERV',
               13:'Bathroom ERV'}
-
-AQI_URL = 'https://www.airnowapi.org/aq/observation/zipCode/current/?format=application/json&zipCode=02144&distance=15&API_KEY={API_KEY}'
-SECRETS_PATH = join(dirname(__file__), 'secrets.json')
-
-# https://docs.airnowapi.org/aq101
-AQI_TABLE = [ (0,50,'Good','Green','#00e400',1),
-              (51, 100,'Moderate','Yellow', '#ffff00', 2),
-              (101, 150,'Unhealthy for Sensitive Groups','Orange','#ff7e00', 3),
-              (151, 200,'Unhealthy','Red', '#ff0000', 4),
-              (201, 300,'Very Unhealthy', 'Purple','#8f3f97', 5),
-              (301, 500,'Hazardous','Maroon', '#7e0023', 6)]
-
-def get_secrets():
-    with open(SECRETS_PATH,'r') as f:
-        return json.load(f)
-
-def get_aqi():
-    API_KEY = get_secrets()['AIRNOW_API_KEY']
-    r = requests.get(AQI_URL.format(API_KEY=API_KEY))
-    return r.json()[0]['AQI']
-
-def aqi_color(aqi):
-    for row in AQI_TABLE:
-        if row[0] <= aqi <= row[1]:
-            return (row[2],row[4])
-                     
 
 # Pydantic model with input validation
 class SpeedRequest(BaseModel):
@@ -66,9 +50,6 @@ class SpeedRequest(BaseModel):
 # Versioned API router
 api_v1 = APIRouter(prefix="/api/v1")
 
-@app.on_event("startup")
-async def startup_event():
-    logger.info("Application is starting up.")
 
 @api_v1.post("/set_speed")
 async def set_speed(req: SpeedRequest):
@@ -78,13 +59,10 @@ async def set_speed(req: SpeedRequest):
 
 @api_v1.get('/status')
 async def status():
-    aqi = get_aqi()
-    erv = await ae200.get_erv_status()
-    (name, color) = aqi_color(aqi)
-    return {'AQI':{'value':aqi,
-                   'color':color,
-                   'name':name},
-            'ERV':erv }
+    erv_task = asyncio.create_task(ae200.get_erv_status())
+    aqi_task = asyncio.create_task(aqi.get_aqi_async())
+    erv, aqi_data = await asyncio.gather(erv_task, aqi_task)
+    return {'AQI': aqi_data, 'ERV': erv}
 
 
 @api_v1.get("/system_map")

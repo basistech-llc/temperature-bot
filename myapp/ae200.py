@@ -10,9 +10,6 @@ from websockets.extensions import permessage_deflate
 import xml.etree.ElementTree as ET
 from pprint import pprint
 
-
-
-
 # logging.basicConfig(
 #     format="%(asctime)s %(message)s",
 #     level=logging.INFO,
@@ -130,25 +127,29 @@ SPEEDS = {1:'LOW',
 
 def drive_speed_to_val(drive,speed):
     if drive=='OFF':
-        return 0 
+        return 0
     for (n,v) in SPEEDS.items():
         if speed==v:
             return n
     raise InvalidValue(str((drive,speed)))
 
 
+async def get_dev_status(dev):
+    d = AE200Functions()
+    return await d.getDeviceInfoAsync(AE200_ADDRESS, dev)
+
 async def get_erv_status():
     ret = {}
     d = AE200Functions()
     for (name,dev) in ERVS.items():
         data = await d.getDeviceInfoAsync(AE200_ADDRESS, dev)
-        
+
         ret[dev] = {'name':name,
                     'drive':data['Drive'],
                     'speed':data['FanSpeed'],
                     'val':drive_speed_to_val(data['Drive'],data['FanSpeed'])}
     return ret
-        
+
 async def set_erv_speed(device,speed):
     d = AE200Functions()
     if speed==0:
