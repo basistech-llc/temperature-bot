@@ -3,12 +3,18 @@ ae200 controller.
 Originally from https://github.com/natevoci/ae200
 """
 
-import logging
+# pylint: disable=invalid-name
+# pylint: disable=line-too-long
+# pylint: disable=missing-function-docstring
+# pylint: disable=redefined-outer-name
+
+import json
 import asyncio
-import websockets
-from websockets.extensions import permessage_deflate
 import xml.etree.ElementTree as ET
 from pprint import pprint
+
+import websockets
+from websockets.extensions import permessage_deflate
 
 getUnitsPayload = """<?xml version="1.0" encoding="UTF-8" ?>
 <Packet>
@@ -42,6 +48,7 @@ def getMnetDetails(deviceIds):
 """
 
 class AE200Functions:
+    """ Originally from https://github.com/natevoci/ae200 """
     def __init__(self):
         self._json = None
         self._temp_list = []
@@ -60,6 +67,7 @@ class AE200Functions:
 
             groupList = []
             for r in unitsResultXML.findall('./DatabaseManager/ControlGroup/MnetList/MnetRecord'):
+                #print( ET.tostring(r) )
                 groupList.append({
                     "id": r.get('Group'),
                     "name": r.get('GroupNameWeb')
@@ -86,7 +94,7 @@ class AE200Functions:
             mnetDetailsResultStr = await websocket.recv()
             mnetDetailsResultXML = ET.fromstring(mnetDetailsResultStr)
 
-            result = {}
+            #result = {}
             node = mnetDetailsResultXML.find('./DatabaseManager/Mnet')
 
             await websocket.close()
@@ -127,7 +135,7 @@ def drive_speed_to_val(drive,speed):
     for (n,v) in SPEEDS.items():
         if speed==v:
             return n
-    raise InvalidValue(str((drive,speed)))
+    raise ValueError( str((drive,speed)) )
 
 
 async def get_erv_status():
@@ -182,4 +190,9 @@ if __name__ == "__main__":
     # Display status
     for (name,dev) in ERVS.items():
         data = d.getDeviceInfo(address, dev)
+        print(data)
         print(dev, name,  "drive: ",data['Drive'], "fan speed: ",data['FanSpeed'])
+
+    for dev in devs:
+        did = dev['id']
+        print(did,json.dumps(d.getDeviceInfo(address,did),indent=4))
