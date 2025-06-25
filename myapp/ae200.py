@@ -164,7 +164,8 @@ if __name__ == "__main__":
     address = AE200_ADDRESS
 
     # Test reading device list
-    pprint(d.getDevices(address))
+    devs = d.getDevices(address)
+    pprint(devs)
 
     #for dev in args.devices:
     #    try:
