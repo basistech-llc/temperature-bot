@@ -3,20 +3,18 @@ ae200 controller.
 Originally from https://github.com/natevoci/ae200
 """
 
-import logging
+# pylint: disable=invalid-name
+# pylint: disable=line-too-long
+# pylint: disable=missing-function-docstring
+# pylint: disable=redefined-outer-name
+
+import json
 import asyncio
-import websockets
-from websockets.extensions import permessage_deflate
 import xml.etree.ElementTree as ET
 from pprint import pprint
 
-
-
-
-# logging.basicConfig(
-#     format="%(asctime)s %(message)s",
-#     level=logging.INFO,
-# )
+import websockets
+from websockets.extensions import permessage_deflate
 
 getUnitsPayload = """<?xml version="1.0" encoding="UTF-8" ?>
 <Packet>
@@ -25,6 +23,15 @@ getUnitsPayload = """<?xml version="1.0" encoding="UTF-8" ?>
 <ControlGroup>
 <MnetList />
 </ControlGroup>
+</DatabaseManager>
+</Packet>
+"""
+
+setRequestPayload="""<?xml version="1.0" encoding="UTF-8" ?>
+<Packet>
+<Command>setRequest</Command>
+<DatabaseManager>
+<Mnet Group="{deviceId}" {attrs}  />
 </DatabaseManager>
 </Packet>
 """
@@ -41,6 +48,7 @@ def getMnetDetails(deviceIds):
 """
 
 class AE200Functions:
+    """ Originally from https://github.com/natevoci/ae200 """
     def __init__(self):
         self._json = None
         self._temp_list = []
@@ -59,6 +67,7 @@ class AE200Functions:
 
             groupList = []
             for r in unitsResultXML.findall('./DatabaseManager/ControlGroup/MnetList/MnetRecord'):
+                #print( ET.tostring(r) )
                 groupList.append({
                     "id": r.get('Group'),
                     "name": r.get('GroupNameWeb')
@@ -85,7 +94,7 @@ class AE200Functions:
             mnetDetailsResultStr = await websocket.recv()
             mnetDetailsResultXML = ET.fromstring(mnetDetailsResultStr)
 
-            result = {}
+            #result = {}
             node = mnetDetailsResultXML.find('./DatabaseManager/Mnet')
 
             await websocket.close()
@@ -94,7 +103,6 @@ class AE200Functions:
 
     def getDeviceInfo(self, address, deviceId):
         return asyncio.run(self.getDeviceInfoAsync(address, deviceId))
-
 
     async def sendAsync(self, address, deviceId, attributes):
         async with websockets.connect(
@@ -105,14 +113,7 @@ class AE200Functions:
             ) as websocket:
 
             attrs = " ".join([f'{key}="{attributes[key]}"' for key in attributes])
-            payload = f"""<?xml version="1.0" encoding="UTF-8" ?>
-<Packet>
-<Command>setRequest</Command>
-<DatabaseManager>
-<Mnet Group="{deviceId}" {attrs}  />
-</DatabaseManager>
-</Packet>
-"""
+            payload = setRequestPayload.format(deviceId=deviceId, attrs=attrs)
             await websocket.send(payload)
             await websocket.close()
 
@@ -130,11 +131,11 @@ SPEEDS = {1:'LOW',
 
 def drive_speed_to_val(drive,speed):
     if drive=='OFF':
-        return 0 
+        return 0
     for (n,v) in SPEEDS.items():
         if speed==v:
             return n
-    raise InvalidValue(str((drive,speed)))
+    raise ValueError( str((drive,speed)) )
 
 
 async def get_erv_status():
@@ -142,13 +143,16 @@ async def get_erv_status():
     d = AE200Functions()
     for (name,dev) in ERVS.items():
         data = await d.getDeviceInfoAsync(AE200_ADDRESS, dev)
-        
-        ret[dev] = {'name':name,
-                    'drive':data['Drive'],
-                    'speed':data['FanSpeed'],
-                    'val':drive_speed_to_val(data['Drive'],data['FanSpeed'])}
+
+        try:
+            ret[dev] = {'name':name,
+                        'drive':data['Drive'],
+                        'speed':data['FanSpeed'],
+                        'val':drive_speed_to_val(data['Drive'],data['FanSpeed'])}
+        except KeyError as e:
+            logging.error("KeyError '%s' in data: %s",e,data)
     return ret
-        
+
 async def set_erv_speed(device,speed):
     d = AE200Functions()
     if speed==0:
@@ -171,20 +175,27 @@ if __name__ == "__main__":
     address = AE200_ADDRESS
 
     # Test reading device list
-    pprint(d.getDevices(address))
+    devs = d.getDevices(address)
+    pprint(devs)
 
-    for dev in args.devices:
-        try:
-            num = ERVS[dev.lower()]
-        except KeyError:
-            print(f"invalid device '{dev}' must be {' or '.join(ERVS.keys())}")
-            exit(1)
-        if args.level==0:
-            d.send(address, num, { "Drive": "OFF"})
-        else:
-            d.send(address, num, { "Drive": "ON"})
-            d.send(address, num, { "FanSpeed": SPEEDS[args.level]})
+    #for dev in args.devices:
+    #    try:
+    #        num = ERVS[dev.lower()]
+    #    except KeyError:
+    #        print(f"invalid device '{dev}' must be {' or '.join(ERVS.keys())}")
+    #        exit(1)
+    #    if args.level==0:
+    #        d.send(address, num, { "Drive": "OFF"})
+    #    else:
+    #        d.send(address, num, { "Drive": "ON"})
+    #        d.send(address, num, { "FanSpeed": SPEEDS[args.level]})
 
+    # Display status
     for (name,dev) in ERVS.items():
         data = d.getDeviceInfo(address, dev)
+        print(data)
         print(dev, name,  "drive: ",data['Drive'], "fan speed: ",data['FanSpeed'])
+
+    for dev in devs:
+        did = dev['id']
+        print(did,json.dumps(d.getDeviceInfo(address,did),indent=4))
