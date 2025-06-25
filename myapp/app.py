@@ -63,7 +63,7 @@ def insert_log(request: Request, unit: int, new_value: str, agent: str = "", com
     with sqlite3.connect(DB_PATH) as conn:
         c = conn.cursor()
         c.execute('''
-            INSERT INTO log (logtime, ip, unit, new_value, agent, comment)
+            INSERT INTO log (logtime, ipaddr, unit, new_value, agent, comment)
             VALUES (?, ?, ?, ?, ?, ?)
         ''', (logtime, ip, unit, new_value, agent, comment))
         conn.commit()
@@ -140,18 +140,15 @@ async def status():
 async def system_map():
     return SYSTEM_MAP
 
-# Register the router
-app.include_router(api_v1)
-
-@app.get("/logs")
+@api_v1.get("/logs")
 async def get_logs(
     start: Optional[int] = Query(None),
     end: Optional[int] = Query(None),
     draw: Optional[int] = Query(1),
-    start_row: Optional[int] = Query(0, alias="start"),
-    length: Optional[int] = Query(10),
-):
-    query = "SELECT logtime, ip, unit, new_value, agent, comment FROM log WHERE 1=1"
+    start_row: Optional[int] = Query(0),
+    length: Optional[int] = Query(100) ):
+
+    query = "SELECT logtime, ipaddr, unit, new_value, agent, comment FROM log WHERE 1=1"
     params = []
 
     if start is not None:
@@ -164,6 +161,7 @@ async def get_logs(
     query += " ORDER BY logtime DESC LIMIT ? OFFSET ?"
     params.extend([length, start_row])
 
+    logging.info("query=%s params=%s",query,params)
     with sqlite3.connect(DB_PATH) as conn:
         c = conn.cursor()
         c.execute("SELECT COUNT(*) FROM log")
@@ -190,6 +188,9 @@ async def get_logs(
         "recordsFiltered": total_records,  # Adjust if implementing search
         "data": data
     })
+
+# Register the router
+app.include_router(api_v1)
 
 
 ################################################################

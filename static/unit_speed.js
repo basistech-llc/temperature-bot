@@ -13,6 +13,61 @@ let lastRefreshTime = 0;
 var start = Date.now();
 var forceRefresh = false;
 
+////////////////////////////////////////////////////////////////
+// Log tables
+function getTodayUnixRange() {
+    const now = new Date();
+    const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const end = new Date(start.getTime() + 86400000); // midnight next day
+    return {
+        start: Math.floor(start.getTime() / 1000),
+        end: Math.floor(end.getTime() / 1000)
+    };
+}
+
+let logTable;
+function createLogTable() {
+    const { start, end } = getTodayUnixRange();
+    console.log("start=",start,"end=",end);
+
+    logTable = new Tabulator("#log-table", {
+        layout: "fitColumns",
+        height: "400px",
+        ajaxURL: `/api/v1/logs?start=${start}&end=${end}`,
+        ajaxResponse: function(url, params, response) {
+            return response.data;  // Tabulator expects an array of row objects
+        },
+        columns: [
+            {
+                title: "Time", field: "logtime", sorter: "number",
+                formatter: function(cell) {
+                    const ts = cell.getValue() * 1000;
+                    return new Date(ts).toLocaleString();
+                },
+                widthGrow: 2
+            },
+            { title: "IP Address", field: "ipaddr", widthGrow: 2 },
+            { title: "Unit", field: "unit", hozAlign: "center" },
+            { title: "Speed", field: "new_value", hozAlign: "center" },
+            { title: "Agent", field: "agent", widthGrow: 2 },
+            { title: "Comment", field: "comment", widthGrow: 3 }
+        ],
+        placeholder: "No logs found for today.",
+        pagination: "local",
+        paginationSize: 10
+    });
+}
+
+function refreshLogTable() {
+    const { start, end } = getTodayUnixRange();
+    logTable.setData(`/api/v1/logs?start=${start}&end=${end}`);
+}
+
+
+////////////////////////////////////////////////////////////////
+
+
+// Function called to set the speed
 async function setSpeed(unit, speed) {
     try {
 	const response = await fetch('/api/v1/set_speed', {
@@ -30,6 +85,7 @@ async function setSpeed(unit, speed) {
     }
 }
 
+// Updates the speed in the UI
 function setRadioSpeed(unit, speed) {
     const radio = document.getElementById(`radio-${unit}-${speed}`);
     if (radio) {
@@ -59,6 +115,7 @@ const refreshGrid = () => {
 
     // If it's time to refresh
     if (secondsUntilRefresh <= 0) {
+        refreshLogTable();
         const formData = new FormData();
         fetch(window.location.href + 'api/v1/status', { method: "GET"})
             .then(response => response.json())
@@ -74,7 +131,7 @@ const refreshGrid = () => {
                     setRadioSpeed(unit, d.val);
 		}
 
-		// Update last refresh
+		// Update last refresh time
                 var currentdate = new Date();
                 const zeroPad = (num, places) => String(num).padStart(places, '0');
                 var datetime = "Last Refresh: " +
@@ -97,9 +154,7 @@ const refreshGrid = () => {
             });
     }
     setTimeout(refreshGrid, 1000);    // Schedule next check in 1 second
-
 };
-
 
 async function loadMapAndRenderGrid() {
     console.log("Running loadMapAndRenderGrid()");
@@ -148,4 +203,7 @@ async function loadMapAndRenderGrid() {
 	console.error("Error in loadMapAndRenderGrid():", e);
     }
 }
+
+
+createLogTable();
 window.addEventListener('DOMContentLoaded', loadMapAndRenderGrid);

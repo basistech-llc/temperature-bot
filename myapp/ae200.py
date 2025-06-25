@@ -144,10 +144,13 @@ async def get_erv_status():
     for (name,dev) in ERVS.items():
         data = await d.getDeviceInfoAsync(AE200_ADDRESS, dev)
 
-        ret[dev] = {'name':name,
-                    'drive':data['Drive'],
-                    'speed':data['FanSpeed'],
-                    'val':drive_speed_to_val(data['Drive'],data['FanSpeed'])}
+        try:
+            ret[dev] = {'name':name,
+                        'drive':data['Drive'],
+                        'speed':data['FanSpeed'],
+                        'val':drive_speed_to_val(data['Drive'],data['FanSpeed'])}
+        except KeyError as e:
+            logging.error("KeyError '%s' in data: %s",e,data)
     return ret
 
 async def set_erv_speed(device,speed):
