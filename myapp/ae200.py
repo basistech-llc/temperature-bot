@@ -10,14 +10,6 @@ from websockets.extensions import permessage_deflate
 import xml.etree.ElementTree as ET
 from pprint import pprint
 
-
-
-
-# logging.basicConfig(
-#     format="%(asctime)s %(message)s",
-#     level=logging.INFO,
-# )
-
 getUnitsPayload = """<?xml version="1.0" encoding="UTF-8" ?>
 <Packet>
 <Command>getRequest</Command>
@@ -25,6 +17,15 @@ getUnitsPayload = """<?xml version="1.0" encoding="UTF-8" ?>
 <ControlGroup>
 <MnetList />
 </ControlGroup>
+</DatabaseManager>
+</Packet>
+"""
+
+setRequestPayload="""<?xml version="1.0" encoding="UTF-8" ?>
+<Packet>
+<Command>setRequest</Command>
+<DatabaseManager>
+<Mnet Group="{deviceId}" {attrs}  />
 </DatabaseManager>
 </Packet>
 """
@@ -95,7 +96,6 @@ class AE200Functions:
     def getDeviceInfo(self, address, deviceId):
         return asyncio.run(self.getDeviceInfoAsync(address, deviceId))
 
-
     async def sendAsync(self, address, deviceId, attributes):
         async with websockets.connect(
                 f"ws://{address}/b_xmlproc/",
@@ -105,14 +105,7 @@ class AE200Functions:
             ) as websocket:
 
             attrs = " ".join([f'{key}="{attributes[key]}"' for key in attributes])
-            payload = f"""<?xml version="1.0" encoding="UTF-8" ?>
-<Packet>
-<Command>setRequest</Command>
-<DatabaseManager>
-<Mnet Group="{deviceId}" {attrs}  />
-</DatabaseManager>
-</Packet>
-"""
+            payload = setRequestPayload.format(deviceId=deviceId, attrs=attrs)
             await websocket.send(payload)
             await websocket.close()
 
@@ -130,7 +123,7 @@ SPEEDS = {1:'LOW',
 
 def drive_speed_to_val(drive,speed):
     if drive=='OFF':
-        return 0 
+        return 0
     for (n,v) in SPEEDS.items():
         if speed==v:
             return n
@@ -142,13 +135,13 @@ async def get_erv_status():
     d = AE200Functions()
     for (name,dev) in ERVS.items():
         data = await d.getDeviceInfoAsync(AE200_ADDRESS, dev)
-        
+
         ret[dev] = {'name':name,
                     'drive':data['Drive'],
                     'speed':data['FanSpeed'],
                     'val':drive_speed_to_val(data['Drive'],data['FanSpeed'])}
     return ret
-        
+
 async def set_erv_speed(device,speed):
     d = AE200Functions()
     if speed==0:
@@ -173,18 +166,19 @@ if __name__ == "__main__":
     # Test reading device list
     pprint(d.getDevices(address))
 
-    for dev in args.devices:
-        try:
-            num = ERVS[dev.lower()]
-        except KeyError:
-            print(f"invalid device '{dev}' must be {' or '.join(ERVS.keys())}")
-            exit(1)
-        if args.level==0:
-            d.send(address, num, { "Drive": "OFF"})
-        else:
-            d.send(address, num, { "Drive": "ON"})
-            d.send(address, num, { "FanSpeed": SPEEDS[args.level]})
+    #for dev in args.devices:
+    #    try:
+    #        num = ERVS[dev.lower()]
+    #    except KeyError:
+    #        print(f"invalid device '{dev}' must be {' or '.join(ERVS.keys())}")
+    #        exit(1)
+    #    if args.level==0:
+    #        d.send(address, num, { "Drive": "OFF"})
+    #    else:
+    #        d.send(address, num, { "Drive": "ON"})
+    #        d.send(address, num, { "FanSpeed": SPEEDS[args.level]})
 
+    # Display status
     for (name,dev) in ERVS.items():
         data = d.getDeviceInfo(address, dev)
         print(dev, name,  "drive: ",data['Drive'], "fan speed: ",data['FanSpeed'])

@@ -19,6 +19,8 @@ import requests
 
 from . import ae200
 
+DEV = "/home/simsong" in __file__
+
 app = FastAPI()
 
 # Serve static files
@@ -56,7 +58,7 @@ def aqi_color(aqi):
     for row in AQI_TABLE:
         if row[0] <= aqi <= row[1]:
             return (row[2],row[4])
-                     
+
 
 # Pydantic model with input validation
 class SpeedRequest(BaseModel):
@@ -96,7 +98,9 @@ app.include_router(api_v1)
 
 @app.get("/", response_class=HTMLResponse)
 async def read_index(request: Request):
-    return templates.TemplateResponse("index.html", {"request": request})
+    return templates.TemplateResponse("index.html",
+                                      {"request": request,
+                                       "develop": DEV })
 
 @app.get("/privacy", response_class=HTMLResponse)
 async def read_index(request: Request):
