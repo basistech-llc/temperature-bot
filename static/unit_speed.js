@@ -2,75 +2,72 @@
 
 console.log("unit_speed.js loaded");
 
-// Refresh logic
-
 // Constants
 const REFRESH_INTERVAL = 10; // seconds between refreshes
 const RUNNING_MINUTES = 10; // minutes to run before stopping
+const DEBUG=false;
+const SHOW_REFRESH_COUNTDOWN = false;
 let lastRefreshTime = 0;
+
+// Refresh logic
 var start = Date.now();
 var forceRefresh = false;
 
-const refreshGrid = () => {
-    const now = Date.now();
-    const secondsSinceRefresh = Math.floor((now - lastRefreshTime) / 1000);
-    const secondsUntilRefresh = forceRefresh ? 0 : (REFRESH_INTERVAL - secondsSinceRefresh);
-    
-    // Check if total runtime exceeded
-    if ((now - start) > RUNNING_MINUTES * 60 * 1000) {
-        document.querySelector('#status').innerHTML = 'stopped.';
-        document.querySelector('#grid').innerHTML = 'Please click <b>reload</b> to restart the grid.';
-        return;
-    }
+////////////////////////////////////////////////////////////////
+// Log tables
+function getTodayUnixRange() {
+    const now = new Date();
+    const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const end = new Date(start.getTime() + 86400000); // midnight next day
+    return {
+        start: Math.floor(start.getTime() / 1000),
+        end: Math.floor(end.getTime() / 1000)
+    };
+}
 
-    // Update countdown display
-    document.querySelector('#next-update').innerHTML =
-        secondsUntilRefresh <= 0 ? 'Refreshing...' : `Next refresh in ${secondsUntilRefresh} seconds`;
-    
-    // If it's time to refresh
-    if (secondsUntilRefresh <= 0) {
-        const formData = new FormData();
-        fetch(window.location.href + 'api/v1/status', { method: "GET"})
-            .then(response => response.json())
-            .then(data => {
-                document.getElementById('aqi-value').textContent = data.AQI.value;
-                document.getElementById('aqi-name').textContent = data.AQI.name;
-                document.getElementById('aqi-name').style.backgroundColor = data.AQI.color;
-		
-                // Update the tables with the new data
-		for (const [unit, d] of Object.entries(data.ERV)) {
-		    console.log("unit=",unit,"d=",d);
-		    document.getElementById(`unit-${unit}-status`).textContent = `speed: ${d.val}`;
-		}
+let logTable;
+function createLogTable() {
+    const { start, end } = getTodayUnixRange();
+    console.log("start=",start,"end=",end);
 
-		// Update the countdown
-                var currentdate = new Date();
-                const zeroPad = (num, places) => String(num).padStart(places, '0');
-                var datetime = "Last Refresh: " +
-                    currentdate.getFullYear() + "-" +
-                    zeroPad(currentdate.getMonth() + 1, 2) + "-" +
-                    zeroPad(currentdate.getDate(), 2) + " " +
-                    zeroPad(currentdate.getHours(), 2) + ":" +
-                    zeroPad(currentdate.getMinutes(), 2) + ":" +
-                    zeroPad(currentdate.getSeconds(), 2);
-                document.querySelector('#last-update').innerHTML = datetime;
-		
-                // Update the refresh time
-                lastRefreshTime = now;
-		forceRefresh = false;
-            })
-            .catch(error => {
-                console.error('Error refreshing leaderboard:', error);
-                // Still update the refresh time on error to prevent rapid retries
-                lastRefreshTime = now;
-            });
-    }
-    
-    // Schedule next check in 1 second
-    setTimeout(refreshGrid, 1000);
-};	    
+    logTable = new Tabulator("#log-table", {
+        layout: "fitColumns",
+        height: "400px",
+        ajaxURL: `/api/v1/logs?start=${start}&end=${end}`,
+        ajaxResponse: function(url, params, response) {
+            return response.data;  // Tabulator expects an array of row objects
+        },
+        columns: [
+            {
+                title: "Time", field: "logtime", sorter: "number",
+                formatter: function(cell) {
+                    const ts = cell.getValue() * 1000;
+                    return new Date(ts).toLocaleString();
+                },
+                widthGrow: 2
+            },
+            { title: "IP Address", field: "ipaddr", widthGrow: 2 },
+            { title: "Unit", field: "unit", hozAlign: "center" },
+            { title: "Speed", field: "new_value", hozAlign: "center" },
+            { title: "Agent", field: "agent", widthGrow: 2 },
+            { title: "Comment", field: "comment", widthGrow: 3 }
+        ],
+        placeholder: "No logs found for today.",
+        pagination: "local",
+        paginationSize: 10
+    });
+}
+
+function refreshLogTable() {
+    const { start, end } = getTodayUnixRange();
+    logTable.setData(`/api/v1/logs?start=${start}&end=${end}`);
+}
 
 
+////////////////////////////////////////////////////////////////
+
+
+// Function called to set the speed
 async function setSpeed(unit, speed) {
     try {
 	const response = await fetch('/api/v1/set_speed', {
@@ -88,6 +85,76 @@ async function setSpeed(unit, speed) {
     }
 }
 
+// Updates the speed in the UI
+function setRadioSpeed(unit, speed) {
+    const radio = document.getElementById(`radio-${unit}-${speed}`);
+    if (radio) {
+        radio.checked = true;
+    } else {
+        console.warn(`Radio button for unit ${unit} speed ${speed} not found.`);
+    }
+}
+
+const refreshGrid = () => {
+    const now = Date.now();
+    const secondsSinceRefresh = Math.floor((now - lastRefreshTime) / 1000);
+    const secondsUntilRefresh = forceRefresh ? 0 : (REFRESH_INTERVAL - secondsSinceRefresh);
+
+    // Check if total runtime exceeded
+    if ((now - start) > RUNNING_MINUTES * 60 * 1000) {
+        document.querySelector('#status').innerHTML = 'stopped.';
+        document.querySelector('#grid').innerHTML = 'Please click <b>reload</b> to restart the grid.';
+        return;
+    }
+
+    // Update countdown display
+    if (SHOW_REFRESH_COUNTDOWN) {
+        document.querySelector('#next-update').innerHTML =
+            secondsUntilRefresh <= 0 ? 'Refreshing...' : `Next refresh in ${secondsUntilRefresh} seconds`;
+    }
+
+    // If it's time to refresh
+    if (secondsUntilRefresh <= 0) {
+        refreshLogTable();
+        const formData = new FormData();
+        fetch(window.location.href + 'api/v1/status', { method: "GET"})
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('aqi-value').textContent = data.AQI.value;
+                document.getElementById('aqi-name').textContent = data.AQI.name;
+                document.getElementById('aqi-name').style.backgroundColor = data.AQI.color;
+
+                // Update the tables with the new data
+		for (const [unit, d] of Object.entries(data.ERV)) {
+		    console.log("unit=",unit,"d=",d);
+		    // document.getElementById(`unit-${unit}-status`).textContent = `speed: ${d.val}`;
+                    setRadioSpeed(unit, d.val);
+		}
+
+		// Update last refresh time
+                var currentdate = new Date();
+                const zeroPad = (num, places) => String(num).padStart(places, '0');
+                var datetime = "Last Refresh: " +
+                    currentdate.getFullYear() + "-" +
+                    zeroPad(currentdate.getMonth() + 1, 2) + "-" +
+                    zeroPad(currentdate.getDate(), 2) + " " +
+                    zeroPad(currentdate.getHours(), 2) + ":" +
+                    zeroPad(currentdate.getMinutes(), 2) + ":" +
+                    zeroPad(currentdate.getSeconds(), 2);
+                document.querySelector('#last-update').innerHTML = datetime;
+
+                // Update the refresh time
+                lastRefreshTime = now;
+		forceRefresh = false;
+            })
+            .catch(error => {
+                console.error('Error refreshing leaderboard:', error);
+                // Still update the refresh time on error to prevent rapid retries
+                lastRefreshTime = now;
+            });
+    }
+    setTimeout(refreshGrid, 1000);    // Schedule next check in 1 second
+};
 
 async function loadMapAndRenderGrid() {
     console.log("Running loadMapAndRenderGrid()");
@@ -97,6 +164,9 @@ async function loadMapAndRenderGrid() {
 	console.log("Got system map:", systemMap);
 
 	const speeds = [0, 1, 2, 3, 4];
+        const form = document.createElement('form');
+        document.getElementById('grid').appendChild(form);
+
 	const table = document.createElement('table');
 	table.className = 'pure-table pure-table-bordered';
 
@@ -114,21 +184,26 @@ async function loadMapAndRenderGrid() {
 
 	    speeds.forEach(speed => {
 		const cell = document.createElement('td');
-		const button = document.createElement('button');
-		button.textContent = speed;
-		button.className = 'pure-button';
-		button.onclick = () => setSpeed(unit, speed);
-		cell.appendChild(button);
+                cell.classList.add('speed');
+		const radio = document.createElement('input');
+                radio.type = 'radio';
+                radio.name = `speed-${unit}`;
+                radio.value = speed;
+                radio.id = `radio-${unit}-${speed}`;
+		radio.onclick = () => setSpeed(unit, speed);
+		cell.appendChild(radio);
 		row.appendChild(cell);
 	    });
 
 	    table.appendChild(row);
 	}
-	document.getElementById('grid').appendChild(table);
+	form.appendChild(table);
 	refreshGrid();		// and schedule a refresh
     } catch (e) {
 	console.error("Error in loadMapAndRenderGrid():", e);
     }
 }
-window.addEventListener('DOMContentLoaded', loadMapAndRenderGrid);
 
+
+createLogTable();
+window.addEventListener('DOMContentLoaded', loadMapAndRenderGrid);

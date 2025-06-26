@@ -1,4 +1,5 @@
-__pycache__
-venv
-*.json
+*.db
 *~
+venv/
+__pycache__/
+secrets.json

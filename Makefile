@@ -2,7 +2,7 @@ pytest:
 	. venv/bin/activate ; 	pytest .
 
 pylint:
-	. venv/bin/activate ; pylint app
+	. venv/bin/activate ; pylint myapp
 
 # Create the virtual environment and install both host requirements
 # and the lambda requirements for testing

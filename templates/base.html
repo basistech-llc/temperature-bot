@@ -3,14 +3,24 @@
 <head>
   <title> {% block title %} {{title}} {% endblock %}</title>
   <link rel="stylesheet" href="https://unpkg.com/purecss@3.0.0/build/pure-min.css">
-  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="static/style.css">
+  <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+  {% block head %}
+  {% endblock %}
+
 </head>
 <body>
+    {% if develop %}
+    <div class="top-banner">
+        <p>🚧 This is the develop site. Please use <a href='https://air.basistech.net/'> https://air.basistech.net/</a>.</p>
+    </div>
+    {% endif %}
+
   {% block body %}
   {% endblock %}
   <footer class="pure-u-1 footer">
     <p>
-      &copy; 2025 BasisTech LLC. 
+      &copy; 2025 BasisTech LLC.
       |
       <a href="/docs">Swagger</a>
       |
