@@ -5,3 +5,4 @@ __pycache__/
 secrets.json
 .DS_Store
 activate
+*.egg-info/

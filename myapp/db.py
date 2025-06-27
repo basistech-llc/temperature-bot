@@ -21,7 +21,6 @@ DATABASE_NAME = os.getenv("DATABASE_NAME", str(DB_PATH))
 def connect_db(db_name):
     """Establishes a connection to the SQLite database."""
     conn = sqlite3.connect(db_name)
-    print(f"**** conn(id)={conn(id)}  db={db_name}")
     conn.row_factory = sqlite3.Row      # returns rows as dicts
     conn.execute("PRAGMA foreign_keys = ON;") # Ensure foreign keys are enabled
     return conn
