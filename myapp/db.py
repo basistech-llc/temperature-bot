@@ -47,7 +47,6 @@ async def get_db_connection():
             conn.close()
             logging.debug("Database connection closed for request.")
 
-
 def setup_database(conn, schema_file):
     """
     Creates the necessary tables if they don't exist by reading SQL from a file.
@@ -165,4 +164,3 @@ def fetch_all_sensor_names(conn):
     cursor = conn.cursor()
     cursor.execute("SELECT id, name FROM sensor_names;")
     return cursor.fetchall()
-

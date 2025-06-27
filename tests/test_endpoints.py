@@ -90,8 +90,6 @@ async def client():
     # Clean up the override after the test
     fastapi_app.dependency_overrides.clear()
 
-
-
 # Use pytest-asyncio to allow async test functions
 @pytest.mark.asyncio
 async def test_get_aqi_sync():

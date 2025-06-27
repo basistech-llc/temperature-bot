@@ -4,10 +4,8 @@ app.py
 
 from os.path import abspath
 import os.path
-#import json
 import asyncio
 import logging
-#import time
 import sqlite3
 
 from pydantic import BaseModel, conint
@@ -20,32 +18,45 @@ from fastapi.templating import Jinja2Templates
 from typing import Optional
 
 
-#import requests
-
 from . import ae200
 from . import aqi
-from . import db
+from . import db # Import the db module
 
 DEV = "/home/simsong" in abspath(__file__)
 
-logger = logging.getLogger(__file__)
+logger = logging.getLogger(__file__) # Use __file__ or __name__ for logger names
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info("Application is starting up.")
-    yield
+    """
+    FastAPI lifespan function to manage resources.
+    """
+    logger.info("Application is starting up. DB_PATH=%s",db.DB_PATH)
+    main_db_conn = None
+    try:
+        main_db_conn = db.connect_db(str(db.DB_PATH))
+        # Assuming your main schema file is at 'etc/schema.sql' in the project root
+        main_schema_file_path = os.path.join(os.path.dirname(os.path.dirname(abspath(__file__))), 'etc', 'schema.sql')
+        db.setup_database(main_db_conn, main_schema_file_path)
+        logger.info("Main application database schema ensured at %s.", main_schema_file_path)
+        yield # Application runs
+    except Exception as e:
+        logger.exception("Failed to start application due to database error: %s", e)
+        raise # Re-raise to prevent app from starting
+    finally:
+        if main_db_conn:
+            main_db_conn.close()
+            logger.info("Main database connection closed from lifespan.")
     logger.info("Application is shutting down.")
 
 
-app = FastAPI(lifespan=lifespan)
-templates = Jinja2Templates(directory="templates")
+app = FastAPI(lifespan=lifespan) # Keep only ONE app = FastAPI() instance
+templates = Jinja2Templates(directory="templates") # Moved here for correct association
 
-app = FastAPI()
 
 ################################################################
 
 # System map dictionary
-# SYSTEM_MAP = {i: f"Unit {i} - Description" for i in range(21)}
 SYSTEM_MAP = {12: "Kitchen ERV", 13: "Bathroom ERV"}
 
 # Pydantic model with input validation
@@ -62,6 +73,7 @@ api_v1 = APIRouter(prefix="/api/v1")
 @api_v1.post("/set_speed")
 async def set_speed(request: Request, req: SpeedControl, conn:sqlite3.Connection = Depends(db.get_db_connection)):
     logger.info("set speed: %s", req)
+    # Ensure insert_changelog expects 'conn' as first arg
     db.insert_changelog(conn, request.client.host, req.unit, str(req.speed), "web")
     await ae200.set_erv_speed(req.unit, req.speed)
     return {"status": "ok", "unit": req.unit, "speed": req.speed}
@@ -98,14 +110,14 @@ async def get_logs( start: Optional[int] = Query(None),
     query += " ORDER BY logtime DESC LIMIT ? OFFSET ?"
     params.extend([length, start_row])
 
-    logging.info("query=%s params=%s", query, params)
+    logger.info("query=%s params=%s", query, params) # Changed to logger.info
     c = conn.cursor()
-    c.execute("SELECT COUNT(*) FROM log")
+    c.execute("SELECT COUNT(*) FROM changelog")
     total_records = c.fetchone()[0]
     c.execute(query, params)
     records = c.fetchall()
 
-    data = [ row for row in records ]
+    data = [ dict(row) for row in records ] # Convert Row objects to dicts for JSON serialization
 
     return JSONResponse( {
             "draw": draw,
@@ -124,10 +136,16 @@ app.include_router(api_v1)
 # Serve static files
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-# Jinja2 template loader
-templates = Jinja2Templates(directory="templates")
+# Jinja2 template loader (already defined above `app = FastAPI()`)
+# templates = Jinja2Templates(directory="templates") # This line is now redundant
+# @app.get("/", response_class=HTMLResponse)
+# async def read_index(request: Request):
+#     return templates.TemplateResponse(
+#         "index.html", {"request": request, "develop": DEV}
+#     )
 
 
+# If you have other top-level routes outside the router, include them here:
 @app.get("/", response_class=HTMLResponse)
 async def read_index(request: Request):
     return templates.TemplateResponse(
