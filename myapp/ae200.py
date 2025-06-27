@@ -14,7 +14,7 @@ import json
 import asyncio
 import xml.etree.ElementTree as ET
 import logging
-from pprint import pprint
+#from pprint import pprint
 
 
 getUnitsPayload = """<?xml version="1.0" encoding="UTF-8" ?>

@@ -1,15 +1,6 @@
-google-auth
-google-auth-oauthlib
-google-auth-httplib2
-google-api-python-client
-websockets
 fastapi
-httpx
 uvicorn
-jinja2
 tinydb  # Optional: remove if not using TinyDB
-pytest-asyncio
-livereload
 pylint
 ruff
 uv

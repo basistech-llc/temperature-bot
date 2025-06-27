@@ -1,26 +1,3 @@
-.top-banner {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 40px;
-  background-color: #333;
-  color: #fff;
-  font-size: 14px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-}
-
-#grid {
-    max-width:500px;
-    padding-bottom: 10px;
-}
-
-.top-banner a {color:white; pad-left: 1em;}
-
 body {
   padding-top: 40px; /* Prevent content from hiding under the banner */
   padding-left: 10px;
@@ -43,4 +20,31 @@ button {
   width: 100%;
   padding: 0.5em;
   font-weight: bold;
+}
+
+.top-banner {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 40px;
+  background-color: #333;
+  color: #fff;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.top-banner a {color:white; pad-left: 1em;}
+
+#grid {
+    max-width:500px;
+    padding-bottom: 10px;
+}
+
+#log-table {
+    max-width:1000px;
 }

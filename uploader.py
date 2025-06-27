@@ -3,17 +3,19 @@ import datetime
 
 from os.path import join,dirname,abspath
 import requests
+import google.auth.exceptions
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
-from googleapiclient.errors import HttpError
-from googleapiclient.http import BatchHttpRequest
+#from googleapiclient.errors import HttpError
+#from googleapiclient.http import BatchHttpRequest
 
 # Replace with the path to your service account credentials JSON file
+from hubitat_secret import HUBITAT_GET_ALL_DEVICES_FULL_DETAILS
+
 CLIENT_SECRETS_FILE = join(dirname(abspath(__file__)),
                             'client_secret_332875224115-e7th03rq9r109gd87huniri1mfqqes0v.apps.googleusercontent.com.json')
-from hubitat_secret import HUBITAT_GET_ALL_DEVICES_FULL_DETAILS
 
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 TOKEN_FILE='token.json'

@@ -1,4 +1,4 @@
-from myapp.app import app
+from myapp.main import app
 import logging
 
 # This just imports and exposes `app` for uvicorn or gunicorn

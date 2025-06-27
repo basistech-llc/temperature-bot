@@ -1,11 +1,14 @@
-pytest:
-	. venv/bin/activate ; 	pytest .
+DBFILE = '/var/db/temperature-bot.db'
 
-pylint:
-	. venv/bin/activate ; pylint myapp
+pytest:
+	.venv/bin/pytest .
 
 ruff-check:
-	NO_COLOR=1 ruff check .
+	ruff check .
+
+dump-schema:
+	echo ".schema"| sqlite3 $(DBFILE) > etc/schema.sql
+
 
 # Create the virtual environment and install both host requirements
 # and the lambda requirements for testing
