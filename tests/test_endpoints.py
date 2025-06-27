@@ -51,7 +51,6 @@ def setup_test_database(conn):
         conn.rollback()
 
 # Dependency override for testing with a real in-memory database
-@asynccontextmanager
 async def override_get_db_connection():
     """
     Provides a temporary, in-memory SQLite connection for tests.
@@ -60,6 +59,7 @@ async def override_get_db_connection():
     try:
         # Connect to an in-memory database
         conn = sqlite3.connect(TEST_DB_NAME)
+        print(f"**** conn(id)={conn(id)}  db={TEST_DB_NAME}")
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA foreign_keys = ON;") # Ensure foreign keys are enabled
 
@@ -81,6 +81,7 @@ async def override_get_db_connection():
 async def client():
     """Provides a TestClient with overridden database dependency."""
     # Temporarily override the dependency for this test scope
+    os.environ['IS_TESTING'] = 'True'
     fastapi_app.dependency_overrides[db.get_db_connection] = override_get_db_connection
 
     # The TestClient will now use the overridden dependency

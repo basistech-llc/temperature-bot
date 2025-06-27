@@ -30,23 +30,14 @@ logger = logging.getLogger(__file__) # Use __file__ or __name__ for logger names
 async def lifespan(app: FastAPI):
     """
     FastAPI lifespan function to manage resources.
+    This function now handles only startup/shutdown logging.
+    The database schema is assumed to be managed externally or on first connect.
     """
-    logger.info("Application is starting up. DB_PATH=%s",db.DB_PATH)
-    main_db_conn = None
-    try:
-        main_db_conn = db.connect_db(str(db.DB_PATH))
-        # Assuming your main schema file is at 'etc/schema.sql' in the project root
-        main_schema_file_path = os.path.join(os.path.dirname(os.path.dirname(abspath(__file__))), 'etc', 'schema.sql')
-        db.setup_database(main_db_conn, main_schema_file_path)
-        logger.info("Main application database schema ensured at %s.", main_schema_file_path)
-        yield # Application runs
-    except Exception as e:
-        logger.exception("Failed to start application due to database error: %s", e)
-        raise # Re-raise to prevent app from starting
-    finally:
-        if main_db_conn:
-            main_db_conn.close()
-            logger.info("Main database connection closed from lifespan.")
+    logger.info("Application is starting up.")
+    # No database setup logic needed here as per user's request.
+    # The database is long-lived and its schema is managed externally.
+
+    yield # Application runs
     logger.info("Application is shutting down.")
 
 
