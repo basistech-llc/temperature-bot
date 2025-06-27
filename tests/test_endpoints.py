@@ -6,9 +6,11 @@ import os
 import time
 import pytest_asyncio
 import pytest
+import tempfile # Import tempfile
+import shutil   # Import shutil for directory cleanup
 
 from fastapi.testclient import TestClient
-from contextlib import asynccontextmanager
+# from contextlib import asynccontextmanager # Not directly used on override_get_db_connection
 
 from myapp.main import app as fastapi_app
 import myapp.ae200 as ae200
@@ -21,12 +23,10 @@ logger = logging.getLogger(__name__)
 # Optional: enable pytest-asyncio
 pytest_plugins = ("pytest_asyncio",)
 
-# Define a temporary in-memory database name for tests
-TEST_DB_NAME = ":memory:" # Use in-memory database for speed and isolation
+# Path to the schema file in the parent directory
 SCHEMA_FILE_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'etc', 'schema.sql')
 
 # Override the setup_database function for testing
-# This setup_database will now take a connection and set up schema on it
 def setup_test_database(conn):
     """
     Sets up the database schema on a given connection by reading from schema.sql.
@@ -35,7 +35,7 @@ def setup_test_database(conn):
     try:
         if not os.path.exists(SCHEMA_FILE_PATH):
             logging.error("Schema file not found at %s. Please ensure it exists.", SCHEMA_FILE_PATH)
-            raise FileNotFoundError(f"Schema file not found at {SCHEMA_FILE_PATH}")
+            raise FileNotFoundError("Schema file not found at %s" % SCHEMA_FILE_PATH)
 
         with open(SCHEMA_FILE_PATH, 'r') as f:
             schema_sql = f.read()
@@ -50,16 +50,18 @@ def setup_test_database(conn):
         logging.exception("An unexpected error occurred during test schema setup: %s", e)
         conn.rollback()
 
-# Dependency override for testing with a real in-memory database
-async def override_get_db_connection():
+# Dependency override for testing with a real temporary file database
+# CHANGED: Removed db_path argument; it will now read from os.environ['TEST_DB_NAME']
+async def get_test_db_connection_provider():
     """
-    Provides a temporary, in-memory SQLite connection for tests.
+    Provides a temporary, file-based SQLite connection for tests.
+    This is an async generator compatible with FastAPI's Depends().
     """
     conn = None
     try:
-        # Connect to an in-memory database
-        conn = sqlite3.connect(TEST_DB_NAME)
-        print(f"**** conn(id)={conn(id)}  db={TEST_DB_NAME}")
+        # Connect to the temporary file database using the environment variable
+        temp_db_path = os.environ['TEST_DB_NAME'] # Get the path from the environment
+        conn = sqlite3.connect(temp_db_path)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA foreign_keys = ON;") # Ensure foreign keys are enabled
 
@@ -73,23 +75,38 @@ async def override_get_db_connection():
     finally:
         if conn:
             conn.close()
-            logging.debug("Test database connection closed.")
+            logging.debug("Test database connection closed for %s.", os.environ.get('TEST_DB_NAME', 'unknown'))
 
 # Set up the TestClient and apply the dependency override
-# This part is crucial for making the TestClient use our test DB
 @pytest_asyncio.fixture(scope="function")
 async def client():
-    """Provides a TestClient with overridden database dependency."""
-    # Temporarily override the dependency for this test scope
-    os.environ['IS_TESTING'] = 'True'
-    fastapi_app.dependency_overrides[db.get_db_connection] = override_get_db_connection
+    """Provides a TestClient with overridden database dependency using a temporary file DB."""
+    # Create a temporary directory for the database file
+    with tempfile.TemporaryDirectory() as tmpdir:
+        # Generate a unique path for the database file within the temporary directory
+        temp_db_path = os.path.join(tmpdir, "test_db.sqlite")
+        logging.info("Created temporary database file for test: %s", temp_db_path)
 
-    # The TestClient will now use the overridden dependency
-    with TestClient(fastapi_app) as test_client:
-        yield test_client
+        # Temporarily set an environment variable to tell lifespan we are testing
+        os.environ['IS_TESTING'] = 'True'
+        # IMPORTANT: Also set TEST_DB_NAME environment variable for db.py's get_db_connection
+        # to ensure it connects to this temporary file.
+        os.environ['TEST_DB_NAME'] = temp_db_path
 
-    # Clean up the override after the test
-    fastapi_app.dependency_overrides.clear()
+        # Override the dependency provider.
+        # CHANGED: Assign the async generator function directly, as its signature now matches.
+        fastapi_app.dependency_overrides[db.get_db_connection] = get_test_db_connection_provider
+
+        with TestClient(fastapi_app) as test_client:
+            yield test_client
+
+        # Clean up the override and environment variables after the test
+        fastapi_app.dependency_overrides.clear()
+        os.environ.pop("IS_TESTING", None)
+        os.environ.pop("TEST_DB_NAME", None) # Clean up the TEST_DB_NAME env var
+        # The TemporaryDirectory context manager will automatically delete tmpdir and its contents.
+        logging.info("Cleaned up temporary database directory: %s", tmpdir)
+
 
 # Use pytest-asyncio to allow async test functions
 @pytest.mark.asyncio
@@ -106,10 +123,15 @@ async def test_get_erv_status():
     logging.info(" get_erv_status: %s", result)
 
 @pytest.mark.asyncio
-async def test_status_endpoint():
-    response = await status()
-    assert "AQI" in response and "ERV" in response
-    logging.info(" /status: %s", response)
+async def test_status_endpoint(client): # Needs client to ensure DB setup
+    # If this status endpoint also uses db.get_db_connection,
+    # it will now correctly use the overridden test DB.
+    response = client.get("/api/v1/status")
+    assert response.status_code == 200
+    response_json = response.json()
+    assert "AQI" in response_json and "ERV" in response_json
+    logging.info(" /status: %s", response_json)
+
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("unit,speed", [
@@ -134,18 +156,19 @@ async def test_set_speed_endpoint(mock_set_speed, client, unit, speed):
 
     # Now, you can actually query the test database to verify the changelog entry
     # Get a new connection to the test DB to verify the data
-    with sqlite3.connect(TEST_DB_NAME) as test_conn_verify:
+    # IMPORTANT: Connect to the same temporary file database
+    with sqlite3.connect(os.environ['TEST_DB_NAME']) as test_conn_verify:
         test_conn_verify.row_factory = sqlite3.Row
         cursor = test_conn_verify.cursor()
         # Note: Assumes 'changelog' table is part of your etc/schema.sql
-        cursor.execute("SELECT host, unit, speed, source FROM changelog WHERE unit = ? AND speed = ?;", (unit, str(speed)))
+        cursor.execute("SELECT ipaddr, unit, new_value, agent FROM changelog WHERE unit = ? AND new_value = ?;", (unit, str(speed)))
         changelog_entry = cursor.fetchone()
 
         assert changelog_entry is not None
-        # In test, client.host is 'testclient' by default for TestClient
-        assert changelog_entry['host'] == 'testclient'
+        # In test, client.ipaddr is 'testclient' by default for TestClient
+        assert changelog_entry['ipaddr'] == 'testclient'
         assert changelog_entry['unit'] == unit
-        assert changelog_entry['speed'] == str(speed)
-        assert changelog_entry['source'] == 'web'
+        assert changelog_entry['new_value'] == str(speed)
+        assert changelog_entry['agent'] == 'web'
 
     logging.info("/set_speed (unit=%s, speed=%s):", unit, speed)
