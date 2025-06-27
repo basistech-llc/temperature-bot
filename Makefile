@@ -4,6 +4,9 @@ pytest:
 pylint:
 	. venv/bin/activate ; pylint myapp
 
+ruff-check:
+	NO_COLOR=1 ruff check .
+
 # Create the virtual environment and install both host requirements
 # and the lambda requirements for testing
 venv:

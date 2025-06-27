@@ -13,6 +13,7 @@ from websockets.extensions import permessage_deflate
 import json
 import asyncio
 import xml.etree.ElementTree as ET
+import logging
 from pprint import pprint
 
 
@@ -178,12 +179,9 @@ if __name__ == "__main__":
         description="Set the BasisTech ERVs",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    parser.add_argument(
-        "--level", help="Specify level 0-4. 0 is off", type=int, default=0
-    )
-    parser.add_argument(
-        "devices", help='Device. Should be "kitchen" or "bathroom"', nargs="*"
-    )
+    #parser.add_argument( "--level", help="Specify level 0-4. 0 is off", type=int, default=0 )
+    parser.add_argument( "--json", help='Full JSON dump of the device(s)', action="store_true")
+    parser.add_argument( "devices", help='Device. Can be a number or list of names', nargs="*"    )
     args = parser.parse_args()
 
     d = AE200Functions()
@@ -191,7 +189,13 @@ if __name__ == "__main__":
 
     # Test reading device list
     devs = d.getDevices(address)
-    pprint(devs)
+
+    for dev in devs:
+        did = dev["id"]
+        name = dev['name']
+        # print(did, json.dumps(d.getDeviceInfo(address, did), indent=4))
+        data = d.getDeviceInfo(address, did)
+        print(did, name, "drive: ", data["Drive"], "fan speed: ", data["FanSpeed"])
 
     # for dev in args.devices:
     #    try:
@@ -206,11 +210,14 @@ if __name__ == "__main__":
     #        d.send(address, num, { "FanSpeed": SPEEDS[args.level]})
 
     # Display status
-    for name, dev in ERVS.items():
-        data = d.getDeviceInfo(address, dev)
-        print(data)
-        print(dev, name, "drive: ", data["Drive"], "fan speed: ", data["FanSpeed"])
+    if False:
+        for name, dev in ERVS.items():
+            data = d.getDeviceInfo(address, dev)
+            print(data)
+            print(dev, name, "drive: ", data["Drive"], "fan speed: ", data["FanSpeed"])
 
-    for dev in devs:
-        did = dev["id"]
-        print(did, json.dumps(d.getDeviceInfo(address, did), indent=4))
+    if args.json:
+        for dev in args.devices:
+            did = int(dev)
+            data = d.getDeviceInfo(address, did)
+            print(json.dumps(data,indent=4,default=str))

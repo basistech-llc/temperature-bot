@@ -3,3 +3,5 @@
 venv/
 __pycache__/
 secrets.json
+.DS_Store
+activate

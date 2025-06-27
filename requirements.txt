@@ -11,3 +11,5 @@ tinydb  # Optional: remove if not using TinyDB
 pytest-asyncio
 livereload
 pylint
+ruff
+uv
