@@ -1,0 +1,28 @@
+[project]
+name = "my-fastapi-app" # Replace with your project name
+version = "0.1.0"
+requires-python = ">=3.12" # Add this line
+dependencies = [
+"google-auth",
+"google-auth-oauthlib",
+"google-auth-httplib2",
+"google-api-python-client",
+"websockets",
+"httpx",
+"jinja2",
+"pytest-asyncio",
+"livereload",
+    "fastapi",
+    "uvicorn",
+    "python-dotenv", # If you're using it for environment variables
+    # Add all your direct top-level dependencies here
+]
+
+[build-system]
+requires = ["setuptools>=61.0"] # Or another build backend
+build-backend = "setuptools.build_meta"
+
+[tool.uv]
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["myapp*"]
