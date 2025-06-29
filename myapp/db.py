@@ -9,14 +9,14 @@ import os   # For checking file existence
 logger = logging.getLogger(__name__) # Use __name__ for module-specific logging
 
 DB_PATH = '/var/db/temperature-bot.db'
-LOCAL_DB_PATH = Path(__file__).parent / "storage.db"
+LOCAL_DB_PATH = Path(__file__).parent.parent / "storage.db"
 DB_PATH = Path(DB_PATH) if os.path.exists(DB_PATH) else LOCAL_DB_PATH
 
 # Dummy DATABASE_NAME for development if not set via environment (should be configured in main.py or env)
 # In a real app, DATABASE_NAME should come from an environment variable or app config.
 # For testing, it's overridden.
 DATABASE_NAME = os.getenv("DATABASE_NAME", str(DB_PATH))
-
+logger.error("DATABASE_NAME=%s",DATABASE_NAME)
 
 def connect_db(db_name):
     """Establishes a connection to the SQLite database."""

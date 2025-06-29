@@ -101,9 +101,7 @@ class AE200Functions:
 
             # result = {}
             node = mnetDetailsResultXML.find("./DatabaseManager/Mnet")
-
             await websocket.close()
-
             return node.attrib
 
     def getDeviceInfo(self, address, deviceId):
@@ -126,18 +124,20 @@ class AE200Functions:
 
 
 AE200_ADDRESS = "10.2.1.20"
+ITEMS = 13
 ERVS = {"kitchen": "12", "bathroom": "13"}
-
 SPEEDS = {1: "LOW", 2: "MID2", 3: "MID1", 4: "HIGH"}
 
 
 def drive_speed_to_val(drive, speed):
     if drive == "OFF":
         return 0
+    if speed=="AUTO":
+        return -1
     for n, v in SPEEDS.items():
         if speed == v:
             return n
-    raise ValueError(str((drive, speed)))
+    raise ValueError(f"Unknown drive={drive} speed={speed}")
 
 
 async def get_dev_status(dev):
@@ -145,12 +145,41 @@ async def get_dev_status(dev):
     return await d.getDeviceInfoAsync(AE200_ADDRESS, dev)
 
 
+async def get_system_map():
+    d = AE200Functions()
+    ret = {}
+    all_items = await d.getDevicesAsync(AE200_ADDRESS)
+    for item in all_items:
+        dev = item['id']
+        name = item['name']
+        ret[dev] = name
+    return ret
+
+async def get_all_status():
+    d = AE200Functions()
+    ret = {}
+    all_items = await d.getDevicesAsync(AE200_ADDRESS)
+    for item in all_items:
+        dev = item['id']
+        name = item['name']
+        data = await d.getDeviceInfoAsync(AE200_ADDRESS, dev)
+        try:
+            ret[dev] = {
+                'name': name,
+                'drive': data['Drive'],
+                'speed': data['FanSpeed'],
+                'val': drive_speed_to_val(data['Drive'], data['FanSpeed']),
+            }
+        except KeyError as e:
+            logging.error("KeyError '%s' in data: %s", e, data)
+    return ret
+
+
 async def get_erv_status():
     ret = {}
     d = AE200Functions()
     for name, dev in ERVS.items():
         data = await d.getDeviceInfoAsync(AE200_ADDRESS, dev)
-
         try:
             ret[dev] = {
                 "name": name,

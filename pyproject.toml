@@ -13,6 +13,7 @@ dependencies = [
 "pytest-asyncio",
 "livereload",
     "fastapi",
+    "fastapi[standard]",
     "uvicorn",
     "python-dotenv", # If you're using it for environment variables
     # Add all your direct top-level dependencies here
@@ -26,3 +27,5 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["myapp*"]
+[tool.ruff]
+exclude = ["lib/"]

@@ -7,14 +7,14 @@ ruff-check:
 	ruff check .
 
 dump-schema:
-	echo ".schema"| sqlite3 $(DBFILE) > etc/schema.sql
+	echo ".schema"| sqlite3 $(DBFILE) | grep -v 'CREATE TABLE sqlite_sequence' > etc/schema.sql
+
+
+dev:
+	.venv/bin/fastapi dev
 
 
 # Create the virtual environment and install both host requirements
 # and the lambda requirements for testing
-venv:
-	python3.12 -m venv venv
-	. venv/bin/activate ; pip install --upgrade pip
-	. venv/bin/activate ; pip install -r requirements.txt
-
-.PHONY: venv
+.venv/bin/pytest:
+	uv sync

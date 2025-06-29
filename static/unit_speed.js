@@ -125,7 +125,7 @@ const refreshGrid = () => {
                 document.getElementById('aqi-name').style.backgroundColor = data.AQI.color;
 
                 // Update the tables with the new data
-		for (const [unit, d] of Object.entries(data.ERV)) {
+		for (const [unit, d] of Object.entries(data.ALL)) {
 		    console.log("unit=",unit,"d=",d);
 		    // document.getElementById(`unit-${unit}-status`).textContent = `speed: ${d.val}`;
                     setRadioSpeed(unit, d.val);
@@ -163,7 +163,7 @@ async function loadMapAndRenderGrid() {
 	const systemMap = await res.json();
 	console.log("Got system map:", systemMap);
 
-	const speeds = [0, 1, 2, 3, 4];
+	const speeds = [-1, 0, 1, 2, 3, 4];
         const form = document.createElement('form');
         document.getElementById('grid').appendChild(form);
 

@@ -72,13 +72,14 @@ async def set_speed(request: Request, req: SpeedControl, conn:sqlite3.Connection
 
 @api_v1.get("/status")
 async def status(conn:sqlite3.Connection = Depends(db.get_db_connection)):
-    erv_task = asyncio.create_task(ae200.get_erv_status())
+    all_task = asyncio.create_task(ae200.get_all_status())
     aqi_task = asyncio.create_task(aqi.get_aqi_async())
-    erv, aqi_data = await asyncio.gather(erv_task, aqi_task)
-    return {"AQI": aqi_data, "ERV": erv}
+    all_data, aqi_data = await asyncio.gather(all_task, aqi_task)
+    return {"AQI": aqi_data, "ALL": all_data}
 
 @api_v1.get("/system_map")
 async def system_map():
+    return await ae200.get_system_map()
     return SYSTEM_MAP
 
 
