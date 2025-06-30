@@ -27,6 +27,7 @@ install-ubuntu:
 	sudo snap install ruff
 	curl -LO https://github.com/astral-sh/uv/releases/download/0.1.19/uv-x86_64-unknown-linux-gnu.tar.gz
 	tar -xzf uv-x86_64-unknown-linux-gnu.tar.gz
+	ls -l
 	chmod +x uv
 	sudo mv uv /usr/local/bin/
 
