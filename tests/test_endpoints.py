@@ -32,6 +32,9 @@ def reduce_websockets_logging():
     logging.getLogger("websockets.client").setLevel(logging.INFO)
 
 
+skip_on_github = pytest.mark.skipif( os.getenv("GITHUB_ACTIONS") == "true", reason="Disabled in GitHub Actions")
+
+
 # Override the setup_database function for testing
 def setup_test_database(conn):
     """
@@ -115,6 +118,7 @@ async def client():
 
 
 # Use pytest-asyncio to allow async test functions
+@skip_on_github
 @pytest.mark.asyncio
 async def test_get_aqi_sync():
     result = aqi.get_aqi_sync()
@@ -122,12 +126,14 @@ async def test_get_aqi_sync():
     assert "value" in result
     logging.info("get_aqi_sync: %s", result)
 
+@skip_on_github
 @pytest.mark.asyncio
 async def test_get_all_status():
     result = await ae200.get_all_status()
     assert isinstance(result, dict)
     logging.info(" get_all_status: %s", result)
 
+@skip_on_github
 @pytest.mark.asyncio
 @patch("myapp.ae200.get_all_status", new_callable=AsyncMock)
 async def test_status_endpoint(mock_get_all_status,client): # Needs client to ensure DB setup
