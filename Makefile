@@ -24,7 +24,7 @@ dev:
 	.venv/bin/fastapi dev
 
 install-ubuntu:
-	sudo apt install ruff uv
+	sudo snap install ruff uv
 	sudo apt install node eslint
 
 install-macos:
