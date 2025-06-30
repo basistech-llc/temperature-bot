@@ -25,11 +25,11 @@ dev:
 
 install-ubuntu:
 	sudo snap install ruff
-	sudo apt install node eslint
+
 
 install-macos:
 	brew install ruff uv
-	brew install node eslint
+
 
 
 # Create the virtual environment and install both host requirements
