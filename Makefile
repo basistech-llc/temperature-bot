@@ -42,5 +42,6 @@ eslint:
 # and the lambda requirements for testing
 .venv/pyvenv.cfg:
 	@echo install venv for the development environment
-	which uv
+	echo $PATH
+	uv help || ls -l
 	uv sync
