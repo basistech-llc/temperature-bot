@@ -31,6 +31,8 @@ install-ubuntu:
 	chmod 755 uv
 	sudo mv uv /usr/local/bin/
 	ls -l /usr/local/bin/uv
+	file /usr/local/bin/uv
+	arch
 	/usr/local/bin/uv help
 	find / -name uv -ls
 
