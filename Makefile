@@ -30,6 +30,9 @@ install-ubuntu:
 	mv uv-x86_64-unknown-linux-gnu uv
 	chmod 755 uv
 	sudo mv uv /usr/local/bin/
+	ls -l /usr/local/bin/uv
+	/usr/local/bin/uv help
+	find / -name uv -ls
 
 install-macos:
 	brew install ruff uv
