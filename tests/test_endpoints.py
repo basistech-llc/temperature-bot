@@ -26,6 +26,12 @@ pytest_plugins = ("pytest_asyncio",)
 # Path to the schema file in the parent directory
 SCHEMA_FILE_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'etc', 'schema.sql')
 
+# Disable websockets debug
+@pytest.fixture(autouse=True)
+def reduce_websockets_logging():
+    logging.getLogger("websockets.client").setLevel(logging.INFO)
+
+
 # Override the setup_database function for testing
 def setup_test_database(conn):
     """
@@ -117,10 +123,10 @@ async def test_get_aqi_sync():
     logging.info("get_aqi_sync: %s", result)
 
 @pytest.mark.asyncio
-async def test_get_erv_status():
-    result = await ae200.get_erv_status()
+async def test_get_all_status():
+    result = await ae200.get_all_status()
     assert isinstance(result, dict)
-    logging.info(" get_erv_status: %s", result)
+    logging.info(" get_all_status: %s", result)
 
 @pytest.mark.asyncio
 @patch("myapp.ae200.get_all_status", new_callable=AsyncMock)
