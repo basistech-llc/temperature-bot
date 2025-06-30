@@ -1,6 +1,7 @@
 """
 ae200 controller.
-Originally from https://github.com/natevoci/ae200
+Originally from https://github.com/natevoci/ae200.
+Includes both async routines and synchronouse covers.
 """
 
 # pylint: disable=invalid-name
@@ -14,8 +15,6 @@ import json
 import asyncio
 import xml.etree.ElementTree as ET
 import logging
-#from pprint import pprint
-
 
 getUnitsPayload = """<?xml version="1.0" encoding="UTF-8" ?>
 <Packet>
@@ -53,7 +52,6 @@ def getMnetDetails(deviceIds):
 </DatabaseManager>
 </Packet>
 """
-
 
 class AE200Functions:
     """Originally from https://github.com/natevoci/ae200"""
@@ -123,8 +121,8 @@ class AE200Functions:
         return asyncio.run(self.sendAsync(address, deviceId, attributes))
 
 
+# BasisTech mapping (to go away)
 AE200_ADDRESS = "10.2.1.20"
-ITEMS = 13
 ERVS = {"kitchen": "12", "bathroom": "13"}
 SPEEDS = {1: "LOW", 2: "MID2", 3: "MID1", 4: "HIGH"}
 
@@ -175,24 +173,7 @@ async def get_all_status():
     return ret
 
 
-async def get_erv_status():
-    ret = {}
-    d = AE200Functions()
-    for name, dev in ERVS.items():
-        data = await d.getDeviceInfoAsync(AE200_ADDRESS, dev)
-        try:
-            ret[dev] = {
-                "name": name,
-                "drive": data["Drive"],
-                "speed": data["FanSpeed"],
-                "val": drive_speed_to_val(data["Drive"], data["FanSpeed"]),
-            }
-        except KeyError as e:
-            logging.error("KeyError '%s' in data: %s", e, data)
-    return ret
-
-
-async def set_erv_speed(device, speed):
+async def set_fan_speed(device, speed):
     d = AE200Functions()
     if speed == 0:
         await d.sendAsync(AE200_ADDRESS, device, {"Drive": "OFF"})

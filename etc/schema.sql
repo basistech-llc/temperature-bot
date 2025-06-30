@@ -20,7 +20,8 @@ CREATE TABLE devlog (
     duration INTEGER NOT NULL DEFAULT 1,
     device_id INTEGER NOT NULL,
     temp10x INTEGER,
-    fanspeed INTEGER,
+    fan_speed_status INTEGER,
+    status_json TEXT,
     FOREIGN KEY (device_id) REFERENCES device_names (id)
 );
 

@@ -10,6 +10,8 @@ dependencies = [
 "websockets",
 "httpx",
 "jinja2",
+"pytest",
+"pytest_cov",
 "pytest-asyncio",
 "livereload",
     "fastapi",

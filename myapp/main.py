@@ -65,7 +65,7 @@ async def set_speed(request: Request, req: SpeedControl, conn:sqlite3.Connection
     logger.info("set speed: %s", req)
     # Ensure insert_changelog expects 'conn' as first arg
     db.insert_changelog(conn, request.client.host, req.unit, str(req.speed), "web")
-    await ae200.set_erv_speed(req.unit, req.speed)
+    await ae200.set_fan_speed(req.unit, req.speed)
     return {"status": "ok", "unit": req.unit, "speed": req.speed}
 
 

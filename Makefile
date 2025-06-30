@@ -1,8 +1,14 @@
 DBFILE = '/var/db/temperature-bot.db'
 DEV_DB = './temperature-bot.db'
+REQ := venv/pyvenv.cfg
+PYTHON := .venv/bin/python
 
-pytest:
-	.venv/bin/pytest . --log-cli-level=DEBUG --log-file-level=DEBUG
+pytest: $(REQ)
+	$(PYTHON) -m pytest . --log-cli-level=DEBUG --log-file-level=DEBUG
+
+pytest-coverage: $(REQ)
+	$(PYTHON) -m pytest -v --cov=. --cov-report=xml --cov-report=html tests
+	@echo covreage report in htmlcov/
 
 ruff-check:
 	ruff check .
@@ -17,8 +23,17 @@ make-dev-db:
 dev:
 	.venv/bin/fastapi dev
 
+install-ubuntu:
+	sudo apt install ruff uv
+	sudo apt install node eslint
+
+install-macos:
+	brew install ruff uv
+	brew install node eslint
+
 
 # Create the virtual environment and install both host requirements
 # and the lambda requirements for testing
-.venv/bin/pytest:
+.venv/pyvenv.cfg:
+	@echo install venv for the development environment
 	uv sync

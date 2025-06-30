@@ -143,8 +143,8 @@ async def test_status_endpoint(mock_get_all_status,client): # Needs client to en
     (12, 1),
     (13, 2),
 ])
-@patch("myapp.ae200.set_erv_speed", new_callable=AsyncMock)
-async def test_set_speed_endpoint(mock_set_erv_speed, client, unit, speed):
+@patch("myapp.ae200.set_fan_speed", new_callable=AsyncMock)
+async def test_set_speed_endpoint(mock_set_fan_speed, client, unit, speed):
     response = client.post(
         "/api/v1/set_speed", # Adjust this path to your actual endpoint URL
         json={"unit": unit, "speed": speed} # Send data as JSON body
@@ -155,8 +155,8 @@ async def test_set_speed_endpoint(mock_set_erv_speed, client, unit, speed):
     assert response_json["unit"] == unit
     assert response_json["speed"] == speed
 
-    # This verifies that myapp.ae200.set_erv_speed is called once with (unit,speed) as arguments
-    mock_set_erv_speed.assert_awaited_once_with(unit, speed)
+    # This verifies that myapp.ae200.set_fan_speed is called once with (unit,speed) as arguments
+    mock_set_fan_speed.assert_awaited_once_with(unit, speed)
 
     # Now, you can actually query the test database to verify the changelog entry
     # Get a new connection to the test DB to verify the data
