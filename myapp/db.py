@@ -16,7 +16,7 @@ DB_PATH = Path(DB_PATH) if os.path.exists(DB_PATH) else LOCAL_DB_PATH
 # In a real app, DATABASE_NAME should come from an environment variable or app config.
 # For testing, it's overridden.
 DATABASE_NAME = os.getenv("DATABASE_NAME", str(DB_PATH))
-logger.error("DATABASE_NAME=%s",DATABASE_NAME)
+logger.debug("DATABASE_NAME=%s",DATABASE_NAME)
 
 def connect_db(db_name):
     """Establishes a connection to the SQLite database."""
@@ -69,23 +69,23 @@ def setup_database(conn, schema_file):
         raise
 
 
-def get_or_create_sensor_id(conn, sensor_name):
+def get_or_create_device_id(conn, device_name):
     """
-    Retrieves the ID for a given sensor name. If the sensor name does not exist
-    in the sensor_names table, it inserts it and returns the newly generated ID.
+    Retrieves the ID for a given device name. If the device name does not exist
+    in the device_names table, it inserts it and returns the newly generated ID.
     """
     cursor = conn.cursor()
 
     try:
-        # Attempt to insert the sensor name.
+        # Attempt to insert the device name.
         # IGNORE ensures that if it already exists (due to UNIQUE constraint),
         # no error is raised and nothing new is inserted.
-        cursor.execute("INSERT OR IGNORE INTO sensor_names (name) VALUES (?);", (sensor_name,))
+        cursor.execute("INSERT OR IGNORE INTO device_names (name) VALUES (?);", (device_name,))
         conn.commit() # Commit the insert operation
 
-        # Now, retrieve the ID of the sensor name, whether it was just inserted
+        # Now, retrieve the ID of the device name, whether it was just inserted
         # or already existed.
-        cursor.execute("SELECT id FROM sensor_names WHERE name = ?;", (sensor_name,))
+        cursor.execute("SELECT id FROM device_names WHERE name = ?;", (device_name,))
         result = cursor.fetchone()
 
         if result:
@@ -93,33 +93,33 @@ def get_or_create_sensor_id(conn, sensor_name):
         else:
             # This case should ideally not happen if INSERT OR IGNORE works as expected
             # and SELECT follows immediately, but it's good for robustness.
-            logging.error("Could not retrieve ID for sensor name: %s", sensor_name)
-            raise ValueError("Could not retrieve ID for sensor name: %s" % sensor_name) # Using %s for consistency
+            logging.error("Could not retrieve ID for device name: %s", device_name)
+            raise ValueError("Could not retrieve ID for device name: %s" % device_name) # Using %s for consistency
 
     except sqlite3.Error as e:
-        logging.error("Database error in get_or_create_sensor_id: %s", e)
+        logging.error("Database error in get_or_create_device_id: %s", e)
         conn.rollback() # Rollback any partial transaction
         raise # Re-raise the exception
 
 
-def insert_templog_entry(conn, sensor_name, temp10x, logtime=None):
+def insert_templog_entry(conn, device_name, temp10x, logtime=None):
     """
-    Inserts an entry into the templog table, handling the sensor_id lookup/creation.
+    Inserts an entry into the templog table, handling the device_id lookup/creation.
     """
     if logtime is None:
         logtime = int(time.time()) # Use current Unix timestamp if not provided
 
     try:
-        # Get or create the sensor_id
-        sensor_id = get_or_create_sensor_id(conn, sensor_name)
+        # Get or create the device_id
+        device_id = get_or_create_device_id(conn, device_name)
 
-        # Insert into templog using the obtained sensor_id
+        # Insert into templog using the obtained device_id
         cursor = conn.cursor()
-        cursor.execute("INSERT INTO templog (logtime, sensor_id, temp10x) VALUES (?, ?, ?);",
-                       (logtime, sensor_id, temp10x) )
+        cursor.execute("INSERT INTO templog (logtime, device_id, temp10x) VALUES (?, ?, ?);",
+                       (logtime, device_id, temp10x) )
         conn.commit()
         # Changed to logging.info
-        logging.info("Inserted templog entry: sensor='%s' (ID: %s), temp10x=%s", sensor_name, sensor_id, temp10x)
+        logging.info("Inserted templog entry: device='%s' (ID: %s), temp10x=%s", device_name, device_id, temp10x)
     except sqlite3.Error as e:
         logging.error("Database error in insert_templog_entry: %s", e)
         conn.rollback() # Rollback any partial transaction
@@ -139,28 +139,28 @@ def insert_changelog( conn, ipaddr:str, unit: int, new_value: str, agent: str = 
         (logtime, ipaddr, unit, new_value, agent, comment))
     conn.commit()
 
-def fetch_all_templog_with_sensor_names(conn):
+def fetch_all_templog_with_device_names(conn):
     """
-    Fetches all templog entries, joining with sensor_names to display the sensor string.
+    Fetches all templog entries, joining with device_names to display the device string.
     """
     cursor = conn.cursor()
     cursor.execute("""
         SELECT
             t.id,
             t.logtime,
-            s.name AS sensor_name,
+            s.name AS device_name,
             t.temp10x
         FROM
             templog t
         JOIN
-            sensor_names s ON t.sensor_id = s.id
+            device_names s ON t.device_id = s.id
         ORDER BY
             t.logtime DESC;
     """)
     return cursor.fetchall()
 
-def fetch_all_sensor_names(conn):
-    """Fetches all sensor names and their IDs."""
+def fetch_all_device_names(conn):
+    """Fetches all device names and their IDs."""
     cursor = conn.cursor()
-    cursor.execute("SELECT id, name FROM sensor_names;")
+    cursor.execute("SELECT id, name FROM device_names;")
     return cursor.fetchall()

@@ -1,13 +1,13 @@
-import asyncio
+#import asyncio
 import logging
 from unittest.mock import AsyncMock, patch
 import sqlite3
 import os
-import time
+#import time
 import pytest_asyncio
 import pytest
 import tempfile # Import tempfile
-import shutil   # Import shutil for directory cleanup
+#import shutil   # Import shutil for directory cleanup
 
 from fastapi.testclient import TestClient
 # from contextlib import asynccontextmanager # Not directly used on override_get_db_connection
@@ -16,7 +16,7 @@ from myapp.main import app as fastapi_app
 import myapp.ae200 as ae200
 import myapp.aqi as aqi
 import myapp.db as db
-from myapp.main import status, set_speed, SpeedControl
+#from myapp.main import status, set_speed, SpeedControl
 
 logger = logging.getLogger(__name__)
 
@@ -123,13 +123,17 @@ async def test_get_erv_status():
     logging.info(" get_erv_status: %s", result)
 
 @pytest.mark.asyncio
-async def test_status_endpoint(client): # Needs client to ensure DB setup
+@patch("myapp.ae200.get_all_status", new_callable=AsyncMock)
+async def test_status_endpoint(mock_get_all_status,client): # Needs client to ensure DB setup
+    mock_get_all_status.return_value = [{'name':'test-device','drive':'ON','speed':'HIGH','val':4}]
+
     # If this status endpoint also uses db.get_db_connection,
     # it will now correctly use the overridden test DB.
     response = client.get("/api/v1/status")
     assert response.status_code == 200
     response_json = response.json()
-    assert "AQI" in response_json and "ERV" in response_json
+    assert "ALL" in response_json
+    assert "AQI" in response_json
     logging.info(" /status: %s", response_json)
 
 
@@ -140,7 +144,7 @@ async def test_status_endpoint(client): # Needs client to ensure DB setup
     (13, 2),
 ])
 @patch("myapp.ae200.set_erv_speed", new_callable=AsyncMock)
-async def test_set_speed_endpoint(mock_set_speed, client, unit, speed):
+async def test_set_speed_endpoint(mock_set_erv_speed, client, unit, speed):
     response = client.post(
         "/api/v1/set_speed", # Adjust this path to your actual endpoint URL
         json={"unit": unit, "speed": speed} # Send data as JSON body
@@ -152,7 +156,7 @@ async def test_set_speed_endpoint(mock_set_speed, client, unit, speed):
     assert response_json["speed"] == speed
 
     # This verifies that myapp.ae200.set_erv_speed is called once with (unit,speed) as arguments
-    mock_set_speed.assert_awaited_once_with(unit, speed)
+    mock_set_erv_speed.assert_awaited_once_with(unit, speed)
 
     # Now, you can actually query the test database to verify the changelog entry
     # Get a new connection to the test DB to verify the data

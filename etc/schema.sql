@@ -3,25 +3,26 @@ CREATE TABLE changelog (
                     logtime INTEGER NOT NULL,
                     ipaddr TEXT NOT NULL,
                     unit INTEGER NOT NULL,
+                    current_values TEXT,
                     new_value TEXT,
                     agent TEXT,
                     comment TEXT
                 );
 
-CREATE TABLE sqlite_sequence(name,seq);
-
-CREATE TABLE sensor_names (
+CREATE TABLE device_names (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT UNIQUE NOT NULL
 );
 
-CREATE TABLE templog (
+CREATE TABLE devlog (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     logtime INTEGER NOT NULL,
-    sensor_id INTEGER NOT NULL,
+    duration INTEGER NOT NULL DEFAULT 1,
+    device_id INTEGER NOT NULL,
     temp10x INTEGER,
-    FOREIGN KEY (sensor_id) REFERENCES sensor_names (id)
+    fanspeed INTEGER,
+    FOREIGN KEY (device_id) REFERENCES device_names (id)
 );
 
-CREATE INDEX idx_templog_logtime ON templog (logtime);
-CREATE INDEX idx_templog_sensor_id ON templog (sensor_id);
+CREATE INDEX idx_templog_logtime ON devlog (logtime);
+CREATE INDEX idx_templog_device_id ON devlog (device_id);

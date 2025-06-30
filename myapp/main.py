@@ -3,7 +3,6 @@ app.py
 """
 
 from os.path import abspath
-import os.path
 import asyncio
 import logging
 import sqlite3
@@ -11,7 +10,7 @@ import sqlite3
 from pydantic import BaseModel, conint
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Depends, HTTPException, Request, APIRouter, Query
+from fastapi import FastAPI, Depends, Request, APIRouter, Query
 from fastapi.responses import JSONResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
