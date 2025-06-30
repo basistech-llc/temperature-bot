@@ -25,7 +25,6 @@ dev:
 
 install-ubuntu:
 	sudo snap install ruff
-	sudo apt install uv
 	sudo apt install node eslint
 
 install-macos:
