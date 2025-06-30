@@ -31,8 +31,6 @@ install-ubuntu:
 	chmod +x uv
 	sudo mv uv /usr/local/bin/
 
-
-
 install-macos:
 	brew install ruff uv
 
@@ -44,4 +42,5 @@ eslint:
 # and the lambda requirements for testing
 .venv/pyvenv.cfg:
 	@echo install venv for the development environment
+	which uv
 	uv sync
