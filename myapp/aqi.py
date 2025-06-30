@@ -22,6 +22,10 @@ def get_secrets():
     with open(SECRETS_PATH, "r") as f:
         return json.load(f)
 
+def get_secret(name):
+    if name in os.environ:
+        return os.environ[name]
+    return get_secrets()[name]
 
 def aqi_color(aqi):
     for row in AQI_TABLE:
@@ -30,7 +34,7 @@ def aqi_color(aqi):
 
 
 def get_aqi_sync():
-    API_KEY = get_secrets()["AIRNOW_API_KEY"]
+    API_KEY = get_secret('AIRNOW_API_KEY')
     url = AQI_URL.format(API_KEY=API_KEY)
     r = requests.get(url)
     aqi = r.json()[0]["AQI"]
