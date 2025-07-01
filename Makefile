@@ -28,6 +28,7 @@ install-ubuntu:
 	curl -LO https://github.com/astral-sh/uv/releases/download/0.1.19/uv-x86_64-unknown-linux-gnu.tar.gz
 	tar -xzf uv-x86_64-unknown-linux-gnu.tar.gz
 	sudo mv uv-x86_64-unknown-linux-gnu/uv /usr/local/bin/uv
+	uv --version
 
 install-macos:
 	curl -LsSf https://astral.sh/uv/install.sh | sh
