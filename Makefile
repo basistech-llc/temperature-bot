@@ -51,4 +51,5 @@ eslint:
 	@echo install venv for the development environment
 	echo $$PATH
 	uv venv
-	uv pip sync pyproject.toml --group dev
+	uv pip sync pyproject.toml
+	uv add --dev pytest
