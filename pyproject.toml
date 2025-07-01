@@ -34,7 +34,8 @@ build-backend = "setuptools.build_meta"
 
 dev-dependencies = [
  "ruff",
- "ruff-lsp"
+ "ruff-lsp",
+ "pytest"
 ]
 [tool.setuptools.packages.find]
 where = ["."]
