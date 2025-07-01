@@ -15,6 +15,7 @@ dependencies = [
 "pytest-asyncio",
 "pluggy",
 "pygments",
+"iniconfig",
 "livereload",
     "fastapi",
     "fastapi[standard]",
