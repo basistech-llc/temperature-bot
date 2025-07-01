@@ -1,45 +1,43 @@
 [project]
 name = "my-fastapi-app" # Replace with your project name
 version = "0.1.0"
-requires-python = ">=3.12" # Add this line
+requires-python = ">=3.12"
 dependencies = [
-"coverage",
-"starlette",
-"google-auth",
-"google-auth-oauthlib",
-"google-auth-httplib2",
-"google-api-python-client",
-"websockets",
-"httpx",
-"jinja2",
-"pytest",
-"pytest_cov",
-"pytest-asyncio",
-"pluggy",
-"pygments",
-"pydantic",
-"iniconfig",
-"livereload",
+    "starlette",
+    "google-auth",
+    "google-auth-oauthlib",
+    "google-auth-httplib2",
+    "google-api-python-client",
+    "websockets",
+    "httpx",
+    "jinja2",
     "fastapi",
     "fastapi[standard]",
     "uvicorn",
     "python-dotenv", # If you're using it for environment variables
-    # Add all your direct top-level dependencies here
+    # Add all your direct top-level production dependencies here
 ]
 
 [build-system]
 requires = ["setuptools>=61.0"] # Or another build backend
 build-backend = "setuptools.build_meta"
 
-[tool.uv]
-
-dev-dependencies = [
- "ruff",
- "ruff-lsp",
- "pytest"
+# This section is for development-specific dependencies,
+# adhering to the new [dependency-groups] standard.
+[dependency-groups]
+dev = [
+    "ruff",
+    "ruff-lsp",
+    "pytest",
+    "pytest-cov",
+    "pytest-asyncio",
+    "coverage", # Often used with pytest-cov, so keep it here
+    "livereload", # If this is only for development
 ]
+
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["myapp*"]
+
 [tool.ruff]
 exclude = ["lib/"]
