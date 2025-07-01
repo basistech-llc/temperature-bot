@@ -13,6 +13,7 @@ dependencies = [
 "pytest",
 "pytest_cov",
 "pytest-asyncio",
+"pluggy",
 "livereload",
     "fastapi",
     "fastapi[standard]",
