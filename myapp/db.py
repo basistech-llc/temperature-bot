@@ -1,6 +1,8 @@
 import sqlite3
 import time # For logtime timestamps
 import logging
+import json
+import math
 from pathlib import Path
 import os   # For checking file existence
 # Removed HTTPException and status import as they are not used directly here
@@ -68,7 +70,6 @@ def setup_database(conn, schema_file):
         logging.exception("An unexpected error occurred during schema setup: %s", e)
         raise
 
-
 def get_or_create_device_id(conn, device_name):
     """
     Retrieves the ID for a given device name. If the device name does not exist
@@ -87,6 +88,7 @@ def get_or_create_device_id(conn, device_name):
         # or already existed.
         cursor.execute("SELECT id FROM device_names WHERE name = ?;", (device_name,))
         result = cursor.fetchone()
+        logging.error("result=%s",result)
 
         if result:
             return result['id']
@@ -101,57 +103,16 @@ def get_or_create_device_id(conn, device_name):
         conn.rollback() # Rollback any partial transaction
         raise # Re-raise the exception
 
-
-def insert_templog_entry(conn, device_name, temp10x, logtime=None):
+def fetch_all_devlog_with_device_names(conn):
     """
-    Inserts an entry into the templog table, handling the device_id lookup/creation.
-    """
-    if logtime is None:
-        logtime = int(time.time()) # Use current Unix timestamp if not provided
-
-    try:
-        # Get or create the device_id
-        device_id = get_or_create_device_id(conn, device_name)
-
-        # Insert into templog using the obtained device_id
-        cursor = conn.cursor()
-        cursor.execute("INSERT INTO templog (logtime, device_id, temp10x) VALUES (?, ?, ?);",
-                       (logtime, device_id, temp10x) )
-        conn.commit()
-        # Changed to logging.info
-        logging.info("Inserted templog entry: device='%s' (ID: %s), temp10x=%s", device_name, device_id, temp10x)
-    except sqlite3.Error as e:
-        logging.error("Database error in insert_templog_entry: %s", e)
-        conn.rollback() # Rollback any partial transaction
-    except ValueError as e:
-        logging.error("Error: %s", e)
-        conn.rollback()
-
-
-def insert_changelog( conn, ipaddr:str, unit: int, new_value: str, agent: str = "", comment: str = ""):
-    logtime = int(time.time())
-    c = conn.cursor()
-    c.execute(
-        """
-        INSERT INTO changelog (logtime, ipaddr, unit, new_value, agent, comment)
-        VALUES (?, ?, ?, ?, ?, ?)
-        """,
-        (logtime, ipaddr, unit, new_value, agent, comment))
-    conn.commit()
-
-def fetch_all_templog_with_device_names(conn):
-    """
-    Fetches all templog entries, joining with device_names to display the device string.
+    Fetches all devlog entries, joining with device_names to display the device string.
     """
     cursor = conn.cursor()
     cursor.execute("""
         SELECT
-            t.id,
-            t.logtime,
-            s.name AS device_name,
-            t.temp10x
+            t.id, t.logtime, s.name AS device_name, t.temp10x
         FROM
-            templog t
+            devlog t
         JOIN
             device_names s ON t.device_id = s.id
         ORDER BY
@@ -164,3 +125,58 @@ def fetch_all_device_names(conn):
     cursor = conn.cursor()
     cursor.execute("SELECT id, name FROM device_names;")
     return cursor.fetchall()
+
+# Insertion
+
+def insert_devlog_entry(conn, device_name: str, temp=None, statusdict=None, logtime=None, force=False):
+    """
+    :param conn: database connection
+    :param device_name: the device
+    :param temp10x: (Temperature in C) * 10
+    :param statusdict: If provided, a dictionary that will be written to the database as status_json (but not if extending)
+    :param logtime: The time_t of the log. If not provided, it's now!
+    :param force: If true, forces a new entry (rather than an extension)
+    Inserts an entry into the devlog table, handling the device_id lookup/creation and automatic extension.
+    """
+    temp10x = int(math.floor(float(temp)*10+0.5))
+    c = conn.cursor()
+    if logtime is None:
+        logtime = int(time.time()) # Use current Unix timestamp if not provided
+    try:
+        # Get or create the device_id
+        device_id = get_or_create_device_id(conn, device_name)
+
+        # Get the most recent temperature entry. If temperature matches and we are not forcing, extend it.
+        c.execute("SELECT * from devlog where device_id=? order by logtime DESC limit 1",(device_id,))
+        r = c.fetchone()
+        if r and r['temp10x']==temp10x and not force:
+            duration = logtime-r['logtime']+1
+            logging.debug("update id=%s duration=%s",device_id,duration)
+            c.execute("UPDATE devlog set duration=? where id=?",(duration, device_id))
+            conn.commit()
+            return
+
+        # Insert into devlog using the obtained device_id
+        logging.debug("insert id=%s",device_id)
+        c.execute("INSERT INTO devlog (logtime, device_id, temp10x, status_json) VALUES (?, ?, ?, ?);",
+                       (logtime, device_id, temp10x, json.dumps(statusdict,default=str) if statusdict else None))
+        conn.commit()
+        # Changed to logging.info
+        logging.info("Inserted devlog entry: device='%s' (ID: %s), temp10x=%s", device_name, device_id, temp10x)
+    except sqlite3.Error as e:
+        logging.error("Database error in insert_devlog_entry: %s", e)
+        conn.rollback() # Rollback any partial transaction
+    except ValueError as e:
+        logging.error("Error: %s", e)
+        conn.rollback()
+
+def insert_changelog( conn, ipaddr:str, unit: int, new_value: str, agent: str = "", comment: str = ""):
+    logtime = int(time.time())
+    c = conn.cursor()
+    c.execute(
+        """
+        INSERT INTO changelog (logtime, ipaddr, unit, new_value, agent, comment)
+        VALUES (?, ?, ?, ?, ?, ?)
+        """,
+        (logtime, ipaddr, unit, new_value, agent, comment))
+    conn.commit()

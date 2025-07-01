@@ -1,9 +1,11 @@
+# Install these with
+# uv add --dev pytest
+
 [project]
 name = "my-fastapi-app" # Replace with your project name
 version = "0.1.0"
 requires-python = ">=3.12"
 dependencies = [
-    "starlette",
     "google-auth",
     "google-auth-oauthlib",
     "google-auth-httplib2",
@@ -31,8 +33,8 @@ dev = [
     "pytest",
     "pytest-cov",
     "pytest-asyncio",
-    "coverage", # Often used with pytest-cov, so keep it here
-    "livereload", # If this is only for development
+    "coverage",   # Often used with pytest-cov, so keep it here
+    "livereload", # Only for development
 ]
 
 [tool.setuptools.packages.find]

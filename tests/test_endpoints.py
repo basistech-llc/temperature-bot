@@ -16,6 +16,7 @@ from myapp.main import app as fastapi_app
 import myapp.ae200 as ae200
 import myapp.aqi as aqi
 import myapp.db as db
+from myapp.paths import SCHEMA_FILE_PATH
 #from myapp.main import status, set_speed, SpeedControl
 
 logger = logging.getLogger(__name__)
@@ -23,8 +24,6 @@ logger = logging.getLogger(__name__)
 # Optional: enable pytest-asyncio
 pytest_plugins = ("pytest_asyncio",)
 
-# Path to the schema file in the parent directory
-SCHEMA_FILE_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'etc', 'schema.sql')
 
 # Disable websockets debug
 @pytest.fixture(autouse=True)
@@ -33,7 +32,6 @@ def reduce_websockets_logging():
 
 
 skip_on_github = pytest.mark.skipif( os.getenv("GITHUB_ACTIONS") == "true", reason="Disabled in GitHub Actions")
-
 
 # Override the setup_database function for testing
 def setup_test_database(conn):
@@ -91,16 +89,14 @@ async def get_test_db_connection_provider():
 async def client():
     """Provides a TestClient with overridden database dependency using a temporary file DB."""
     # Create a temporary directory for the database file
-    with tempfile.TemporaryDirectory() as tmpdir:
-        # Generate a unique path for the database file within the temporary directory
-        temp_db_path = os.path.join(tmpdir, "test_db.sqlite")
-        logging.info("Created temporary database file for test: %s", temp_db_path)
+    with tempfile.NamedTemporaryFile(suffix='.db') as tf:
+        logging.info("Created temporary database file for test: %s", tf.name)
 
         # Temporarily set an environment variable to tell lifespan we are testing
         os.environ['IS_TESTING'] = 'True'
         # IMPORTANT: Also set TEST_DB_NAME environment variable for db.py's get_db_connection
         # to ensure it connects to this temporary file.
-        os.environ['TEST_DB_NAME'] = temp_db_path
+        os.environ['TEST_DB_NAME'] = tf.name
 
         # Override the dependency provider.
         # CHANGED: Assign the async generator function directly, as its signature now matches.
@@ -112,9 +108,8 @@ async def client():
         # Clean up the override and environment variables after the test
         fastapi_app.dependency_overrides.clear()
         os.environ.pop("IS_TESTING", None)
-        os.environ.pop("TEST_DB_NAME", None) # Clean up the TEST_DB_NAME env var
-        # The TemporaryDirectory context manager will automatically delete tmpdir and its contents.
-        logging.info("Cleaned up temporary database directory: %s", tmpdir)
+        os.environ.pop("TEST_DB_NAME", None)
+
 
 
 # Use pytest-asyncio to allow async test functions
