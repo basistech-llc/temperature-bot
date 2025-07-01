@@ -17,6 +17,7 @@ dependencies = [
 "pytest-asyncio",
 "pluggy",
 "pygments",
+"pydantic",
 "iniconfig",
 "livereload",
     "fastapi",
