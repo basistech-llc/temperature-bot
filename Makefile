@@ -30,7 +30,8 @@ install-ubuntu:
 	sudo mv uv-x86_64-unknown-linux-gnu/uv /usr/local/bin/uv
 
 install-macos:
-	brew install ruff uv
+	curl -LsSf https://astral.sh/uv/install.sh | sh
+	brew install ruff
 
 
 eslint:
