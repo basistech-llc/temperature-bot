@@ -24,15 +24,23 @@ dev:
 	.venv/bin/fastapi dev
 
 install-ubuntu:
-	sudo snap install ruff
-	curl -LO https://github.com/astral-sh/uv/releases/download/0.1.19/uv-x86_64-unknown-linux-gnu.tar.gz
-	tar -xzf uv-x86_64-unknown-linux-gnu.tar.gz
-	sudo mv uv-x86_64-unknown-linux-gnu/uv /usr/local/bin/uv
+	sudo apt install update
+	sudo apt install python3-pip
+	pip install --user pipx
+	pipx ensurepath
+	pipx install uv
 	uv --version
+	pipx install ruff
+	ruff --version
 
 install-macos:
-	curl -LsSf https://astral.sh/uv/install.sh | sh
-	brew install ruff
+	@echo Use pipx for the latest uv
+	pip install pipx
+	pipx ensurepath
+	pipx install uv
+	uv --version # Check this output: it *must* be 0.1.18 or higher
+	pipx install ruff
+	ruff --version
 
 
 eslint:
