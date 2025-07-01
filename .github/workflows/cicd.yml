@@ -50,7 +50,7 @@ jobs:
           make pytest-coverage
 
       - name: Upload coverage test to codecov.io
-        if: runner.os == 'Linux'
+        if: runner.os == 'Linux-X'
         uses: codecov/codecov-action@v4
         with:
           fail_ci_if_error: true
