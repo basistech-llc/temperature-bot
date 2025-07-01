@@ -42,4 +42,4 @@ eslint:
 	@echo install venv for the development environment
 	echo $$PATH
 	uv venv
-	uv pip sync pyproject.toml --all-packages
+	uv pip sync pyproject.toml
