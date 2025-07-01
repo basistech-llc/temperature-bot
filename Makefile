@@ -4,10 +4,10 @@ REQ := .venv/pyvenv.cfg
 PYTHON := .venv/bin/python
 
 pytest: $(REQ)
-	$(PYTHON) -m pytest . --log-cli-level=DEBUG --log-file-level=DEBUG
+	uv run pytest . --log-cli-level=DEBUG --log-file-level=DEBUG
 
 pytest-coverage: $(REQ)
-	$(PYTHON) -m pytest -v --cov=. --cov-report=xml --cov-report=html tests
+	uv run pytest -v --cov=. --cov-report=xml --cov-report=html tests
 	@echo covreage report in htmlcov/
 
 ruff-check:
