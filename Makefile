@@ -41,4 +41,5 @@ eslint:
 .venv/pyvenv.cfg:
 	@echo install venv for the development environment
 	echo $$PATH
+	uv venv
 	uv pip sync
