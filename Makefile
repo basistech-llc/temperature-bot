@@ -21,7 +21,8 @@ dump-schema:
 
 make-dev-db:
 	/bin/rm -f $(DEV_DB)
-	sqlite3 $(DV_DB) < etc/schema.sql
+	sqlite3 $(DEV_DB) < etc/schema.sql
+	ls -l $(DEV_DB)
 
 dev:
 	.venv/bin/fastapi dev

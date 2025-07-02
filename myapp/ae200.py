@@ -16,6 +16,13 @@ import asyncio
 import xml.etree.ElementTree as ET
 import logging
 
+# Fan mapping speeds
+SPEEDS = {1: "LOW", 2: "MID2", 3: "MID1", 4: "HIGH"}
+
+# BasisTech address (to go away)
+AE200_ADDRESS = "10.2.1.20"
+
+
 getUnitsPayload = """<?xml version="1.0" encoding="UTF-8" ?>
 <Packet>
 <Command>getRequest</Command>
@@ -56,15 +63,16 @@ def getMnetDetails(deviceIds):
 class AE200Functions:
     """Originally from https://github.com/natevoci/ae200"""
 
-    def __init__(self):
+    def __init__(self, address=AE200_ADDRESS):
         self._json = None
         self._temp_list = []
+        self.address = address
 
-    async def getDevicesAsync(self, address):
+    async def getDevicesAsync(self):
         async with websockets.connect(
-            f"ws://{address}/b_xmlproc/",
+            f"ws://{self.address}/b_xmlproc/",
             extensions=[permessage_deflate.ClientPerMessageDeflateFactory()],
-            origin=f"http://{address}",
+            origin=f"http://{self.address}",
             subprotocols=["b_xmlproc"],
         ) as websocket:
             await websocket.send(getUnitsPayload)
@@ -79,17 +87,16 @@ class AE200Functions:
                 groupList.append({"id": r.get("Group"), "name": r.get("GroupNameWeb")})
 
             await websocket.close()
-
             return groupList
 
-    def getDevices(self, address):
-        return asyncio.run(self.getDevicesAsync(address))
+    def getDevices(self):
+        return asyncio.run(self.getDevicesAsync())
 
-    async def getDeviceInfoAsync(self, address, deviceId):
+    async def getDeviceInfoAsync(self, deviceId):
         async with websockets.connect(
-            f"ws://{address}/b_xmlproc/",
+            f"ws://{self.address}/b_xmlproc/",
             extensions=[permessage_deflate.ClientPerMessageDeflateFactory()],
-            origin=f"http://{address}",
+            origin=f"http://{self.address}",
             subprotocols=["b_xmlproc"],
         ) as websocket:
             getMnetDetailsPayload = getMnetDetails([deviceId])
@@ -102,14 +109,14 @@ class AE200Functions:
             await websocket.close()
             return node.attrib
 
-    def getDeviceInfo(self, address, deviceId):
-        return asyncio.run(self.getDeviceInfoAsync(address, deviceId))
+    def getDeviceInfo(self, deviceId):
+        return asyncio.run(self.getDeviceInfoAsync(deviceId))
 
-    async def sendAsync(self, address, deviceId, attributes):
+    async def sendAsync(self, deviceId, attributes):
         async with websockets.connect(
-            f"ws://{address}/b_xmlproc/",
+            f"ws://{self.address}/b_xmlproc/",
             extensions=[permessage_deflate.ClientPerMessageDeflateFactory()],
-            origin=f"http://{address}",
+            origin=f"http://{self.address}",
             subprotocols=["b_xmlproc"],
         ) as websocket:
             attrs = " ".join([f'{key}="{attributes[key]}"' for key in attributes])
@@ -117,14 +124,8 @@ class AE200Functions:
             await websocket.send(payload)
             await websocket.close()
 
-    def send(self, address, deviceId, attributes):
-        return asyncio.run(self.sendAsync(address, deviceId, attributes))
-
-
-# BasisTech mapping (to go away)
-AE200_ADDRESS = "10.2.1.20"
-ERVS = {"kitchen": "12", "bathroom": "13"}
-SPEEDS = {1: "LOW", 2: "MID2", 3: "MID1", 4: "HIGH"}
+    def send(self, deviceId, attributes):
+        return asyncio.run(self.sendAsync(deviceId, attributes))
 
 
 def drive_speed_to_val(drive, speed):
@@ -146,7 +147,7 @@ async def get_dev_status(dev):
 async def get_system_map():
     d = AE200Functions()
     ret = {}
-    all_items = await d.getDevicesAsync(AE200_ADDRESS)
+    all_items = await d.getDevicesAsync()
     for item in all_items:
         dev = item['id']
         name = item['name']
@@ -156,11 +157,11 @@ async def get_system_map():
 async def get_all_status():
     d = AE200Functions()
     ret = {}
-    all_items = await d.getDevicesAsync(AE200_ADDRESS)
+    all_items = await d.getDevicesAsync()
     for item in all_items:
         dev = item['id']
         name = item['name']
-        data = await d.getDeviceInfoAsync(AE200_ADDRESS, dev)
+        data = await d.getDeviceInfoAsync(dev)
         try:
             ret[dev] = {
                 'name': name,
@@ -176,10 +177,10 @@ async def get_all_status():
 async def set_fan_speed(device, speed):
     d = AE200Functions()
     if speed == 0:
-        await d.sendAsync(AE200_ADDRESS, device, {"Drive": "OFF"})
+        await d.sendAsync(device, {"Drive": "OFF"})
     else:
-        await d.sendAsync(AE200_ADDRESS, device, {"Drive": "ON"})
-        await d.sendAsync(AE200_ADDRESS, device, {"FanSpeed": SPEEDS[speed]})
+        await d.sendAsync(device, {"Drive": "ON"})
+        await d.sendAsync(device, {"FanSpeed": SPEEDS[speed]})
 
 
 if __name__ == "__main__":
@@ -194,17 +195,16 @@ if __name__ == "__main__":
     parser.add_argument( "devices", help='Device. Can be a number or list of names', nargs="*"    )
     args = parser.parse_args()
 
-    d = AE200Functions()
-    address = AE200_ADDRESS
+    d = AE200Functions(AE200_ADDRESS)
 
     # Test reading device list
-    devs = d.getDevices(address)
+    devs = d.getDevices()
 
     for dev in devs:
         did = dev["id"]
         name = dev['name']
-        # print(did, json.dumps(d.getDeviceInfo(address, did), indent=4))
-        data = d.getDeviceInfo(address, did)
+        # print(did, json.dumps(d.getDeviceInfo(did), indent=4))
+        data = d.getDeviceInfo(did)
         print(did, name, "drive: ", data["Drive"], "fan speed: ", data["FanSpeed"])
 
     # for dev in args.devices:
@@ -214,20 +214,13 @@ if __name__ == "__main__":
     #        print(f"invalid device '{dev}' must be {' or '.join(ERVS.keys())}")
     #        exit(1)
     #    if args.level==0:
-    #        d.send(address, num, { "Drive": "OFF"})
+    #        d.send(num, { "Drive": "OFF"})
     #    else:
-    #        d.send(address, num, { "Drive": "ON"})
-    #        d.send(address, num, { "FanSpeed": SPEEDS[args.level]})
-
-    # Display status
-    if False:
-        for name, dev in ERVS.items():
-            data = d.getDeviceInfo(address, dev)
-            print(data)
-            print(dev, name, "drive: ", data["Drive"], "fan speed: ", data["FanSpeed"])
+    #        d.send(num, { "Drive": "ON"})
+    #        d.send(num, { "FanSpeed": SPEEDS[args.level]})
 
     if args.json:
         for dev in args.devices:
             did = int(dev)
-            data = d.getDeviceInfo(address, did)
+            data = d.getDeviceInfo(did)
             print(json.dumps(data,indent=4,default=str))
