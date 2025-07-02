@@ -86,12 +86,11 @@ def get_or_create_device_id(conn, device_name):
 
         # Now, retrieve the ID of the device name, whether it was just inserted
         # or already existed.
-        cursor.execute("SELECT id FROM devices WHERE device_name = ?;", (device_name,))
+        cursor.execute("SELECT device_id FROM devices WHERE device_name = ?;", (device_name,))
         result = cursor.fetchone()
-        logging.error("result=%s",result)
 
         if result:
-            return result['id']
+            return result['device_id']
         else:
             # This case should ideally not happen if INSERT OR IGNORE works as expected
             # and SELECT follows immediately, but it's good for robustness.
@@ -114,7 +113,7 @@ def fetch_all_devlog_with_devices(conn):
         FROM
             devlog t
         JOIN
-            devices s ON t.device_id = s.id
+            devices s ON t.device_id = s.device_id
         ORDER BY
             t.logtime DESC;
     """)
@@ -135,10 +134,12 @@ def insert_devlog_entry(conn, device_name: str, temp=None, statusdict=None, logt
     :param temp10x: (Temperature in C) * 10
     :param statusdict: If provided, a dictionary that will be written to the database as status_json (but not if extending)
     :param logtime: The time_t of the log. If not provided, it's now!
-    :param force: If true, forces a new entry (rather than an extension)
+    :param force: If True, forces a new entry.
+                  If False, then only create a new entry if the temp or statusdict have changed.
     Inserts an entry into the devlog table, handling the device_id lookup/creation and automatic extension.
     """
-    temp10x = int(math.floor(float(temp)*10+0.5))
+    temp10x     = int(math.floor(float(temp)*10+0.5)) if temp else None
+    status_json = json.dumps(statusdict, default=str, sort_keys=True) if statusdict else None
     c = conn.cursor()
     if logtime is None:
         logtime = int(time.time()) # Use current Unix timestamp if not provided
@@ -149,17 +150,17 @@ def insert_devlog_entry(conn, device_name: str, temp=None, statusdict=None, logt
         # Get the most recent temperature entry. If temperature matches and we are not forcing, extend it.
         c.execute("SELECT * from devlog where device_id=? order by logtime DESC limit 1",(device_id,))
         r = c.fetchone()
-        if r and r['temp10x']==temp10x and not force:
+        if r and r['temp10x']==temp10x and r['status_json']==status_json and not force:
             duration = logtime-r['logtime']+1
-            logging.debug("update id=%s duration=%s",device_id,duration)
-            c.execute("UPDATE devlog set duration=? where id=?",(duration, device_id))
+            logging.debug("update log_id=%s duration=%s",device_id,duration)
+            c.execute("UPDATE devlog set duration=? where log_id=?",(duration, r['log_id']))
             conn.commit()
             return
 
         # Insert into devlog using the obtained device_id
-        logging.debug("insert id=%s",device_id)
+        logging.debug("insert logtime=%s device_id=%s",logtime, device_id)
         c.execute("INSERT INTO devlog (logtime, device_id, temp10x, status_json) VALUES (?, ?, ?, ?);",
-                       (logtime, device_id, temp10x, json.dumps(statusdict,default=str) if statusdict else None))
+                       (logtime, device_id, temp10x, status_json))
         conn.commit()
         # Changed to logging.info
         logging.info("Inserted devlog entry: device='%s' (ID: %s), temp10x=%s", device_name, device_id, temp10x)

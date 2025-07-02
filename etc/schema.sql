@@ -1,5 +1,5 @@
 CREATE TABLE changelog (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    changelog_id INTEGER PRIMARY KEY AUTOINCREMENT,
                     logtime INTEGER NOT NULL,
                     ipaddr TEXT NOT NULL,
                     unit INTEGER NOT NULL,
@@ -10,21 +10,20 @@ CREATE TABLE changelog (
                 );
 
 CREATE TABLE devices (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    device_id INTEGER PRIMARY KEY AUTOINCREMENT,
     device_name TEXT UNIQUE NOT NULL
 );
 
 CREATE INDEX idx_devices_device_name ON devices (device_name);
 
 CREATE TABLE devlog (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    log_id INTEGER PRIMARY KEY AUTOINCREMENT,
     logtime INTEGER NOT NULL,
     duration INTEGER NOT NULL DEFAULT 1,
     device_id INTEGER NOT NULL,
     temp10x INTEGER,
-    fan_speed_status INTEGER,
     status_json TEXT,
-    FOREIGN KEY (device_id) REFERENCES devices (id)
+    FOREIGN KEY (device_id) REFERENCES devices (device_id)
 );
 
 CREATE INDEX idx_templog_logtime ON devlog (logtime);

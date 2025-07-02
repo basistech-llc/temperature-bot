@@ -10,6 +10,9 @@ pytest-coverage: $(REQ)
 	$(PYTHON) -m pytest -v --cov=. --cov-report=xml --cov-report=html tests
 	@echo covreage report in htmlcov/
 
+tags:
+	etags */*.py
+
 ruff-check:
 	ruff check .
 
