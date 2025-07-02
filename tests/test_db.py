@@ -48,15 +48,15 @@ def test_temperature_insert(db_conn):
     assert dev1_id != dev2_id
 
     c = db_conn.cursor()
-    c.execute("SELECT *,dn.name as name from devlog d1 INNER JOIN (select device_id,MAX(logtime) as max_logtime from devlog group by device_id) as d2 on d1.device_id = d2.device_id and d1.logtime = d2.max_logtime INNER JOIN device_names dn on d1.device_id = dn.id")
+    c.execute("SELECT *,dn.device_name as device_name from devlog d1 INNER JOIN (select device_id,MAX(logtime) as max_logtime from devlog group by device_id) as d2 on d1.device_id = d2.device_id and d1.logtime = d2.max_logtime INNER JOIN devices dn on d1.device_id = dn.id")
     rows = c.fetchall()
     assert len(rows)==2
-    assert rows[0]['name'] == 'devtest1'
+    assert rows[0]['device_name'] == 'devtest1'
     assert rows[0]['temp10x'] == 200
     assert rows[0]['logtime'] == 100
     assert rows[0]['duration'] == 13
 
-    assert rows[1]['name'] == 'devtest2'
+    assert rows[1]['device_name'] == 'devtest2'
     assert rows[1]['temp10x'] == 220
     assert rows[1]['logtime'] == 112
     assert rows[1]['duration'] == 1

@@ -9,10 +9,12 @@ CREATE TABLE changelog (
                     comment TEXT
                 );
 
-CREATE TABLE device_names (
+CREATE TABLE devices (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT UNIQUE NOT NULL
+    device_name TEXT UNIQUE NOT NULL
 );
+
+CREATE INDEX idx_devices_device_name ON devices (device_name);
 
 CREATE TABLE devlog (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -22,7 +24,7 @@ CREATE TABLE devlog (
     temp10x INTEGER,
     fan_speed_status INTEGER,
     status_json TEXT,
-    FOREIGN KEY (device_id) REFERENCES device_names (id)
+    FOREIGN KEY (device_id) REFERENCES devices (id)
 );
 
 CREATE INDEX idx_templog_logtime ON devlog (logtime);

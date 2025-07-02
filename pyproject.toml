@@ -31,6 +31,7 @@ dev = [
     "ruff",
     "ruff-lsp",
     "pytest",
+    "pytest-env",
     "pytest-cov",
     "pytest-asyncio",
     "coverage",   # Often used with pytest-cov, so keep it here

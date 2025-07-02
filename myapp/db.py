@@ -73,7 +73,7 @@ def setup_database(conn, schema_file):
 def get_or_create_device_id(conn, device_name):
     """
     Retrieves the ID for a given device name. If the device name does not exist
-    in the device_names table, it inserts it and returns the newly generated ID.
+    in the devices table, it inserts it and returns the newly generated ID.
     """
     cursor = conn.cursor()
 
@@ -81,12 +81,12 @@ def get_or_create_device_id(conn, device_name):
         # Attempt to insert the device name.
         # IGNORE ensures that if it already exists (due to UNIQUE constraint),
         # no error is raised and nothing new is inserted.
-        cursor.execute("INSERT OR IGNORE INTO device_names (name) VALUES (?);", (device_name,))
+        cursor.execute("INSERT OR IGNORE INTO devices (device_name) VALUES (?);", (device_name,))
         conn.commit() # Commit the insert operation
 
         # Now, retrieve the ID of the device name, whether it was just inserted
         # or already existed.
-        cursor.execute("SELECT id FROM device_names WHERE name = ?;", (device_name,))
+        cursor.execute("SELECT id FROM devices WHERE device_name = ?;", (device_name,))
         result = cursor.fetchone()
         logging.error("result=%s",result)
 
@@ -103,9 +103,9 @@ def get_or_create_device_id(conn, device_name):
         conn.rollback() # Rollback any partial transaction
         raise # Re-raise the exception
 
-def fetch_all_devlog_with_device_names(conn):
+def fetch_all_devlog_with_devices(conn):
     """
-    Fetches all devlog entries, joining with device_names to display the device string.
+    Fetches all devlog entries, joining with devices to display the device string.
     """
     cursor = conn.cursor()
     cursor.execute("""
@@ -114,16 +114,16 @@ def fetch_all_devlog_with_device_names(conn):
         FROM
             devlog t
         JOIN
-            device_names s ON t.device_id = s.id
+            devices s ON t.device_id = s.id
         ORDER BY
             t.logtime DESC;
     """)
     return cursor.fetchall()
 
-def fetch_all_device_names(conn):
+def fetch_all_devices(conn):
     """Fetches all device names and their IDs."""
     cursor = conn.cursor()
-    cursor.execute("SELECT id, name FROM device_names;")
+    cursor.execute("SELECT id, name FROM devices;")
     return cursor.fetchall()
 
 # Insertion

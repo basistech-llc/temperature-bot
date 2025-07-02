@@ -36,6 +36,11 @@ jobs:
         run: |
           make install-macos
 
+      - name: Run pytest with coverage
+        run: |
+          export AIRNOW_API_KEY=${{ secrets.AIRNOW_API_KEY }}
+          make pytest-coverage
+
       - name: Lint with pylint
         run: |
           make ruff-check
@@ -43,11 +48,6 @@ jobs:
       - name: JavaScript and HTML eslint
         run: |
           make eslint
-
-      - name: Run pytest with coverage
-        run: |
-          export AIRNOW_API_KEY=${{ secrets.AIRNOW_API_KEY }}
-          make pytest-coverage
 
       - name: Upload coverage test to codecov.io
         if: runner.os == 'Linux-X'
