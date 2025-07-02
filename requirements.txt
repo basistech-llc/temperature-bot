@@ -1,6 +1,0 @@
-fastapi
-uvicorn
-tinydb  # Optional: remove if not using TinyDB
-pylint
-ruff
-uv
