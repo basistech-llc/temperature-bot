@@ -64,7 +64,7 @@ def setup_database(conn, schema_file):
             schema_sql = f.read()
         cursor.executescript(schema_sql) # Executes all SQL statements in the file
         conn.commit()
-        DEVICE_MAP = {}
+        DEVICE_MAP.clear()
         logging.info("Database schema from '%s' set up successfully.", schema_file)
     except sqlite3.Error as e:
         conn.rollback()

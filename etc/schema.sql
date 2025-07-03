@@ -18,9 +18,9 @@ CREATE INDEX idx_devices_device_name ON devices (device_name);
 
 CREATE TABLE devlog (
     log_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    device_id INTEGER NOT NULL,
     logtime INTEGER NOT NULL,
     duration INTEGER NOT NULL DEFAULT 1,
-    device_id INTEGER NOT NULL,
     temp10x INTEGER,
     status_json TEXT,
     FOREIGN KEY (device_id) REFERENCES devices (device_id)

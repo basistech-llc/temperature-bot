@@ -60,6 +60,10 @@ def getMnetDetails(deviceIds):
 </Packet>
 """
 
+def cleanDeviceInfo(statusdict):
+    """Given the deviceInfo, remove empty values"""
+    return {key:value for (key,value) in statusdict.items() if value!=""}
+
 class AE200Functions:
     """Originally from https://github.com/natevoci/ae200"""
 
@@ -92,13 +96,14 @@ class AE200Functions:
     def getDevices(self):
         return asyncio.run(self.getDevicesAsync())
 
-    async def getDeviceInfoAsync(self, deviceId):
-        async with websockets.connect(
-            f"ws://{self.address}/b_xmlproc/",
-            extensions=[permessage_deflate.ClientPerMessageDeflateFactory()],
-            origin=f"http://{self.address}",
-            subprotocols=["b_xmlproc"],
-        ) as websocket:
+    async def getDeviceInfoAsync(self, deviceId, clean=True):
+        """:param deviceId: The numeric ID of the device to get
+        :param clean: if True (default), then remove keys with empty values.
+        """
+        async with websockets.connect( f"ws://{self.address}/b_xmlproc/",
+                                       extensions=[permessage_deflate.ClientPerMessageDeflateFactory()],
+                                       origin=f"http://{self.address}",
+                                       subprotocols=["b_xmlproc"], ) as websocket:
             getMnetDetailsPayload = getMnetDetails([deviceId])
             await websocket.send(getMnetDetailsPayload)
             mnetDetailsResultStr = await websocket.recv()
@@ -107,10 +112,10 @@ class AE200Functions:
             # result = {}
             node = mnetDetailsResultXML.find("./DatabaseManager/Mnet")
             await websocket.close()
-            return node.attrib
+            return cleanDeviceInfo(node.attrib) if clean else node.attrib
 
-    def getDeviceInfo(self, deviceId):
-        return asyncio.run(self.getDeviceInfoAsync(deviceId))
+    def getDeviceInfo(self, deviceId, clean=True):
+        return asyncio.run(self.getDeviceInfoAsync(deviceId, clean=clean))
 
     async def sendAsync(self, deviceId, attributes):
         async with websockets.connect(
