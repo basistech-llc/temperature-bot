@@ -26,7 +26,9 @@ def connect_db(db_name):
     """Establishes a connection to the SQLite database."""
     conn = sqlite3.connect(db_name)
     conn.row_factory = sqlite3.Row      # returns rows as dicts
-    conn.execute("PRAGMA foreign_keys = ON;") # Ensure foreign keys are enabled
+    conn.execute("PRAGMA foreign_keys=ON;")
+    conn.execute("PRAGMA journal_mode=WAL;")
+    conn.execute("PRAGMA synchronous=NORMAL;")
     return conn
 
 async def get_db_connection():

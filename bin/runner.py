@@ -48,6 +48,8 @@ def setup_parser():
     return parser
 
 def load_csv(conn, fname):
+    conn.execute("PRAGMA journal_mode=OFF;")
+    conn.execute("PRAGMA synchronous=OFFL;")
     with open(os.path.join(ETC_DIR,'sample_hubitat.json')) as f:
         hub = json.load(f)
     labelmap = { h['label']:h['name'] for h in hub}
@@ -64,7 +66,9 @@ def load_csv(conn, fname):
                 name = labelmap[label]
                 db.insert_devlog_entry(conn, device_name=name, temp=val, logtime=dt.timestamp(), commit=False)
             conn.commit()
-
+    conn.execute("PRAGMA journal_mode=WAL;")
+    conn.execute("PRAGMA synchronous=NORMAL;")
+    conn.execute("PRAGMA wal_checkpoint(FULL)")
 
 def main():
     parser = setup_parser()
