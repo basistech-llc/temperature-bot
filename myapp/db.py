@@ -20,6 +20,8 @@ DB_PATH = Path(DB_PATH) if os.path.exists(DB_PATH) else LOCAL_DB_PATH
 DATABASE_NAME = os.getenv("DATABASE_NAME", str(DB_PATH))
 logger.debug("DATABASE_NAME=%s",DATABASE_NAME)
 
+DEVICE_MAP = {}
+
 def connect_db(db_name):
     """Establishes a connection to the SQLite database."""
     conn = sqlite3.connect(db_name)
@@ -60,6 +62,7 @@ def setup_database(conn, schema_file):
             schema_sql = f.read()
         cursor.executescript(schema_sql) # Executes all SQL statements in the file
         conn.commit()
+        DEVICE_MAP = {}
         logging.info("Database schema from '%s' set up successfully.", schema_file)
     except sqlite3.Error as e:
         conn.rollback()
@@ -77,23 +80,20 @@ def get_or_create_device_id(conn, device_name):
     """
     cursor = conn.cursor()
 
-    try:
-        # Attempt to insert the device name.
-        # IGNORE ensures that if it already exists (due to UNIQUE constraint),
-        # no error is raised and nothing new is inserted.
-        cursor.execute("INSERT OR IGNORE INTO devices (device_name) VALUES (?);", (device_name,))
-        conn.commit() # Commit the insert operation
+    if device_name in DEVICE_MAP:
+        return DEVICE_MAP[device_name]
 
-        # Now, retrieve the ID of the device name, whether it was just inserted
-        # or already existed.
+    try:
+        cursor.execute("INSERT OR IGNORE INTO devices (device_name) VALUES (?);", (device_name,))
+        conn.commit()
+
         cursor.execute("SELECT device_id FROM devices WHERE device_name = ?;", (device_name,))
         result = cursor.fetchone()
 
         if result:
-            return result['device_id']
+            DEVICE_MAP[device_name] = result['device_id']
+            return DEVICE_MAP[device_name]
         else:
-            # This case should ideally not happen if INSERT OR IGNORE works as expected
-            # and SELECT follows immediately, but it's good for robustness.
             logging.error("Could not retrieve ID for device name: %s", device_name)
             raise ValueError("Could not retrieve ID for device name: %s" % device_name) # Using %s for consistency
 
@@ -127,7 +127,7 @@ def fetch_all_devices(conn):
 
 # Insertion
 
-def insert_devlog_entry(conn, device_name: str, temp=None, statusdict=None, logtime=None, force=False):
+def insert_devlog_entry(conn, device_name: str, temp=None, statusdict=None, logtime=None, force=False, commit=True):
     """
     :param conn: database connection
     :param device_name: the device
@@ -154,14 +154,16 @@ def insert_devlog_entry(conn, device_name: str, temp=None, statusdict=None, logt
             duration = logtime-r['logtime']+1
             logging.debug("update log_id=%s duration=%s",device_id,duration)
             c.execute("UPDATE devlog set duration=? where log_id=?",(duration, r['log_id']))
-            conn.commit()
+            if commit:
+                conn.commit()
             return
 
         # Insert into devlog using the obtained device_id
         logging.debug("insert logtime=%s device_id=%s",logtime, device_id)
         c.execute("INSERT INTO devlog (logtime, device_id, temp10x, status_json) VALUES (?, ?, ?, ?);",
                        (logtime, device_id, temp10x, status_json))
-        conn.commit()
+        if commit:
+            conn.commit()
         # Changed to logging.info
         logging.info("Inserted devlog entry: device='%s' (ID: %s), temp10x=%s", device_name, device_id, temp10x)
     except sqlite3.Error as e:
