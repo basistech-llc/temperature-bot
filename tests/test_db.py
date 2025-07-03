@@ -83,7 +83,7 @@ def test_temperature_insert(db_conn):
 
     # finally, check to see if our combining code broadly works
     logging.debug("devtest1_id=%s",devtest1_id)
-    runner.combine_temp_measurements(db_conn,100,150,1)
+    runner.combine_temp_measurements(db_conn,100,150,50)
     c.execute("SELECT * from devlog where device_id=?",(devtest1_id,))
     rows = c.fetchall()
     assert len(rows)==1
