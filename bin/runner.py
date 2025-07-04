@@ -85,6 +85,8 @@ def daily_cleanup(conn, when):
     """Every day:
     1. Temperatures for the previous week get coarsened to every 5 minutes.
     2. Temperatures for the previous month get coarsened to every 20 minutes.
+    :param conn: database connection
+    :param when: datetime of the day to do it for
     """
     print("Daily cleanup")
     c = conn.cursor()
@@ -119,7 +121,7 @@ def daily_cleanup(conn, when):
 
 
 
-def load_csv(conn, fname, after_str):
+def load_csv(conn, fname, after_str, unsafe=False):
     """Loads CSV with reduced durabilty."""
     with open(os.path.join(ETC_DIR,'sample_hubitat.json')) as f:
         hub = json.load(f)
@@ -134,8 +136,12 @@ def load_csv(conn, fname, after_str):
         when = None
         prev_date = None
         try:
-            conn.execute("PRAGMA journal_mode=OFF;")
-            conn.execute("PRAGMA synchronous=OFF;")
+            if unsafe:
+                conn.execute("PRAGMA journal_mode=OFF;")
+                conn.execute("PRAGMA synchronous=OFF;")
+            else:
+                conn.execute("PRAGMA journal_mode=WALL;")
+                conn.execute("PRAGMA synchronous=NORMAL;")
             t0 = time.time()
             count = 0
             for row in reader:
@@ -173,28 +179,48 @@ def load_csv(conn, fname, after_str):
             conn.execute("PRAGMA synchronous=NORMAL;")
             conn.execute("PRAGMA wal_checkpoint(FULL)")
 
+def report(conn):
+    c = conn.cursor()
+    c.execute("Select count(*),DATE(logtime,'unixepoch') as d from devlog group by d order by d")
+    for row in c.fetchall():
+        print(dict(row))
+
+
 def setup_parser():
     import argparse
     parser = argparse.ArgumentParser(description='BasisTech LLC Runner.',
                                      formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("--csv", help='load csv file')
+    parser.add_argument("--unsafe", help="Run without synchronous mode. Fast, but dangerous", action='store_true')
     parser.add_argument("--dry-run", action='store_true')
     parser.add_argument("--csv-after", help="Date after which to import CSV in YYYY-MM-DD format",default="0000-00-00")
     parser.add_argument("--dbfile", help='path to database file', default=DEV_DB)
+    parser.add_argument("--report", help="report on the database", action='store_true')
+    parser.add_argument("--daily", help='Run the daily cleanup')
     clogging.add_argument(parser)
     return parser
 
 def main():
     parser = setup_parser()
     args = parser.parse_args()
-    clock.lock_script()
     if not os.path.exists(args.dbfile):
         raise FileNotFoundError(args.dbfile)
     conn = db.connect_db(args.dbfile)
-    if args.csv:
-        load_csv(conn, args.csv, args.csv_after)
     if args.dry_run:
         print("=dry run=")
+    if args.report:
+        report(conn)
+        return
+
+    if args.csv:
+        load_csv(conn, args.csv, args.csv_after, unsafe=args.unsafe)
+        return
+
+    # Normal run
+    clock.lock_script()
+    if args.daily:
+        daily_cleanup(conn, datetime.datetime.now())
+
     update_ae200(conn, dry_run=args.dry_run)
     update_hubitat(conn, dry_run=args.dry_run)
 
