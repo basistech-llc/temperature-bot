@@ -150,8 +150,17 @@ def insert_devlog_entry(conn, device_name: str, temp=None, statusdict=None, logt
         device_id = get_or_create_device_id(conn, device_name)
 
         # Get the most recent temperature entry. If temperature matches and we are not forcing, extend it.
-        c.execute("SELECT * from devlog where device_id=? order by logtime DESC limit 1",(device_id,))
+        c.execute("SELECT * from devlog where device_id=? and logtime<=? order by logtime DESC limit 1",(device_id,logtime))
         r = c.fetchone()
+        if r and r['logtime']==logtime:
+            # duplicate entry. Replace if duration is
+            if r['duration']==1:
+                logging.debug("replace %s with temp10x=%s status=%s",dict(r),temp10x,status_json)
+                c.execute("UPDATE devlog set temp10x=?,status_json=? where log_id=?",(temp10x, status_json,r['log_id']))
+            else:
+                logging.debug("ignore temp10x=%s status=%s because row=%s",temp10x,status_json,dict(r))
+            return
+
         if r and r['temp10x']==temp10x and r['status_json']==status_json and not force:
             duration = logtime-r['logtime']+1
             logging.debug("update log_id=%s duration=%s",device_id,duration)
@@ -171,9 +180,11 @@ def insert_devlog_entry(conn, device_name: str, temp=None, statusdict=None, logt
     except sqlite3.Error as e:
         logging.error("Database error in insert_devlog_entry: %s", e)
         conn.rollback() # Rollback any partial transaction
+        raise
     except ValueError as e:
         logging.error("Error: %s", e)
         conn.rollback()
+        raise
 
 def insert_changelog( conn, ipaddr:str, unit: int, new_value: str, agent: str = "", comment: str = ""):
     logtime = int(time.time())

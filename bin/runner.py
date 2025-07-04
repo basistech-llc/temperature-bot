@@ -96,42 +96,66 @@ def daily_cleanup(conn, when):
               (prev_week_start, prev_week_end))
     row = c.fetchone()
     if row:
-        logging.info("Found an entry on %s with duration=%s",time.asctime(time.locatltime(row['logtime'])), row['duration'])
+        logging.info("Found an entry on %s with duration=%s",time.asctime(time.localtime(row['logtime'])), row['duration'])
         combine_temp_measurements(conn, prev_week_start, prev_week_end, 5*60)
 
     # See if there are any in the previous month that need to be
-    prev_month_start = (when - datetime.timedelta(months=2)).timestamp()
-    prev_month_end = (when - datetime.timedelta(months=1)).timestamp()
+    def prev_month(when):
+        pm_year  = when.year
+        pm_month = when.month - 1
+        if pm_month <= 0:
+            pm_month += 12
+            pm_year -= 1
+        return datetime.datetime(year=pm_year, month=pm_month, day=1)
+
+    prev_month_start = prev_month(prev_month(prev_month(when))).timestamp()
+    prev_month_end   = prev_month(prev_month(when)).timestamp()
     c.execute("""select logtime,duration from devlog where logtime>=? and logtime <=? and duration<600 limit 1""",
               (prev_month_start, prev_month_end))
     row = c.fetchone()
     if row:
-        logging.info("Found an entry on %s with duration=%s",time.asctime(time.locatltime(row['logtime'])), row['duration'])
+        logging.info("Found an entry on %s with duration=%s",time.asctime(time.localtime(row['logtime'])), row['duration'])
         combine_temp_measurements(conn, prev_month_start, prev_month_end, 20*60)
 
 
 
-def load_csv(conn, fname):
+def load_csv(conn, fname, after_str):
     """Loads CSV with reduced durabilty."""
     with open(os.path.join(ETC_DIR,'sample_hubitat.json')) as f:
         hub = json.load(f)
     labelmap = { h['label']:h['name'] for h in hub}
-    print(labelmap)
+    after = datetime.datetime.fromisoformat(after_str+" 23:59:59")
     with open(fname) as csvfile:
+        total_lines = csvfile.read().count("\n")
+        lines = 0
+        start_time = time.time()
+        csvfile.seek(0)
         reader = csv.DictReader(csvfile)
         when = None
         prev_date = None
         try:
             conn.execute("PRAGMA journal_mode=OFF;")
             conn.execute("PRAGMA synchronous=OFF;")
+            t0 = time.time()
+            count = 0
             for row in reader:
+                lines += 1
                 for label,val in row.items():
                     if label.lower()=='time':
                         when = val
                         dt = datetime.datetime.fromisoformat(val)
-                        print(when)
+                        if dt < after:
+                            break # abort for loop on row
                         if (prev_date is not None) and dt.date() != prev_date.date():
-                            daily_cleanup(dt)
+                            print("\n")
+                            seconds = int(time.time() - t0)
+                            remaining = int((time.time()-start_time) / ( lines/total_lines))
+                            if seconds>0:
+                                print(f"{count} records in {lines}/{total_lines} lines processed in {seconds} seconds = {int(count/seconds)} records/second. Estimate seconds remaining={remaining}. Completion at {time.asctime(time.localtime(time.time()+remaining))}")
+                            daily_cleanup(conn, dt)
+                            count = 0
+                            t0 = time.time()
+                        print(f"\r{when}...  ",flush=True,end='')
                         prev_date = dt
                     else:
                         label = label.replace("OFFLINE - ","")
@@ -139,8 +163,10 @@ def load_csv(conn, fname):
                         db.insert_devlog_entry(conn, device_name=name, temp=val,
                                                logtime=datetime.datetime.fromisoformat(when).timestamp(),
                                                commit=False)
+                        count += 1
                 conn.commit()
         except KeyboardInterrupt:
+            conn.rollback()
             print("Keyboard interrupt. Last time: ",when)
         finally:
             conn.execute("PRAGMA journal_mode=WAL;")
@@ -151,9 +177,9 @@ def setup_parser():
     import argparse
     parser = argparse.ArgumentParser(description='BasisTech LLC Runner.',
                                      formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument("--debug", action='store_true')
     parser.add_argument("--csv", help='load csv file')
     parser.add_argument("--dry-run", action='store_true')
+    parser.add_argument("--csv-after", help="Date after which to import CSV in YYYY-MM-DD format",default="0000-00-00")
     parser.add_argument("--dbfile", help='path to database file', default=DEV_DB)
     clogging.add_argument(parser)
     return parser
@@ -166,7 +192,7 @@ def main():
         raise FileNotFoundError(args.dbfile)
     conn = db.connect_db(args.dbfile)
     if args.csv:
-        load_csv(conn,args.csv)
+        load_csv(conn, args.csv, args.csv_after)
     if args.dry_run:
         print("=dry run=")
     update_ae200(conn, dry_run=args.dry_run)
