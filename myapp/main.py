@@ -18,7 +18,7 @@ from typing import Optional
 
 
 from . import ae200
-from . import aqi
+from . import weather
 from . import db # Import the db module
 
 DEV = "/home/simsong" in abspath(__file__)
@@ -72,7 +72,7 @@ async def set_speed(request: Request, req: SpeedControl, conn:sqlite3.Connection
 @api_v1.get("/status")
 async def status(conn:sqlite3.Connection = Depends(db.get_db_connection)):
     all_task = asyncio.create_task(ae200.get_all_status())
-    aqi_task = asyncio.create_task(aqi.get_aqi_async())
+    aqi_task = asyncio.create_task(weather.get_aqi_async())
     all_data, aqi_data = await asyncio.gather(all_task, aqi_task)
     return {"AQI": aqi_data, "ALL": all_data}
 

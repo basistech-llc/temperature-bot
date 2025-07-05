@@ -14,7 +14,7 @@ from fastapi.testclient import TestClient
 
 from myapp.main import app as fastapi_app
 import myapp.ae200 as ae200
-import myapp.aqi as aqi
+import myapp.weather as weather
 import myapp.db as db
 from myapp.paths import SCHEMA_FILE_PATH
 #from myapp.main import status, set_speed, SpeedControl
@@ -116,7 +116,7 @@ async def client():
 @skip_on_github
 @pytest.mark.asyncio
 async def test_get_aqi_sync():
-    result = aqi.get_aqi_sync()
+    result = weather.get_aqi_sync()
     assert isinstance(result, dict)
     assert "value" in result
     logging.info("get_aqi_sync: %s", result)
