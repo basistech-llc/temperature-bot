@@ -8,8 +8,10 @@ import json
 import csv
 import logging
 import time
+from os.path import dirname,abspath,join
 
-sys.path.append(".")
+# runner is first to run so it needs to add . to the path
+sys.path.append(dirname(dirname(abspath(__file__))))
 
 from myapp.paths import DEV_DB,ETC_DIR
 import myapp.ae200 as ae200
@@ -196,13 +198,16 @@ def setup_parser():
     parser.add_argument("--csv-after", help="Date after which to import CSV in YYYY-MM-DD format",default="0000-00-00")
     parser.add_argument("--dbfile", help='path to database file', default=DEV_DB)
     parser.add_argument("--report", help="report on the database", action='store_true')
+    parser.add_argument("--syslog", help="log to syslog", action='store_true')
     parser.add_argument("--daily", help='Run the daily cleanup')
     clogging.add_argument(parser)
     return parser
 
 def main():
+    logging.info("%s %s",__file__," ".join(sys.argv))
     parser = setup_parser()
     args = parser.parse_args()
+    clogging.setup(args.loglevel, syslog=args.syslog, log_format=clogging.LOG_FORMAT,syslog_format=clogging.YEAR + " " + clogging.SYSLOG_FORMAT)
     if not os.path.exists(args.dbfile):
         raise FileNotFoundError(args.dbfile)
     conn = db.connect_db(args.dbfile)
