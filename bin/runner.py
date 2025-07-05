@@ -9,6 +9,7 @@ import csv
 import logging
 import time
 from os.path import dirname,abspath,join
+import tabulate
 
 # runner is first to run so it needs to add . to the path
 sys.path.append(dirname(dirname(abspath(__file__))))
@@ -182,10 +183,17 @@ def load_csv(conn, fname, after_str, unsafe=False):
             conn.execute("PRAGMA wal_checkpoint(FULL)")
 
 def report(conn):
+    os.environ['TZ'] = 'America/New_York'  # ET corresponds to New York timezone
+    time.tzset()                           # Apply the timezone change
     c = conn.cursor()
-    c.execute("Select count(*),DATE(logtime,'unixepoch') as d from devlog group by d order by d")
-    for row in c.fetchall():
-        print(dict(row))
+    for query in ["""Select count(*),DATE(logtime,'unixepoch','localtime') as d from devlog group by d order by d""",
+                  """Select count(*),strftime('%Y-%m-%d %H', logtime,'unixepoch', 'localtime') as d from devlog where logtime > strftime('%s','now','start of day','-1 day') group by d order by d""",
+                  """select datetime(d.logtime,'unixepoch','localtime') as w,device_name,d.duration,(d.temp10x+0.0)/10 as temp from devices left join devlog d on devices.device_id=d.device_id order by logtime desc limit 10"""
+                  ]:
+        c.execute(query)
+        data = c.fetchall()
+        print(tabulate.tabulate([dict(x).values() for x in data], data[0].keys()))
+
 
 
 def setup_parser():
