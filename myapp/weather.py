@@ -1,16 +1,13 @@
-import json
-import os
-from os.path import dirname, join
 import requests
 import httpx
 import asyncio
 import datetime
+from .utils import get_secret
 
 BASIS_LAT = 42.3876
 BASIS_LON = -71.0995
 
 AQI_URL = "https://www.airnowapi.org/aq/observation/zipCode/current/?format=application/json&zipCode=02144&distance=15&API_KEY={API_KEY}"
-SECRETS_PATH = join(dirname(__file__), "secrets.json")
 
 # https://docs.airnowapi.org/aq101
 AQI_TABLE = [
@@ -22,15 +19,6 @@ AQI_TABLE = [
     (301, 500, "Hazardous", "Maroon", "#7e0023", 6),
 ]
 
-
-def get_secrets():
-    with open(SECRETS_PATH, "r") as f:
-        return json.load(f)
-
-def get_secret(name):
-    if name in os.environ:
-        return os.environ[name]
-    return get_secrets()[name]
 
 def aqi_color(aqi):
     for row in AQI_TABLE:
@@ -47,7 +35,7 @@ def get_aqi_sync():
 
 
 async def get_aqi_async():
-    API_KEY = get_secrets()["AIRNOW_API_KEY"]
+    API_KEY = get_secret('AIRNOW_API_KEY')
     url = AQI_URL.format(API_KEY=API_KEY)
 
     async with httpx.AsyncClient() as client:
@@ -155,45 +143,48 @@ class WeatherService:
             await self._client.aclose()
 
 
-# Global instance for backward compatibility
-_weather_service = None
-
-async def get_weather_data_async():
+async def get_weather_data_async(lat=BASIS_LAT, lon=BASIS_LON):
     """Get both current weather and forecast data"""
-    global _weather_service
-    if _weather_service is None:
-        _weather_service = WeatherService()
-    
-    return await _weather_service.get_all_weather_data()
+    service = WeatherService(lat=lat, lon=lon)
+    try:
+        return await service.get_all_weather_data()
+    finally:
+        await service.close()
 
 
 # Legacy functions for backward compatibility
-async def get_weather_async():
+async def get_weather_async(lat=BASIS_LAT, lon=BASIS_LON):
     """Legacy function - returns raw weather API data"""
-    service = WeatherService()
-    await service._ensure_points_loaded()
-    
-    observation_stations_url = service.weather_points['properties']['observationStations']
-    forecast_hourly_url = service.weather_points['properties']['forecastHourly']
-    
-    stations_response, forecast_response = await asyncio.gather(
-        service._client.get(observation_stations_url),
-        service._client.get(forecast_hourly_url)
-    )
-    
-    stations_response.raise_for_status()
-    forecast_response.raise_for_status()
-    
-    return {
-        'points': service.weather_points,
-        'stations': stations_response.json(),
-        'forecasts': forecast_response.json()
-    }
+    service = WeatherService(lat=lat, lon=lon)
+    try:
+        await service._ensure_points_loaded()
+        
+        observation_stations_url = service.weather_points['properties']['observationStations']
+        forecast_hourly_url = service.weather_points['properties']['forecastHourly']
+        
+        stations_response, forecast_response = await asyncio.gather(
+            service._client.get(observation_stations_url),
+            service._client.get(forecast_hourly_url)
+        )
+        
+        stations_response.raise_for_status()
+        forecast_response.raise_for_status()
+        
+        return {
+            'points': service.weather_points,
+            'stations': stations_response.json(),
+            'forecasts': forecast_response.json()
+        }
+    finally:
+        await service.close()
 
-async def get_current_weather_async():
+async def get_current_weather_async(lat=BASIS_LAT, lon=BASIS_LON):
     """Legacy function - get current weather from nearest station"""
-    service = WeatherService()
-    return await service.get_current_conditions()
+    service = WeatherService(lat=lat, lon=lon)
+    try:
+        return await service.get_current_conditions()
+    finally:
+        await service.close()
 
 
 def print_weather(info, limit=None):

@@ -139,8 +139,8 @@ async def test_status_endpoint(mock_get_all_status,client): # Needs client to en
     response = client.get("/api/v1/status")
     assert response.status_code == 200
     response_json = response.json()
-    assert "ALL" in response_json
-    assert "AQI" in response_json
+    assert "devices" in response_json
+    assert "aqi" in response_json
     logging.info(" /status: %s", response_json)
 
 
