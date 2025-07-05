@@ -73,8 +73,9 @@ async def set_speed(request: Request, req: SpeedControl, conn:sqlite3.Connection
 async def status(conn:sqlite3.Connection = Depends(db.get_db_connection)):
     all_task = asyncio.create_task(ae200.get_all_status())
     aqi_task = asyncio.create_task(weather.get_aqi_async())
-    all_data, aqi_data = await asyncio.gather(all_task, aqi_task)
-    return {"AQI": aqi_data, "ALL": all_data}
+    weather_data_task = asyncio.create_task(weather.get_weather_data_async())
+    all_data, aqi_data, weather_data = await asyncio.gather(all_task, aqi_task, weather_data_task)
+    return {"aqi": aqi_data, "weather": weather_data, "devices": all_data}
 
 @api_v1.get("/system_map")
 async def system_map():

@@ -8,7 +8,7 @@ import json
 import csv
 import logging
 import time
-from os.path import dirname,abspath,join
+from os.path import dirname,abspath
 
 # runner is first to run so it needs to add . to the path
 sys.path.append(dirname(dirname(abspath(__file__))))

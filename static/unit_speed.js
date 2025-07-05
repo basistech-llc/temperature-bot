@@ -14,6 +14,42 @@ var start = Date.now();
 var forceRefresh = false;
 
 ////////////////////////////////////////////////////////////////
+// Weather display functions
+function displayWeather(weatherInfo) {
+    const weatherDiv = document.getElementById('weather');
+    if (!weatherDiv || !weatherInfo) {
+        return;
+    }
+    
+    let html = '';
+    
+    // Current weather
+    if (weatherInfo.current) {
+        const current = weatherInfo.current;
+        const temp = current.temperature ? `${Math.round(current.temperature)}°F` : 'N/A';
+        html += `<div><strong>Current:</strong> ${temp} ${current.conditions}`;
+        if (current.icon) {
+            html += ` <img src="${current.icon}" alt="weather icon" class="weather-icon">`;
+        }
+        html += `</div>`;
+    }
+    
+    // Forecast
+    if (weatherInfo.forecast && weatherInfo.forecast.length > 0) {
+        html += `<div><strong>Forecast:</strong></div>`;
+        weatherInfo.forecast.forEach(period => {
+            html += `<div>${period.time} ${period.temperature}°F ${period.conditions}`;
+            if (period.icon) {
+                html += ` <img src="${period.icon}" alt="weather icon" class="weather-icon">`;
+            }
+            html += `</div>`;
+        });
+    }
+    
+    weatherDiv.innerHTML = html;
+}
+
+////////////////////////////////////////////////////////////////
 // Log tables
 function getTodayUnixRange() {
     const now = new Date();
@@ -120,12 +156,17 @@ const refreshGrid = () => {
         fetch(window.location.href + 'api/v1/status', { method: "GET"})
             .then(response => response.json())
             .then(data => {
-                document.getElementById('aqi-value').textContent = data.AQI.value;
-                document.getElementById('aqi-name').textContent = data.AQI.name;
-                document.getElementById('aqi-name').style.backgroundColor = data.AQI.color;
+                document.getElementById('aqi-value').textContent = data.aqi.value;
+                document.getElementById('aqi-name').textContent = data.aqi.name;
+                document.getElementById('aqi-name').style.backgroundColor = data.aqi.color;
+
+                // Display weather information if available
+                if (data.weather) {
+                    displayWeather(data.weather);
+                }
 
                 // Update the tables with the new data
-		for (const [unit, d] of Object.entries(data.ALL)) {
+		for (const [unit, d] of Object.entries(data.devices)) {
 		    console.log("unit=",unit,"d=",d);
 		    // document.getElementById(`unit-${unit}-status`).textContent = `speed: ${d.val}`;
                     setRadioSpeed(unit, d.val);

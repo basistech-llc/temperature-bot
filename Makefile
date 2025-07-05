@@ -31,19 +31,18 @@ install-ubuntu:
 	sudo apt install python3-pip
 	pip install --user pipx
 	pipx ensurepath
-	pipx install uv
-	uv --version
-	pipx install ruff
+	pipx install poetry ruff
 	ruff --version
+	poetry install
 
 install-macos:
-	@echo Use pipx for the latest uv
+	@echo Use pipx for the latest poetry
 	pip install pipx
 	pipx ensurepath
-	pipx install uv
-	uv --version # Check this output: it *must* be 0.1.18 or higher
+	pipx install poetry ruff
 	pipx install ruff
 	ruff --version
+	poetry install
 
 
 eslint:
@@ -54,6 +53,4 @@ eslint:
 .venv/pyvenv.cfg:
 	@echo install venv for the development environment
 	echo $$PATH
-	uv venv
-	uv pip sync pyproject.toml
-	uv add --dev pytest
+	poetry install

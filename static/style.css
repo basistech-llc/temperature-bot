@@ -48,3 +48,9 @@ button {
 #log-table {
     max-width:1000px;
 }
+
+.weather-icon {
+    width: 20px;
+    height: 20px;
+    vertical-align: middle;
+}
