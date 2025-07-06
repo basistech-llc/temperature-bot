@@ -15,13 +15,13 @@ import pytest
 from fastapi.testclient import TestClient
 # from contextlib import asynccontextmanager # Not directly used on override_get_db_connection
 
-from myapp.main import app as fastapi_app
-from myapp import main
-from myapp import ae200
-from myapp import airnow
-from myapp import db
-from myapp.paths import SCHEMA_FILE_PATH
-#from myapp.main import status, set_speed, SpeedControl
+from app.main import app as fastapi_app
+from app import main
+from app import ae200
+from app import airnow
+from app import db
+from app.paths import SCHEMA_FILE_PATH
+#from app.main import status, set_speed, SpeedControl
 
 print(f"test_endpoints.py: fastapi_app id={id(fastapi_app)}")
 
@@ -127,7 +127,7 @@ async def test_get_version(client):
 # Use pytest-asyncio to allow async test functions
 @skip_on_github
 @pytest.mark.asyncio
-@patch("myapp.airnow.get_aqi_sync")
+@patch("app.airnow.get_aqi_sync")
 async def test_get_aqi_sync(mock_get_aqi_sync):
     # Mock the return value
     mock_get_aqi_sync.return_value = {"value": 45, "color": "#00e400", "name": "Good"}
@@ -148,9 +148,9 @@ async def test_get_all_status():
 
 @skip_on_github
 @pytest.mark.asyncio
-@patch("myapp.ae200.get_all_status", new_callable=AsyncMock)
-@patch("myapp.airnow.get_aqi_async", new_callable=AsyncMock)
-@patch("myapp.weather.get_weather_data_async", new_callable=AsyncMock)
+@patch("app.ae200.get_all_status", new_callable=AsyncMock)
+@patch("app.airnow.get_aqi_async", new_callable=AsyncMock)
+@patch("app.weather.get_weather_data_async", new_callable=AsyncMock)
 async def test_status_endpoint(mock_get_weather_data, mock_get_aqi, mock_get_all_status, client): # Needs client to ensure DB setup
     mock_get_all_status.return_value = [{'name':'test-device','drive':'ON','speed':'HIGH','val':4}]
     mock_get_aqi.return_value = {"value": 45, "color": "#00e400", "name": "Good"}
@@ -173,7 +173,7 @@ async def test_status_endpoint(mock_get_weather_data, mock_get_aqi, mock_get_all
     (12, 1),
     (13, 2),
 ])
-@patch("myapp.ae200.set_fan_speed", new_callable=AsyncMock)
+@patch("app.ae200.set_fan_speed", new_callable=AsyncMock)
 async def test_set_speed_endpoint(mock_set_fan_speed, client, unit, speed):
     response = client.post(
         "/api/v1/set_speed", # Adjust this path to your actual endpoint URL
@@ -185,7 +185,7 @@ async def test_set_speed_endpoint(mock_set_fan_speed, client, unit, speed):
     assert response_json["unit"] == unit
     assert response_json["speed"] == speed
 
-    # This verifies that myapp.ae200.set_fan_speed is called once with (unit,speed) as arguments
+    # This verifies that app.ae200.set_fan_speed is called once with (unit,speed) as arguments
     mock_set_fan_speed.assert_awaited_once_with(unit, speed)
 
     # Now, you can actually query the test database to verify the changelog entry

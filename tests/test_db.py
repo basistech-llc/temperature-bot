@@ -17,13 +17,13 @@ import pytest
 #from fastapi.testclient import TestClient
 # from contextlib import asynccontextmanager # Not directly used on override_get_db_connection
 
-#from myapp.main import app as fastapi_app
-#import myapp.ae200 as ae200
-#import myapp.aqi as aqi
-from myapp import db
-from myapp.paths import SCHEMA_FILE_PATH
+#from app.main import app as fastapi_app
+#import app.ae200 as ae200
+#import app.aqi as aqi
+from app import db
+from app.paths import SCHEMA_FILE_PATH
 from bin import runner
-#from myapp.main import status, set_speed, SpeedControl
+#from app.main import status, set_speed, SpeedControl
 
 logger = logging.getLogger(__name__)
 

@@ -17,7 +17,7 @@ PYLINT_THRESHOLD := 9.5
 PYLINT_OPTS : =--output-format=parseable --rcfile .pylintrc --fail-under=$(PYLINT_THRESHOLD) --verbose
 check:
 	ruff check .
-	$(PYTHON) -m pylint $(PYLINT_OPTS) myapp tests *.py
+	$(PYTHON) -m pylint $(PYLINT_OPTS) app tests *.py
 
 dump-schema:
 	echo ".schema"| sqlite3 $(DBFILE) | grep -v 'CREATE TABLE sqlite_sequence' > etc/schema.sql

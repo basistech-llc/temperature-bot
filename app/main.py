@@ -110,6 +110,17 @@ async def get_cached_aqi(conn, cache_hours=1):
         logger.error("api_error=%s",api_error)
         return {"value": "N/A", "color": "#cccccc", "name": "Unavailable"}
 
+async def get_last_db_data(conn):
+    def fix_status_json(devdict):
+        devdict = dict(devdict)
+        try:
+            devdict['status'] = json.loads(devdict['status_json'])
+        except (TypeError,json.JSONDecodeError):
+            pass
+        del devdict['status_json']
+        return devdict
+    return [fix_status_json(dd) for dd in db.fetch_last_status(conn)]
+
 ################################################################
 # Versioned API router
 api_v1 = APIRouter(prefix=API_V1_PREFIX)
@@ -130,8 +141,9 @@ async def status(conn:sqlite3.Connection = Depends(db.get_db_connection)):
     aqi_task = asyncio.create_task(get_cached_aqi(conn, cache_hours=1))
     all_task = asyncio.create_task(ae200.get_all_status())
     weather_data_task = asyncio.create_task(weather.get_weather_data_async())
-    all_data, aqi_data, weather_data = await asyncio.gather(all_task, aqi_task, weather_data_task)
-    return {"aqi": aqi_data, "weather": weather_data, "devices": all_data}
+    db_task  = asyncio.create_task(get_last_db_data(conn))
+    all_data, aqi_data, weather_data,db_data = await asyncio.gather(all_task, aqi_task, weather_data_task, db_task)
+    return {"aqi": aqi_data, "weather": weather_data, "devices": all_data, 'db':db_data}
 
 
 @api_v1.get("/system_map")

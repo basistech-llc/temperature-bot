@@ -6,8 +6,8 @@ import asyncio
 import datetime
 
 import httpx
-from myapp.util import get_config
-from myapp.paths import TIMEOUT_SECONDS
+from app.util import get_config
+from app.paths import TIMEOUT_SECONDS
 
 class WeatherService:
     """Create a connection for a specific location"""

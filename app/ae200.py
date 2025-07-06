@@ -17,7 +17,7 @@ import json
 import websockets
 from websockets.extensions import permessage_deflate
 
-from myapp.util import get_config
+from app.util import get_config
 
 # Fan mapping speeds
 SPEED_AUTO = -1

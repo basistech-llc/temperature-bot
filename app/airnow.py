@@ -7,8 +7,8 @@ import logging
 
 import requests
 import httpx
-from myapp.util import get_config,get_secret
-from myapp.paths import TIMEOUT_SECONDS
+from app.util import get_config,get_secret
+from app.paths import TIMEOUT_SECONDS
 
 AQI_URL = "https://www.airnowapi.org/aq/observation/zipCode/current/?format=application/json&zipCode={zipcode}&distance=15&API_KEY={API_KEY}"
 

@@ -13,10 +13,10 @@ from os.path import dirname,abspath
 # runner is first to run so it needs to add . to the path
 sys.path.append(dirname(dirname(abspath(__file__))))
 
-from myapp.paths import DB_PATH,ETC_DIR
-import myapp.ae200 as ae200
-import myapp.db as db
-import myapp.hubitat as hubitat
+from app.paths import DB_PATH,ETC_DIR
+import app.ae200 as ae200
+import app.db as db
+import app.hubitat as hubitat
 
 import lib.ctools.clogging as clogging
 import lib.ctools.lock as clock

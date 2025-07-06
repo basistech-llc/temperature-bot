@@ -12,7 +12,7 @@ import json
 import math
 
 
-from myapp.paths import DB_PATH
+from app.paths import DB_PATH
 
 logger = logging.getLogger(__name__)
 logger.debug("DB_PATH=%s",DB_PATH)
@@ -122,6 +122,12 @@ def fetch_all_devices(conn):
     """Fetches all device names and their IDs."""
     cursor = conn.cursor()
     cursor.execute("SELECT id, name FROM devices;")
+    return cursor.fetchall()
+
+def fetch_last_status(conn):
+    """Fetches the last status for each device"""
+    cursor = conn.cursor()
+    cursor.execute("select a.*,b.device_name from (select * from devlog group by device_id having logtime=max(logtime)) as a left join devices b where a.device_id = b.device_id")
     return cursor.fetchall()
 
 def get_recent_devlogs(conn, device_name: str, seconds: int):

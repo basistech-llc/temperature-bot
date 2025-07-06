@@ -7,9 +7,9 @@ import asyncio
 from pprint import pprint
 
 
-import myapp.ae200 as ae200
-import myapp.app as app
-from myapp.ae200 import AE200Functions,AE200_ADDRESS
+import app.ae200 as ae200
+import app.app as app
+from app.ae200 import AE200Functions,AE200_ADDRESS
 
 #import rules
 #import lib.ctools as ctools

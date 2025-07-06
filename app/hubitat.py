@@ -4,8 +4,8 @@ Hubitat implementation
 
 import json
 import requests
-from myapp.util import get_config,get_secret
-from myapp.paths import TIMEOUT_SECONDS
+from app.util import get_config,get_secret
+from app.paths import TIMEOUT_SECONDS
 
 HUBITAT_GET_ALL_DEVICES_FULL_DETAILS = "http://{host}/apps/api/493/devices/all?access_token={access_token}"
 HUBITAT_GET_DEVICE_INFO = "http://{host}/apps/api/493/devices/{device_id}?access_token={access_token}"

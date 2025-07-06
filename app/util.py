@@ -6,7 +6,7 @@ utility functions
 import os
 import functools
 import yaml
-from myapp.paths import CONFIG_YAML_PATH
+from app.paths import CONFIG_YAML_PATH
 
 
 @functools.lru_cache(maxsize=1)
