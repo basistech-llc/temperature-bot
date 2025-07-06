@@ -7,6 +7,7 @@ from os.path import abspath,join,dirname
 import os
 
 # Path to the schema file in the parent directory
+TIMEOUT_SECONDS = 2
 APP_DIR = dirname(abspath(__file__))
 ROOT_DIR = dirname(APP_DIR)
 ETC_DIR = join(dirname(APP_DIR),"etc")

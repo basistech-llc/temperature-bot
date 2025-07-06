@@ -9,14 +9,15 @@ Includes both async routines and synchronouse covers.
 # pylint: disable=missing-function-docstring
 # pylint: disable=redefined-outer-name
 
-import websockets
-from websockets.extensions import permessage_deflate
-import json
 import asyncio
 import xml.etree.ElementTree as ET
 import logging
+import json
 
-from myapp.paths import get_config
+import websockets
+from websockets.extensions import permessage_deflate
+
+from myapp.util import get_config
 
 # Fan mapping speeds
 SPEED_AUTO = -1

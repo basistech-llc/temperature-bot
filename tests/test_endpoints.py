@@ -1,21 +1,24 @@
+"""
+test async endpoints
+"""
 #import asyncio
 import logging
 from unittest.mock import AsyncMock, patch
 import sqlite3
 import os
+import tempfile # Import tempfile
 #import time
 import pytest_asyncio
 import pytest
-import tempfile # Import tempfile
 #import shutil   # Import shutil for directory cleanup
 
 from fastapi.testclient import TestClient
 # from contextlib import asynccontextmanager # Not directly used on override_get_db_connection
 
 from myapp.main import app as fastapi_app
-import myapp.ae200 as ae200
-import myapp.weather as weather
-import myapp.db as db
+from myapp import ae200
+from myapp import airnow
+from myapp import db
 from myapp.paths import SCHEMA_FILE_PATH
 #from myapp.main import status, set_speed, SpeedControl
 
@@ -42,7 +45,7 @@ def setup_test_database(conn):
     try:
         if not os.path.exists(SCHEMA_FILE_PATH):
             logging.error("Schema file not found at %s. Please ensure it exists.", SCHEMA_FILE_PATH)
-            raise FileNotFoundError("Schema file not found at %s" % SCHEMA_FILE_PATH)
+            raise FileNotFoundError(f"Schema file not found at {SCHEMA_FILE_PATH}")
 
         with open(SCHEMA_FILE_PATH, 'r') as f:
             schema_sql = f.read()
@@ -52,9 +55,6 @@ def setup_test_database(conn):
         logging.info("Test database schema set up successfully from %s.", SCHEMA_FILE_PATH)
     except sqlite3.Error as e:
         logging.exception("Test database error during schema setup: %s", e)
-        conn.rollback()
-    except Exception as e:
-        logging.exception("An unexpected error occurred during test schema setup: %s", e)
         conn.rollback()
 
 # Dependency override for testing with a real temporary file database
@@ -119,8 +119,8 @@ async def client():
 async def test_get_aqi_sync(mock_get_aqi_sync):
     # Mock the return value
     mock_get_aqi_sync.return_value = {"value": 45, "color": "#00e400", "name": "Good"}
-    
-    result = weather.get_aqi_sync()
+
+    result = airnow.get_aqi_sync()
     assert isinstance(result, dict)
     assert "value" in result
     assert result["value"] == 45

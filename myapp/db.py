@@ -1,9 +1,16 @@
+"""
+Centralized database operations to sqlite3 database.
+Location is specified by environment variable DB_PATH.
+Default location is $ROOT_DIR/temperature-bot.db  (largely for development and testing)
+"""
+
+
 import sqlite3
 import time # For logtime timestamps
 import logging
 import json
 import math
-import os   # For checking file existence
+
 
 from myapp.paths import DB_PATH
 
@@ -87,7 +94,7 @@ def get_or_create_device_id(conn, device_name):
             return DEVICE_MAP[device_name]
         else:
             logging.error("Could not retrieve ID for device name: %s", device_name)
-            raise ValueError("Could not retrieve ID for device name: %s" % device_name) # Using %s for consistency
+            raise ValueError("Could not retrieve ID for device name: %s" % device_name) # pylint: disable=consider-using-f-string
 
     except sqlite3.Error as e:
         logging.error("Database error in get_or_create_device_id: %s", e)
@@ -156,6 +163,7 @@ def get_recent_devlogs(conn, device_name: str, seconds: int):
 
 # Insertion
 
+# pylint: disable=too-many-arguments, disable=too-many-positional-arguments
 def insert_devlog_entry(conn, device_name: str, temp=None, statusdict=None, logtime=None, force=False, commit=True):
     """
     :param conn: database connection

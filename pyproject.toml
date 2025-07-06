@@ -25,7 +25,8 @@ dependencies = [
     "fastapi[standard]",
     "uvicorn",
     "python-dotenv", # If you're using it for environment variables
-    "pyyaml (>=6.0.2,<7.0.0)"
+    "pyyaml (>=6.0.2,<7.0.0)",
+    "pylint (>=3.3.7,<4.0.0)"
 ]
 
 authors = [

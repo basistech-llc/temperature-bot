@@ -2,9 +2,10 @@
 Hubitat implementation
 """
 
-import requests
 import json
+import requests
 from myapp.util import get_config,get_secret
+from myapp.paths import TIMEOUT_SECONDS
 
 HUBITAT_GET_ALL_DEVICES_FULL_DETAILS = "http://{host}/apps/api/493/devices/all?access_token={access_token}"
 HUBITAT_GET_DEVICE_INFO = "http://{host}/apps/api/493/devices/{device_id}?access_token={access_token}"
@@ -22,8 +23,8 @@ def extract_temperatures(hubdict: dict):
 
 def get_all_devices():
     host = get_config()['hubitat']['host']
-    access_token get_secret()['hubitat']['access_token']
-    r = requests.get(HUBITAT_GET_ALL_DEVICES_FULL_DETAILS.format(host=host,access_token=access_token))
+    access_token = get_secret('hubitat','access_token')
+    r = requests.get(HUBITAT_GET_ALL_DEVICES_FULL_DETAILS.format(host=host,access_token=access_token),timeout=TIMEOUT_SECONDS)
     return r.json()
 
 if __name__=="__main__":

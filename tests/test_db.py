@@ -1,13 +1,17 @@
+"""
+test for db.py
+"""
+
 #import asyncio
 import logging
 #from unittest.mock import AsyncMock, patch
 import sqlite3
 import json
+import tempfile # Import tempfile
 #import os
 #import time
 #import pytest_asyncio
 import pytest
-import tempfile # Import tempfile
 #import shutil   # Import shutil for directory cleanup
 
 #from fastapi.testclient import TestClient
@@ -16,9 +20,9 @@ import tempfile # Import tempfile
 #from myapp.main import app as fastapi_app
 #import myapp.ae200 as ae200
 #import myapp.aqi as aqi
-import myapp.db as db
+from myapp import db
 from myapp.paths import SCHEMA_FILE_PATH
-import bin.runner as runner
+from bin import runner
 #from myapp.main import status, set_speed, SpeedControl
 
 logger = logging.getLogger(__name__)

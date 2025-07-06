@@ -1,3 +1,7 @@
+"""
+test hubitat.py
+"""
+
 import logging
 #from unittest.mock import AsyncMock, patch
 #import sqlite3
@@ -13,7 +17,7 @@ import json
 #from fastapi.testclient import TestClient
 # from contextlib import asynccontextmanager # Not directly used on override_get_db_connection
 
-import myapp.hubitat as hubitat
+from myapp import hubitat
 
 #from myapp.main import app as fastapi_app
 #import myapp.ae200 as ae200

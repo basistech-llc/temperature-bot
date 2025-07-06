@@ -1,12 +1,16 @@
-import httpx
+"""
+Weather functions from the US National Weather Service
+"""
+
 import asyncio
 import datetime
 
+import httpx
 from myapp.util import get_config
-
-TIMEOUT_SECONDS = 2
+from myapp.paths import TIMEOUT_SECONDS
 
 class WeatherService:
+    """Create a connection for a specific location"""
     def __init__(self, lat=None, lon=None):
         if lat is None:
             lat = get_config()['location']['lat']
@@ -15,24 +19,24 @@ class WeatherService:
         self.lat = lat
         self.lon = lon
         self.weather_points = None
-        self._client = None
+        self.client = None
 
-    async def _ensure_points_loaded(self):
+    async def ensure_points_loaded(self):
         if self.weather_points is None:
-            if self._client is None:
-                self._client = httpx.AsyncClient(timeout=TIMEOUT_SECONDS)
+            if self.client is None:
+                self.client = httpx.AsyncClient(timeout=TIMEOUT_SECONDS)
 
             weather_points_url = f'https://api.weather.gov/points/{self.lat},{self.lon}'
-            response = await self._client.get(weather_points_url)
+            response = await self.client.get(weather_points_url)
             response.raise_for_status()
             self.weather_points = response.json()
 
     async def get_current_conditions(self):
         """Get current weather conditions from nearest station"""
-        await self._ensure_points_loaded()
+        await self.ensure_points_loaded()
 
         observation_stations_url = self.weather_points['properties']['observationStations']
-        response = await self._client.get(observation_stations_url)
+        response = await self.client.get(observation_stations_url)
         response.raise_for_status()
         stations = response.json()
 
@@ -43,7 +47,7 @@ class WeatherService:
         station_id = nearest_station['properties']['stationIdentifier']
 
         observations_url = f"https://api.weather.gov/stations/{station_id}/observations/latest"
-        response = await self._client.get(observations_url)
+        response = await self.client.get(observations_url)
         response.raise_for_status()
         observation = response.json()
 
@@ -61,10 +65,10 @@ class WeatherService:
 
     async def get_forecast(self):
         """Get hourly forecast data"""
-        await self._ensure_points_loaded()
+        await self.ensure_points_loaded()
 
         forecast_hourly_url = self.weather_points['properties']['forecastHourly']
-        response = await self._client.get(forecast_hourly_url)
+        response = await self.client.get(forecast_hourly_url)
         response.raise_for_status()
         forecasts = response.json()
 
@@ -101,8 +105,8 @@ class WeatherService:
         }
 
     async def close(self):
-        if self._client:
-            await self._client.aclose()
+        if self.client:
+            await self.client.aclose()
 
 
 async def get_weather_data_async(lat=None, lon=None):
@@ -119,14 +123,14 @@ async def get_weather_async(lat=None, lon=None):
     """Legacy function - returns raw weather API data"""
     service = WeatherService(lat=lat, lon=lon)
     try:
-        await service._ensure_points_loaded()
+        await service.ensure_points_loaded()
 
         observation_stations_url = service.weather_points['properties']['observationStations']
         forecast_hourly_url = service.weather_points['properties']['forecastHourly']
 
         stations_response, forecast_response = await asyncio.gather(
-            service._client.get(observation_stations_url),
-            service._client.get(forecast_hourly_url)
+            service.client.get(observation_stations_url),
+            service.client.get(forecast_hourly_url)
         )
 
         stations_response.raise_for_status()

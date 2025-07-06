@@ -3,28 +3,41 @@ app.py
 """
 
 from os.path import abspath
+import os
 import asyncio
 import logging
 import sqlite3
 import json
+from typing import Optional
 
-from pydantic import BaseModel, conint
 from contextlib import asynccontextmanager
 
+from pydantic import BaseModel, conint
 from fastapi import FastAPI, Depends, Request, APIRouter, Query
 from fastapi.responses import JSONResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from typing import Optional
 
 
 from . import ae200
 from . import weather
-from . import db # Import the db module
+from . import db
+from . import airnow
 
 DEV = "/home/simsong" in abspath(__file__)
 
-logger = logging.getLogger(__file__) # Use __file__ or __name__ for logger names
+DEFAULT_LOG_LEVEL = 'INFO'
+LOGGING_CONFIG='%(asctime)s  %(filename)s:%(lineno)d %(levelname)s: %(message)s'
+
+LOG_LEVEL = os.getenv("LOG_LEVEL",DEFAULT_LOG_LEVEL).upper()
+logging.basicConfig(format=LOGGING_CONFIG, level=LOG_LEVEL, force=True)
+logger = logging.getLogger(__name__)
+
+def fix_boto_log_level():
+    """Do not run boto loggers at debug level"""
+    for name in logging.root.manager.loggerDict: # pylint: disable=no-member
+        if name.startswith('boto'):
+            logging.getLogger(name).setLevel(logging.INFO)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -33,12 +46,14 @@ async def lifespan(app: FastAPI):
     This function now handles only startup/shutdown logging.
     The database schema is assumed to be managed externally or on first connect.
     """
-    logger.info("Application is starting up.")
     # No database setup logic needed here as per user's request.
     # The database is long-lived and its schema is managed externally.
 
+    logger.info("Application %s is starting up.", app)
+    fix_boto_log_level()
     yield # Application runs
-    logger.info("Application is shutting down.")
+    logger.info("Application %s is shutting down.", app)
+
 
 
 app = FastAPI(lifespan=lifespan) # Keep only ONE app = FastAPI() instance
@@ -70,18 +85,18 @@ async def get_cached_aqi(conn, cache_hours=1):
     # Check for recent AQI data in database
     if recent_logs:= db.get_recent_devlogs(conn, 'aqi', cache_seconds):
         latest_log = recent_logs[0]
-        logging.debug("latest_log=%s",latest_log)
+        logger.debug("latest_log=%s",latest_log)
         if latest_log['temp10x']:
             return json.loads(latest_log['temp10x'])
 
     try:
-        aqi_data = await weather.get_aqi_async()
-        logging.debug("aqi_data=%s",aqi_data)
+        aqi_data = await airnow.get_aqi_async()
+        logger.debug("aqi_data=%s",aqi_data)
         db.insert_devlog_entry(conn, 'aqi', temp=aqi_data['value'])
         return aqi_data
 
-    except Exception as api_error:
-        logging.error("api_error=%s",api_error)
+    except airnow.AirnowError as api_error:
+        logger.error("api_error=%s",api_error)
         return {"value": "N/A", "color": "#cccccc", "name": "Unavailable"}
 
 ################################################################
@@ -109,8 +124,8 @@ async def status(conn:sqlite3.Connection = Depends(db.get_db_connection)):
 @api_v1.get("/system_map")
 async def system_map():
     return await ae200.get_system_map()
-    return SYSTEM_MAP
 
+# pylint: disable=too-many-arguments, disable=too-many-positional-arguments
 @api_v1.get("/logs")
 async def get_logs( start: Optional[int] = Query(None),
                     end: Optional[int] = Query(None),
