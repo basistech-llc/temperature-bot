@@ -14,7 +14,7 @@ from contextlib import asynccontextmanager
 
 from pydantic import BaseModel, conint
 from fastapi import FastAPI, Depends, Request, APIRouter, Query
-from fastapi.responses import JSONResponse, HTMLResponse
+from fastapi.responses import JSONResponse, HTMLResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -24,12 +24,16 @@ from . import weather
 from . import db
 from . import airnow
 
-DEV = "/home/simsong" in abspath(__file__)
+__version__ = '0.0.1'
 
+DEV = "/home/simsong" in abspath(__file__)
+API_V1_PREFIX = "/api/v1"
 DEFAULT_LOG_LEVEL = 'INFO'
 LOGGING_CONFIG='%(asctime)s  %(filename)s:%(lineno)d %(levelname)s: %(message)s'
-
 LOG_LEVEL = os.getenv("LOG_LEVEL",DEFAULT_LOG_LEVEL).upper()
+
+ENABLE_AIRNOW = False
+
 logging.basicConfig(format=LOGGING_CONFIG, level=LOG_LEVEL, force=True)
 logger = logging.getLogger(__name__)
 
@@ -55,7 +59,6 @@ async def lifespan(app: FastAPI):
     logger.info("Application %s is shutting down.", app)
 
 
-
 app = FastAPI(lifespan=lifespan) # Keep only ONE app = FastAPI() instance
 templates = Jinja2Templates(directory="templates") # Moved here for correct association
 
@@ -70,6 +73,12 @@ SYSTEM_MAP = {12: "Kitchen ERV", 13: "Bathroom ERV"}
 class SpeedControl(BaseModel):
     unit: conint(ge=0, le=20)
     speed: conint(ge=0, le=4)
+
+
+class SpeedSetResponse(BaseModel):
+    status: str
+    unit: int
+    speed: int
 
 
 async def get_cached_aqi(conn, cache_hours=1):
@@ -90,6 +99,8 @@ async def get_cached_aqi(conn, cache_hours=1):
             return json.loads(latest_log['temp10x'])
 
     try:
+        if not ENABLE_AIRNOW:
+            raise airnow.AirnowError("ENABLE_AIRNOW is false")
         aqi_data = await airnow.get_aqi_async()
         logger.debug("aqi_data=%s",aqi_data)
         db.insert_devlog_entry(conn, 'aqi', temp=aqi_data['value'])
@@ -101,16 +112,18 @@ async def get_cached_aqi(conn, cache_hours=1):
 
 ################################################################
 # Versioned API router
-api_v1 = APIRouter(prefix="/api/v1")
-app.include_router(api_v1)
+api_v1 = APIRouter(prefix=API_V1_PREFIX)
 
-@api_v1.post("/set_speed")
-async def set_speed(request: Request, req: SpeedControl, conn:sqlite3.Connection = Depends(db.get_db_connection)):
+@api_v1.get("/version")
+async def version():
+    return {"version":__version__}
+
+@api_v1.post("/set_speed", response_model=SpeedSetResponse)
+async def set_speed(request: Request, req: SpeedControl, conn: sqlite3.Connection = Depends(db.get_db_connection)):
     logger.info("set speed: %s", req)
     db.insert_changelog(conn, request.client.host, req.unit, str(req.speed), "web")
     await ae200.set_fan_speed(req.unit, req.speed)
-    return {"status": "ok", "unit": req.unit, "speed": req.speed}
-
+    return SpeedSetResponse(status="ok", unit=req.unit, speed=req.speed)
 
 @api_v1.get("/status")
 async def status(conn:sqlite3.Connection = Depends(db.get_db_connection)):
@@ -127,11 +140,12 @@ async def system_map():
 
 # pylint: disable=too-many-arguments, disable=too-many-positional-arguments
 @api_v1.get("/logs")
-async def get_logs( start: Optional[int] = Query(None),
-                    end: Optional[int] = Query(None),
-                    draw: Optional[int] = Query(1),
-                    start_row: Optional[int] = Query(0),
-                    length: Optional[int] = Query(100),conn:sqlite3.Connection = Depends(db.get_db_connection) ):
+async def get_logs( start: int | None = Query(default=None),
+                    end: int | None = Query(default=None),
+                    draw: int = Query(default=1),
+                    start_row: int = Query(default=0),
+                    length: int = Query(default=100),
+                    conn: sqlite3.Connection = Depends(db.get_db_connection)):
     query = "SELECT logtime, ipaddr, unit, new_value, agent, comment FROM changelog WHERE 1=1"
     params = []
 
@@ -157,6 +171,8 @@ async def get_logs( start: Optional[int] = Query(None),
             "recordsFiltered": total_records,  # Adjust if implementing search
             "data": data } )
 
+# This must be done after all routes are defined
+app.include_router(api_v1)
 
 ################################################################
 # Serve static files
@@ -172,3 +188,9 @@ async def read_index(request: Request):
 @app.get("/privacy", response_class=HTMLResponse)
 async def privacy(request: Request):
     return templates.TemplateResponse("privacy.html", {"request": request})
+
+@app.get("/version", response_class=PlainTextResponse)
+async def version():
+    return f"version: {__version__}"
+
+print(f"main.py: app id={id(app)}")

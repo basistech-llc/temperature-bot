@@ -16,11 +16,14 @@ from fastapi.testclient import TestClient
 # from contextlib import asynccontextmanager # Not directly used on override_get_db_connection
 
 from myapp.main import app as fastapi_app
+from myapp import main
 from myapp import ae200
 from myapp import airnow
 from myapp import db
 from myapp.paths import SCHEMA_FILE_PATH
 #from myapp.main import status, set_speed, SpeedControl
+
+print(f"test_endpoints.py: fastapi_app id={id(fastapi_app)}")
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +35,6 @@ pytest_plugins = ("pytest_asyncio",)
 @pytest.fixture(autouse=True)
 def reduce_websockets_logging():
     logging.getLogger("websockets.client").setLevel(logging.INFO)
-
 
 skip_on_github = pytest.mark.skipif( os.getenv("GITHUB_ACTIONS") == "true", reason="Disabled in GitHub Actions")
 
@@ -111,11 +113,21 @@ async def client():
         os.environ.pop("TEST_DB_NAME", None)
 
 
+@pytest.mark.asyncio
+async def test_get_version(client):
+    response = client.get("/version")
+    assert response.status_code == 200
+    assert response.text == f'version: {main.__version__}'
+
+    response = client.get("/api/v1/version")
+    assert response.status_code == 200
+    assert response.json() == {'version':main.__version__}
+
 
 # Use pytest-asyncio to allow async test functions
 @skip_on_github
 @pytest.mark.asyncio
-@patch("myapp.weather.get_aqi_sync")
+@patch("myapp.airnow.get_aqi_sync")
 async def test_get_aqi_sync(mock_get_aqi_sync):
     # Mock the return value
     mock_get_aqi_sync.return_value = {"value": 45, "color": "#00e400", "name": "Good"}
@@ -137,7 +149,7 @@ async def test_get_all_status():
 @skip_on_github
 @pytest.mark.asyncio
 @patch("myapp.ae200.get_all_status", new_callable=AsyncMock)
-@patch("myapp.weather.get_aqi_async", new_callable=AsyncMock)
+@patch("myapp.airnow.get_aqi_async", new_callable=AsyncMock)
 @patch("myapp.weather.get_weather_data_async", new_callable=AsyncMock)
 async def test_status_endpoint(mock_get_weather_data, mock_get_aqi, mock_get_all_status, client): # Needs client to ensure DB setup
     mock_get_all_status.return_value = [{'name':'test-device','drive':'ON','speed':'HIGH','val':4}]
