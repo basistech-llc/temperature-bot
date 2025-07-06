@@ -115,10 +115,16 @@ async def client():
 # Use pytest-asyncio to allow async test functions
 @skip_on_github
 @pytest.mark.asyncio
-async def test_get_aqi_sync():
+@patch("myapp.weather.get_aqi_sync")
+async def test_get_aqi_sync(mock_get_aqi_sync):
+    # Mock the return value
+    mock_get_aqi_sync.return_value = {"value": 45, "color": "#00e400", "name": "Good"}
+    
     result = weather.get_aqi_sync()
     assert isinstance(result, dict)
     assert "value" in result
+    assert result["value"] == 45
+    assert result["name"] == "Good"
     logging.info("get_aqi_sync: %s", result)
 
 @skip_on_github
@@ -131,8 +137,12 @@ async def test_get_all_status():
 @skip_on_github
 @pytest.mark.asyncio
 @patch("myapp.ae200.get_all_status", new_callable=AsyncMock)
-async def test_status_endpoint(mock_get_all_status,client): # Needs client to ensure DB setup
+@patch("myapp.weather.get_aqi_async", new_callable=AsyncMock)
+@patch("myapp.weather.get_weather_data_async", new_callable=AsyncMock)
+async def test_status_endpoint(mock_get_weather_data, mock_get_aqi, mock_get_all_status, client): # Needs client to ensure DB setup
     mock_get_all_status.return_value = [{'name':'test-device','drive':'ON','speed':'HIGH','val':4}]
+    mock_get_aqi.return_value = {"value": 45, "color": "#00e400", "name": "Good"}
+    mock_get_weather_data.return_value = {"current": {"temperature": 72, "conditions": "Sunny"}, "forecast": []}
 
     # If this status endpoint also uses db.get_db_connection,
     # it will now correctly use the overridden test DB.
@@ -141,6 +151,7 @@ async def test_status_endpoint(mock_get_all_status,client): # Needs client to en
     response_json = response.json()
     assert "devices" in response_json
     assert "aqi" in response_json
+    assert "weather" in response_json
     logging.info(" /status: %s", response_json)
 
 

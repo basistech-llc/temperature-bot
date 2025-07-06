@@ -3,22 +3,18 @@ import time # For logtime timestamps
 import logging
 import json
 import math
-from pathlib import Path
 import os   # For checking file existence
-# Removed HTTPException and status import as they are not used directly here
-# from fastapi import HTTPException, status # Removed, these belong in main.py if used
 
-logger = logging.getLogger(__name__) # Use __name__ for module-specific logging
+from paths import DB_PATH
 
-DB_PATH = '/var/db/temperature-bot.db'
-LOCAL_DB_PATH = Path(__file__).parent.parent / "storage.db"
-DB_PATH = Path(DB_PATH) if os.path.exists(DB_PATH) else LOCAL_DB_PATH
+logger = logging.getLogger(__name__)
 
-# Dummy DATABASE_NAME for development if not set via environment (should be configured in main.py or env)
-# In a real app, DATABASE_NAME should come from an environment variable or app config.
+
+# Dummy DB_PATH for development if not set via environment (should be configured in main.py or env)
+# In a real app, DB_PATH should come from an environment variable or app config.
 # For testing, it's overridden.
-DATABASE_NAME = os.getenv("DATABASE_NAME", str(DB_PATH))
-logger.debug("DATABASE_NAME=%s",DATABASE_NAME)
+DB_PATH = os.getenv("DB_PATH", str(DB_PATH))
+logger.debug("DB_PATH=%s",DB_PATH)
 
 DEVICE_MAP = {}
 
@@ -38,7 +34,7 @@ async def get_db_connection():
     """
     conn = None
     try:
-        conn = connect_db(DATABASE_NAME) # This connect_db function is your synchronous one
+        conn = connect_db(DB_PATH) # This connect_db function is your synchronous one
         yield conn # Provide the connection to the route function
     except sqlite3.Error as e:
         # Re-raising HTTPException here is generally done in the FastAPI route
@@ -126,6 +122,43 @@ def fetch_all_devices(conn):
     cursor = conn.cursor()
     cursor.execute("SELECT id, name FROM devices;")
     return cursor.fetchall()
+
+def get_recent_devlogs(conn, device_name: str, seconds: int):
+    """
+    Get recent devlog entries for a device within the specified time window.
+
+    :param conn: database connection
+    :param device_name: the device name to query
+    :param seconds: number of seconds to look back from now
+    :return: list of devlog entries where logtime+duration > now()-seconds
+    """
+    cursor = conn.cursor()
+    current_time = int(time.time())
+    cutoff_time = current_time - seconds
+
+    try:
+        # Get the device_id
+        device_id = get_or_create_device_id(conn, device_name)
+
+        # Query for entries where logtime+duration > cutoff_time
+        # This ensures we get the most recent entry AND any other entry that overlaps with our time window
+        cursor.execute("""
+            SELECT d.*, dn.device_name
+            FROM devlog d
+            JOIN devices dn ON d.device_id = dn.device_id
+            WHERE d.device_id = ? AND (d.logtime + d.duration) > ?
+            ORDER BY d.logtime DESC
+        """, (device_id, cutoff_time))
+
+        return cursor.fetchall()
+
+    except sqlite3.Error as e:
+        logging.error("Database error in get_recent_devlogs: %s", e)
+        raise
+    except ValueError as e:
+        logging.error("Error: %s", e)
+        raise
+
 
 # Insertion
 

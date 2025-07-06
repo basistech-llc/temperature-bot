@@ -13,7 +13,7 @@ from os.path import dirname,abspath
 # runner is first to run so it needs to add . to the path
 sys.path.append(dirname(dirname(abspath(__file__))))
 
-from myapp.paths import DEV_DB,ETC_DIR
+from myapp.paths import DB_PATH,ETC_DIR
 import myapp.ae200 as ae200
 import myapp.db as db
 import myapp.hubitat as hubitat
@@ -196,7 +196,7 @@ def setup_parser():
     parser.add_argument("--unsafe", help="Run without synchronous mode. Fast, but dangerous", action='store_true')
     parser.add_argument("--dry-run", action='store_true')
     parser.add_argument("--csv-after", help="Date after which to import CSV in YYYY-MM-DD format",default="0000-00-00")
-    parser.add_argument("--dbfile", help='path to database file', default=DEV_DB)
+    parser.add_argument("--dbfile", help='path to database file', default=DB_PATH)
     parser.add_argument("--report", help="report on the database", action='store_true')
     parser.add_argument("--syslog", help="log to syslog", action='store_true')
     parser.add_argument("--daily", help='Run the daily cleanup')

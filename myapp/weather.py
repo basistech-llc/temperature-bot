@@ -2,7 +2,7 @@ import requests
 import httpx
 import asyncio
 import datetime
-from .utils import get_secret
+from myapp.utils import get_secret
 
 BASIS_LAT = 42.3876
 BASIS_LON = -71.0995
@@ -24,6 +24,7 @@ def aqi_color(aqi):
     for row in AQI_TABLE:
         if row[0] <= aqi <= row[1]:
             return (row[2], row[4])
+
 
 def get_aqi_sync():
     API_KEY = get_secret('AIRNOW_API_KEY')

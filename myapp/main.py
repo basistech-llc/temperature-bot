@@ -6,6 +6,7 @@ from os.path import abspath
 import asyncio
 import logging
 import sqlite3
+import json
 
 from pydantic import BaseModel, conint
 from contextlib import asynccontextmanager
@@ -56,6 +57,41 @@ class SpeedControl(BaseModel):
     speed: conint(ge=0, le=4)
 
 
+async def get_cached_aqi(conn, cache_hours=1):
+    """
+    Get AQI data from cache if available and recent, otherwise fetch from API.
+    
+    :param conn: database connection
+    :param cache_hours: number of hours to cache AQI data
+    :return: AQI data dict with value, color, name
+    """
+    cache_seconds = cache_hours * 3600
+    
+    try:
+        # Check for recent AQI data in database
+        recent_logs = db.get_recent_devlogs(conn, 'aqi', cache_seconds)
+        
+        if recent_logs:
+            # Use the most recent entry
+            latest_log = recent_logs[0]
+            if latest_log['status_json']:
+                aqi_data = json.loads(latest_log['status_json'])
+                return aqi_data
+        
+        # No recent data, fetch from API
+        aqi_data = await weather.get_aqi_async()
+        
+        # Store in database
+        db.insert_devlog_entry(conn, 'aqi', statusdict=aqi_data, commit=True)
+        
+        return aqi_data
+        
+    except Exception as e:
+        # If anything goes wrong, fall back to API
+        logger.error(f"Error getting cached AQI: {e}")
+        return await weather.get_aqi_async()
+
+
 ################################################################
 # Versioned API router
 api_v1 = APIRouter(prefix="/api/v1")
@@ -72,7 +108,7 @@ async def set_speed(request: Request, req: SpeedControl, conn:sqlite3.Connection
 @api_v1.get("/status")
 async def status(conn:sqlite3.Connection = Depends(db.get_db_connection)):
     all_task = asyncio.create_task(ae200.get_all_status())
-    aqi_task = asyncio.create_task(weather.get_aqi_async())
+    aqi_task = asyncio.create_task(get_cached_aqi(conn, cache_hours=1))
     weather_data_task = asyncio.create_task(weather.get_weather_data_async())
     all_data, aqi_data, weather_data = await asyncio.gather(all_task, aqi_task, weather_data_task)
     return {"aqi": aqi_data, "weather": weather_data, "devices": all_data}

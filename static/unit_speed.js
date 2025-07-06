@@ -16,14 +16,36 @@ var forceRefresh = false;
 ////////////////////////////////////////////////////////////////
 // Weather display functions
 function displayWeather(weatherInfo) {
+    console.log('displayWeather called with:', weatherInfo);
     const weatherDiv = document.getElementById('weather');
+    console.log('weatherDiv found:', !!weatherDiv);
     if (!weatherDiv || !weatherInfo) {
+        console.log('Early return - weatherDiv:', !!weatherDiv, 'weatherInfo:', !!weatherInfo);
         return;
     }
     
+    // Preserve existing AQI elements
+    const aqiStatus = weatherDiv.querySelector('#aqi-status');
+    const status = weatherDiv.querySelector('#status');
+    const lastUpdate = weatherDiv.querySelector('#last-update');
+    const nextUpdate = weatherDiv.querySelector('#next-update');
+    
+    console.log('Preserved elements:', {
+        aqiStatus: !!aqiStatus,
+        status: !!status,
+        lastUpdate: !!lastUpdate,
+        nextUpdate: !!nextUpdate
+    });
+    
     let html = '';
     
-    // Current weather
+    // Add back the preserved elements
+    if (aqiStatus) html += aqiStatus.outerHTML;
+    if (status) html += status.outerHTML;
+    if (lastUpdate) html += lastUpdate.outerHTML;
+    if (nextUpdate) html += nextUpdate.outerHTML;
+    
+    // Add weather content
     if (weatherInfo.current) {
         const current = weatherInfo.current;
         const temp = current.temperature ? `${Math.round(current.temperature)}°F` : 'N/A';
@@ -32,6 +54,7 @@ function displayWeather(weatherInfo) {
             html += ` <img src="${current.icon}" alt="weather icon" class="weather-icon">`;
         }
         html += `</div>`;
+        console.log('Added current weather to HTML');
     }
     
     // Forecast
@@ -44,8 +67,10 @@ function displayWeather(weatherInfo) {
             }
             html += `</div>`;
         });
+        console.log('Added forecast to HTML');
     }
     
+    console.log('Final HTML length:', html.length);
     weatherDiv.innerHTML = html;
 }
 
@@ -139,7 +164,7 @@ const refreshGrid = () => {
     // Check if total runtime exceeded
     if ((now - start) > RUNNING_MINUTES * 60 * 1000) {
         document.querySelector('#status').innerHTML = 'stopped.';
-        document.querySelector('#grid').innerHTML = 'Please click <b>reload</b> to restart the grid.';
+        document.querySelector('#main-grid').innerHTML = 'Please click <b>reload</b> to restart the grid.';
         return;
     }
 
@@ -156,13 +181,37 @@ const refreshGrid = () => {
         fetch(window.location.href + 'api/v1/status', { method: "GET"})
             .then(response => response.json())
             .then(data => {
-                document.getElementById('aqi-value').textContent = data.aqi.value;
-                document.getElementById('aqi-name').textContent = data.aqi.name;
-                document.getElementById('aqi-name').style.backgroundColor = data.aqi.color;
+                console.log('Status data received:', data);
+                
+                // Check if elements exist before trying to update
+                const aqiValueElement = document.getElementById('aqi-value');
+                const aqiNameElement = document.getElementById('aqi-name');
+                
+                console.log('Element check:', {
+                    aqiValueElement: aqiValueElement,
+                    aqiNameElement: aqiNameElement,
+                    aqiData: data.aqi
+                });
+                
+                if (aqiValueElement && aqiNameElement && data.aqi) {
+                    aqiValueElement.textContent = data.aqi.value;
+                    aqiNameElement.textContent = data.aqi.name;
+                    aqiNameElement.style.backgroundColor = data.aqi.color;
+                    console.log('AQI updated:', data.aqi);
+                } else {
+                    console.error('AQI elements not found or data missing:', {
+                        aqiValueElement: !!aqiValueElement,
+                        aqiNameElement: !!aqiNameElement,
+                        aqiData: !!data.aqi
+                    });
+                }
 
                 // Display weather information if available
                 if (data.weather) {
+                    console.log('Weather data found:', data.weather);
                     displayWeather(data.weather);
+                } else {
+                    console.log('No weather data in response');
                 }
 
                 // Update the tables with the new data
@@ -206,7 +255,7 @@ async function loadMapAndRenderGrid() {
 
 	const speeds = [-1, 0, 1, 2, 3, 4];
         const form = document.createElement('form');
-        document.getElementById('grid').appendChild(form);
+        document.getElementById('main-grid').appendChild(form);
 
 	const table = document.createElement('table');
 	table.className = 'pure-table pure-table-bordered';
