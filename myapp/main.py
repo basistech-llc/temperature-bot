@@ -60,46 +60,38 @@ class SpeedControl(BaseModel):
 async def get_cached_aqi(conn, cache_hours=1):
     """
     Get AQI data from cache if available and recent, otherwise fetch from API.
-    
+
     :param conn: database connection
     :param cache_hours: number of hours to cache AQI data
     :return: AQI data dict with value, color, name
     """
     cache_seconds = cache_hours * 3600
-    
-    try:
-        # Check for recent AQI data in database
-        recent_logs = db.get_recent_devlogs(conn, 'aqi', cache_seconds)
-        
-        if recent_logs:
-            # Use the most recent entry
-            latest_log = recent_logs[0]
-            if latest_log['status_json']:
-                aqi_data = json.loads(latest_log['status_json'])
-                return aqi_data
-        
-        # No recent data, fetch from API
-        aqi_data = await weather.get_aqi_async()
-        
-        # Store in database
-        db.insert_devlog_entry(conn, 'aqi', statusdict=aqi_data, commit=True)
-        
-        return aqi_data
-        
-    except Exception as e:
-        # If anything goes wrong, fall back to API
-        logger.error(f"Error getting cached AQI: {e}")
-        return await weather.get_aqi_async()
 
+    # Check for recent AQI data in database
+    if recent_logs:= db.get_recent_devlogs(conn, 'aqi', cache_seconds):
+        latest_log = recent_logs[0]
+        logging.debug("latest_log=%s",latest_log)
+        if latest_log['temp10x']:
+            return json.loads(latest_log['temp10x'])
+
+    try:
+        aqi_data = await weather.get_aqi_async()
+        logging.debug("aqi_data=%s",aqi_data)
+        db.insert_devlog_entry(conn, 'aqi', temp=aqi_data['value'])
+        return aqi_data
+
+    except Exception as api_error:
+        logging.error("api_error=%s",api_error)
+        return {"value": "N/A", "color": "#cccccc", "name": "Unavailable"}
 
 ################################################################
 # Versioned API router
 api_v1 = APIRouter(prefix="/api/v1")
+app.include_router(api_v1)
 
 @api_v1.post("/set_speed")
 async def set_speed(request: Request, req: SpeedControl, conn:sqlite3.Connection = Depends(db.get_db_connection)):
     logger.info("set speed: %s", req)
-    # Ensure insert_changelog expects 'conn' as first arg
     db.insert_changelog(conn, request.client.host, req.unit, str(req.speed), "web")
     await ae200.set_fan_speed(req.unit, req.speed)
     return {"status": "ok", "unit": req.unit, "speed": req.speed}
@@ -107,17 +99,17 @@ async def set_speed(request: Request, req: SpeedControl, conn:sqlite3.Connection
 
 @api_v1.get("/status")
 async def status(conn:sqlite3.Connection = Depends(db.get_db_connection)):
-    all_task = asyncio.create_task(ae200.get_all_status())
     aqi_task = asyncio.create_task(get_cached_aqi(conn, cache_hours=1))
+    all_task = asyncio.create_task(ae200.get_all_status())
     weather_data_task = asyncio.create_task(weather.get_weather_data_async())
     all_data, aqi_data, weather_data = await asyncio.gather(all_task, aqi_task, weather_data_task)
     return {"aqi": aqi_data, "weather": weather_data, "devices": all_data}
+
 
 @api_v1.get("/system_map")
 async def system_map():
     return await ae200.get_system_map()
     return SYSTEM_MAP
-
 
 @api_v1.get("/logs")
 async def get_logs( start: Optional[int] = Query(None),
@@ -137,15 +129,12 @@ async def get_logs( start: Optional[int] = Query(None),
 
     query += " ORDER BY logtime DESC LIMIT ? OFFSET ?"
     params.extend([length, start_row])
-
-    logger.info("query=%s params=%s", query, params) # Changed to logger.info
+    logger.info("query=%s params=%s", query, params)
     c = conn.cursor()
     c.execute("SELECT COUNT(*) FROM changelog")
     total_records = c.fetchone()[0]
     c.execute(query, params)
-    records = c.fetchall()
-
-    data = [ dict(row) for row in records ] # Convert Row objects to dicts for JSON serialization
+    data = [ dict(row) for row in c.fetchall() ]  # Convert Row objects to dicts for JSON serialization
 
     return JSONResponse( {
             "draw": draw,
@@ -154,32 +143,16 @@ async def get_logs( start: Optional[int] = Query(None),
             "data": data } )
 
 
-# Register the router
-app.include_router(api_v1)
-
-
 ################################################################
-## Main app
-
 # Serve static files
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-# Jinja2 template loader (already defined above `app = FastAPI()`)
-# templates = Jinja2Templates(directory="templates") # This line is now redundant
-# @app.get("/", response_class=HTMLResponse)
-# async def read_index(request: Request):
-#     return templates.TemplateResponse(
-#         "index.html", {"request": request, "develop": DEV}
-#     )
 
-
-# If you have other top-level routes outside the router, include them here:
+################################################################
+# Othe top-level routes
 @app.get("/", response_class=HTMLResponse)
 async def read_index(request: Request):
-    return templates.TemplateResponse(
-        "index.html", {"request": request, "develop": DEV}
-    )
-
+    return templates.TemplateResponse( "index.html", {"request": request, "develop": DEV} )
 
 @app.get("/privacy", response_class=HTMLResponse)
 async def privacy(request: Request):

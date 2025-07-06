@@ -16,12 +16,11 @@ import asyncio
 import xml.etree.ElementTree as ET
 import logging
 
+from myapp.paths import get_config
+
 # Fan mapping speeds
-SPEEDS = {1: "LOW", 2: "MID2", 3: "MID1", 4: "HIGH"}
-
-# BasisTech address (to go away)
-AE200_ADDRESS = "10.2.1.20"
-
+SPEED_AUTO = -1
+SPEEDS = {-1:"AUTO", 1: "LOW", 2: "MID2", 3: "MID1", 4: "HIGH"}
 
 getUnitsPayload = """<?xml version="1.0" encoding="UTF-8" ?>
 <Packet>
@@ -60,16 +59,33 @@ def getMnetDetails(deviceIds):
 </Packet>
 """
 
+################################################################
+### support functions
 def cleanDeviceInfo(statusdict):
-    """Given the deviceInfo, remove empty values"""
+    """Given the statusdict, remove empty values"""
     return {key:value for (key,value) in statusdict.items() if value!=""}
 
+def drive_speed_to_val(drive, speed):
+    """Converts an AE200 drive and speed to a single value (-1 for auto)"""
+    if drive == "OFF":
+        return 0
+    if speed=="AUTO":
+        return -1
+    for n, v in SPEEDS.items():
+        if speed == v:
+            return n
+    raise ValueError(f"Unknown drive={drive} speed={speed}")
+
+################################################################
+### controller class
 class AE200Functions:
     """Originally from https://github.com/natevoci/ae200"""
 
-    def __init__(self, address=AE200_ADDRESS):
+    def __init__(self, address=None):
         self._json = None
         self._temp_list = []
+        if address is None:
+            address = get_config()['ae200']['host']
         self.address = address
 
     async def getDevicesAsync(self):
@@ -84,12 +100,9 @@ class AE200Functions:
             unitsResultXML = ET.fromstring(unitsResultStr)
 
             groupList = []
-            for r in unitsResultXML.findall(
-                "./DatabaseManager/ControlGroup/MnetList/MnetRecord"
-            ):
+            for r in unitsResultXML.findall( "./DatabaseManager/ControlGroup/MnetList/MnetRecord" ):
                 # print( ET.tostring(r) )
                 groupList.append({"id": r.get("Group"), "name": r.get("GroupNameWeb")})
-
             await websocket.close()
             return groupList
 
@@ -132,22 +145,9 @@ class AE200Functions:
     def send(self, deviceId, attributes):
         return asyncio.run(self.sendAsync(deviceId, attributes))
 
-
-def drive_speed_to_val(drive, speed):
-    if drive == "OFF":
-        return 0
-    if speed=="AUTO":
-        return -1
-    for n, v in SPEEDS.items():
-        if speed == v:
-            return n
-    raise ValueError(f"Unknown drive={drive} speed={speed}")
-
-
 async def get_dev_status(dev):
     d = AE200Functions()
-    return await d.getDeviceInfoAsync(AE200_ADDRESS, dev)
-
+    return await d.getDeviceInfoAsync(dev)
 
 async def get_system_map():
     d = AE200Functions()
@@ -178,7 +178,6 @@ async def get_all_status():
             logging.error("KeyError '%s' in data: %s", e, data)
     return ret
 
-
 async def set_fan_speed(device, speed):
     d = AE200Functions()
     if speed == 0:
@@ -192,15 +191,15 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(
-        description="Set the BasisTech ERVs",
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
-    )
-    #parser.add_argument( "--level", help="Specify level 0-4. 0 is off", type=int, default=0 )
+        description="Demo function",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter )
+    parser.add_argument( "--host", help='address of the AE200 controller')
     parser.add_argument( "--json", help='Full JSON dump of the device(s)', action="store_true")
-    parser.add_argument( "devices", help='Device. Can be a number or list of names', nargs="*"    )
+    parser.add_argument( "--set",   help='Specifies a device to set', type=int)
+    parser.add_argument( "--level", help="Specify level 0-4. 0 is off", type=int, default=0 )
     args = parser.parse_args()
 
-    d = AE200Functions(AE200_ADDRESS)
+    d = AE200Functions(args.host)
 
     # Test reading device list
     devs = d.getDevices()
@@ -211,18 +210,6 @@ if __name__ == "__main__":
         # print(did, json.dumps(d.getDeviceInfo(did), indent=4))
         data = d.getDeviceInfo(did)
         print(did, name, "drive: ", data["Drive"], "fan speed: ", data["FanSpeed"])
-
-    # for dev in args.devices:
-    #    try:
-    #        num = ERVS[dev.lower()]
-    #    except KeyError:
-    #        print(f"invalid device '{dev}' must be {' or '.join(ERVS.keys())}")
-    #        exit(1)
-    #    if args.level==0:
-    #        d.send(num, { "Drive": "OFF"})
-    #    else:
-    #        d.send(num, { "Drive": "ON"})
-    #        d.send(num, { "FanSpeed": SPEEDS[args.level]})
 
     if args.json:
         for dev in args.devices:

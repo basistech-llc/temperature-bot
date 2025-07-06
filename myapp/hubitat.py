@@ -4,7 +4,7 @@ Hubitat implementation
 
 import requests
 import json
-from .paths import SECRETS_PATH
+from myapp.util import get_config,get_secret
 
 HUBITAT_GET_ALL_DEVICES_FULL_DETAILS = "http://{host}/apps/api/493/devices/all?access_token={access_token}"
 HUBITAT_GET_DEVICE_INFO = "http://{host}/apps/api/493/devices/{device_id}?access_token={access_token}"
@@ -21,11 +21,10 @@ def extract_temperatures(hubdict: dict):
             if "TemperatureMeasurement" in dev['capabilities']]
 
 def get_all_devices():
-    with open(SECRETS_PATH,'r') as f:
-        hubitat = json.load(f)['HUBITAT'][0]
-    r = requests.get(HUBITAT_GET_ALL_DEVICES_FULL_DETAILS.format(host=hubitat['host'],access_token=hubitat['access_token']))
+    host = get_config()['hubitat']['host']
+    access_token get_secret()['hubitat']['access_token']
+    r = requests.get(HUBITAT_GET_ALL_DEVICES_FULL_DETAILS.format(host=host,access_token=access_token))
     return r.json()
-
 
 if __name__=="__main__":
     """A little test program"""

@@ -5,15 +5,9 @@ import json
 import math
 import os   # For checking file existence
 
-from paths import DB_PATH
+from myapp.paths import DB_PATH
 
 logger = logging.getLogger(__name__)
-
-
-# Dummy DB_PATH for development if not set via environment (should be configured in main.py or env)
-# In a real app, DB_PATH should come from an environment variable or app config.
-# For testing, it's overridden.
-DB_PATH = os.getenv("DB_PATH", str(DB_PATH))
 logger.debug("DB_PATH=%s",DB_PATH)
 
 DEVICE_MAP = {}
