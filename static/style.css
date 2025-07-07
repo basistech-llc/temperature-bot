@@ -12,6 +12,10 @@ th {
     background-color: beige;
 }
 
+#unit-header {
+    width: 200px;
+}
+
 td.speed {
     text-align: center;
 }
@@ -41,7 +45,7 @@ button {
 .top-banner a {color:white; pad-left: 1em;}
 
 .maxwidth {
-  max-width: 500px;
+  max-width: 800px;
 }
 
 #main-grid {
@@ -55,9 +59,10 @@ button {
 }
 
 .weather-icon {
-    width: 20px;
-    height: 20px;
+    width: 40px;
+    height: 40px;
     vertical-align: middle;
+    horizontal-align: left;
 }
 
 /* Debug styles for the fan-status-container */

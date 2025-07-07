@@ -12,6 +12,7 @@ let lastRefreshTime = 0;
 // Refresh logic
 var start = Date.now();
 var forceRefresh = false;
+const FAN_SPEEDS = [-1, 0, 1, 2, 3, 4];
 
 ////////////////////////////////////////////////////////////////
 // Weather display functions
@@ -23,53 +24,53 @@ function displayWeather(weatherInfo) {
         console.log('Early return - weatherDiv:', !!weatherDiv, 'weatherInfo:', !!weatherInfo);
         return;
     }
-    
+
     // Preserve existing AQI elements
     const aqiStatus = weatherDiv.querySelector('#aqi-status');
     const status = weatherDiv.querySelector('#status');
     const lastUpdate = weatherDiv.querySelector('#last-update');
     const nextUpdate = weatherDiv.querySelector('#next-update');
-    
+
     console.log('Preserved elements:', {
         aqiStatus: !!aqiStatus,
         status: !!status,
         lastUpdate: !!lastUpdate,
         nextUpdate: !!nextUpdate
     });
-    
+
     let html = '';
-    
+
     // Add back the preserved elements
     if (aqiStatus) html += aqiStatus.outerHTML;
     if (status) html += status.outerHTML;
     if (lastUpdate) html += lastUpdate.outerHTML;
     if (nextUpdate) html += nextUpdate.outerHTML;
-    
+
     // Add weather content
     if (weatherInfo.current) {
         const current = weatherInfo.current;
         const temp = current.temperature ? `${Math.round(current.temperature)}°F` : 'N/A';
-        html += `<div><strong>Current:</strong> ${temp} ${current.conditions}`;
+        html += `<div><strong>Current:</strong> ${temp} `;
         if (current.icon) {
             html += ` <img src="${current.icon}" alt="weather icon" class="weather-icon">`;
         }
-        html += `</div>`;
+        html += `${current.conditions}</div>`;
         console.log('Added current weather to HTML');
     }
-    
+
     // Forecast
     if (weatherInfo.forecast && weatherInfo.forecast.length > 0) {
         html += `<div><strong>Forecast:</strong></div>`;
         weatherInfo.forecast.forEach(period => {
-            html += `<div>${period.time} ${period.temperature}°F ${period.conditions}`;
+            html += `<div>${period.time} ${period.temperature}°F `;
             if (period.icon) {
                 html += ` <img src="${period.icon}" alt="weather icon" class="weather-icon">`;
             }
-            html += `</div>`;
+            html += `${period.conditions}</div>`;
         });
         console.log('Added forecast to HTML');
     }
-    
+
     console.log('Final HTML length:', html.length);
     weatherDiv.innerHTML = html;
 }
@@ -129,7 +130,7 @@ function refreshLogTable() {
 
 
 // Function called to set the speed
-async function setSpeed(unit, speed) {
+async function setFanSpeed(unit, speed) {
     try {
 	const response = await fetch('/api/v1/set_speed', {
 	    method: 'POST',
@@ -143,16 +144,6 @@ async function setSpeed(unit, speed) {
     } catch (e) {
 	console.error('Failed to set speed:', e);
 	alert('Error setting speed.');
-    }
-}
-
-// Updates the speed in the UI
-function setRadioSpeed(unit, speed) {
-    const radio = document.getElementById(`radio-${unit}-${speed}`);
-    if (radio) {
-        radio.checked = true;
-    } else {
-        console.warn(`Radio button for unit ${unit} speed ${speed} not found.`);
     }
 }
 
@@ -182,43 +173,43 @@ const refreshGrid = () => {
             .then(response => response.json())
             .then(data => {
                 console.log('Status data received:', data);
-                
-                // Check if elements exist before trying to update
+
                 const aqiValueElement = document.getElementById('aqi-value');
-                const aqiNameElement = document.getElementById('aqi-name');
-                
-                console.log('Element check:', {
-                    aqiValueElement: aqiValueElement,
-                    aqiNameElement: aqiNameElement,
-                    aqiData: data.aqi
-                });
-                
-                if (aqiValueElement && aqiNameElement && data.aqi) {
-                    aqiValueElement.textContent = data.aqi.value;
-                    aqiNameElement.textContent = data.aqi.name;
-                    aqiNameElement.style.backgroundColor = data.aqi.color;
-                    console.log('AQI updated:', data.aqi);
-                } else {
-                    console.error('AQI elements not found or data missing:', {
-                        aqiValueElement: !!aqiValueElement,
-                        aqiNameElement: !!aqiNameElement,
-                        aqiData: !!data.aqi
-                    });
+                const aqiNameElement =  document.getElementById('aqi-name');
+
+                if (aqiValueElement && aqiNameElement ) {
+		    if (data.aqi.error) {
+			aqiValueElement.textContent = 'Error';
+			aqiNameElement.textContent = data.aqi.error;
+		    } else {
+			aqiValueElement.textContent = data.aqi.value;
+			aqiNameElement.textContent = data.aqi.name;
+			aqiNameElement.style.backgroundColor = data.aqi.color;
+		    }
                 }
 
                 // Display weather information if available
                 if (data.weather) {
-                    console.log('Weather data found:', data.weather);
                     displayWeather(data.weather);
-                } else {
-                    console.log('No weather data in response');
                 }
 
                 // Update the tables with the new data
-		for (const [unit, d] of Object.entries(data.devices)) {
-		    console.log("unit=",unit,"d=",d);
-		    // document.getElementById(`unit-${unit}-status`).textContent = `speed: ${d.val}`;
-                    setRadioSpeed(unit, d.val);
+		for (const dev of data.devices) {
+		    console.log("dev=",dev);
+		    if (dev.temp10x) {
+			const cell = document.getElementById(`temp-${dev.device_id}`);
+			var myformat = Intl.NumberFormat('en-US', {minimumIntegerDigits:2,
+								   minimumFractionDigits:1});
+			cell.textContent = myformat.format(dev.temp10x/10);
+		    }
+		    if (dev.speed) {
+			const radio = document.getElementById(`radio-${dev.device_id}-${dev.drive_speed_val}`);
+			if (radio) {
+			    radio.checked = true;
+			} else {
+			    console.warn(`Radio button not found for radio-${dev.device_id}-${dev.drive_speed_val} dev=`,dev);
+			}
+		    }
 		}
 
 		// Update last refresh time
@@ -246,14 +237,15 @@ const refreshGrid = () => {
     setTimeout(refreshGrid, 1000);    // Schedule next check in 1 second
 };
 
+/* This creates the grid using the status API. */
 async function loadMapAndRenderGrid() {
     console.log("Running loadMapAndRenderGrid()");
     try {
-	const res = await fetch('/api/v1/system_map');
-	const systemMap = await res.json();
-	console.log("Got system map:", systemMap);
+	const res = await fetch('/api/v1/status');
+	const r2 =  await res.json()
+	const devices = r2.devices;
+	console.log("Got devices:", devices);
 
-	const speeds = [-1, 0, 1, 2, 3, 4];
         const form = document.createElement('form');
         document.getElementById('main-grid').appendChild(form);
 
@@ -262,29 +254,50 @@ async function loadMapAndRenderGrid() {
 
 	// Header row
 	const headerRow = document.createElement('tr');
-	headerRow.innerHTML = `<th>Unit</th>` + speeds.map(s => `<th>${s}</th>`).join('');
+	headerRow.innerHTML = `<th >Unit</th><th>Temp</th>` + FAN_SPEEDS.map(s => `<th>${s}</th>`).join('');
 	table.appendChild(headerRow);
 
 	// Rows
-	for (const [unit, label] of Object.entries(systemMap)) {
+	console.log("devices=",devices);
+	for (const obj of devices ) {
 	    const row = document.createElement('tr');
 	    const labelCell = document.createElement('td');
-	    labelCell.innerHTML = label + ` <span id="unit-${unit}-status"></span>`;
+	    labelCell.innerHTML = obj.device_name + `<span id="device-${obj.device_id}-status"></span>`;
 	    row.appendChild(labelCell);
 
-	    speeds.forEach(speed => {
+	    // If this device takes a temp, put a space for it
+	    if (obj.temp10x ){
 		const cell = document.createElement('td');
-                cell.classList.add('speed');
-		const radio = document.createElement('input');
-                radio.type = 'radio';
-                radio.name = `speed-${unit}`;
-                radio.value = speed;
-                radio.id = `radio-${unit}-${speed}`;
-		radio.onclick = () => setSpeed(unit, speed);
-		cell.appendChild(radio);
+		cell.id = `temp-${obj.device_id}`;
+		cell.textContent = '--';
 		row.appendChild(cell);
-	    });
+	    } else {
+		// Otherwise create a blank cell
+		const cell = document.createElement('td');
+		cell.textContent = 'n/a';
+		row.appendChild(cell);
+	    }
 
+	    // If this is a device that supports speed control, draw those radio buttons
+	    if (obj.speed) {
+		FAN_SPEEDS.forEach(fan_speed => {
+		    const cell = document.createElement('td');
+                    cell.classList.add('speed');
+		    const radio = document.createElement('input');
+                    radio.type  = 'radio';
+                    radio.name  = `fan_speed-${obj.device_id}`;
+                    radio.value = fan_speed;
+                    radio.id    = `radio-${obj.device_id}-${fan_speed}`;
+		    radio.onclick = () => setFanSpeed(obj.status.id, fan_speed);
+		    cell.appendChild(radio);
+		    row.appendChild(cell);
+		});
+	    } else {
+		// Otherwise create a blank colspan
+		const cell = document.createElement('td');
+		cell.colSpan = 6;
+		row.appendChild(cell);
+	    }
 	    table.appendChild(row);
 	}
 	form.appendChild(table);

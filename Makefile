@@ -27,8 +27,11 @@ make-dev-db:
 	sqlite3 $(DEV_DB) < etc/schema.sql
 	ls -l $(DEV_DB)
 
-dev:
+local-dev:
 	.venv/bin/fastapi dev
+#sleep 1
+#browser-sync 'http://localhost:8000' 'static' --watch --files .
+
 
 install-ubuntu:
 	sudo apt install python3-pip
@@ -37,6 +40,7 @@ install-ubuntu:
 	pipx install poetry ruff
 	ruff --version
 	poetry install
+	npm install browser-sync -g
 
 install-macos:
 	@echo Use pipx for the latest poetry
@@ -46,6 +50,7 @@ install-macos:
 	pipx install ruff
 	ruff --version
 	poetry install
+	npm install browser-sync -g
 
 
 eslint:

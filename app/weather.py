@@ -121,6 +121,9 @@ async def get_weather_data_async(lat=None, lon=None):
     except httpx.ConnectError as e:
         logging.error("%s: %s",type(e),e)
         return {'error':f"{type(e)}: {e}" }
+    except httpx.HTTPSStatusError as e:
+        logging.error("%s: %s",type(e),e)
+        return {'error':f"{type(e)}: {e}" }
 
 
 

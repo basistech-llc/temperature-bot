@@ -61,6 +61,9 @@ async def get_aqi_async():
             response.raise_for_status()
         except httpx.TimeoutException as e:
             raise AirnowError("timeout") from e
+        except httpx.HTTPStatusError as e:
+            logging.error("%s: %s",type(e),e)
+            return {"error":f"HTTP Status error e={e}"}
 
     if response.json()==[]:
         return {"error":"AirNow API returned []; likely rate-limited"}

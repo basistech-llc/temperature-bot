@@ -7,3 +7,4 @@ secrets.json
 activate
 *.egg-info/
 *secret*.json
+TAGS

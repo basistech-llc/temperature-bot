@@ -18,7 +18,6 @@ from fastapi.responses import JSONResponse, HTMLResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-
 from . import ae200
 from . import weather
 from . import db
@@ -32,7 +31,7 @@ DEFAULT_LOG_LEVEL = 'INFO'
 LOGGING_CONFIG='%(asctime)s  %(filename)s:%(lineno)d %(levelname)s: %(message)s'
 LOG_LEVEL = os.getenv("LOG_LEVEL",DEFAULT_LOG_LEVEL).upper()
 
-ENABLE_AIRNOW = True
+ENABLE_AIRNOW = False
 
 logging.basicConfig(format=LOGGING_CONFIG, level=LOG_LEVEL, force=True)
 logger = logging.getLogger(__name__)

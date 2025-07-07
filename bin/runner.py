@@ -26,6 +26,7 @@ def update_ae200(conn, dry_run=False):
     devs = d.getDevices()
     for dev in devs:
         data = d.getDeviceInfo(dev['id'])
+        data['id'] = dev['id']
         temp = data.get("InletTemp",None)
         if not dry_run:
             db.insert_devlog_entry(conn, device_name=dev['name'], temp=temp, statusdict=data)

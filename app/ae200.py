@@ -68,6 +68,8 @@ def cleanDeviceInfo(statusdict):
 
 def drive_speed_to_val(drive, speed):
     """Converts an AE200 drive and speed to a single value (-1 for auto)"""
+    if drive is None or speed is None:
+        return None
     if drive == "OFF":
         return 0
     if speed=="AUTO":
@@ -162,10 +164,12 @@ async def get_system_map():
 
 def extract_status(data):
     """Return a dict with drive/speed/drive_speed_val"""
+    drive = data.get('Drive',None)
+    speed = data.get('FanSpeed',None)
     return {
-        'drive': data['Drive'],
-        'speed': data['FanSpeed'],
-        'drive_speed_val': drive_speed_to_val(data['Drive'], data['FanSpeed']),
+        'drive': drive,
+        'speed': speed,
+        'drive_speed_val': drive_speed_to_val(drive, speed)
     }
 
 async def get_all_status():
