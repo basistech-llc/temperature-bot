@@ -1,23 +1,29 @@
+"""
+test async endpoints
+"""
 #import asyncio
 import logging
 from unittest.mock import AsyncMock, patch
 import sqlite3
 import os
+import tempfile # Import tempfile
 #import time
 import pytest_asyncio
 import pytest
-import tempfile # Import tempfile
 #import shutil   # Import shutil for directory cleanup
 
 from fastapi.testclient import TestClient
 # from contextlib import asynccontextmanager # Not directly used on override_get_db_connection
 
-from myapp.main import app as fastapi_app
-import myapp.ae200 as ae200
-import myapp.aqi as aqi
-import myapp.db as db
-from myapp.paths import SCHEMA_FILE_PATH
-#from myapp.main import status, set_speed, SpeedControl
+from app.main import app as fastapi_app
+from app import main
+from app import ae200
+from app import airnow
+from app import db
+from app.paths import SCHEMA_FILE_PATH
+#from app.main import status, set_speed, SpeedControl
+
+print(f"test_endpoints.py: fastapi_app id={id(fastapi_app)}")
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +36,6 @@ pytest_plugins = ("pytest_asyncio",)
 def reduce_websockets_logging():
     logging.getLogger("websockets.client").setLevel(logging.INFO)
 
-
 skip_on_github = pytest.mark.skipif( os.getenv("GITHUB_ACTIONS") == "true", reason="Disabled in GitHub Actions")
 
 # Override the setup_database function for testing
@@ -42,7 +47,7 @@ def setup_test_database(conn):
     try:
         if not os.path.exists(SCHEMA_FILE_PATH):
             logging.error("Schema file not found at %s. Please ensure it exists.", SCHEMA_FILE_PATH)
-            raise FileNotFoundError("Schema file not found at %s" % SCHEMA_FILE_PATH)
+            raise FileNotFoundError(f"Schema file not found at {SCHEMA_FILE_PATH}")
 
         with open(SCHEMA_FILE_PATH, 'r') as f:
             schema_sql = f.read()
@@ -52,9 +57,6 @@ def setup_test_database(conn):
         logging.info("Test database schema set up successfully from %s.", SCHEMA_FILE_PATH)
     except sqlite3.Error as e:
         logging.exception("Test database error during schema setup: %s", e)
-        conn.rollback()
-    except Exception as e:
-        logging.exception("An unexpected error occurred during test schema setup: %s", e)
         conn.rollback()
 
 # Dependency override for testing with a real temporary file database
@@ -111,14 +113,30 @@ async def client():
         os.environ.pop("TEST_DB_NAME", None)
 
 
+@pytest.mark.asyncio
+async def test_get_version(client):
+    response = client.get("/version")
+    assert response.status_code == 200
+    assert response.text == f'version: {main.__version__}'
+
+    response = client.get("/api/v1/version")
+    assert response.status_code == 200
+    assert response.json() == {'version':main.__version__}
+
 
 # Use pytest-asyncio to allow async test functions
 @skip_on_github
 @pytest.mark.asyncio
-async def test_get_aqi_sync():
-    result = aqi.get_aqi_sync()
+@patch("app.airnow.get_aqi_sync")
+async def test_get_aqi_sync(mock_get_aqi_sync):
+    # Mock the return value
+    mock_get_aqi_sync.return_value = {"value": 45, "color": "#00e400", "name": "Good"}
+
+    result = airnow.get_aqi_sync()
     assert isinstance(result, dict)
     assert "value" in result
+    assert result["value"] == 45
+    assert result["name"] == "Good"
     logging.info("get_aqi_sync: %s", result)
 
 @skip_on_github
@@ -130,17 +148,22 @@ async def test_get_all_status():
 
 @skip_on_github
 @pytest.mark.asyncio
-@patch("myapp.ae200.get_all_status", new_callable=AsyncMock)
-async def test_status_endpoint(mock_get_all_status,client): # Needs client to ensure DB setup
+@patch("app.ae200.get_all_status", new_callable=AsyncMock)
+@patch("app.airnow.get_aqi_async", new_callable=AsyncMock)
+@patch("app.weather.get_weather_data_async", new_callable=AsyncMock)
+async def test_status_endpoint(mock_get_weather_data, mock_get_aqi, mock_get_all_status, client): # Needs client to ensure DB setup
     mock_get_all_status.return_value = [{'name':'test-device','drive':'ON','speed':'HIGH','val':4}]
+    mock_get_aqi.return_value = {"value": 45, "color": "#00e400", "name": "Good"}
+    mock_get_weather_data.return_value = {"current": {"temperature": 72, "conditions": "Sunny"}, "forecast": []}
 
     # If this status endpoint also uses db.get_db_connection,
     # it will now correctly use the overridden test DB.
     response = client.get("/api/v1/status")
     assert response.status_code == 200
     response_json = response.json()
-    assert "ALL" in response_json
-    assert "AQI" in response_json
+    assert "devices" in response_json
+    assert "aqi" in response_json
+    assert "weather" in response_json
     logging.info(" /status: %s", response_json)
 
 
@@ -150,7 +173,7 @@ async def test_status_endpoint(mock_get_all_status,client): # Needs client to en
     (12, 1),
     (13, 2),
 ])
-@patch("myapp.ae200.set_fan_speed", new_callable=AsyncMock)
+@patch("app.ae200.set_fan_speed", new_callable=AsyncMock)
 async def test_set_speed_endpoint(mock_set_fan_speed, client, unit, speed):
     response = client.post(
         "/api/v1/set_speed", # Adjust this path to your actual endpoint URL
@@ -162,7 +185,7 @@ async def test_set_speed_endpoint(mock_set_fan_speed, client, unit, speed):
     assert response_json["unit"] == unit
     assert response_json["speed"] == speed
 
-    # This verifies that myapp.ae200.set_fan_speed is called once with (unit,speed) as arguments
+    # This verifies that app.ae200.set_fan_speed is called once with (unit,speed) as arguments
     mock_set_fan_speed.assert_awaited_once_with(unit, speed)
 
     # Now, you can actually query the test database to verify the changelog entry

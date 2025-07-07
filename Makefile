@@ -13,8 +13,11 @@ pytest-coverage: $(REQ)
 tags:
 	etags */*.py
 
-ruff-check:
+PYLINT_THRESHOLD := 9.5
+PYLINT_OPTS : =--output-format=parseable --rcfile .pylintrc --fail-under=$(PYLINT_THRESHOLD) --verbose
+check:
 	ruff check .
+	$(PYTHON) -m pylint $(PYLINT_OPTS) app tests *.py
 
 dump-schema:
 	echo ".schema"| sqlite3 $(DBFILE) | grep -v 'CREATE TABLE sqlite_sequence' > etc/schema.sql
@@ -24,26 +27,30 @@ make-dev-db:
 	sqlite3 $(DEV_DB) < etc/schema.sql
 	ls -l $(DEV_DB)
 
-dev:
+local-dev:
 	.venv/bin/fastapi dev
+#sleep 1
+#browser-sync 'http://localhost:8000' 'static' --watch --files .
+
 
 install-ubuntu:
 	sudo apt install python3-pip
 	pip install --user pipx
 	pipx ensurepath
-	pipx install uv
-	uv --version
-	pipx install ruff
+	pipx install poetry ruff
 	ruff --version
+	poetry install
+	npm install browser-sync -g
 
 install-macos:
-	@echo Use pipx for the latest uv
+	@echo Use pipx for the latest poetry
 	pip install pipx
 	pipx ensurepath
-	pipx install uv
-	uv --version # Check this output: it *must* be 0.1.18 or higher
+	pipx install poetry ruff
 	pipx install ruff
 	ruff --version
+	poetry install
+	npm install browser-sync -g
 
 
 eslint:
@@ -54,6 +61,4 @@ eslint:
 .venv/pyvenv.cfg:
 	@echo install venv for the development environment
 	echo $$PATH
-	uv venv
-	uv pip sync pyproject.toml
-	uv add --dev pytest
+	poetry install

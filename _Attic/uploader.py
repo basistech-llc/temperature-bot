@@ -1,3 +1,7 @@
+"""
+not used anymore. Uploaded to Google Sheet
+"""
+
 import os
 import datetime
 

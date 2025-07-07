@@ -12,6 +12,10 @@ th {
     background-color: beige;
 }
 
+#unit-header {
+    width: 200px;
+}
+
 td.speed {
     text-align: center;
 }
@@ -40,11 +44,63 @@ button {
 
 .top-banner a {color:white; pad-left: 1em;}
 
-#grid {
-    max-width:500px;
-    padding-bottom: 10px;
+.maxwidth {
+  max-width: 800px;
+}
+
+#main-grid {
+  max-width: 500px;
+  padding-bottom: 10px;
+  min-height: 200px; /* Ensure it takes up space for grid layout */
 }
 
 #log-table {
     max-width:1000px;
+}
+
+.weather-icon {
+    width: 40px;
+    height: 40px;
+    vertical-align: middle;
+    horizontal-align: left;
+}
+
+/* Debug styles for the fan-status-container */
+#fan-status-container {
+    border: 1px solid #ccc;
+    margin: 10px 0;
+    padding: 10px;
+}
+
+#fan-status-container > div {
+    border: 1px dashed #999;
+    padding: 10px;
+    margin: 5px;
+}
+
+#weather {
+    background-color: #f0f8ff;
+    min-height: 100px;
+    /* Removed margin-left: 50px; - this was causing the layout issue */
+}
+
+/* On small screens, remove the left margin */
+@media (max-width: 767px) {
+    #weather {
+        margin-left: 0;
+        margin-top: 50px;
+    }
+}
+
+#aqi-status {
+    width: auto;
+    display: inline-block;
+    padding: 5px 10px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    max-width: 250px;
+}
+
+#fan-status-container .pure-u-1.pure-u-md-1-2:first-child {
+    max-width: 400px;
 }

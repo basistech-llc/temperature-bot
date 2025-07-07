@@ -8,16 +8,20 @@ import json
 import csv
 import logging
 import time
+<<<<<<< HEAD
 from os.path import dirname,abspath,join
 import tabulate
+=======
+from os.path import dirname,abspath
+>>>>>>> 01ea2580fa94e3771691a3936617168d21663260
 
 # runner is first to run so it needs to add . to the path
 sys.path.append(dirname(dirname(abspath(__file__))))
 
-from myapp.paths import DEV_DB,ETC_DIR
-import myapp.ae200 as ae200
-import myapp.db as db
-import myapp.hubitat as hubitat
+from app.paths import DB_PATH,ETC_DIR
+import app.ae200 as ae200
+import app.db as db
+import app.hubitat as hubitat
 
 import lib.ctools.clogging as clogging
 import lib.ctools.lock as clock
@@ -27,6 +31,7 @@ def update_ae200(conn, dry_run=False):
     devs = d.getDevices()
     for dev in devs:
         data = d.getDeviceInfo(dev['id'])
+        data['id'] = dev['id']
         temp = data.get("InletTemp",None)
         if not dry_run:
             db.insert_devlog_entry(conn, device_name=dev['name'], temp=temp, statusdict=data)
@@ -204,7 +209,7 @@ def setup_parser():
     parser.add_argument("--unsafe", help="Run without synchronous mode. Fast, but dangerous", action='store_true')
     parser.add_argument("--dry-run", action='store_true')
     parser.add_argument("--csv-after", help="Date after which to import CSV in YYYY-MM-DD format",default="0000-00-00")
-    parser.add_argument("--dbfile", help='path to database file', default=DEV_DB)
+    parser.add_argument("--dbfile", help='path to database file', default=DB_PATH)
     parser.add_argument("--report", help="report on the database", action='store_true')
     parser.add_argument("--syslog", help="log to syslog", action='store_true')
     parser.add_argument("--daily", help='Run the daily cleanup')
