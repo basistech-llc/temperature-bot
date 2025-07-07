@@ -14,7 +14,7 @@ tags:
 	etags */*.py
 
 PYLINT_THRESHOLD := 9.5
-PYLINT_OPTS : =--output-format=parseable --rcfile .pylintrc --fail-under=$(PYLINT_THRESHOLD) --verbose
+PYLINT_OPTS :=--output-format=parseable --rcfile .pylintrc --fail-under=$(PYLINT_THRESHOLD) --verbose
 check:
 	ruff check .
 	$(PYTHON) -m pylint $(PYLINT_OPTS) app tests *.py
@@ -34,13 +34,12 @@ local-dev:
 
 
 install-ubuntu:
-	sudo apt install python3-pip
-	pip install --user pipx
+	sudo apt install python3-pip pipx
 	pipx ensurepath
 	pipx install poetry ruff
 	ruff --version
 	poetry install
-	npm install browser-sync -g
+	echo disabled - npm install browser-sync -g
 
 install-macos:
 	@echo Use pipx for the latest poetry
@@ -50,7 +49,7 @@ install-macos:
 	pipx install ruff
 	ruff --version
 	poetry install
-	npm install browser-sync -g
+	echo disabled - npm install browser-sync -g
 
 
 eslint:
