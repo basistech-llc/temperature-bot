@@ -4,6 +4,7 @@ Weather functions from the US National Weather Service
 
 import asyncio
 import datetime
+import logging
 
 import httpx
 from app.util import get_config
@@ -111,66 +112,18 @@ class WeatherService:
 
 async def get_weather_data_async(lat=None, lon=None):
     """Get both current weather and forecast data"""
-    service = WeatherService(lat=lat, lon=lon)
     try:
-        return await service.get_all_weather_data()
-    finally:
-        await service.close()
+        service = WeatherService(lat=lat, lon=lon)
+        try:
+            return await service.get_all_weather_data()
+        finally:
+            await service.close()
+    except httpx.ConnectError as e:
+        logging.error("%s: %s",type(e),e)
+        return {'error':f"{type(e)}: {e}" }
 
-
-# Legacy functions for backward compatibility
-async def get_weather_async(lat=None, lon=None):
-    """Legacy function - returns raw weather API data"""
-    service = WeatherService(lat=lat, lon=lon)
-    try:
-        await service.ensure_points_loaded()
-
-        observation_stations_url = service.weather_points['properties']['observationStations']
-        forecast_hourly_url = service.weather_points['properties']['forecastHourly']
-
-        stations_response, forecast_response = await asyncio.gather(
-            service.client.get(observation_stations_url),
-            service.client.get(forecast_hourly_url)
-        )
-
-        stations_response.raise_for_status()
-        forecast_response.raise_for_status()
-
-        return {
-            'points': service.weather_points,
-            'stations': stations_response.json(),
-            'forecasts': forecast_response.json()
-        }
-    finally:
-        await service.close()
-
-async def get_current_weather_async(lat=None, lon=None):
-    """Legacy function - get current weather from nearest station"""
-    service = WeatherService(lat=lat, lon=lon)
-    try:
-        return await service.get_current_conditions()
-    finally:
-        await service.close()
-
-def print_weather(info, limit=None):
-    # Find the closest station
-    for ct,station in enumerate(info['stations']['features']):
-        prop = station['properties']
-        print(station['geometry']['coordinates'], prop['stationIdentifier'], prop['name'], prop['distance']['value'])
-        if limit is not None and ct>=limit:
-            break
-
-    # print the forecast
-    for ct,forecast in enumerate(info['forecasts']['properties']['periods']):
-        start = datetime.datetime.fromisoformat(forecast['startTime'])
-        end = datetime.datetime.fromisoformat(forecast['endTime'])
-        if end < datetime.datetime.now(tz=end.tzinfo):
-            continue
-        print(start,forecast['temperature'],forecast['icon'],forecast['shortForecast'])
-        if limit is not None and ct>=limit:
-            break
 
 
 if __name__=="__main__":
-    info = asyncio.run(get_weather_async())
-    print_weather(info, limit = 5)
+    info = asyncio.run(get_weather_data_async())
+    print(json.dumps(info,indent=4))

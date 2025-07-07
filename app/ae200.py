@@ -160,21 +160,23 @@ async def get_system_map():
         ret[dev] = name
     return ret
 
+def extract_status(data):
+    """Return a dict with drive/speed/drive_speed_val"""
+    return {
+        'drive': data['Drive'],
+        'speed': data['FanSpeed'],
+        'drive_speed_val': drive_speed_to_val(data['Drive'], data['FanSpeed']),
+    }
+
 async def get_all_status():
     d = AE200Functions()
     ret = {}
     all_items = await d.getDevicesAsync()
     for item in all_items:
         dev = item['id']
-        name = item['name']
         data = await d.getDeviceInfoAsync(dev)
         try:
-            ret[dev] = {
-                'name': name,
-                'drive': data['Drive'],
-                'speed': data['FanSpeed'],
-                'val': drive_speed_to_val(data['Drive'], data['FanSpeed']),
-            }
+            ret = {**extract_status(data), **{'name':item['name']}}
         except KeyError as e:
             logging.error("KeyError '%s' in data: %s", e, data)
     return ret

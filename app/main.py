@@ -32,7 +32,7 @@ DEFAULT_LOG_LEVEL = 'INFO'
 LOGGING_CONFIG='%(asctime)s  %(filename)s:%(lineno)d %(levelname)s: %(message)s'
 LOG_LEVEL = os.getenv("LOG_LEVEL",DEFAULT_LOG_LEVEL).upper()
 
-ENABLE_AIRNOW = False
+ENABLE_AIRNOW = True
 
 logging.basicConfig(format=LOGGING_CONFIG, level=LOG_LEVEL, force=True)
 logger = logging.getLogger(__name__)
@@ -100,10 +100,13 @@ async def get_cached_aqi(conn, cache_hours=1):
 
     try:
         if not ENABLE_AIRNOW:
-            raise airnow.AirnowError("ENABLE_AIRNOW is false")
+            return {'error':f'ENABLE_AIRNOW={ENABLE_AIRNOW}'}
         aqi_data = await airnow.get_aqi_async()
-        logger.debug("aqi_data=%s",aqi_data)
-        db.insert_devlog_entry(conn, 'aqi', temp=aqi_data['value'])
+        if 'error' in aqi_data:
+            logger.error("aqi_data=%s", aqi_data)
+        else:
+            logger.debug("aqi_data=%s",aqi_data)
+            db.insert_devlog_entry(conn, 'aqi', temp=aqi_data['value'])
         return aqi_data
 
     except airnow.AirnowError as api_error:
@@ -138,12 +141,20 @@ async def set_speed(request: Request, req: SpeedControl, conn: sqlite3.Connectio
 
 @api_v1.get("/status")
 async def status(conn:sqlite3.Connection = Depends(db.get_db_connection)):
-    aqi_task = asyncio.create_task(get_cached_aqi(conn, cache_hours=1))
-    all_task = asyncio.create_task(ae200.get_all_status())
+    # debug just one service:
+    #data = await asyncio.create_task(weather.get_weather_data_async())
+    #return data
+
+    aqi_task          = asyncio.create_task(get_cached_aqi(conn, cache_hours=1))
     weather_data_task = asyncio.create_task(weather.get_weather_data_async())
-    db_task  = asyncio.create_task(get_last_db_data(conn))
-    all_data, aqi_data, weather_data,db_data = await asyncio.gather(all_task, aqi_task, weather_data_task, db_task)
-    return {"aqi": aqi_data, "weather": weather_data, "devices": all_data, 'db':db_data}
+    device_task       = asyncio.create_task(get_last_db_data(conn))
+    aqi_data, weather_data,device_data = await asyncio.gather(aqi_task, weather_data_task, device_task)
+
+    # Annotation the device_data
+    for data in device_data:
+        if data.get('status',[]):
+            data.update(ae200.extract_status(data['status']))
+    return {"aqi": aqi_data, "weather": weather_data, "devices": device_data}
 
 
 @api_v1.get("/system_map")

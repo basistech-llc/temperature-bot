@@ -35,6 +35,7 @@ def aqi_color(aqi):
     raise ValueError(f"invalid aqi={aqi}")
 
 def get_aqi_sync():
+    logging.error("***** GET AQI SYNC ******")
     zipcode = get_config()['location']['zipcode']
     API_KEY = get_secret('airnow','api_key')
     url = AQI_URL.format(zipcode=zipcode, API_KEY=API_KEY)
@@ -45,6 +46,8 @@ def get_aqi_sync():
         return {"value": aqi, "color": color, "name": name}
     except requests.exceptions.Timeout as e:
         raise AirnowError("timeout") from e
+    except Exception as e:
+        logging.error("********* EXCEPTION ************** %s",e)
 
 
 async def get_aqi_async():
@@ -60,7 +63,7 @@ async def get_aqi_async():
             raise AirnowError("timeout") from e
 
     if response.json()==[]:
-        return {"value":"n/a", "color":"red", "name":"limited"}
+        return {"error":"AirNow API returned []; likely rate-limited"}
     aqi = response.json()[0]['AQI']
     (name, color) = aqi_color(aqi)
     return {"value": aqi, "color": color, "name": name}
