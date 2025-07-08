@@ -212,7 +212,7 @@ def setup_parser():
     parser.add_argument("--dbfile", help='path to database file', default=DB_PATH)
     parser.add_argument("--report", help="report on the database", action='store_true')
     parser.add_argument("--syslog", help="log to syslog", action='store_true')
-    parser.add_argument("--daily", help='Run the daily cleanup')
+    parser.add_argument("--daily", help='Run the daily cleanup', action='store_true')
     clogging.add_argument(parser)
     return parser
 

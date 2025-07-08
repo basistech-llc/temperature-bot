@@ -29,8 +29,13 @@ make-dev-db:
 
 local-dev:
 	.venv/bin/fastapi dev
-#sleep 1
-#browser-sync 'http://localhost:8000' 'static' --watch --files .
+
+################################################################
+## Every minutes
+every-minute:
+	.venv/bin/python -m bin.runner
+daily:
+	.venv/bin/python -m bin.runner --daily
 
 
 install-ubuntu:
