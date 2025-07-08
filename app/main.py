@@ -8,7 +8,7 @@ import asyncio
 import logging
 import sqlite3
 import json
-from typing import Optional
+#from typing import Optional
 
 from contextlib import asynccontextmanager
 
@@ -128,7 +128,7 @@ async def get_last_db_data(conn):
 api_v1 = APIRouter(prefix=API_V1_PREFIX)
 
 @api_v1.get("/version")
-async def version():
+async def get_version_json():
     return {"version":__version__}
 
 @api_v1.post("/set_speed", response_model=SpeedSetResponse)
@@ -139,26 +139,28 @@ async def set_speed(request: Request, req: SpeedControl, conn: sqlite3.Connectio
     return SpeedSetResponse(status="ok", unit=req.unit, speed=req.speed)
 
 @api_v1.get("/status")
-async def status(conn:sqlite3.Connection = Depends(db.get_db_connection)):
+async def get_status(conn:sqlite3.Connection = Depends(db.get_db_connection)):
     # debug just one service:
     #data = await asyncio.create_task(weather.get_weather_data_async())
     #return data
 
-    aqi_task          = asyncio.create_task(get_cached_aqi(conn, cache_hours=1))
-    weather_data_task = asyncio.create_task(weather.get_weather_data_async())
     device_task       = asyncio.create_task(get_last_db_data(conn))
-    aqi_data, weather_data,device_data = await asyncio.gather(aqi_task, weather_data_task, device_task)
+    device_data,      = await asyncio.gather(device_task) # final, is important becuase it returns a list
 
     # Annotation the device_data
     for data in device_data:
         if data.get('status',[]):
             data.update(ae200.extract_status(data['status']))
-    return {"aqi": aqi_data, "weather": weather_data, "devices": device_data}
+    return {"devices": device_data}
 
 
-@api_v1.get("/system_map")
-async def system_map():
-    return await ae200.get_system_map()
+@api_v1.get("/weather")
+async def get_weather(conn:sqlite3.Connection = Depends(db.get_db_connection)):
+    aqi_task          = asyncio.create_task(get_cached_aqi(conn, cache_hours=1))
+    weather_data_task = asyncio.create_task(weather.get_weather_data_async())
+    aqi_data, weather_data= await asyncio.gather(aqi_task, weather_data_task)
+
+    return {"aqi": aqi_data, "weather": weather_data}
 
 # pylint: disable=too-many-arguments, disable=too-many-positional-arguments
 @api_v1.get("/logs")
@@ -212,7 +214,7 @@ async def privacy(request: Request):
     return templates.TemplateResponse("privacy.html", {"request": request})
 
 @app.get("/version", response_class=PlainTextResponse)
-async def version():
+async def get_version():
     return f"version: {__version__}"
 
 print(f"main.py: app id={id(app)}")

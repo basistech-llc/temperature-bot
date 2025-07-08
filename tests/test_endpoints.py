@@ -149,22 +149,34 @@ async def test_get_all_status():
 @skip_on_github
 @pytest.mark.asyncio
 @patch("app.ae200.get_all_status", new_callable=AsyncMock)
-@patch("app.airnow.get_aqi_async", new_callable=AsyncMock)
-@patch("app.weather.get_weather_data_async", new_callable=AsyncMock)
-async def test_status_endpoint(mock_get_weather_data, mock_get_aqi, mock_get_all_status, client): # Needs client to ensure DB setup
+async def test_status_endpoint(mock_get_all_status, client): # Needs client to ensure DB setup
     mock_get_all_status.return_value = [{'name':'test-device','drive':'ON','speed':'HIGH','val':4}]
-    mock_get_aqi.return_value = {"value": 45, "color": "#00e400", "name": "Good"}
-    mock_get_weather_data.return_value = {"current": {"temperature": 72, "conditions": "Sunny"}, "forecast": []}
 
     # If this status endpoint also uses db.get_db_connection,
     # it will now correctly use the overridden test DB.
     response = client.get("/api/v1/status")
     assert response.status_code == 200
     response_json = response.json()
+    logging.info(" /status: %s", response_json)
     assert "devices" in response_json
+
+
+@skip_on_github
+@pytest.mark.asyncio
+@patch("app.weather.get_weather_data_async", new_callable=AsyncMock)
+@patch("app.airnow.get_aqi_async", new_callable=AsyncMock)
+async def test_weather_endpoint(mock_get_weather_data, mock_get_aqi, client): # Needs client to ensure DB setup
+    mock_get_aqi.return_value = {"value": 45, "color": "#00e400", "name": "Good"}
+    mock_get_weather_data.return_value = {"current": {"temperature": 72, "conditions": "Sunny"}, "forecast": []}
+
+    # If this status endpoint also uses db.get_db_connection,
+    # it will now correctly use the overridden test DB.
+    response = client.get("/api/v1/weather")
+    assert response.status_code == 200
+    response_json = response.json()
+    logging.info(" /weather: %s", response_json)
     assert "aqi" in response_json
     assert "weather" in response_json
-    logging.info(" /status: %s", response_json)
 
 
 @pytest.mark.asyncio

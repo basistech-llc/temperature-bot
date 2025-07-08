@@ -5,6 +5,7 @@ Weather functions from the US National Weather Service
 import asyncio
 import datetime
 import logging
+import json
 
 import httpx
 from app.util import get_config
@@ -121,7 +122,7 @@ async def get_weather_data_async(lat=None, lon=None):
     except httpx.ConnectError as e:
         logging.error("%s: %s",type(e),e)
         return {'error':f"{type(e)}: {e}" }
-    except httpx.HTTPSStatusError as e:
+    except httpx.HTTPStatusError as e:
         logging.error("%s: %s",type(e),e)
         return {'error':f"{type(e)}: {e}" }
 

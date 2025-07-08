@@ -8,12 +8,9 @@ import json
 import csv
 import logging
 import time
-<<<<<<< HEAD
-from os.path import dirname,abspath,join
-import tabulate
-=======
 from os.path import dirname,abspath
->>>>>>> 01ea2580fa94e3771691a3936617168d21663260
+import tabulate
+
 
 # runner is first to run so it needs to add . to the path
 sys.path.append(dirname(dirname(abspath(__file__))))

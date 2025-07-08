@@ -46,8 +46,9 @@ def get_aqi_sync():
         return {"value": aqi, "color": color, "name": name}
     except requests.exceptions.Timeout as e:
         raise AirnowError("timeout") from e
-    except Exception as e:
+    except Exception as e:      # pylint: disable=broad-exception-caught
         logging.error("********* EXCEPTION ************** %s",e)
+        return {"error":str(e)}
 
 
 async def get_aqi_async():

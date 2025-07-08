@@ -19,33 +19,12 @@ const FAN_SPEEDS = [-1, 0, 1, 2, 3, 4];
 function displayWeather(weatherInfo) {
     console.log('displayWeather called with:', weatherInfo);
     const weatherDiv = document.getElementById('weather');
-    console.log('weatherDiv found:', !!weatherDiv);
     if (!weatherDiv || !weatherInfo) {
         console.log('Early return - weatherDiv:', !!weatherDiv, 'weatherInfo:', !!weatherInfo);
         return;
     }
 
-    // Preserve existing AQI elements
-    const aqiStatus = weatherDiv.querySelector('#aqi-status');
-    const status = weatherDiv.querySelector('#status');
-    const lastUpdate = weatherDiv.querySelector('#last-update');
-    const nextUpdate = weatherDiv.querySelector('#next-update');
-
-    console.log('Preserved elements:', {
-        aqiStatus: !!aqiStatus,
-        status: !!status,
-        lastUpdate: !!lastUpdate,
-        nextUpdate: !!nextUpdate
-    });
-
     let html = '';
-
-    // Add back the preserved elements
-    if (aqiStatus) html += aqiStatus.outerHTML;
-    if (status) html += status.outerHTML;
-    if (lastUpdate) html += lastUpdate.outerHTML;
-    if (nextUpdate) html += nextUpdate.outerHTML;
-
     // Add weather content
     if (weatherInfo.current) {
         const current = weatherInfo.current;
@@ -70,8 +49,6 @@ function displayWeather(weatherInfo) {
         });
         console.log('Added forecast to HTML');
     }
-
-    console.log('Final HTML length:', html.length);
     weatherDiv.innerHTML = html;
 }
 
@@ -174,25 +151,6 @@ const refreshGrid = () => {
             .then(data => {
                 console.log('Status data received:', data);
 
-                const aqiValueElement = document.getElementById('aqi-value');
-                const aqiNameElement =  document.getElementById('aqi-name');
-
-                if (aqiValueElement && aqiNameElement ) {
-		    if (data.aqi.error) {
-			aqiValueElement.textContent = 'Error';
-			aqiNameElement.textContent = data.aqi.error;
-		    } else {
-			aqiValueElement.textContent = data.aqi.value;
-			aqiNameElement.textContent = data.aqi.name;
-			aqiNameElement.style.backgroundColor = data.aqi.color;
-		    }
-                }
-
-                // Display weather information if available
-                if (data.weather) {
-                    displayWeather(data.weather);
-                }
-
                 // Update the tables with the new data
 		for (const dev of data.devices) {
 		    console.log("dev=",dev);
@@ -238,75 +196,102 @@ const refreshGrid = () => {
 };
 
 /* This creates the grid using the status API. */
-async function loadMapAndRenderGrid() {
-    console.log("Running loadMapAndRenderGrid()");
+async function loadWeatherAndRenderGrid() {
+    console.log("Running loadWeatherAndRenderGrid()");
     try {
-	const res = await fetch('/api/v1/status');
-	const r2 =  await res.json()
-	const devices = r2.devices;
-	console.log("Got devices:", devices);
+        fetch('api/v1/weather', { method: "GET"})
+            .then(response => response.json())
+            .then(data => {
+                console.log('Weather data received:', data);
 
-        const form = document.createElement('form');
-        document.getElementById('main-grid').appendChild(form);
+                const aqiValueElement = document.getElementById('aqi-value');
+                const aqiNameElement =  document.getElementById('aqi-name');
 
-	const table = document.createElement('table');
-	table.className = 'pure-table pure-table-bordered';
+                if (aqiValueElement && aqiNameElement ) {
+		    if (data.aqi.error) {
+			aqiValueElement.textContent = 'Error';
+			aqiNameElement.textContent = data.aqi.error;
+		    } else {
+			aqiValueElement.textContent = data.aqi.value;
+			aqiNameElement.textContent = data.aqi.name;
+			aqiNameElement.style.backgroundColor = data.aqi.color;
+		    }
+                }
+                // Display weather information if available
+                if (data.weather) {
+                    displayWeather(data.weather);
+                }
+	    });
 
-	// Header row
-	const headerRow = document.createElement('tr');
-	headerRow.innerHTML = `<th >Unit</th><th>Temp</th>` + FAN_SPEEDS.map(s => `<th>${s}</th>`).join('');
-	table.appendChild(headerRow);
 
-	// Rows
-	console.log("devices=",devices);
-	for (const obj of devices ) {
-	    const row = document.createElement('tr');
-	    const labelCell = document.createElement('td');
-	    labelCell.innerHTML = obj.device_name + `<span id="device-${obj.device_id}-status"></span>`;
-	    row.appendChild(labelCell);
+	fetch('/api/v1/status', { method: "GET"})
+	    .then(response => response.json())
+	    .then(data => {
+		console.log("Status data:",data);
+		const devices = data.devices;
 
-	    // If this device takes a temp, put a space for it
-	    if (obj.temp10x ){
-		const cell = document.createElement('td');
-		cell.id = `temp-${obj.device_id}`;
-		cell.textContent = '--';
-		row.appendChild(cell);
-	    } else {
-		// Otherwise create a blank cell
-		const cell = document.createElement('td');
-		cell.textContent = 'n/a';
-		row.appendChild(cell);
-	    }
+		const form = document.createElement('form');
+		document.getElementById('main-grid').appendChild(form);
 
-	    // If this is a device that supports speed control, draw those radio buttons
-	    if (obj.speed) {
-		FAN_SPEEDS.forEach(fan_speed => {
-		    const cell = document.createElement('td');
-                    cell.classList.add('speed');
-		    const radio = document.createElement('input');
-                    radio.type  = 'radio';
-                    radio.name  = `fan_speed-${obj.device_id}`;
-                    radio.value = fan_speed;
-                    radio.id    = `radio-${obj.device_id}-${fan_speed}`;
-		    radio.onclick = () => setFanSpeed(obj.status.id, fan_speed);
-		    cell.appendChild(radio);
-		    row.appendChild(cell);
-		});
-	    } else {
-		// Otherwise create a blank colspan
-		const cell = document.createElement('td');
-		cell.colSpan = 6;
-		row.appendChild(cell);
-	    }
-	    table.appendChild(row);
-	}
-	form.appendChild(table);
-	refreshGrid();		// and schedule a refresh
+		const table = document.createElement('table');
+		table.className = 'pure-table pure-table-bordered';
+
+		// Header row
+		const headerRow = document.createElement('tr');
+		headerRow.innerHTML = `<th >Unit</th><th>Temp</th>` + FAN_SPEEDS.map(s => `<th>${s}</th>`).join('');
+		table.appendChild(headerRow);
+
+		// Rows
+		console.log("devices=",devices);
+		for (const obj of devices ) {
+		    const row = document.createElement('tr');
+		    const labelCell = document.createElement('td');
+		    labelCell.innerHTML = obj.device_name + `<span id="device-${obj.device_id}-status"></span>`;
+		    row.appendChild(labelCell);
+
+		    // If this device takes a temp, put a space for it
+		    if (obj.temp10x ){
+			const cell = document.createElement('td');
+			cell.id = `temp-${obj.device_id}`;
+			cell.textContent = '--';
+			row.appendChild(cell);
+		    } else {
+			// Otherwise create a blank cell
+			const cell = document.createElement('td');
+			cell.textContent = 'n/a';
+			row.appendChild(cell);
+		    }
+
+		    // If this is a device that supports speed control, draw those radio buttons
+		    if (obj.speed) {
+			FAN_SPEEDS.forEach(fan_speed => {
+			    const cell = document.createElement('td');
+			    cell.classList.add('speed');
+			    const radio = document.createElement('input');
+			    radio.type  = 'radio';
+			    radio.name  = `fan_speed-${obj.device_id}`;
+			    radio.value = fan_speed;
+			    radio.id    = `radio-${obj.device_id}-${fan_speed}`;
+			    radio.onclick = () => setFanSpeed(obj.status.id, fan_speed);
+			    cell.appendChild(radio);
+			    row.appendChild(cell);
+			});
+		    } else {
+			// Otherwise create a blank colspan
+			const cell = document.createElement('td');
+			cell.colSpan = 6;
+			row.appendChild(cell);
+		    }
+		    table.appendChild(row);
+		}
+		form.appendChild(table);
+		refreshGrid();		// and schedule a refresh
+	    });
     } catch (e) {
-	console.error("Error in loadMapAndRenderGrid():", e);
+	console.error("Error in loadWeatherAndRenderGrid():", e);
     }
 }
 
 
 createLogTable();
-window.addEventListener('DOMContentLoaded', loadMapAndRenderGrid);
+window.addEventListener('DOMContentLoaded', loadWeatherAndRenderGrid);

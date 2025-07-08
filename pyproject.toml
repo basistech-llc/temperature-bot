@@ -27,7 +27,8 @@ dependencies = [
     "python-dotenv", # If you're using it for environment variables
     "pyyaml (>=6.0.2,<7.0.0)",
     "pylint (>=3.3.7,<4.0.0)",
-    "asgi-lifespan (>=2.1.0,<3.0.0)"
+    "asgi-lifespan (>=2.1.0,<3.0.0)",
+    "tabulate (>=0.9.0,<0.10.0)"
 ]
 
 authors = [
