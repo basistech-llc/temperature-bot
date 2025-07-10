@@ -29,6 +29,7 @@ logger = logging.getLogger(__name__)
 
 # Optional: enable pytest-asyncio
 pytest_plugins = ("pytest_asyncio",)
+skip_on_github = pytest.mark.skipif( os.getenv("GITHUB_ACTIONS") == "true", reason="Disabled in GitHub Actions")
 
 
 
