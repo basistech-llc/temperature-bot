@@ -2,6 +2,7 @@
 test async endpoints
 """
 #import asyncio
+import sys
 from os.path import join
 import logging
 from unittest.mock import AsyncMock, patch
