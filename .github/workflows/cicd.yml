@@ -36,6 +36,11 @@ jobs:
         run: |
           make install-macos
 
+      - name: Run pytest
+        run: |
+          export AIRNOW_API_KEY=${{ secrets.AIRNOW_API_KEY }}
+          make pytest
+
       - name: Run pytest with coverage
         run: |
           export AIRNOW_API_KEY=${{ secrets.AIRNOW_API_KEY }}

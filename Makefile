@@ -7,7 +7,7 @@ pytest: $(REQ)
 	$(PYTHON) -m pytest . --log-cli-level=DEBUG --log-file-level=DEBUG
 
 pytest-coverage: $(REQ)
-	$(PYTHON) -m pytest -v --cov=. --cov-report=xml --cov-report=html tests
+	$(PYTHON) -m pytest . -v --cov=. --cov-report=xml --cov-report=html --log-cli-level=DEBUG --log-file-level=DEBUG
 	@echo covreage report in htmlcov/
 
 tags:
