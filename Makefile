@@ -42,6 +42,7 @@ install-ubuntu:
 	sudo apt install python3-pip pipx
 	pipx ensurepath
 	pipx install poetry ruff
+	poetry config virtualenvs.in-project true
 	ruff --version
 	poetry install
 	echo disabled - npm install browser-sync -g
@@ -51,7 +52,7 @@ install-macos:
 	pip install pipx
 	pipx ensurepath
 	pipx install poetry ruff
-	pipx install ruff
+	poetry config virtualenvs.in-project true
 	ruff --version
 	poetry install
 	echo disabled - npm install browser-sync -g
