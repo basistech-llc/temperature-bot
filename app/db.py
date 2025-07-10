@@ -135,7 +135,9 @@ def fetch_all_devices(conn):
 def fetch_last_status(conn):
     """Fetches the last status for each device"""
     cursor = conn.cursor()
-    cursor.execute("select a.*,b.device_name from (select * from devlog group by device_id having logtime=max(logtime)) as a left join devices b where a.device_id = b.device_id order by b.device_name")
+    cursor.execute("""select a.*,b.device_name
+    FROM (select * from devlog group by device_id having logtime=max(logtime)) as a
+    LEFT JOIN devices b where a.device_id = b.device_id order by b.device_name""")
     return cursor.fetchall()
 
 def get_recent_devlogs(conn, device_name: str, seconds: int):

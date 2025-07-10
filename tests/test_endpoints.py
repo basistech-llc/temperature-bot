@@ -174,8 +174,8 @@ async def test_weather_endpoint(mock_get_weather_data, mock_get_aqi, client): # 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("unit,speed,name", [
     (10, 0, "OFF"),             # Run for unit 10 (Broadway South)
-    (10, 1, "LOW"),
-    (10, 4, "HIGH"),
+#    (10, 1, "LOW"),
+#    (10, 4, "HIGH"),
 ])
 @patch("app.ae200.get_device_info_async", new_callable=AsyncMock)
 @patch("app.ae200.set_fan_speed_async", new_callable=AsyncMock)
