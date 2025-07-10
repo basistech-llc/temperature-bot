@@ -129,22 +129,7 @@ async def test_get_version(client):
     assert response.json() == {'version':main.__version__}
 
 
-# Use pytest-asyncio to allow async test functions
-@skip_on_github
 @pytest.mark.asyncio
-@patch("app.airnow.get_aqi_sync")
-async def test_get_aqi_sync(mock_get_aqi_sync):
-    # Mock the return value
-    mock_get_aqi_sync.return_value = {"value": 45, "color": "#00e400", "name": "Good"}
-
-    result = airnow.get_aqi_sync()
-    assert isinstance(result, dict)
-    assert "value" in result
-    assert result["value"] == 45
-    assert result["name"] == "Good"
-    logging.info("get_aqi_sync: %s", result)
-
-@skip_on_github
 async def test_status_endpoint(client): # Needs client to ensure DB setup
     response = client.get("/api/v1/status")
     assert response.status_code == 200
