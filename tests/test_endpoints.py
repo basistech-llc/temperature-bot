@@ -2,11 +2,13 @@
 test async endpoints
 """
 #import asyncio
+from os.path import join
 import logging
 from unittest.mock import AsyncMock, patch
 import sqlite3
 import os
 import tempfile # Import tempfile
+import json
 #import time
 import pytest_asyncio
 import pytest
@@ -20,10 +22,8 @@ from app import main
 from app import ae200
 from app import airnow
 from app import db
-from app.paths import SCHEMA_FILE_PATH
+from app.paths import SCHEMA_FILE_PATH,TEST_DATA_DIR
 #from app.main import status, set_speed, SpeedControl
-
-print(f"test_endpoints.py: fastapi_app id={id(fastapi_app)}")
 
 logger = logging.getLogger(__name__)
 
@@ -80,6 +80,11 @@ async def get_test_db_connection_provider():
         yield conn # Yield the connection to the test
     except Exception as e:
         logging.exception("Error setting up test database connection: %s", e)
+        logging.exception("wild")
+        c = conn.cursor()
+        c.execute("select * from devices")
+        for row in c.fetchall():
+            logging.exception("ROW=%s",dict(row))
         raise
     finally:
         if conn:
@@ -140,26 +145,12 @@ async def test_get_aqi_sync(mock_get_aqi_sync):
     logging.info("get_aqi_sync: %s", result)
 
 @skip_on_github
-@pytest.mark.asyncio
-async def test_get_all_status():
-    result = await ae200.get_all_status()
-    assert isinstance(result, dict)
-    logging.info(" get_all_status: %s", result)
-
-@skip_on_github
-@pytest.mark.asyncio
-@patch("app.ae200.get_all_status", new_callable=AsyncMock)
-async def test_status_endpoint(mock_get_all_status, client): # Needs client to ensure DB setup
-    mock_get_all_status.return_value = [{'name':'test-device','drive':'ON','speed':'HIGH','val':4}]
-
-    # If this status endpoint also uses db.get_db_connection,
-    # it will now correctly use the overridden test DB.
+async def test_status_endpoint(client): # Needs client to ensure DB setup
     response = client.get("/api/v1/status")
     assert response.status_code == 200
     response_json = response.json()
     logging.info(" /status: %s", response_json)
     assert "devices" in response_json
-
 
 @skip_on_github
 @pytest.mark.asyncio
@@ -179,42 +170,67 @@ async def test_weather_endpoint(mock_get_weather_data, mock_get_aqi, client): # 
     assert "weather" in response_json
 
 
+# pylint: disable=too-many-arguments, disable=too-many-positional-arguments
 @pytest.mark.asyncio
-@pytest.mark.parametrize("unit,speed", [
-    (12, 0),
-    (12, 1),
-    (13, 2),
+@pytest.mark.parametrize("unit,speed,name", [
+    (10, 0, "OFF"),             # Run for unit 10 (Broadway South)
+    (10, 1, "LOW"),
+    (10, 4, "HIGH"),
 ])
-@patch("app.ae200.set_fan_speed", new_callable=AsyncMock)
-async def test_set_speed_endpoint(mock_set_fan_speed, client, unit, speed):
+@patch("app.ae200.get_device_info_async", new_callable=AsyncMock)
+@patch("app.ae200.set_fan_speed_async", new_callable=AsyncMock)
+@patch("app.ae200.get_devices_async", new_callable=AsyncMock) # note patche args are in reverse order
+async def test_set_speed_endpoint(mock_get_devices_async,mock_set_fan_speed_async, mock_get_device_info_async, client, unit, speed, name):
+    # Get the mocked return value
+    with open(join(TEST_DATA_DIR,'get_devices.json')) as f:
+        mock_get_devices_async.return_value = json.load(f)
+    with open(join(TEST_DATA_DIR,'get_device_10.json')) as f:
+        dev10 = json.load(f)
+        dev10['FanSpeed'] = name        # it should be set to this name
+        mock_get_device_info_async.return_value = dev10
+
+
+    # Send the /set_speed
     response = client.post(
-        "/api/v1/set_speed", # Adjust this path to your actual endpoint URL
-        json={"unit": unit, "speed": speed} # Send data as JSON body
+        "/api/v1/set_speed",
+        json={"unit": unit, "speed": speed}
     )
     assert response.status_code == 200 # Check for successful HTTP status
     response_json = response.json()
     assert response_json["status"] == "ok"
     assert response_json["unit"] == unit
     assert response_json["speed"] == speed
+    assert 'device_name' in response_json
+    device_name = response_json['device_name']
 
-    # This verifies that app.ae200.set_fan_speed is called once with (unit,speed) as arguments
-    mock_set_fan_speed.assert_awaited_once_with(unit, speed)
+    # Verify that these were both called with the arguments
 
-    # Now, you can actually query the test database to verify the changelog entry
-    # Get a new connection to the test DB to verify the data
-    # IMPORTANT: Connect to the same temporary file database
+    mock_get_devices_async.assert_awaited_once_with()
+    mock_get_device_info_async.assert_awaited_once_with(unit)
+    mock_set_fan_speed_async.assert_awaited_once_with(unit, speed)
+
+    # Verify that the database got updated
+    # Note that we are using the TEST_DB_NAME put in the environment.
     with sqlite3.connect(os.environ['TEST_DB_NAME']) as test_conn_verify:
         test_conn_verify.row_factory = sqlite3.Row
         cursor = test_conn_verify.cursor()
-        # Note: Assumes 'changelog' table is part of your etc/schema.sql
-        cursor.execute("SELECT ipaddr, unit, new_value, agent FROM changelog WHERE unit = ? AND new_value = ?;", (unit, str(speed)))
+        cursor.execute("SELECT ipaddr, unit, new_value, agent FROM changelog WHERE unit = ? AND new_value = ?;",
+                       (unit, str(speed)))
         changelog_entry = cursor.fetchone()
 
         assert changelog_entry is not None
-        # In test, client.ipaddr is 'testclient' by default for TestClient
         assert changelog_entry['ipaddr'] == 'testclient'
         assert changelog_entry['unit'] == unit
         assert changelog_entry['new_value'] == str(speed)
         assert changelog_entry['agent'] == 'web'
+
+        cursor.execute("SELECT * from devices where device_name=?",(device_name,))
+        row = cursor.fetchone()
+        logging.debug("row=%s",dict(row))
+        device_id = row['device_id']
+        cursor.execute("SELECT * from devlog where device_id=? order by logtime desc",(device_id,))
+        row = cursor.fetchone()
+        extracted_status = ae200.extract_status(json.loads(row['status_json']))
+        assert extracted_status['drive_speed_val'] == speed
 
     logging.info("/set_speed (unit=%s, speed=%s):", unit, speed)

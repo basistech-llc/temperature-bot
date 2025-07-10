@@ -4,28 +4,6 @@ body {
   font-family: sans-serif;
 }
 
-table {
-  width: 100%;
-}
-
-th {
-    background-color: beige;
-}
-
-#unit-header {
-    width: 200px;
-}
-
-td.speed {
-    text-align: center;
-}
-
-button {
-  width: 100%;
-  padding: 0.5em;
-  font-weight: bold;
-}
-
 .top-banner {
   position: fixed;
   top: 0;
@@ -44,14 +22,30 @@ button {
 
 .top-banner a {color:white; pad-left: 1em;}
 
-.maxwidth {
-  max-width: 800px;
-}
+/* main grid */
 
 #main-grid {
-  max-width: 500px;
+  max-width: 800px;
   padding-bottom: 10px;
   min-height: 200px; /* Ensure it takes up space for grid layout */
+}
+
+th {
+    background-color: beige;
+}
+
+#unit-header {
+    width: 200px;
+}
+
+td.speed {
+    text-align: center;
+}
+
+button {
+  width: 100%;
+  padding: 0.5em;
+  font-weight: bold;
 }
 
 #log-table {
@@ -81,7 +75,6 @@ button {
 #weather {
     background-color: #f0f8ff;
     min-height: 100px;
-    /* Removed margin-left: 50px; - this was causing the layout issue */
 }
 
 /* On small screens, remove the left margin */

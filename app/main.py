@@ -78,6 +78,7 @@ class SpeedSetResponse(BaseModel):
     status: str
     unit: int
     speed: int
+    device_name: str
 
 
 async def get_cached_aqi(conn, cache_hours=1):
@@ -132,11 +133,25 @@ async def get_version_json():
     return {"version":__version__}
 
 @api_v1.post("/set_speed", response_model=SpeedSetResponse)
-async def set_speed(request: Request, req: SpeedControl, conn: sqlite3.Connection = Depends(db.get_db_connection)):
+async def set_speed(request: Request, req: SpeedControl,
+                    conn: sqlite3.Connection = Depends(db.get_db_connection)):
+    """Sets the speed, recoreds the speed in the changelog, and then updates the database, so status is always up-to-date"""
     logger.info("set speed: %s", req)
     db.insert_changelog(conn, request.client.host, req.unit, str(req.speed), "web")
-    await ae200.set_fan_speed(req.unit, req.speed)
-    return SpeedSetResponse(status="ok", unit=req.unit, speed=req.speed)
+    await ae200.set_fan_speed_async(req.unit, req.speed)
+    # This code from main.py; should be refactored.
+    devs = await ae200.get_devices_async()
+    device_name = None
+    for dev in devs:
+        if str(dev['id'])==str(req.unit):
+            print("equal")
+            data = await asyncio.create_task(ae200.get_device_info_async(req.unit))
+            data['id'] = dev['id']
+            device_name = dev['name']
+            temp = data.get('InletTemp', None)
+            db.insert_devlog_entry(conn, device_name=device_name, temp=temp, statusdict=data)
+            break
+    return SpeedSetResponse(status="ok", unit=req.unit, speed=req.speed, device_name=device_name)
 
 @api_v1.get("/status")
 async def get_status(conn:sqlite3.Connection = Depends(db.get_db_connection)):

@@ -9,6 +9,7 @@ Includes both async routines and synchronouse covers.
 # pylint: disable=missing-function-docstring
 # pylint: disable=redefined-outer-name
 
+import os
 import asyncio
 import xml.etree.ElementTree as ET
 import logging
@@ -21,7 +22,7 @@ from app.util import get_config
 
 # Fan mapping speeds
 SPEED_AUTO = -1
-SPEEDS = {-1:"AUTO", 1: "LOW", 2: "MID2", 3: "MID1", 4: "HIGH"}
+SPEEDS = {-1:"AUTO", 0: "OFF", 1: "LOW", 2: "MID2", 3: "MID1", 4: "HIGH"}
 
 getUnitsPayload = """<?xml version="1.0" encoding="UTF-8" ?>
 <Packet>
@@ -92,6 +93,7 @@ class AE200Functions:
         self.address = address
 
     async def getDevicesAsync(self):
+        assert 'PYTEST' not in os.environ
         async with websockets.connect(
             f"ws://{self.address}/b_xmlproc/",
             extensions=[permessage_deflate.ClientPerMessageDeflateFactory()],
@@ -134,6 +136,7 @@ class AE200Functions:
         return asyncio.run(self.getDeviceInfoAsync(deviceId, clean=clean))
 
     async def sendAsync(self, deviceId, attributes):
+        assert 'PYTEST' not in os.environ
         async with websockets.connect(
             f"ws://{self.address}/b_xmlproc/",
             extensions=[permessage_deflate.ClientPerMessageDeflateFactory()],
@@ -148,19 +151,13 @@ class AE200Functions:
     def send(self, deviceId, attributes):
         return asyncio.run(self.sendAsync(deviceId, attributes))
 
-async def get_dev_status(dev):
+async def get_dev_status(unit_id):
     d = AE200Functions()
-    return await d.getDeviceInfoAsync(dev)
+    return await d.getDeviceInfoAsync(unit_id)
 
-async def get_system_map():
+async def get_devices_async():
     d = AE200Functions()
-    ret = {}
-    all_items = await d.getDevicesAsync()
-    for item in all_items:
-        dev = item['id']
-        name = item['name']
-        ret[dev] = name
-    return ret
+    return await d.getDevicesAsync()
 
 def extract_status(data):
     """Return a dict with drive/speed/drive_speed_val"""
@@ -172,26 +169,19 @@ def extract_status(data):
         'drive_speed_val': drive_speed_to_val(drive, speed)
     }
 
-async def get_all_status():
-    d = AE200Functions()
-    ret = {}
-    all_items = await d.getDevicesAsync()
-    for item in all_items:
-        dev = item['id']
-        data = await d.getDeviceInfoAsync(dev)
-        try:
-            ret = {**extract_status(data), **{'name':item['name']}}
-        except KeyError as e:
-            logging.error("KeyError '%s' in data: %s", e, data)
-    return ret
-
-async def set_fan_speed(device, speed):
+async def set_fan_speed_async(device, speed):
+    logging.info("set_fan_speed_async(%s,%s)",device,speed)
     d = AE200Functions()
     if speed == 0:
         await d.sendAsync(device, {"Drive": "OFF"})
     else:
         await d.sendAsync(device, {"Drive": "ON"})
         await d.sendAsync(device, {"FanSpeed": SPEEDS[speed]})
+
+async def get_device_info_async(device):
+    logging.info("get_device_info_async(%s)",device)
+    d = AE200Functions()
+    return await d.getDeviceInfoAsync(device)
 
 
 if __name__ == "__main__":
@@ -210,6 +200,7 @@ if __name__ == "__main__":
 
     # Test reading device list
     devs = d.getDevices()
+    print(json.dumps(devs))
 
     for dev in devs:
         did = dev["id"]

@@ -10,6 +10,7 @@ import time # For logtime timestamps
 import logging
 import json
 import math
+import os
 
 
 from app.paths import DB_PATH
@@ -72,22 +73,29 @@ def setup_database(conn, schema_file):
         logging.exception("An unexpected error occurred during schema setup: %s", e)
         raise
 
-def get_or_create_device_id(conn, device_name):
+def get_or_create_device_id(conn, device_name, use_cache=True):
     """
     Retrieves the ID for a given device name. If the device name does not exist
     in the devices table, it inserts it and returns the newly generated ID.
+    Don't use the cache when testing
     """
     cursor = conn.cursor()
 
-    if device_name in DEVICE_MAP:
+    if 'PYTEST' in os.environ:
+        use_cache = False
+
+    if use_cache and (device_name in DEVICE_MAP):
+        logging.debug("get_or_create_device_id DEVICE_MAP[%s]=%s",device_name,DEVICE_MAP[device_name])
         return DEVICE_MAP[device_name]
 
     try:
+        logging.debug("INSERT OR IGNORE device_name=%s",device_name)
         cursor.execute("INSERT OR IGNORE INTO devices (device_name) VALUES (?);", (device_name,))
         conn.commit()
 
         cursor.execute("SELECT device_id FROM devices WHERE device_name = ?;", (device_name,))
         result = cursor.fetchone()
+        logging.debug("get_or_create_device_id(%s) result=%s",device_name,dict(result))
 
         if result:
             DEVICE_MAP[device_name] = result['device_id']
@@ -181,6 +189,7 @@ def insert_devlog_entry(conn, device_name: str, temp=None, statusdict=None, logt
                   If False, then only create a new entry if the temp or statusdict have changed.
     Inserts an entry into the devlog table, handling the device_id lookup/creation and automatic extension.
     """
+    logging.debug("conn=%s device_name=%s temp=%s statusdict=%s logtime=%s force=%s commit=%s",conn,device_name,temp,statusdict,logtime,force,commit)
     temp10x     = int(math.floor(float(temp)*10+0.5)) if temp else None
     status_json = json.dumps(statusdict, default=str, sort_keys=True) if statusdict else None
     c = conn.cursor()
