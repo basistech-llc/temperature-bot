@@ -43,7 +43,7 @@ def setup_test_database(conn):
     """
     Sets up the database schema on a given connection by reading from schema.sql.
     """
-    print("setup_test_database")
+    print("setup_test_database",file=sys.stderr)
     cursor = conn.cursor()
     try:
         if not os.path.exists(SCHEMA_FILE_PATH):
@@ -55,7 +55,7 @@ def setup_test_database(conn):
 
         cursor.executescript(schema_sql)
         conn.commit()
-        print("sending schema")
+        print("sending schema",file=sys.stderr)
         logging.info("Test database schema set up successfully from %s.", SCHEMA_FILE_PATH)
     except sqlite3.Error as e:
         logging.exception("Test database error during schema setup: %s", e)
@@ -77,10 +77,10 @@ async def get_test_db_connection_provider():
         conn.execute("PRAGMA foreign_keys = ON;") # Ensure foreign keys are enabled
 
         # Set up schema on this temporary connection
-        print("calling setup_test_database")
+        print("calling setup_test_database",file=sys.stderr)
         setup_test_database(conn)
 
-        print(f"Yielding connection. temp_db_path={temp_db_path}")
+        print(f"Yielding connection. temp_db_path={temp_db_path}",file=sys.stderr)
         yield conn # Yield the connection to the test
     except Exception as e:
         logging.exception("Error setting up test database connection: %s", e)
