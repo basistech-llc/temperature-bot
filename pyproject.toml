@@ -19,16 +19,14 @@ dependencies = [
     "google-auth-httplib2",
     "google-api-python-client",
     "websockets",
-    "httpx",
+    "requests",
     "jinja2",
-    "fastapi",
-    "fastapi[standard]",
-    "uvicorn",
+    "flask",
     "python-dotenv", # If you're using it for environment variables
     "pyyaml (>=6.0.2,<7.0.0)",
     "pylint (>=3.3.7,<4.0.0)",
-    "asgi-lifespan (>=2.1.0,<3.0.0)",
-    "tabulate (>=0.9.0,<0.10.0)"
+    "tabulate (>=0.9.0,<0.10.0)",
+    "flask-pydantic (>=0.13.1,<0.14.0)"
 ]
 
 authors = [
@@ -47,7 +45,6 @@ ruff-lsp = "*"
 pytest = "*"
 pytest-env = "*"
 pytest-cov = "*"
-pytest-asyncio = "*"
 coverage = "*"
 livereload = "*"
 

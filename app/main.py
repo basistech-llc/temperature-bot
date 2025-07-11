@@ -1,22 +1,19 @@
 """
-app.py
+app.py - Flask version
 """
 
 from os.path import abspath
 import os
-import asyncio
 import logging
 import sqlite3
 import json
-#from typing import Optional
+from functools import wraps
 
-from contextlib import asynccontextmanager
+from flask import Flask, request, jsonify, render_template, send_from_directory, Blueprint
+from werkzeug.exceptions import HTTPException
 
+from flask_pydantic import validate
 from pydantic import BaseModel, conint
-from fastapi import FastAPI, Depends, Request, APIRouter, Query
-from fastapi.responses import JSONResponse, HTMLResponse, PlainTextResponse
-from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
 
 from . import ae200
 from . import weather
@@ -42,46 +39,32 @@ def fix_boto_log_level():
         if name.startswith('boto'):
             logging.getLogger(name).setLevel(logging.INFO)
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    """
-    FastAPI lifespan function to manage resources.
-    This function now handles only startup/shutdown logging.
-    The database schema is assumed to be managed externally or on first connect.
-    """
-    # No database setup logic needed here as per user's request.
-    # The database is long-lived and its schema is managed externally.
+app = Flask(__name__)
 
-    logger.info("Application %s is starting up.", app)
-    fix_boto_log_level()
-    yield # Application runs
-    logger.info("Application %s is shutting down.", app)
-
-
-app = FastAPI(lifespan=lifespan) # Keep only ONE app = FastAPI() instance
-templates = Jinja2Templates(directory="templates") # Moved here for correct association
-
+# Initialize logging and boto settings
+fix_boto_log_level()
 
 ################################################################
 
 # System map dictionary
 SYSTEM_MAP = {12: "Kitchen ERV", 13: "Bathroom ERV"}
 
-# Pydantic model with input validation
-# pylint: disable=missing-class-docstring
-class SpeedControl(BaseModel):
-    unit: conint(ge=0, le=20)
-    speed: conint(ge=0, le=4)
+def get_db_connection():
+    """Get database connection for current request"""
+    return db.get_db_connection()
 
+def with_db_connection(f):
+    """Decorator to handle database connections properly"""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        conn = get_db_connection()
+        try:
+            return f(conn, *args, **kwargs)
+        finally:
+            conn.close()
+    return decorated_function
 
-class SpeedSetResponse(BaseModel):
-    status: str
-    unit: int
-    speed: int
-    device_name: str
-
-
-async def get_cached_aqi(conn, cache_hours=1):
+def get_cached_aqi(conn, cache_hours=1):
     """
     Get AQI data from cache if available and recent, otherwise fetch from API.
 
@@ -101,7 +84,7 @@ async def get_cached_aqi(conn, cache_hours=1):
     try:
         if not ENABLE_AIRNOW:
             return {'error':f'ENABLE_AIRNOW={ENABLE_AIRNOW}'}
-        aqi_data = await airnow.get_aqi_async()
+        aqi_data = airnow.get_aqi_sync()
         if 'error' in aqi_data:
             logger.error("aqi_data=%s", aqi_data)
         else:
@@ -113,7 +96,7 @@ async def get_cached_aqi(conn, cache_hours=1):
         logger.error("api_error=%s",api_error)
         return {"value": "N/A", "color": "#cccccc", "name": "Unavailable"}
 
-async def get_last_db_data(conn):
+def get_last_db_data(conn):
     def fix_status_json(devdict):
         devdict = dict(devdict)
         try:
@@ -125,66 +108,74 @@ async def get_last_db_data(conn):
     return [fix_status_json(dd) for dd in db.fetch_last_status(conn)]
 
 ################################################################
-# Versioned API router
-api_v1 = APIRouter(prefix=API_V1_PREFIX)
+# Versioned API routes
 
-@api_v1.get("/version")
-async def get_version_json():
-    return {"version":__version__}
+api_v1 = Blueprint('api_v1', __name__)
 
-@api_v1.post("/set_speed", response_model=SpeedSetResponse)
-async def set_speed(request: Request, req: SpeedControl,
-                    conn: sqlite3.Connection = Depends(db.get_db_connection)):
-    """Sets the speed, recoreds the speed in the changelog, and then updates the database, so status is always up-to-date"""
-    logger.info("set speed: %s", req)
-    db.insert_changelog(conn, request.client.host, req.unit, str(req.speed), "web")
-    await ae200.set_fan_speed_async(req.unit, req.speed)
-    # This code from main.py; should be refactored.
-    devs = await ae200.get_devices_async()
+@api_v1.route('/version')
+def get_version_json():
+    return jsonify({"version": __version__})
+
+class SpeedControl(BaseModel):
+    unit: conint(ge=0, le=20)
+    speed: conint(ge=0, le=4)
+
+@api_v1.route('/set_speed', methods=['POST'])
+@validate()
+@with_db_connection
+def set_speed(conn, body: SpeedControl):
+    """Sets the speed, records the speed in the changelog, and then updates the database, so status is always up-to-date"""
+    unit = body.unit
+    speed = body.speed
+    logger.info("set speed: unit=%s, speed=%s", unit, speed)
+    db.insert_changelog(conn, request.remote_addr, unit, str(speed), "web")
+    ae200.set_fan_speed(unit, speed)
+    devs = ae200.get_devices()
     device_name = None
     for dev in devs:
-        if str(dev['id'])==str(req.unit):
-            print("equal")
-            data = await asyncio.create_task(ae200.get_device_info_async(req.unit))
+        if str(dev['id']) == str(unit):
+            data = ae200.get_device_info(unit)
             data['id'] = dev['id']
             device_name = dev['name']
             temp = data.get('InletTemp', None)
             db.insert_devlog_entry(conn, device_name=device_name, temp=temp, statusdict=data)
             break
-    return SpeedSetResponse(status="ok", unit=req.unit, speed=req.speed, device_name=device_name)
+    return jsonify({
+        "status": "ok",
+        "unit": unit,
+        "speed": speed,
+        "device_name": device_name
+    })
 
-@api_v1.get("/status")
-async def get_status(conn:sqlite3.Connection = Depends(db.get_db_connection)):
-    # debug just one service:
-    #data = await asyncio.create_task(weather.get_weather_data_async())
-    #return data
+@api_v1.route('/status')
+@with_db_connection
+def get_status(conn):
+    device_data = get_last_db_data(conn)
 
-    device_task       = asyncio.create_task(get_last_db_data(conn))
-    device_data,      = await asyncio.gather(device_task) # final, is important becuase it returns a list
-
-    # Annotation the device_data
+    # Annotate the device_data
     for data in device_data:
-        if data.get('status',[]):
+        if data.get('status', []):
             data.update(ae200.extract_status(data['status']))
-    return {"devices": device_data}
+    
+    return jsonify({"devices": device_data})
 
+@api_v1.route('/weather')
+@with_db_connection
+def get_weather(conn):
+    aqi_data = get_cached_aqi(conn, cache_hours=1)
+    weather_data = weather.get_weather_data()
 
-@api_v1.get("/weather")
-async def get_weather(conn:sqlite3.Connection = Depends(db.get_db_connection)):
-    aqi_task          = asyncio.create_task(get_cached_aqi(conn, cache_hours=1))
-    weather_data_task = asyncio.create_task(weather.get_weather_data_async())
-    aqi_data, weather_data= await asyncio.gather(aqi_task, weather_data_task)
+    return jsonify({"aqi": aqi_data, "weather": weather_data})
 
-    return {"aqi": aqi_data, "weather": weather_data}
-
-# pylint: disable=too-many-arguments, disable=too-many-positional-arguments
-@api_v1.get("/logs")
-async def get_logs( start: int | None = Query(default=None),
-                    end: int | None = Query(default=None),
-                    draw: int = Query(default=1),
-                    start_row: int = Query(default=0),
-                    length: int = Query(default=100),
-                    conn: sqlite3.Connection = Depends(db.get_db_connection)):
+@api_v1.route('/logs')
+@with_db_connection
+def get_logs(conn):
+    start = request.args.get('start', type=int)
+    end = request.args.get('end', type=int)
+    draw = request.args.get('draw', 1, type=int)
+    start_row = request.args.get('start_row', 0, type=int)
+    length = request.args.get('length', 100, type=int)
+    
     query = "SELECT logtime, ipaddr, unit, new_value, agent, comment FROM changelog WHERE 1=1"
     params = []
 
@@ -198,38 +189,46 @@ async def get_logs( start: int | None = Query(default=None),
     query += " ORDER BY logtime DESC LIMIT ? OFFSET ?"
     params.extend([length, start_row])
     logger.info("query=%s params=%s", query, params)
+    
     c = conn.cursor()
     c.execute("SELECT COUNT(*) FROM changelog")
     total_records = c.fetchone()[0]
     c.execute(query, params)
-    data = [ dict(row) for row in c.fetchall() ]  # Convert Row objects to dicts for JSON serialization
+    data = [dict(row) for row in c.fetchall()]  # Convert Row objects to dicts for JSON serialization
 
-    return JSONResponse( {
-            "draw": draw,
-            "recordsTotal": total_records,
-            "recordsFiltered": total_records,  # Adjust if implementing search
-            "data": data } )
+    return jsonify({
+        "draw": draw,
+        "recordsTotal": total_records,
+        "recordsFiltered": total_records,  # Adjust if implementing search
+        "data": data
+    })
 
-# This must be done after all routes are defined
-app.include_router(api_v1)
+# Register the blueprint
+app.register_blueprint(api_v1, url_prefix='/api/v1')
 
 ################################################################
 # Serve static files
-app.mount("/static", StaticFiles(directory="static"), name="static")
-
+@app.route('/static/<path:filename>')
+def static_files(filename):
+    return send_from_directory('static', filename)
 
 ################################################################
-# Othe top-level routes
-@app.get("/", response_class=HTMLResponse)
-async def read_index(request: Request):
-    return templates.TemplateResponse( "index.html", {"request": request, "develop": DEV} )
+# Top-level routes
+@app.route("/")
+def read_index():
+    return render_template("index.html", develop=DEV)
 
-@app.get("/privacy", response_class=HTMLResponse)
-async def privacy(request: Request):
-    return templates.TemplateResponse("privacy.html", {"request": request})
+@app.route("/privacy")
+def privacy():
+    return render_template("privacy.html")
 
-@app.get("/version", response_class=PlainTextResponse)
-async def get_version():
+@app.route("/version")
+def get_version():
     return f"version: {__version__}"
+
+# Error handler
+@app.errorhandler(HTTPException)
+def handle_exception(e):
+    return jsonify({"error": e.description}), e.code
 
 print(f"main.py: app id={id(app)}")

@@ -29,27 +29,22 @@ def connect_db(db_name):
     conn.execute("PRAGMA synchronous=NORMAL;")
     return conn
 
-async def get_db_connection():
+def get_db_connection():
     """
-    Dependency that opens a new SQLite connection for each request
-    and ensures it's closed after the request is processed.
+    Returns a new SQLite connection for each request.
+    The connection should be closed by the caller when done.
     """
-    conn = None
     try:
-        conn = connect_db(DB_PATH) # This connect_db function is your synchronous one
-        yield conn # Provide the connection to the route function
+        # Use test database if in testing environment
+        if 'TEST_DB_NAME' in os.environ:
+            db_path = os.environ['TEST_DB_NAME']
+        else:
+            db_path = DB_PATH
+        conn = connect_db(db_path)
+        return conn
     except sqlite3.Error as e:
-        # Re-raising HTTPException here is generally done in the FastAPI route
-        # or a custom exception handler, not directly in a db utility.
-        # But for now, keeping it consistent with previous logic while fixing f-string
-        logging.exception("Database connection error in dependency: %s", e)
-        # Assuming HTTPException is imported in main.py for actual app use.
-        # If this is strictly a DB utility, you might raise a custom DB exception instead.
-        raise # Re-raise the exception after logging
-    finally:
-        if conn:
-            conn.close()
-            logging.debug("Database connection closed for request.")
+        logging.exception("Database connection error: %s", e)
+        raise
 
 def setup_database(conn, schema_file):
     """

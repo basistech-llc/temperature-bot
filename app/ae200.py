@@ -178,10 +178,34 @@ async def set_fan_speed_async(device, speed):
         await d.sendAsync(device, {"Drive": "ON"})
         await d.sendAsync(device, {"FanSpeed": SPEEDS[speed]})
 
+def set_fan_speed(device, speed):
+    logging.info("set_fan_speed(%s,%s)",device,speed)
+    d = AE200Functions()
+    if speed == 0:
+        d.send(device, {"Drive": "OFF"})
+    else:
+        d.send(device, {"Drive": "ON"})
+        d.send(device, {"FanSpeed": SPEEDS[speed]})
+
 async def get_device_info_async(device):
     logging.info("get_device_info_async(%s)",device)
     d = AE200Functions()
     return await d.getDeviceInfoAsync(device)
+
+def get_device_info(device):
+    logging.info("get_device_info(%s)",device)
+    d = AE200Functions()
+    return d.getDeviceInfo(device)
+
+def get_dev_status(device):
+    logging.info("get_dev_status(%s)",device)
+    d = AE200Functions()
+    return d.getDeviceInfo(device)
+
+def get_devices():
+    logging.info("get_devices()")
+    d = AE200Functions()
+    return d.getDevices()
 
 
 if __name__ == "__main__":

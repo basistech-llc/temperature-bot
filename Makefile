@@ -15,8 +15,8 @@ tags:
 
 PYLINT_THRESHOLD := 9.5
 PYLINT_OPTS :=--output-format=parseable --rcfile .pylintrc --fail-under=$(PYLINT_THRESHOLD) --verbose
-check:
-	ruff check .
+check: $(REQ)
+	$(PYTHON) -m ruff check .
 	$(PYTHON) -m pylint $(PYLINT_OPTS) app tests *.py
 
 dump-schema:
@@ -27,15 +27,15 @@ make-dev-db:
 	sqlite3 $(DEV_DB) < etc/schema.sql
 	ls -l $(DEV_DB)
 
-local-dev:
-	.venv/bin/fastapi dev
+local-dev: $(REQ)
+	$(PYTHON) run_local.py
 
 ################################################################
 ## Every minutes
-every-minute:
-	.venv/bin/python -m bin.runner
-daily:
-	.venv/bin/python -m bin.runner --daily
+every-minute: $(REQ)
+	$(PYTHON) -m bin.runner
+daily: $(REQ)
+	$(PYTHON) -m bin.runner --daily
 
 
 install-ubuntu:

@@ -2,47 +2,25 @@
 test for db.py
 """
 
-#import asyncio
 import logging
-#from unittest.mock import AsyncMock, patch
 import sqlite3
 import json
-import tempfile # Import tempfile
-#import os
-#import time
-#import pytest_asyncio
+import tempfile
 import pytest
-#import shutil   # Import shutil for directory cleanup
 
-#from fastapi.testclient import TestClient
-# from contextlib import asynccontextmanager # Not directly used on override_get_db_connection
-
-#from app.main import app as fastapi_app
-#import app.ae200 as ae200
-#import app.aqi as aqi
 from app import db
 from app.paths import SCHEMA_FILE_PATH
 from bin import runner
-#from app.main import status, set_speed, SpeedControl
 
 logger = logging.getLogger(__name__)
-
-# Optional: enable pytest-asyncio
-pytest_plugins = ("pytest_asyncio",)
-
-#NAME='/tmp/db.db'
-#if os.path.exists(NAME):
-#    os.unlink(NAME)
 
 @pytest.fixture
 def db_conn():
     """Clean database connection to a database that is created for the purpose"""
     with tempfile.NamedTemporaryFile(suffix=".db") as tf:
-        #conn = sqlite3.connect(NAME)
         conn = sqlite3.connect(tf.name)
         conn.row_factory = sqlite3.Row      # returns rows as dicts
         conn.execute("PRAGMA foreign_keys = ON;") # Ensure foreign keys are enabled
-        #cursor = conn.cursor()
         db.setup_database(conn, SCHEMA_FILE_PATH)
         yield conn
 
