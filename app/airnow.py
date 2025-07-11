@@ -1,13 +1,11 @@
 """
-async and sync impelemntation of AirNow AQI API.
+Synchronous implementation of AirNow AQI API.
 You need an API key
 """
 
 import logging
-
 import requests
-import httpx
-from app.util import get_config,get_secret
+from app.util import get_config, get_secret
 from app.paths import TIMEOUT_SECONDS
 
 AQI_URL = "https://www.airnowapi.org/aq/observation/zipCode/current/?format=application/json&zipCode={zipcode}&distance=15&API_KEY={API_KEY}"
@@ -27,47 +25,36 @@ class AirnowError(Exception):
     """Generic errors"""
 
 
-
 def aqi_color(aqi):
     for row in AQI_TABLE:
         if row[0] <= aqi <= row[1]:
             return (row[2], row[4])
     raise ValueError(f"invalid aqi={aqi}")
 
+
 def get_aqi_sync():
-    logging.error("***** GET AQI SYNC ******")
+    """Get AQI data from AirNow API synchronously"""
     zipcode = get_config()['location']['zipcode']
-    API_KEY = get_secret('airnow','api_key')
+    API_KEY = get_secret('airnow', 'api_key')
     url = AQI_URL.format(zipcode=zipcode, API_KEY=API_KEY)
+    logging.info("get_aqi_sync: %s", url)
+    
     try:
         r = requests.get(url, timeout=TIMEOUT_SECONDS)
+        r.raise_for_status()
+        
+        if r.json() == []:
+            return {"error": "AirNow API returned []; likely rate-limited"}
+            
         aqi = r.json()[0]["AQI"]
         (name, color) = aqi_color(aqi)
         return {"value": aqi, "color": color, "name": name}
+        
     except requests.exceptions.Timeout as e:
         raise AirnowError("timeout") from e
+    except requests.exceptions.HTTPError as e:
+        logging.error("%s: %s", type(e), e)
+        return {"error": f"HTTP Status error: {e}"}
     except Exception as e:      # pylint: disable=broad-exception-caught
-        logging.error("********* EXCEPTION ************** %s",e)
-        return {"error":str(e)}
-
-
-async def get_aqi_async():
-    zipcode = get_config()['location']['zipcode']
-    API_KEY = get_secret('airnow','api_key')
-    url = AQI_URL.format(zipcode=zipcode,API_KEY=API_KEY)
-    logging.info("get_aqi_async: %s" , url)
-    async with httpx.AsyncClient( timeout=TIMEOUT_SECONDS) as client:
-        try:
-            response = await client.get(url)
-            response.raise_for_status()
-        except httpx.TimeoutException as e:
-            raise AirnowError("timeout") from e
-        except httpx.HTTPStatusError as e:
-            logging.error("%s: %s",type(e),e)
-            return {"error":f"HTTP Status error e={e}"}
-
-    if response.json()==[]:
-        return {"error":"AirNow API returned []; likely rate-limited"}
-    aqi = response.json()[0]['AQI']
-    (name, color) = aqi_color(aqi)
-    return {"value": aqi, "color": color, "name": name}
+        logging.error("Exception in get_aqi_sync: %s", e)
+        return {"error": str(e)}

@@ -1,7 +1,7 @@
 """
 ae200 controller.
 Originally from https://github.com/natevoci/ae200.
-Includes both async routines and synchronouse covers.
+Includes both async routines and synchronous covers.
 """
 
 # pylint: disable=invalid-name
@@ -80,6 +80,19 @@ def drive_speed_to_val(drive, speed):
             return n
     raise ValueError(f"Unknown drive={drive} speed={speed}")
 
+def run_async_safely(coro):
+    """Run an async coroutine safely, handling existing event loops"""
+    try:
+        loop = asyncio.get_running_loop()
+        # We're already in an event loop, create a task
+        import concurrent.futures
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            future = executor.submit(asyncio.run, coro)
+            return future.result()
+    except RuntimeError:
+        # No event loop running, we can use asyncio.run
+        return asyncio.run(coro)
+
 ################################################################
 ### controller class
 class AE200Functions:
@@ -112,7 +125,7 @@ class AE200Functions:
             return groupList
 
     def getDevices(self):
-        return asyncio.run(self.getDevicesAsync())
+        return run_async_safely(self.getDevicesAsync())
 
     async def getDeviceInfoAsync(self, deviceId, clean=True):
         """:param deviceId: The numeric ID of the device to get
@@ -133,7 +146,7 @@ class AE200Functions:
             return cleanDeviceInfo(node.attrib) if clean else node.attrib
 
     def getDeviceInfo(self, deviceId, clean=True):
-        return asyncio.run(self.getDeviceInfoAsync(deviceId, clean=clean))
+        return run_async_safely(self.getDeviceInfoAsync(deviceId, clean=clean))
 
     async def sendAsync(self, deviceId, attributes):
         assert 'PYTEST' not in os.environ
@@ -149,7 +162,7 @@ class AE200Functions:
             await websocket.close()
 
     def send(self, deviceId, attributes):
-        return asyncio.run(self.sendAsync(deviceId, attributes))
+        return run_async_safely(self.sendAsync(deviceId, attributes))
 
 async def get_dev_status(unit_id):
     d = AE200Functions()
