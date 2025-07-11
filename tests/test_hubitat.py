@@ -5,7 +5,6 @@ test hubitat.py
 import logging
 from os.path import join
 import json
-import pytest
 
 from app import hubitat
 from app.paths import ETC_DIR

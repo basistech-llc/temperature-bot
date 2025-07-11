@@ -17,12 +17,18 @@ import json
 
 import websockets
 from websockets.extensions import permessage_deflate
+from pydantic import BaseModel, conint
 
 from app.util import get_config
 
 # Fan mapping speeds
 SPEED_AUTO = -1
 SPEEDS = {-1:"AUTO", 0: "OFF", 1: "LOW", 2: "MID2", 3: "MID1", 4: "HIGH"}
+
+class SpeedControl(BaseModel):
+    """Pydantic model for speed control requests."""
+    unit: conint(ge=0, le=20)
+    speed: conint(ge=0, le=4)
 
 getUnitsPayload = """<?xml version="1.0" encoding="UTF-8" ?>
 <Packet>
@@ -80,18 +86,37 @@ def drive_speed_to_val(drive, speed):
             return n
     raise ValueError(f"Unknown drive={drive} speed={speed}")
 
-def run_async_safely(coro):
-    """Run an async coroutine safely, handling existing event loops"""
-    try:
-        loop = asyncio.get_running_loop()
-        # We're already in an event loop, create a task
-        import concurrent.futures
-        with concurrent.futures.ThreadPoolExecutor() as executor:
-            future = executor.submit(asyncio.run, coro)
-            return future.result()
-    except RuntimeError:
-        # No event loop running, we can use asyncio.run
-        return asyncio.run(coro)
+class AsyncRunner:
+    """Manages async operations for the application"""
+
+    def __init__(self):
+        self._loop = None
+
+    def get_loop(self):
+        """Get or create the application's event loop"""
+        if self._loop is None:
+            self._loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(self._loop)
+        return self._loop
+
+    def run_async_safely(self, coro):
+        """Run an async coroutine safely, handling existing event loops"""
+        try:
+            # Try to get the current running loop
+            loop = asyncio.get_running_loop()
+            # We're already in an event loop, create a task
+            task = loop.create_task(coro)
+            # Wait for the task to complete by running the loop
+            while not task.done():
+                loop.run_until_complete(asyncio.sleep(0.01))
+            return task.result()
+        except RuntimeError:
+            # No event loop running, use the app's event loop
+            loop = self.get_loop()
+            return loop.run_until_complete(coro)
+
+# Singleton instance
+runner = AsyncRunner()
 
 ################################################################
 ### controller class
@@ -125,7 +150,7 @@ class AE200Functions:
             return groupList
 
     def getDevices(self):
-        return run_async_safely(self.getDevicesAsync())
+        return runner.run_async_safely(self.getDevicesAsync())
 
     async def getDeviceInfoAsync(self, deviceId, clean=True):
         """:param deviceId: The numeric ID of the device to get
@@ -146,7 +171,7 @@ class AE200Functions:
             return cleanDeviceInfo(node.attrib) if clean else node.attrib
 
     def getDeviceInfo(self, deviceId, clean=True):
-        return run_async_safely(self.getDeviceInfoAsync(deviceId, clean=clean))
+        return runner.run_async_safely(self.getDeviceInfoAsync(deviceId, clean=clean))
 
     async def sendAsync(self, deviceId, attributes):
         assert 'PYTEST' not in os.environ
@@ -162,7 +187,7 @@ class AE200Functions:
             await websocket.close()
 
     def send(self, deviceId, attributes):
-        return run_async_safely(self.sendAsync(deviceId, attributes))
+        return runner.run_async_safely(self.sendAsync(deviceId, attributes))
 
 async def get_dev_status(unit_id):
     d = AE200Functions()
@@ -210,10 +235,7 @@ def get_device_info(device):
     d = AE200Functions()
     return d.getDeviceInfo(device)
 
-def get_dev_status(device):
-    logging.info("get_dev_status(%s)",device)
-    d = AE200Functions()
-    return d.getDeviceInfo(device)
+
 
 def get_devices():
     logging.info("get_devices()")

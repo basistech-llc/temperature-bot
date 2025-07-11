@@ -5,7 +5,6 @@ app.py - Flask version
 from os.path import abspath
 import os
 import logging
-import sqlite3
 import json
 from functools import wraps
 
@@ -13,12 +12,12 @@ from flask import Flask, request, jsonify, render_template, send_from_directory,
 from werkzeug.exceptions import HTTPException
 
 from flask_pydantic import validate
-from pydantic import BaseModel, conint
 
 from . import ae200
 from . import weather
 from . import db
 from . import airnow
+from .ae200 import SpeedControl
 
 __version__ = '0.0.1'
 
@@ -116,10 +115,6 @@ api_v1 = Blueprint('api_v1', __name__)
 def get_version_json():
     return jsonify({"version": __version__})
 
-class SpeedControl(BaseModel):
-    unit: conint(ge=0, le=20)
-    speed: conint(ge=0, le=4)
-
 @api_v1.route('/set_speed', methods=['POST'])
 @validate()
 @with_db_connection
@@ -156,7 +151,7 @@ def get_status(conn):
     for data in device_data:
         if data.get('status', []):
             data.update(ae200.extract_status(data['status']))
-    
+
     return jsonify({"devices": device_data})
 
 @api_v1.route('/weather')
@@ -175,7 +170,7 @@ def get_logs(conn):
     draw = request.args.get('draw', 1, type=int)
     start_row = request.args.get('start_row', 0, type=int)
     length = request.args.get('length', 100, type=int)
-    
+
     query = "SELECT logtime, ipaddr, unit, new_value, agent, comment FROM changelog WHERE 1=1"
     params = []
 
@@ -189,7 +184,7 @@ def get_logs(conn):
     query += " ORDER BY logtime DESC LIMIT ? OFFSET ?"
     params.extend([length, start_row])
     logger.info("query=%s params=%s", query, params)
-    
+
     c = conn.cursor()
     c.execute("SELECT COUNT(*) FROM changelog")
     total_records = c.fetchone()[0]

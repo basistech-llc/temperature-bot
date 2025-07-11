@@ -1,13 +1,9 @@
 """
 test airnow endpoint
 """
-from os.path import join
 import logging
 from unittest.mock import patch
-import sqlite3
 import os
-import tempfile
-import json
 import pytest
 
 from app import airnow

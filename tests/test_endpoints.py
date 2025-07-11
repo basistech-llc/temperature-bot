@@ -1,7 +1,6 @@
 """
 test Flask endpoints
 """
-import sys
 from os.path import join
 import logging
 from unittest.mock import patch
@@ -14,8 +13,6 @@ import pytest
 from app.main import app as flask_app
 from app import main
 from app import ae200
-from app import airnow
-from app import db
 from app.paths import SCHEMA_FILE_PATH, TEST_DATA_DIR
 
 logger = logging.getLogger(__name__)
@@ -65,7 +62,7 @@ def get_test_db_connection():
         logging.debug("*** calling setup_test_database")
         setup_test_database(conn)
 
-        logging.debug(f"*** Yielding connection. temp_db_path={temp_db_path}")
+        logging.debug("*** Yielding connection. temp_db_path=%s",temp_db_path)
         return conn  # Return the connection to the test
     except Exception as e:
         logging.exception("Error setting up test database connection: %s", e)
