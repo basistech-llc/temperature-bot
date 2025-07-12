@@ -59,7 +59,7 @@ install-macos:
 
 
 eslint:
-	(cd static; make eslint)
+	(cd app/static; make eslint)
 
 # Create the virtual environment and install both host requirements
 # and the lambda requirements for testing
