@@ -33,7 +33,11 @@ def connect_db(db_name):
     conn = sqlite3.connect(db_name)
     conn.row_factory = sqlite3.Row      # returns rows as dicts
     conn.execute("PRAGMA foreign_keys=ON;")
-    conn.execute("PRAGMA journal_mode=WAL;")
+    # Use DELETE journal mode for testing to avoid WAL locking issues
+    if 'TEST_DB_NAME' in os.environ:
+        conn.execute("PRAGMA journal_mode=DELETE;")
+    else:
+        conn.execute("PRAGMA journal_mode=WAL;")
     conn.execute("PRAGMA synchronous=NORMAL;")
     return conn
 

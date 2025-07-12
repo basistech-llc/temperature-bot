@@ -9,12 +9,13 @@ import os
 import json
 import pytest
 
+from fixtures import client, skip_on_github  # noqa: F401  # pylint: disable=unused-import
+
 from app import main
 from app import ae200
 from app import db
 from app.paths import TEST_DATA_DIR
 
-from fixtures import client, skip_on_github  # noqa: F401  # pylint: disable=unused-import
 
 logger = logging.getLogger(__name__)
 

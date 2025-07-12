@@ -18,6 +18,10 @@ PYLINT_OPTS :=--output-format=parseable --rcfile .pylintrc --fail-under=$(PYLINT
 check: $(REQ)
 	$(PYTHON) -m ruff check .
 	$(PYTHON) -m pylint $(PYLINT_OPTS) app tests *.py
+	$(PYTHON) -m mypy app
+
+type-check: $(REQ)
+	$(PYTHON) -m mypy app
 
 dump-schema:
 	echo ".schema"| sqlite3 $(DBFILE) | grep -v 'CREATE TABLE sqlite_sequence' > etc/schema.sql

@@ -161,7 +161,7 @@ def get_logs(conn):
     start_row = request.args.get('start_row', 0, type=int)
     length = request.args.get('length', 100, type=int)
 
-    query = "SELECT logtime, ipaddr, unit, new_value, agent, comment FROM changelog WHERE 1=1"
+    query = "SELECT c.logtime, c.ipaddr, d.device_name as unit, c.new_value, c.agent, c.comment FROM changelog c LEFT JOIN devices d ON c.device_id = d.device_id WHERE 1=1"
     params = []
 
     if start is not None:
