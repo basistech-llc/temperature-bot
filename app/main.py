@@ -236,7 +236,7 @@ def show_rules(conn):
     rule_results = ""
     prev_results = ""
     when = datetime.datetime.now().replace(minute=0, second=0, microsecond=0) + datetime.timedelta(hours=1)
-    for hours in range(24*7):
+    for _ in range(24*7):
         new_results = rules_engine.rules_results(conn, when.timestamp())
         if new_results and new_results != prev_results:
             rule_results += f"<h3>{str(when)}</h3><pre>{new_results}</pre>\n"
