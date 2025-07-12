@@ -17,18 +17,12 @@ import json
 
 import websockets
 from websockets.extensions import permessage_deflate
-from pydantic import BaseModel, conint
 
 from app.util import get_config
 
 # Fan mapping speeds
 SPEED_AUTO = -1
 SPEEDS = {-1:"AUTO", 0: "OFF", 1: "LOW", 2: "MID2", 3: "MID1", 4: "HIGH"}
-
-class SpeedControl(BaseModel):
-    """Pydantic model for speed control requests."""
-    unit: conint(ge=0, le=20)
-    speed: conint(ge=0, le=4)
 
 getUnitsPayload = """<?xml version="1.0" encoding="UTF-8" ?>
 <Packet>
@@ -216,14 +210,14 @@ async def set_fan_speed_async(device, speed):
         await d.sendAsync(device, {"Drive": "ON"})
         await d.sendAsync(device, {"FanSpeed": SPEEDS[speed]})
 
-def set_fan_speed(device, speed):
-    logging.info("set_fan_speed(%s,%s)",device,speed)
+def set_fan_speed(ae200_device, speed):
+    logging.info("set_fan_speed(%s,%s)",ae200_device,speed)
     d = AE200Functions()
     if speed == 0:
-        d.send(device, {"Drive": "OFF"})
+        d.send(ae200_device, {"Drive": "OFF"})
     else:
-        d.send(device, {"Drive": "ON"})
-        d.send(device, {"FanSpeed": SPEEDS[speed]})
+        d.send(ae200_device, {"Drive": "ON"})
+        d.send(ae200_device, {"FanSpeed": SPEEDS[speed]})
 
 async def get_device_info_async(device):
     logging.info("get_device_info_async(%s)",device)
@@ -234,7 +228,6 @@ def get_device_info(device):
     logging.info("get_device_info(%s)",device)
     d = AE200Functions()
     return d.getDeviceInfo(device)
-
 
 
 def get_devices():

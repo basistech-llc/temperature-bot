@@ -107,12 +107,12 @@ function refreshLogTable() {
 
 
 // Function called to set the speed
-async function setFanSpeed(unit, speed) {
+async function setFanSpeed(device_id, speed) {
     try {
 	const response = await fetch('/api/v1/set_speed', {
 	    method: 'POST',
 	    headers: { 'Content-Type': 'application/json' },
-	    body: JSON.stringify({ unit: unit, speed: speed })
+	    body: JSON.stringify({ device_id: device_id, speed: speed })
 	});
 
 	const result = await response.json();
@@ -272,7 +272,7 @@ async function loadWeatherAndRenderGrid() {
 			    radio.name  = `fan_speed-${obj.device_id}`;
 			    radio.value = fan_speed;
 			    radio.id    = `radio-${obj.device_id}-${fan_speed}`;
-			    radio.onclick = () => setFanSpeed(obj.status.id, fan_speed);
+			    radio.onclick = () => setFanSpeed(obj.device_id, fan_speed);
 			    cell.appendChild(radio);
 			    row.appendChild(cell);
 			});

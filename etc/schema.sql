@@ -2,7 +2,7 @@ CREATE TABLE changelog (
                     changelog_id INTEGER PRIMARY KEY AUTOINCREMENT,
                     logtime INTEGER NOT NULL,
                     ipaddr TEXT NOT NULL,
-                    unit INTEGER NOT NULL,
+                    device_id INTEGER NOT NULL,
                     current_values TEXT,
                     new_value TEXT,
                     agent TEXT,
@@ -11,7 +11,8 @@ CREATE TABLE changelog (
 
 CREATE TABLE devices (
     device_id INTEGER PRIMARY KEY AUTOINCREMENT,
-    device_name TEXT UNIQUE NOT NULL
+    device_name TEXT UNIQUE NOT NULL,
+    ae200_device_id INTEGER
 );
 
 CREATE INDEX idx_devices_device_name ON devices (device_name);

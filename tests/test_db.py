@@ -25,13 +25,13 @@ def db_conn():
         yield conn
 
 def test_temperature_insert(db_conn):
-    db.insert_devlog_entry(db_conn, "devtest1", temp=20, logtime=100)
-    db.insert_devlog_entry(db_conn, "devtest1", temp=20, logtime=101) # extends first measurement by 1 second to 2 seconds
-    db.insert_devlog_entry(db_conn, "devtest1", temp=20, logtime=112) # extends first measurement by another 11 seconds to 13 seconds
+    db.insert_devlog_entry(db_conn, device_name="devtest1", temp=20, logtime=100)
+    db.insert_devlog_entry(db_conn, device_name="devtest1", temp=20, logtime=101) # extends first measurement by 1 second to 2 seconds
+    db.insert_devlog_entry(db_conn, device_name="devtest1", temp=20, logtime=112) # extends first measurement by another 11 seconds to 13 seconds
 
-    db.insert_devlog_entry(db_conn, "devtest2", temp=20, logtime=100)
-    db.insert_devlog_entry(db_conn, "devtest2", temp=21, logtime=111) # new measurement. We now have two measurements with 1 second each.
-    db.insert_devlog_entry(db_conn, "devtest2", temp=22, logtime=112) # new measurement. We have no idea when when the measurement changes.
+    db.insert_devlog_entry(db_conn, device_name="devtest2", temp=20, logtime=100)
+    db.insert_devlog_entry(db_conn, device_name="devtest2", temp=21, logtime=111) # new measurement. We now have two measurements with 1 second each.
+    db.insert_devlog_entry(db_conn, device_name="devtest2", temp=22, logtime=112) # new measurement. We have no idea when when the measurement changes.
                                                                       # We have 3 measurements, 1 second each
 
     dev1_id = db.get_or_create_device_id(db_conn, "devtest1")
@@ -55,9 +55,9 @@ def test_temperature_insert(db_conn):
     devtest2_id = rows[1]['device_id']
 
     # make sure status_json behaves as expected
-    db.insert_devlog_entry(db_conn, "complex1", statusdict={'name':'foo', 'val':'bar'}, logtime=100)
-    db.insert_devlog_entry(db_conn, "complex1", statusdict={'name':'foo', 'val':'bar2'}, logtime=101)
-    db.insert_devlog_entry(db_conn, "complex1", statusdict={'name':'foo', 'val':'bar2'}, logtime=102)
+    db.insert_devlog_entry(db_conn, device_name="complex1", statusdict={'name':'foo', 'val':'bar'}, logtime=100)
+    db.insert_devlog_entry(db_conn, device_name="complex1", statusdict={'name':'foo', 'val':'bar2'}, logtime=101)
+    db.insert_devlog_entry(db_conn, device_name="complex1", statusdict={'name':'foo', 'val':'bar2'}, logtime=102)
     c.execute("SELECT * from devlog where device_id=(select device_id from devices where device_name='complex1') order by logtime DESC limit 1")
     rows = c.fetchall()
     assert len(rows)==1

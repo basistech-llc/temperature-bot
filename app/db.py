@@ -1,9 +1,9 @@
 """
 Centralized database operations to sqlite3 database.
+Specialized to temperature bot.
 Location is specified by environment variable DB_PATH.
 Default location is $ROOT_DIR/temperature-bot.db  (largely for development and testing)
 """
-
 
 import sqlite3
 import time # For logtime timestamps
@@ -12,14 +12,21 @@ import json
 import math
 import os
 
+from pydantic import BaseModel, conint
 
 from app.paths import DB_PATH
+
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 logger.debug("DB_PATH=%s",DB_PATH)
 
 DEVICE_MAP = {}
+
+class SpeedControl(BaseModel):
+    """Pydantic model for speed control requests."""
+    device_id: conint(ge=0, le=20)
+    speed: conint(ge=0, le=4)
 
 def connect_db(db_name):
     """Establishes a connection to the SQLite database."""
@@ -177,10 +184,13 @@ def get_recent_devlogs(conn, device_name: str, seconds: int):
 # Insertion
 
 # pylint: disable=too-many-arguments, disable=too-many-positional-arguments
-def insert_devlog_entry(conn, device_name: str, temp=None, statusdict=None, logtime=None, force=False, commit=True):
+def insert_devlog_entry(conn, *,
+                        device_id=None, device_name: str=None, temp=None, statusdict=None,
+                        logtime=None, force=False, commit=True):
     """
     :param conn: database connection
-    :param device_name: the device
+    :param device_id: the device_id
+    :param device_name: the device (if device_id is not provided)
     :param temp10x: (Temperature in C) * 10
     :param statusdict: If provided, a dictionary that will be written to the database as status_json (but not if extending)
     :param logtime: The time_t of the log. If not provided, it's now!
@@ -188,7 +198,8 @@ def insert_devlog_entry(conn, device_name: str, temp=None, statusdict=None, logt
                   If False, then only create a new entry if the temp or statusdict have changed.
     Inserts an entry into the devlog table, handling the device_id lookup/creation and automatic extension.
     """
-    logging.debug("conn=%s device_name=%s temp=%s statusdict=%s logtime=%s force=%s commit=%s",conn,device_name,temp,statusdict,logtime,force,commit)
+    logging.debug("conn=%s device_id=%s device_name=%s temp=%s statusdict=%s logtime=%s force=%s commit=%s",
+                  conn,device_id, device_name,temp,statusdict,logtime,force,commit)
     temp10x     = int(math.floor(float(temp)*10+0.5)) if temp else None
     status_json = json.dumps(statusdict, default=str, sort_keys=True) if statusdict else None
     c = conn.cursor()
@@ -196,7 +207,8 @@ def insert_devlog_entry(conn, device_name: str, temp=None, statusdict=None, logt
         logtime = int(time.time()) # Use current Unix timestamp if not provided
     try:
         # Get or create the device_id
-        device_id = get_or_create_device_id(conn, device_name)
+        if device_id is None:
+            device_id = get_or_create_device_id(conn, device_name)
 
         # Get the most recent temperature entry. If temperature matches and we are not forcing, extend it.
         c.execute("SELECT * from devlog where device_id=? and logtime<=? order by logtime DESC limit 1",(device_id,logtime))
@@ -235,13 +247,24 @@ def insert_devlog_entry(conn, device_name: str, temp=None, statusdict=None, logt
         conn.rollback()
         raise
 
-def insert_changelog( conn, ipaddr:str, unit: int, new_value: str, agent: str = "", comment: str = ""):
+def insert_changelog( conn, ipaddr:str, device_id: int, new_value: str, agent: str = "", comment: str = ""):
     logtime = int(time.time())
     c = conn.cursor()
     c.execute(
         """
-        INSERT INTO changelog (logtime, ipaddr, unit, new_value, agent, comment)
+        INSERT INTO changelog (logtime, ipaddr, device_id, new_value, agent, comment)
         VALUES (?, ?, ?, ?, ?, ?)
         """,
-        (logtime, ipaddr, unit, new_value, agent, comment))
+        (logtime, ipaddr, device_id, new_value, agent, comment))
     conn.commit()
+
+def update_devlog_map(conn, device_name:str, ae200_device_id:int):
+    c = conn.cursor()
+    device_id = get_or_create_device_id(conn, device_name)
+    c.execute("UPDATE devices set ae200_device_id = ? where device_id=?",(ae200_device_id, device_id))
+    conn.commit()
+
+def get_ae200_unit(conn, device_id:int):
+    c = conn.cursor()
+    c.execute("select ae200_device_id from devices where device_id=?",(device_id,))
+    return c.fetchone()['ae200_device_id']

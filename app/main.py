@@ -19,7 +19,7 @@ from . import weather
 from . import db
 from . import airnow
 from . import rules_engine
-from .ae200 import SpeedControl
+from .db import SpeedControl
 
 __version__ = '0.0.1'
 
@@ -95,7 +95,7 @@ def get_cached_aqi(conn, cache_hours=1):
             logger.error("aqi_data=%s", aqi_data)
         else:
             logger.debug("aqi_data=%s",aqi_data)
-            db.insert_devlog_entry(conn, 'aqi', temp=aqi_data['value'])
+            db.insert_devlog_entry(conn, device_name='aqi', temp=aqi_data['value'])
         return aqi_data
 
     except airnow.AirnowError as api_error:
@@ -127,27 +127,10 @@ def get_version_json():
 @with_db_connection
 def set_speed(conn, body: SpeedControl):
     """Sets the speed, records the speed in the changelog, and then updates the database, so status is always up-to-date"""
-    unit = body.unit
-    speed = body.speed
-    logger.info("set speed: unit=%s, speed=%s", unit, speed)
-    db.insert_changelog(conn, request.remote_addr, unit, str(speed), "web")
-    ae200.set_fan_speed(unit, speed)
-    devs = ae200.get_devices()
-    device_name = None
-    for dev in devs:
-        if str(dev['id']) == str(unit):
-            data = ae200.get_device_info(unit)
-            data['id'] = dev['id']
-            device_name = dev['name']
-            temp = data.get('InletTemp', None)
-            db.insert_devlog_entry(conn, device_name=device_name, temp=temp, statusdict=data)
-            break
-    return jsonify({
-        "status": "ok",
-        "unit": unit,
-        "speed": speed,
-        "device_name": device_name
-    })
+    logger.info("set speed: body=%s",body)
+    rules_engine.set_body_speed(conn, body, request.remote_addr, 'web')
+
+    return jsonify({ "status": "ok" })
 
 @api_v1.route('/status')
 @with_db_connection
