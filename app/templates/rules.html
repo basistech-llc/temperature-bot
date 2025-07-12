@@ -1,0 +1,48 @@
+{% extends 'base.html' %}
+{% block title %} Rules {% endblock %}
+
+{% block body %}
+<div class="pure-g"><!-- the start of the pure row -->
+  <div class="pure-u-1"><!-- across the entire row -->
+  <h1>1070 Broadway</h1>
+  </div>
+</div>
+
+<div class="pure-g" >
+  <div class="pure-u-2-1">
+    <h2>Devices</h2>
+    <table>
+      {% for key, value in devices.items() %}
+      <tr><th>{{ key }} </th><td> {{value}}</td></tr>
+      {% endfor %}
+      </table>
+    </ul>
+  </div>
+  <div class="pure-u-2-1 left-gutter">
+    <h2>Time (right now)</h2>
+    <table>
+      {% for key, value in times.items() %}
+      <tr><th>{{ key }} </th><td> {{value}}</td></tr>
+      {% endfor %}
+    </table>
+  </div>
+</div>
+
+<div class="pure-g" >
+  <div class="pure-u-1">
+    <h2>Rules</h2>
+    <pre>
+{{rules}}
+    </pre>
+  </div>
+</div>
+
+<div class="pure-g" >
+  <div class="pure-u-1">
+    <h2>Running these rules in the future will produce</h2>
+       {{rules_results | safe}}
+  </div>
+</div>
+
+
+  {% endblock %}

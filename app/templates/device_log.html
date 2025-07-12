@@ -1,0 +1,25 @@
+{% extends 'base.html' %}
+{% block title %} Unit Speed Control {% endblock %}
+{% block head %}
+<link href="https://unpkg.com/tabulator-tables@5.5.2/dist/css/tabulator.min.css" rel="stylesheet">
+<script src="https://unpkg.com/tabulator-tables@5.5.2/dist/js/tabulator.min.js"></script>
+{% endblock %}
+
+{% block body %}
+<div class="pure-g"><!-- the start of the pure row -->
+  <div class="pure-u-1"><!-- across the entire row -->
+  <h1>1070 Broadway</h1>
+  </div>
+</div>
+
+<div class="pure-g" >
+  <div class="pure-u-1">
+    {% for row in rows %}
+    {{row.device_id}} {{row.start}} - {{row.end}} ({{row.duration}} s) {{row.temp10x / 10}}ºC <br/>
+    {% endfor %}
+  </div>
+</div>
+
+
+
+  {% endblock %}
