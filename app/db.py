@@ -97,11 +97,11 @@ def get_or_create_device_id(conn, device_name, use_cache=True):
         cursor.execute("INSERT OR IGNORE INTO devices (device_name) VALUES (?);", (device_name,))
         conn.commit()
 
-        cursor.execute("SELECT device_id FROM devices WHERE device_name = ?;", (device_name,))
+        cursor.execute("SELECT * FROM devices WHERE device_name = ?;", (device_name,))
         result = cursor.fetchone()
-        logging.debug("get_or_create_device_id(%s) result=%s",device_name,dict(result))
 
         if result:
+            logging.debug("get_or_create_device_id(%s) result=%s",device_name,result)
             DEVICE_MAP[device_name] = result['device_id']
             return DEVICE_MAP[device_name]
         else:
