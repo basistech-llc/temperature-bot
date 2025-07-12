@@ -31,6 +31,7 @@ ENABLE_AIRNOW = False
 
 logging.basicConfig(format=LOGGING_CONFIG, level=LOG_LEVEL, force=True)
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
 def fix_boto_log_level():
     """Do not run boto loggers at debug level"""
@@ -38,7 +39,11 @@ def fix_boto_log_level():
         if name.startswith('boto'):
             logging.getLogger(name).setLevel(logging.INFO)
 
+# https://flask.palletsprojects.com/en/stable/config/
 app = Flask(__name__)
+app.config["TEMPLATES_AUTO_RELOAD"] = True
+app.logger.setLevel(logging.DEBUG)
+
 
 # Initialize logging and boto settings
 fix_boto_log_level()
@@ -220,6 +225,18 @@ def privacy():
 @app.route("/version")
 def get_version():
     return f"version: {__version__}"
+
+@app.route("/device_log/<device_id>")
+@with_db_connection
+def device_log(conn, device_id):
+    logger.debug("HI MOM")
+    c = conn.cursor()
+    c.execute("""SELECT *,datetime(logtime,'unixepoch','localtime') as start,
+                             datetime(logtime+duration,'unixepoch','localtime') as end
+                             from devlog where device_id=? order by logtime desc""",(device_id,))
+    rows = c.fetchall()
+    logger.debug("rows=%s",[dict(row) for row in rows])
+    return render_template("device_log.html",rows=rows)
 
 # Error handler
 @app.errorhandler(HTTPException)

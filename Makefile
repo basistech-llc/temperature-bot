@@ -28,7 +28,7 @@ make-dev-db:
 	ls -l $(DEV_DB)
 
 local-dev: $(REQ)
-	$(PYTHON) run_local.py
+	FLASK_DEBUG=True $(PYTHON) run_local.py
 
 ################################################################
 ## Every minutes

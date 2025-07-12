@@ -16,6 +16,7 @@ import os
 from app.paths import DB_PATH
 
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 logger.debug("DB_PATH=%s",DB_PATH)
 
 DEVICE_MAP = {}
@@ -40,6 +41,7 @@ def get_db_connection():
             db_path = os.environ['TEST_DB_NAME']
         else:
             db_path = DB_PATH
+        logger.debug("db_path=%s",db_path)
         conn = connect_db(db_path)
         return conn
     except sqlite3.Error as e:
