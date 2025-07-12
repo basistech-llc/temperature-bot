@@ -16,6 +16,7 @@ import tabulate
 sys.path.append(dirname(dirname(abspath(__file__))))
 
 from app.paths import DB_PATH,ETC_DIR
+from app.rules_engine import run_rules
 import app.ae200 as ae200
 import app.db as db
 import app.hubitat as hubitat
@@ -23,7 +24,7 @@ import app.hubitat as hubitat
 import lib.ctools.clogging as clogging
 import lib.ctools.lock as clock
 
-def update_ae200(conn, dry_run=False):
+def update_from_ae200(conn, dry_run=False):
     d = ae200.AE200Functions()
     devs = d.getDevices()
     for dev in devs:
@@ -35,7 +36,7 @@ def update_ae200(conn, dry_run=False):
         else:
             print(dev,data)
 
-def update_hubitat(conn, dry_run=False):
+def update_from_hubitat(conn, dry_run=False):
     for item in hubitat.extract_temperatures(hubitat.get_all_devices()):
         if not dry_run:
             db.insert_devlog_entry(conn, device_name=item['name'], temp=item['temperature'])
@@ -125,7 +126,6 @@ def daily_cleanup(conn, when):
         combine_temp_measurements(conn, prev_month_start, prev_month_end, 20*60)
 
 
-
 def load_csv(conn, fname, after_str, unsafe=False):
     """Loads CSV with reduced durabilty."""
     with open(os.path.join(ETC_DIR,'sample_hubitat.json')) as f:
@@ -196,8 +196,6 @@ def report(conn):
         data = c.fetchall()
         print(tabulate.tabulate([dict(x).values() for x in data], data[0].keys()))
 
-
-
 def setup_parser():
     import argparse
     parser = argparse.ArgumentParser(description='BasisTech LLC Runner.',
@@ -210,6 +208,7 @@ def setup_parser():
     parser.add_argument("--report", help="report on the database", action='store_true')
     parser.add_argument("--syslog", help="log to syslog", action='store_true')
     parser.add_argument("--daily", help='Run the daily cleanup', action='store_true')
+    parser.add_argument("--rules", help='Also run the rules engine', action='store_true')
     clogging.add_argument(parser)
     return parser
 
@@ -236,8 +235,11 @@ def main():
     if args.daily:
         daily_cleanup(conn, datetime.datetime.now())
 
-    update_ae200(conn, dry_run=args.dry_run)
-    update_hubitat(conn, dry_run=args.dry_run)
+    update_from_ae200(conn, dry_run=args.dry_run)
+    update_from_hubitat(conn, dry_run=args.dry_run)
+
+    if args.rules:
+        run_rules(conn)
 
 if __name__=="__main__":
     main()

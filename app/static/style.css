@@ -21,6 +21,9 @@ body {
 }
 
 .top-banner a {color:white; pad-left: 1em;}
+.left-gutter {
+    padding-left: 50px;
+}
 
 /* main grid */
 

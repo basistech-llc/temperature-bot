@@ -6,6 +6,7 @@ from os.path import abspath
 import os
 import logging
 import json
+import datetime
 from functools import wraps
 
 from flask import Flask, request, jsonify, render_template, send_from_directory, Blueprint
@@ -17,13 +18,14 @@ from . import ae200
 from . import weather
 from . import db
 from . import airnow
+from . import rules_engine
 from .ae200 import SpeedControl
 
 __version__ = '0.0.1'
 
 DEV = "/home/simsong" in abspath(__file__)
 API_V1_PREFIX = "/api/v1"
-DEFAULT_LOG_LEVEL = 'INFO'
+DEFAULT_LOG_LEVEL = 'DEBUG'
 LOGGING_CONFIG='%(asctime)s  %(filename)s:%(lineno)d %(levelname)s: %(message)s'
 LOG_LEVEL = os.getenv("LOG_LEVEL",DEFAULT_LOG_LEVEL).upper()
 
@@ -226,10 +228,32 @@ def privacy():
 def get_version():
     return f"version: {__version__}"
 
+
+@app.route("/rules")
+@with_db_connection
+def show_rules(conn):
+    # Let's see how the rules will render for the next seven days
+    rule_results = ""
+    prev_results = ""
+    when = datetime.datetime.now().replace(minute=0, second=0, microsecond=0) + datetime.timedelta(hours=1)
+    for hours in range(24*7):
+        new_results = rules_engine.rules_results(conn, when.timestamp())
+        if new_results and new_results != prev_results:
+            rule_results += f"<h3>{str(when)}</h3><pre>{new_results}</pre>\n"
+        prev_results = new_results
+        when += datetime.timedelta(hours=1)
+
+    print('rule_results=',rule_results)
+
+    return render_template("rules.html",
+                           devices=rules_engine.get_devices_dict(conn),
+                           rules=rules_engine.get_rules(),
+                           rules_results=rule_results,
+                           times=rules_engine.get_time_dict())
+
 @app.route("/device_log/<device_id>")
 @with_db_connection
 def device_log(conn, device_id):
-    logger.debug("HI MOM")
     c = conn.cursor()
     c.execute("""SELECT *,datetime(logtime,'unixepoch','localtime') as start,
                              datetime(logtime+duration,'unixepoch','localtime') as end

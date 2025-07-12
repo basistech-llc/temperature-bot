@@ -38,18 +38,18 @@ def get_aqi_sync():
     API_KEY = get_secret('airnow', 'api_key')
     url = AQI_URL.format(zipcode=zipcode, API_KEY=API_KEY)
     logging.info("get_aqi_sync: %s", url)
-    
+
     try:
         r = requests.get(url, timeout=TIMEOUT_SECONDS)
         r.raise_for_status()
-        
+
         if r.json() == []:
             return {"error": "AirNow API returned []; likely rate-limited"}
-            
+
         aqi = r.json()[0]["AQI"]
         (name, color) = aqi_color(aqi)
         return {"value": aqi, "color": color, "name": name}
-        
+
     except requests.exceptions.Timeout as e:
         raise AirnowError("timeout") from e
     except requests.exceptions.HTTPError as e:
