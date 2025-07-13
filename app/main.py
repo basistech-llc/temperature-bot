@@ -224,7 +224,7 @@ def get_logs(conn):
         try:
             row['age'] = github_style_duration(row['logtime'])
         except TypeError as e:
-            logging.error("e=%s data=%s",e,data)
+            logging.error("e=%s data=%s",e,row)
 
     return jsonify({
         "draw": draw,
