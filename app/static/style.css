@@ -55,6 +55,15 @@ button {
     max-width:1000px;
 }
 
+#temp-header {
+    width: 80px;
+}
+
+#last-refresh {
+    color: blue;
+    font-style: italic;
+}
+
 .age {
     color: #aaa;
 }

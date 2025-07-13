@@ -181,7 +181,7 @@ const refreshGrid = () => {
                     zeroPad(currentdate.getHours(), 2) + ":" +
                     zeroPad(currentdate.getMinutes(), 2) + ":" +
                     zeroPad(currentdate.getSeconds(), 2);
-                document.querySelector('#last-update').innerHTML = datetime;
+                document.querySelector('#last-refresh').innerHTML = datetime;
 
                 // Update the refresh time
                 lastRefreshTime = now;
@@ -239,7 +239,7 @@ async function loadWeatherAndRenderGrid() {
 
 		// Header row
 		const headerRow = document.createElement('tr');
-		headerRow.innerHTML = `<th >Unit</th><th>Temp</th>` + FAN_SPEEDS.map(s => `<th>${s}</th>`).join('');
+		headerRow.innerHTML = `<th >Unit</th><th id='temp-header'>Temp</th>` + FAN_SPEEDS.map(s => `<th>${s}</th>`).join('');
 		table.appendChild(headerRow);
 
 		// Rows

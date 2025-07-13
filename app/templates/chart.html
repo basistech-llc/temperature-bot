@@ -1,16 +1,16 @@
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="UTF-8">
-  <title>Temperature Time Series</title>
+{% extends 'base.html' %}
+{% block title %} Temperature Time Series {% endblock %}
+{% block head %}
   <script src="https://cdn.jsdelivr.net/npm/echarts@5"></script>
   <style>
     #main { width: 100%; height: 800px; }
     #controls { margin-top: 1em; font-family: sans-serif; }
     #checkboxes label { margin-right: 1em; }
   </style>
-</head>
-<body>
+{% endblock %}
+{% block body %}
+
+<div class="pure-g"><!-- the start of the pure row -->
   <div id="main"></div>
   <div id="controls">
     <div id="checkboxes"></div>
@@ -151,5 +151,5 @@
       URL.revokeObjectURL(url);
     });
   </script>
-</body>
-</html>
+</div>
+{% endblock %}
