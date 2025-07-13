@@ -16,9 +16,7 @@ from pydantic import BaseModel, conint
 
 from app.paths import DB_PATH
 
-
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
 logger.debug("DB_PATH=%s",DB_PATH)
 
 DEVICE_MAP = {}
@@ -56,7 +54,7 @@ def get_db_connection():
         conn = connect_db(db_path)
         return conn
     except sqlite3.Error as e:
-        logging.exception("Database connection error: %s", e)
+        logger.exception("Database connection error: %s", e)
         raise
 
 def setup_database(conn, schema_file):
@@ -71,14 +69,14 @@ def setup_database(conn, schema_file):
         cursor.executescript(schema_sql) # Executes all SQL statements in the file
         conn.commit()
         DEVICE_MAP.clear()
-        logging.info("Database schema from '%s' set up successfully.", schema_file)
+        logger.info("Database schema from '%s' set up successfully.", schema_file)
     except sqlite3.Error as e:
         conn.rollback()
-        logging.error("Database error during schema setup: %s", e)
+        logger.error("Database error during schema setup: %s", e)
         raise # Re-raise the exception
     except Exception as e:
         conn.rollback()
-        logging.exception("An unexpected error occurred during schema setup: %s", e)
+        logger.exception("An unexpected error occurred during schema setup: %s", e)
         raise
 
 def get_or_create_device_id(conn, device_name, use_cache=True):
@@ -93,11 +91,11 @@ def get_or_create_device_id(conn, device_name, use_cache=True):
         use_cache = False
 
     if use_cache and (device_name in DEVICE_MAP):
-        logging.debug("get_or_create_device_id DEVICE_MAP[%s]=%s",device_name,DEVICE_MAP[device_name])
+        logger.debug("get_or_create_device_id DEVICE_MAP[%s]=%s",device_name,DEVICE_MAP[device_name])
         return DEVICE_MAP[device_name]
 
     try:
-        logging.debug("INSERT OR IGNORE device_name=%s",device_name)
+        logger.debug("INSERT OR IGNORE device_name=%s",device_name)
         cursor.execute("INSERT OR IGNORE INTO devices (device_name) VALUES (?);", (device_name,))
         conn.commit()
 
@@ -105,15 +103,15 @@ def get_or_create_device_id(conn, device_name, use_cache=True):
         result = cursor.fetchone()
 
         if result:
-            logging.debug("get_or_create_device_id(%s) result=%s",device_name,result)
+            logger.debug("get_or_create_device_id(%s) result=%s",device_name,result)
             DEVICE_MAP[device_name] = result['device_id']
             return DEVICE_MAP[device_name]
         else:
-            logging.error("Could not retrieve ID for device name: %s", device_name)
+            logger.error("Could not retrieve ID for device name: %s", device_name)
             raise ValueError("Could not retrieve ID for device name: %s" % device_name) # pylint: disable=consider-using-f-string
 
     except sqlite3.Error as e:
-        logging.error("Database error in get_or_create_device_id: %s", e)
+        logger.error("Database error in get_or_create_device_id: %s", e)
         conn.rollback() # Rollback any partial transaction
         raise # Re-raise the exception
 
@@ -143,9 +141,10 @@ def fetch_all_devices(conn):
 def fetch_last_status(conn):
     """Fetches the last status for each device"""
     cursor = conn.cursor()
-    cursor.execute("""select a.*,b.device_name
-    FROM (select * from devlog group by device_id having logtime=max(logtime)) as a
-    LEFT JOIN devices b where a.device_id = b.device_id order by b.device_name""")
+    cursor.execute("""SELECT a.*,b.device_name
+                      FROM (SELECT * FROM devlog GROUP BY device_id HAVING logtime=max(logtime)) AS a
+                      LEFT JOIN devices b where a.device_id = b.device_id
+                      ORDER by b.device_name""")
     return cursor.fetchall()
 
 def get_recent_devlogs(conn, device_name: str, seconds: int):
@@ -178,10 +177,10 @@ def get_recent_devlogs(conn, device_name: str, seconds: int):
         return cursor.fetchall()
 
     except sqlite3.Error as e:
-        logging.error("Database error in get_recent_devlogs: %s", e)
+        logger.error("Database error in get_recent_devlogs: %s", e)
         raise
     except ValueError as e:
-        logging.error("Error: %s", e)
+        logger.error("Error: %s", e)
         raise
 
 
@@ -202,7 +201,7 @@ def insert_devlog_entry(conn, *,
                   If False, then only create a new entry if the temp or statusdict have changed.
     Inserts an entry into the devlog table, handling the device_id lookup/creation and automatic extension.
     """
-    logging.debug("conn=%s device_id=%s device_name=%s temp=%s statusdict=%s logtime=%s force=%s commit=%s",
+    logger.debug("conn=%s device_id=%s device_name=%s temp=%s statusdict=%s logtime=%s force=%s commit=%s",
                   conn,device_id, device_name,temp,statusdict,logtime,force,commit)
     temp10x     = int(math.floor(float(temp)*10+0.5)) if temp else None
     status_json = json.dumps(statusdict, default=str, sort_keys=True) if statusdict else None
@@ -212,6 +211,7 @@ def insert_devlog_entry(conn, *,
     try:
         # Get or create the device_id
         if device_id is None:
+            assert device_name is not None
             device_id = get_or_create_device_id(conn, device_name)
 
         # Get the most recent temperature entry. If temperature matches and we are not forcing, extend it.
@@ -220,34 +220,33 @@ def insert_devlog_entry(conn, *,
         if r and r['logtime']==logtime:
             # duplicate entry. Replace if duration is
             if r['duration']==1:
-                logging.debug("replace %s with temp10x=%s status=%s",dict(r),temp10x,status_json)
+                logger.debug("replace %s with temp10x=%s status=%s",dict(r),temp10x,status_json)
                 c.execute("UPDATE devlog set temp10x=?,status_json=? where log_id=?",(temp10x, status_json,r['log_id']))
             else:
-                logging.debug("ignore temp10x=%s status=%s because row=%s",temp10x,status_json,dict(r))
+                logger.debug("ignore temp10x=%s status=%s because row=%s",temp10x,status_json,dict(r))
             return
 
         if r and r['temp10x']==temp10x and r['status_json']==status_json and not force:
             duration = logtime-r['logtime']+1
-            logging.debug("update log_id=%s duration=%s",device_id,duration)
+            logger.debug("update log_id=%s temp10x=%s duration=%s",device_id,temp10x,duration)
             c.execute("UPDATE devlog set duration=? where log_id=?",(duration, r['log_id']))
             if commit:
                 conn.commit()
             return
 
         # Insert into devlog using the obtained device_id
-        logging.debug("insert logtime=%s device_id=%s",logtime, device_id)
+        logger.debug("insert logtime=%s device_id=%s",logtime, device_id)
         c.execute("INSERT INTO devlog (logtime, device_id, temp10x, status_json) VALUES (?, ?, ?, ?);",
                        (logtime, device_id, temp10x, status_json))
         if commit:
             conn.commit()
-        # Changed to logging.info
-        logging.info("Inserted devlog entry: device='%s' (ID: %s), temp10x=%s", device_name, device_id, temp10x)
+        logger.info("Inserted devlog entry: device_name='%s' device_id=%s, temp10x=%s", device_name, device_id, temp10x)
     except sqlite3.Error as e:
-        logging.error("Database error in insert_devlog_entry: %s", e)
+        logger.error("Database error in insert_devlog_entry: %s", e)
         conn.rollback() # Rollback any partial transaction
         raise
     except ValueError as e:
-        logging.error("Error: %s", e)
+        logger.error("Error: %s", e)
         conn.rollback()
         raise
 
@@ -263,10 +262,12 @@ def insert_changelog( conn, ipaddr:str, device_id: int, new_value: str, agent: s
     conn.commit()
 
 def update_devlog_map(conn, device_name:str, ae200_device_id:int):
+    logger.debug("device_name=%s ae200_device_id=%s",device_name,ae200_device_id)
     c = conn.cursor()
     device_id = get_or_create_device_id(conn, device_name)
     c.execute("UPDATE devices set ae200_device_id = ? where device_id=?",(ae200_device_id, device_id))
     conn.commit()
+    return device_id
 
 def get_ae200_unit(conn, device_id:int):
     c = conn.cursor()

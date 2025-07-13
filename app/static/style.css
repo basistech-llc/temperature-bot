@@ -55,11 +55,18 @@ button {
     max-width:1000px;
 }
 
+.age {
+    color: #aaa;
+}
+
 .weather-icon {
     width: 40px;
     height: 40px;
     vertical-align: middle;
     horizontal-align: left;
+    padding-bottom: 10px;
+    padding-left: 5px;
+    padding-right: 5px;
 }
 
 /* Debug styles for the fan-status-container */

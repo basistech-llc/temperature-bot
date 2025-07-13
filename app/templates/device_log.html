@@ -14,9 +14,38 @@
 
 <div class="pure-g" >
   <div class="pure-u-1">
-    {% for row in rows %}
-    {{row.device_id}} {{row.start}} - {{row.end}} ({{row.duration}} s) {{row.temp10x / 10}}ºC <br/>
+    <table>
+      {% for key, value in device.items() %}
+      <tr><th>{{ key }} </th><td> {{value}}</td></tr>
+      {% endfor %}
+    </table>
+  </div>
+</div>
+
+
+<div class="pure-g" >
+  <h2> Device Log</h2>
+  <div class="pure-u-1">
+    <table>
+      <tr><th>Device ID</td><th>Time Range</th><th>Temp</th></tr>
+      {% for row in devlog %}
+      <tr><td>{{row.device_id}}</td><td> {{row.start}} - {{row.end}} ({{row.duration}} s)</td> <td>{{row.temp10x / 10}}ºC</td></tr>
     {% endfor %}
+      </table>
+  </div>
+</div>
+
+<div class="pure-g" >
+  <h2> Change Log</h2>
+  <div class="pure-u-1">
+    <table>
+      <tr><th>Device ID</td><th>Log Time</th><th>IP Addr</th><th><Current Value</th><th>New Value</th><th>Agent</th><th>Comment</th></tr>
+      {% for row in changelog %}
+	<tr><td>{{row.device_id}}</td><td> {{row.logtime}}</td> <td>{{row.ipaddr}}</td>
+	    <td>{{row.current_values}}</td><td>{{row.new_value}}</td><td>{{row.agent}}</td><td>{{row.comment}}</td>
+	</tr>
+    {% endfor %}
+      </table>
   </div>
 </div>
 

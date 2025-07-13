@@ -7,12 +7,14 @@ import os
 import logging
 import json
 import datetime
+import time
 from functools import wraps
 
 from flask import Flask, request, jsonify, render_template, send_from_directory, Blueprint
 from werkzeug.exceptions import HTTPException
 
 from flask_pydantic import validate
+
 
 from . import ae200
 from . import weather
@@ -45,7 +47,6 @@ def fix_boto_log_level():
 app = Flask(__name__)
 app.config["TEMPLATES_AUTO_RELOAD"] = True
 app.logger.setLevel(logging.DEBUG)
-
 
 # Initialize logging and boto settings
 fix_boto_log_level()
@@ -113,6 +114,28 @@ def get_last_db_data(conn):
         return devdict
     return [fix_status_json(dd) for dd in db.fetch_last_status(conn)]
 
+def github_style_duration(past_time, now=None):
+    if now is None:
+        now = time.time()
+    seconds = int(now - past_time)
+    if seconds < 60:
+        return f"{seconds}s"
+    minutes = seconds // 60
+    if minutes < 60:
+        return f"{minutes}m"
+    hours = minutes // 60
+    if hours < 24:
+        return f"{hours}h"
+    days = hours // 24
+    if days < 30:
+        return f"{days}d"
+    months = days // 30
+    if months < 12:
+        return f"{months}mo"
+    years = months // 12
+    return f"{years}y"
+
+
 ################################################################
 # Versioned API routes
 
@@ -139,8 +162,10 @@ def get_status(conn):
 
     # Annotate the device_data
     for data in device_data:
-        if data.get('status', []):
+        if 'status' in data:
             data.update(ae200.extract_status(data['status']))
+        if 'logtime' in data:
+            data['age'] = github_style_duration(data['logtime']+data.get('duration',1))
 
     return jsonify({"devices": device_data})
 
@@ -149,7 +174,6 @@ def get_status(conn):
 def get_weather(conn):
     aqi_data = get_cached_aqi(conn, cache_hours=1)
     weather_data = weather.get_weather_data()
-
     return jsonify({"aqi": aqi_data, "weather": weather_data})
 
 @api_v1.route('/logs')
@@ -180,6 +204,8 @@ def get_logs(conn):
     total_records = c.fetchone()[0]
     c.execute(query, params)
     data = [dict(row) for row in c.fetchall()]  # Convert Row objects to dicts for JSON serialization
+    for row in data:
+        data['age'] = github_style_duration(data['logtime'])
 
     return jsonify({
         "draw": draw,
@@ -238,12 +264,16 @@ def show_rules(conn):
 @with_db_connection
 def device_log(conn, device_id):
     c = conn.cursor()
+    c.execute("""SELECT * from devices where device_id=?""",(device_id,))
+    device = dict(c.fetchone())
+
     c.execute("""SELECT *,datetime(logtime,'unixepoch','localtime') as start,
                              datetime(logtime+duration,'unixepoch','localtime') as end
                              from devlog where device_id=? order by logtime desc""",(device_id,))
-    rows = c.fetchall()
-    logger.debug("rows=%s",[dict(row) for row in rows])
-    return render_template("device_log.html",rows=rows)
+    devlog = c.fetchall()
+    c.execute("SELECT * from changelog where device_id=?",(device_id,))
+    changelog=c.fetchall()
+    return render_template("device_log.html",device=device,devlog=devlog,changelog=changelog)
 
 # Error handler
 @app.errorhandler(HTTPException)

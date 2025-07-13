@@ -28,7 +28,7 @@ function displayWeather(weatherInfo) {
     // Add weather content
     if (weatherInfo.current) {
         const current = weatherInfo.current;
-        const temp = current.temperature ? `${Math.round(current.temperature)}°F` : 'N/A';
+        const temp = current.temperature ? `${Math.round(current.temperature)}°C (Boston Logan Airport)` : 'N/A';
         html += `<div><strong>Current:</strong> ${temp} `;
         if (current.icon) {
             html += ` <img src="${current.icon}" alt="weather icon" class="weather-icon">`;
@@ -39,7 +39,7 @@ function displayWeather(weatherInfo) {
 
     // Forecast
     if (weatherInfo.forecast && weatherInfo.forecast.length > 0) {
-        html += `<div><strong>Forecast:</strong></div>`;
+        html += `<div><strong>Forecast for CALA:</strong></div>`;
         weatherInfo.forecast.forEach(period => {
             html += `<div>${period.time} ${period.temperature}°F `;
             if (period.icon) {
@@ -158,7 +158,8 @@ const refreshGrid = () => {
 			const cell = document.getElementById(`temp-${dev.device_id}`);
 			var myformat = Intl.NumberFormat('en-US', {minimumIntegerDigits:2,
 								   minimumFractionDigits:1});
-			cell.textContent = myformat.format(dev.temp10x/10);
+			cell.innerHTML = myformat.format(dev.temp10x/10) + (dev.age ? ` <span class='age'>(${dev.age})</span> ` : '');
+
 		    }
 		    if (dev.speed) {
 			const radio = document.getElementById(`radio-${dev.device_id}-${dev.drive_speed_val}`);
@@ -246,7 +247,7 @@ async function loadWeatherAndRenderGrid() {
 		for (const obj of devices ) {
 		    const row = document.createElement('tr');
 		    const labelCell = document.createElement('td');
-		    labelCell.innerHTML = obj.device_name + `<span id="device-${obj.device_id}-status"></span>`;
+		    labelCell.innerHTML = `<a href='/device_log/${obj.device_id}'>${obj.device_name}</a> <span id="device-${obj.device_id}-status"></span>`;
 		    row.appendChild(labelCell);
 
 		    // If this device takes a temp, put a space for it

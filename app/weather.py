@@ -9,6 +9,8 @@ import requests
 
 from app.util import get_config
 from app.paths import TIMEOUT_SECONDS
+logger = logging.getLogger(__name__)
+
 
 class WeatherService:
     """Create a connection for a specific location"""
@@ -39,6 +41,7 @@ class WeatherService:
 
         observation_stations_url = self.weather_points['properties']['observationStations']
         response = self.session.get(observation_stations_url)
+        logger.debug("get %s",observation_stations_url)
         response.raise_for_status()
         stations = response.json()
 
@@ -49,6 +52,7 @@ class WeatherService:
         station_id = nearest_station['properties']['stationIdentifier']
 
         observations_url = f"https://api.weather.gov/stations/{station_id}/observations/latest"
+        logger.debug("get %s",observations_url)
         response = self.session.get(observations_url)
         response.raise_for_status()
         observation = response.json()
@@ -118,10 +122,10 @@ def get_weather_data(lat=None, lon=None):
         finally:
             service.close()
     except requests.exceptions.ConnectionError as e:
-        logging.error("%s: %s", type(e), e)
+        logger.error("%s: %s", type(e), e)
         return {'error': f"{type(e)}: {e}"}
     except requests.exceptions.HTTPError as e:
-        logging.error("%s: %s", type(e), e)
+        logger.error("%s: %s", type(e), e)
         return {'error': f"{type(e)}: {e}"}
 
 
