@@ -1,0 +1,17 @@
+### /etc/systemd/system/basistech_air.service ###
+[Unit]
+Description=Gunicorn instance to serve the Flask application
+After=network.target
+
+[Service]
+User=simsong
+Group=simsong
+WorkingDirectory=/home/simsong/temperature-bot
+Environment="PATH=/home/simsong/temperature-bot/.venv/bin"
+ExecStart=/bin/bash -c 'gunicorn app.main:app --reload --host 127.0.0.1 --port 8003 --workers $((2 * $(/usr/bin/nproc) + 1))'
+Restart=always
+RestartSec=2
+
+
+[Install]
+WantedBy=multi-user.target
