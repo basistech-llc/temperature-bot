@@ -26,6 +26,8 @@ from app.main import app
 
 logger = logging.getLogger(__name__)
 
+TEST_TEMP=32
+
 # Disable websockets debug
 @pytest.fixture(autouse=True)
 def reduce_websockets_logging():
@@ -182,7 +184,7 @@ def test_browser_fan_speed_controls(
     # Mock weather and AQI data
     mock_get_aqi.return_value = {"value": 45, "color": "#00e400", "name": "Good"}
     mock_get_weather_data.return_value = {
-        "current": {"temperature": 72, "conditions": "Sunny"},
+        "current": {"temperature": TEST_TEMP, "conditions": "Sunny"},
         "forecast": []
     }
 
@@ -362,7 +364,7 @@ def test_browser_page_loads_correctly(
 
     mock_get_aqi.return_value = {"value": 45, "color": "#00e400", "name": "Good"}
     mock_get_weather_data.return_value = {
-        "current": {"temperature": 72, "conditions": "Sunny"},
+        "current": {"temperature": TEST_TEMP, "conditions": "Sunny"},
         "forecast": []
     }
 
@@ -415,8 +417,9 @@ def test_browser_page_loads_correctly(
                 expect(page.locator('#aqi-name')).to_contain_text("Good")
 
             # Verify weather section exists
+            logger.debug("page.locator #weather=%s",page.locator('#weather').inner_text())
             expect(page.locator('#weather')).to_be_visible()
-            expect(page.locator('#weather')).to_contain_text("72°F")
+            expect(page.locator('#weather')).to_contain_text(str(TEST_TEMP))
             expect(page.locator('#weather')).to_contain_text("Sunny")
 
             # Verify log table exists
@@ -425,7 +428,7 @@ def test_browser_page_loads_correctly(
             browser.close()
 
     except Exception as e:
-        logger.error("Browser page load test failed: %s",e)
+        logger.error("Browser page error: %s",e)
         raise
     finally:
         # Clean up

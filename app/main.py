@@ -203,15 +203,18 @@ def get_logs(conn):
     c.execute("SELECT COUNT(*) FROM changelog")
     total_records = c.fetchone()[0]
     c.execute(query, params)
-    data = [dict(row) for row in c.fetchall()]  # Convert Row objects to dicts for JSON serialization
-    for row in data:
-        data['age'] = github_style_duration(data['logtime'])
+    rows = [dict(row) for row in c.fetchall()]  # Convert Row objects to dicts for JSON serialization
+    for row in rows:
+        try:
+            row['age'] = github_style_duration(row['logtime'])
+        except TypeError as e:
+            logging.error("e=%s data=%s",e,data)
 
     return jsonify({
         "draw": draw,
         "recordsTotal": total_records,
         "recordsFiltered": total_records,  # Adjust if implementing search
-        "data": data
+        "data": rows
     })
 
 # Register the blueprint
