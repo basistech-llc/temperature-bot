@@ -8,6 +8,7 @@ User=simsong
 Group=simsong
 WorkingDirectory=/home/air/temperature-bot
 Environment="PATH=/home/air/temperature-bot/.venv/bin"
+Environment="DB_PATH=/var/db/temperature-bot.db"
 ExecStart=/bin/bash -c 'gunicorn app.main:app --reload --bind 127.0.0.1:8100 --workers $((2 * $(/usr/bin/nproc) + 1))'
 Restart=always
 RestartSec=2
