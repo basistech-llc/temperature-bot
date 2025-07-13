@@ -176,6 +176,22 @@ def get_weather(conn):
     weather_data = weather.get_weather_data()
     return jsonify({"aqi": aqi_data, "weather": weather_data})
 
+@api_v1.route('/temperature')
+@with_db_connection
+def get_temperature_series(conn):
+    now = time.time()
+    c = conn.cursor()
+    c.execute("SELECT * from devices")
+    devices = c.fetchall()
+    series = []
+    for dev in devices:
+        c.execute("SELECT logtime,temp10x from devlog where device_id=? and logtime >= ? and logtime is not null and temp10x is not null order by logtime",(dev['device_id'],now-60*60*24*7,))
+        rows = c.fetchall()
+        data = [[row['logtime'],row['temp10x']/10] for row in rows]
+        if data:
+            series.append({'name':dev['device_name'],'data':data})
+    return jsonify({'series':series})
+
 @api_v1.route('/logs')
 @with_db_connection
 def get_logs(conn):
@@ -240,7 +256,6 @@ def privacy():
 def get_version():
     return f"version: {__version__}"
 
-
 @app.route("/rules")
 @with_db_connection
 def show_rules(conn):
@@ -277,6 +292,10 @@ def device_log(conn, device_id):
     c.execute("SELECT * from changelog where device_id=?",(device_id,))
     changelog=c.fetchall()
     return render_template("device_log.html",device=device,devlog=devlog,changelog=changelog)
+
+@app.route('/chart')
+def show_chart():
+    return render_template('chart.html')
 
 # Error handler
 @app.errorhandler(HTTPException)

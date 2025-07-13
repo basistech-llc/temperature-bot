@@ -9,3 +9,9 @@ activate
 *secret*.json
 TAGS
 config.yaml
+coverage.xml
+node_modules
+temps.csv
+*.pyx
+token.json
+.coverage

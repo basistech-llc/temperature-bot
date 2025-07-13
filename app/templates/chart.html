@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Temperature Time Series</title>
+  <script src="https://cdn.jsdelivr.net/npm/echarts@5"></script>
+  <style>
+    #main { width: 100%; height: 800px; }
+    #controls { margin-top: 1em; font-family: sans-serif; }
+    #checkboxes label { margin-right: 1em; }
+  </style>
+</head>
+<body>
+  <div id="main"></div>
+  <div id="controls">
+    <div id="checkboxes"></div>
+    <button id="downloadCsv">Download CSV</button>
+  </div>
+
+  <script>
+    const chart = echarts.init(document.getElementById('main'));
+    let rawData = []; // original data from API
+
+    // Format time as Day HH:mm using local time
+    function formatTime(ts) {
+      return new Intl.DateTimeFormat(undefined, {
+        weekday: 'short',
+        hour: '2-digit',
+        minute: '2-digit'
+      }).format(new Date(ts));
+    }
+
+    // Load from /api/temperature
+    fetch('/api/v1/temperature')
+      .then(response => response.json())
+      .then(json => {
+        rawData = json.series;
+        const checkboxContainer = document.getElementById('checkboxes');
+        checkboxContainer.innerHTML = '';
+
+        rawData.forEach((series, index) => {
+          const id = `checkbox-${index}`;
+          const checkbox = document.createElement('input');
+          checkbox.type = 'checkbox';
+          checkbox.id = id;
+          checkbox.checked = true;
+
+          const label = document.createElement('label');
+          label.htmlFor = id;
+          label.innerText = series.name;
+
+          checkbox.addEventListener('change', updateChart);
+          checkboxContainer.appendChild(checkbox);
+          checkboxContainer.appendChild(label);
+        });
+
+        updateChart();
+      });
+
+    function updateChart() {
+      const checkboxes = document.querySelectorAll('#checkboxes input[type=checkbox]');
+      const series = [];
+
+      checkboxes.forEach((cb, i) => {
+        if (cb.checked) {
+          series.push({
+            name: rawData[i].name,
+            type: 'line',
+            showSymbol: false,
+            data: rawData[i].data.map(([ts, val]) => [ts * 1000, val]) // convert to ms
+          });
+        }
+      });
+
+      const option = {
+        title: { text: 'Temperature Time Series', top:0 },
+        tooltip: {
+          trigger: 'axis',
+          formatter: function (params) {
+            const ts = params[0].value[0];
+            let output = `${formatTime(ts)}<br>`;
+            for (const p of params) {
+              output += `${p.marker} ${p.seriesName}: ${p.value[1]} °C<br>`;
+            }
+            return output;
+          }
+        },
+        legend: {
+          data: series.map(s => s.name),
+	  top: 40
+        },
+	grid: {
+	  top: 200,
+	  left: 100,
+	  right: 100,
+	  bottom: 100
+	},
+        xAxis: {
+          type: 'time',
+          name: 'Time',
+          axisLabel: {
+            formatter: function (value) {
+              return formatTime(value);
+            }
+          }
+        },
+        yAxis: {
+          type: 'value',
+          name: 'Temperature (°C)'
+        },
+        series: series
+      };
+
+      chart.setOption(option, true);
+    }
+
+    // CSV Export
+    document.getElementById('downloadCsv').addEventListener('click', () => {
+      const checkboxes = document.querySelectorAll('#checkboxes input[type=checkbox]');
+      const visibleSeries = [];
+
+      checkboxes.forEach((cb, i) => {
+        if (cb.checked) {
+          visibleSeries.push(rawData[i]);
+        }
+      });
+
+      const timestamps = new Set();
+      visibleSeries.forEach(s => s.data.forEach(([t]) => timestamps.add(t)));
+      const sortedTimestamps = Array.from(timestamps).sort((a, b) => a - b);
+
+      let csv = 'Timestamp (s),Local Time';
+      visibleSeries.forEach(s => csv += `,${s.name}`);
+      csv += '\n';
+
+      for (const ts of sortedTimestamps) {
+        csv += `${ts},${formatTime(ts * 1000)}`;
+        for (const s of visibleSeries) {
+          const entry = s.data.find(([t]) => t === ts);
+          csv += `,${entry ? entry[1] : ''}`;
+        }
+        csv += '\n';
+      }
+
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'temperature.csv';
+      a.click();
+      URL.revokeObjectURL(url);
+    });
+  </script>
+</body>
+</html>
