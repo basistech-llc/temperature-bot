@@ -37,6 +37,8 @@ logging.basicConfig(format=LOGGING_CONFIG, level=LOG_LEVEL, force=True)
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
+#os.environ['TZ'] = 'EST5EDT'
+
 def fix_boto_log_level():
     """Do not run boto loggers at debug level"""
     for name in logging.root.manager.loggerDict: # pylint: disable=no-member
