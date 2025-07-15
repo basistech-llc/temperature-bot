@@ -114,6 +114,9 @@ def get_last_db_data(conn):
         return devdict
     return [fix_status_json(dd) for dd in db.fetch_last_status(conn)]
 
+################################################################
+### Query support
+
 def github_style_duration(past_time, now=None):
     if now is None:
         now = time.time()
@@ -135,6 +138,20 @@ def github_style_duration(past_time, now=None):
     years = months // 12
     return f"{years}y"
 
+def temporal_quantification(cmd, args):
+    """Anotate cmd and args with start, end, limit"""
+    start = request.args.get('start', type=int)
+    end = request.args.get('end', type=int)
+
+    if start is not None:
+        cmd += " AND logtime >= ? "
+        args.append(start)
+
+    if end is not None:
+        cmd += " AND logtime <= ? "
+        args.append(end)
+
+    return (cmd, args)
 
 ################################################################
 # Versioned API routes
@@ -195,30 +212,24 @@ def get_temperature_series(conn):
 @api_v1.route('/logs')
 @with_db_connection
 def get_logs(conn):
-    start = request.args.get('start', type=int)
-    end = request.args.get('end', type=int)
     draw = request.args.get('draw', 1, type=int)
     start_row = request.args.get('start_row', 0, type=int)
     length = request.args.get('length', 100, type=int)
 
-    query = "SELECT c.logtime, c.ipaddr, d.device_name as unit, c.new_value, c.agent, c.comment FROM changelog c LEFT JOIN devices d ON c.device_id = d.device_id WHERE 1=1"
-    params = []
+    cmd = """SELECT c.logtime, c.ipaddr, d.device_name as unit, c.new_value, c.agent, c.comment FROM changelog c
+               LEFT JOIN devices d ON c.device_id = d.device_id WHERE 1=1"""
+    args = []
 
-    if start is not None:
-        query += " AND logtime >= ?"
-        params.append(start)
-    if end is not None:
-        query += " AND logtime <= ?"
-        params.append(end)
+    (cmd,args) = temporal_quantification(cmd, args)
 
-    query += " ORDER BY logtime DESC LIMIT ? OFFSET ?"
-    params.extend([length, start_row])
-    logger.info("query=%s params=%s", query, params)
+    cmd += " ORDER BY logtime DESC LIMIT ? OFFSET ?"
+    args.extend([length, start_row])
+    logger.info("cmd=%s args=%s", cmd, args)
 
     c = conn.cursor()
     c.execute("SELECT COUNT(*) FROM changelog")
     total_records = c.fetchone()[0]
-    c.execute(query, params)
+    c.execute(cmd, args)
     rows = [dict(row) for row in c.fetchall()]  # Convert Row objects to dicts for JSON serialization
     for row in rows:
         try:
@@ -245,8 +256,19 @@ def static_files(filename):
 ################################################################
 # Top-level routes
 @app.route("/")
-def read_index():
-    return render_template("index.html", develop=DEV)
+@with_db_connection
+def read_index(conn):
+    # Get device data for the template
+    device_data = get_last_db_data(conn)
+    
+    # Annotate the device_data (same logic as in get_status endpoint)
+    for data in device_data:
+        if 'status' in data:
+            data.update(ae200.extract_status(data['status']))
+        if 'logtime' in data:
+            data['age'] = github_style_duration(data['logtime']+data.get('duration',1))
+    
+    return render_template("index.html", develop=DEV, devices=device_data)
 
 @app.route("/privacy")
 def privacy():
@@ -270,8 +292,6 @@ def show_rules(conn):
         prev_results = new_results
         when += datetime.timedelta(hours=1)
 
-    print('rule_results=',rule_results)
-
     return render_template("rules.html",
                            devices=rules_engine.get_devices_dict(conn),
                            rules=rules_engine.get_rules(),
@@ -285,11 +305,24 @@ def device_log(conn, device_id):
     c.execute("""SELECT * from devices where device_id=?""",(device_id,))
     device = dict(c.fetchone())
 
-    c.execute("""SELECT *,datetime(logtime,'unixepoch','localtime') as start,
+    cmd = """SELECT *,datetime(logtime,'unixepoch','localtime') as start,
                              datetime(logtime+duration,'unixepoch','localtime') as end
-                             from devlog where device_id=? order by logtime desc""",(device_id,))
+                             from devlog where device_id=? """
+    args = [device_id]
+    (cmd,args) = temporal_quantification(cmd,args)
+
+    cmd += " ORDER BY logtime DESC "
+
+    c.execute(cmd, args)
     devlog = c.fetchall()
-    c.execute("SELECT * from changelog where device_id=?",(device_id,))
+
+    cmd = "SELECT * from changelog where device_id=?"
+    args = [device_id]
+    (cmd,args) = temporal_quantification(cmd,args)
+
+    cmd += ' ORDER BY logtime DESC '
+
+    c.execute(cmd, args)
     changelog=c.fetchall()
     return render_template("device_log.html",device=device,devlog=devlog,changelog=changelog)
 

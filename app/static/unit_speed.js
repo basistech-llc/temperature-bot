@@ -124,6 +124,18 @@ async function setFanSpeed(device_id, speed) {
     }
 }
 
+// Add event listeners for radio buttons
+function setupRadioButtonListeners() {
+    const radioButtons = document.querySelectorAll('input[type="radio"][data-device-id]');
+    radioButtons.forEach(radio => {
+        radio.addEventListener('change', function() {
+            const deviceId = parseInt(this.getAttribute('data-device-id'));
+            const speed = parseInt(this.getAttribute('data-speed'));
+            setFanSpeed(deviceId, speed);
+        });
+    });
+}
+
 const refreshGrid = () => {
     const now = Date.now();
     const secondsSinceRefresh = Math.floor((now - lastRefreshTime) / 1000);
@@ -196,9 +208,9 @@ const refreshGrid = () => {
     setTimeout(refreshGrid, 1000);    // Schedule next check in 1 second
 };
 
-/* This creates the grid using the status API. */
-async function loadWeatherAndRenderGrid() {
-    console.log("Running loadWeatherAndRenderGrid()");
+/* This loads weather and starts the refresh cycle. */
+async function loadWeatherAndStartRefresh() {
+    console.log("Running loadWeatherAndStartRefresh()");
     try {
         fetch('api/v1/weather', { method: "GET"})
             .then(response => response.json())
@@ -224,75 +236,16 @@ async function loadWeatherAndRenderGrid() {
                 }
 	    });
 
-
-	fetch('/api/v1/status', { method: "GET"})
-	    .then(response => response.json())
-	    .then(data => {
-		console.log("Status data:",data);
-		const devices = data.devices;
-
-		const form = document.createElement('form');
-		document.getElementById('main-grid').appendChild(form);
-
-		const table = document.createElement('table');
-		table.className = 'pure-table pure-table-bordered';
-
-		// Header row
-		const headerRow = document.createElement('tr');
-		headerRow.innerHTML = `<th >Unit</th><th id='temp-header'>Temp</th>` + FAN_SPEEDS.map(s => `<th>${s}</th>`).join('');
-		table.appendChild(headerRow);
-
-		// Rows
-		console.log("devices=",devices);
-		for (const obj of devices ) {
-		    const row = document.createElement('tr');
-		    const labelCell = document.createElement('td');
-		    labelCell.innerHTML = `<a href='/device_log/${obj.device_id}'>${obj.device_name}</a> <span id="device-${obj.device_id}-status"></span>`;
-		    row.appendChild(labelCell);
-
-		    // If this device takes a temp, put a space for it
-		    if (obj.temp10x ){
-			const cell = document.createElement('td');
-			cell.id = `temp-${obj.device_id}`;
-			cell.textContent = '--';
-			row.appendChild(cell);
-		    } else {
-			// Otherwise create a blank cell
-			const cell = document.createElement('td');
-			cell.textContent = 'n/a';
-			row.appendChild(cell);
-		    }
-
-		    // If this is a device that supports speed control, draw those radio buttons
-		    if (obj.speed) {
-			FAN_SPEEDS.forEach(fan_speed => {
-			    const cell = document.createElement('td');
-			    cell.classList.add('speed');
-			    const radio = document.createElement('input');
-			    radio.type  = 'radio';
-			    radio.name  = `fan_speed-${obj.device_id}`;
-			    radio.value = fan_speed;
-			    radio.id    = `radio-${obj.device_id}-${fan_speed}`;
-			    radio.onclick = () => setFanSpeed(obj.device_id, fan_speed);
-			    cell.appendChild(radio);
-			    row.appendChild(cell);
-			});
-		    } else {
-			// Otherwise create a blank colspan
-			const cell = document.createElement('td');
-			cell.colSpan = 6;
-			row.appendChild(cell);
-		    }
-		    table.appendChild(row);
-		}
-		form.appendChild(table);
-		refreshGrid();		// and schedule a refresh
-	    });
+        // Start the refresh cycle
+        refreshGrid();
     } catch (e) {
-	console.error("Error in loadWeatherAndRenderGrid():", e);
+	console.error("Error in loadWeatherAndStartRefresh():", e);
     }
 }
 
 
 createLogTable();
-window.addEventListener('DOMContentLoaded', loadWeatherAndRenderGrid);
+window.addEventListener('DOMContentLoaded', function() {
+    setupRadioButtonListeners();
+    loadWeatherAndStartRefresh();
+});
