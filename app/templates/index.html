@@ -21,12 +21,12 @@
             <tr>
               <th class="column-unit">Unit</th>
               <th class="column-temp" id="temp-header">Temp</th>
-              <th class="column-speed column-speed-auto">-1</th>
-              <th class="column-speed column-speed-off">0</th>
-              <th class="column-speed column-speed-low">1</th>
-              <th class="column-speed column-speed-mid2">2</th>
-              <th class="column-speed column-speed-mid1">3</th>
-              <th class="column-speed column-speed-high">4</th>
+              <th class="column-speed column-speed-auto"></th>
+              <th class="column-speed column-speed-off"></th>
+              <th class="column-speed column-speed-low"></th>
+              <th class="column-speed column-speed-mid2"></th>
+              <th class="column-speed column-speed-mid1"></th>
+              <th class="column-speed column-speed-high"></th>
             </tr>
           </thead>
           <tbody>
@@ -36,10 +36,10 @@
                 {{ device.device_name }}
                 <span id="device-{{ device.device_id }}-status"></span>
                 <div class="temporal-links">
-                  <a href="/device_log/{{ device.device_id }}?start={{ (now - 86400) | int }}&end={{ now | int }}">[day]</a>
-                  <a href="/device_log/{{ device.device_id }}?start={{ (now - 604800) | int }}&end={{ now | int }}">[week]</a>
-                  <a href="/device_log/{{ device.device_id }}">[all]</a>
-                  <a href="/chart?device_id={{ device.device_id }}">[graph]</a>
+                  <a href="/device_log/{{ device.device_id }}?start={{ (now - 86400) | int }}&end={{ now | int }}" target="_blank">day</a>
+                  <a href="/device_log/{{ device.device_id }}?start={{ (now - 604800) | int }}&end={{ now | int }}" target="_blank">week</a>
+                  <a href="/device_log/{{ device.device_id }}" target="_blank">all</a>
+                  <a href="/chart?device_id={{ device.device_id }}" target="_blank">graph</a>
                 </div>
               </td>
               {% if device.temp10x %}

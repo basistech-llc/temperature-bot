@@ -219,6 +219,16 @@ def test_browser_fan_speed_controls(
             logtime=current_time,
             force=True
         )
+        # Add a second device without speed control
+        no_speed_device_id = db.get_or_create_device_id(test_conn, "No Speed Device")
+        db.insert_devlog_entry(
+            test_conn,
+            device_id=no_speed_device_id,
+            temp=22.0,
+            statusdict={"Drive": "ON", "InletTemp": "22.0"},
+            logtime=current_time,
+            force=True
+        )
         test_conn.commit()
 
     # Set up mocked return values
@@ -264,6 +274,17 @@ def test_browser_fan_speed_controls(
 
             # Wait for the grid to load
             helper.wait_for_grid_to_load()
+
+            # Verify that Broadway South has radio buttons
+            for speed in [0, 1, 2, 3, 4]:
+                radio = page.locator(f'#radio-{helper.get_broadway_south_device_id()}-{speed}')
+                expect(radio).to_be_visible()
+
+            # Verify that No Speed Device does not have any radio buttons
+            no_speed_row = page.locator('tr:has-text("No Speed Device")')
+            for speed in [0, 1, 2, 3, 4]:
+                radio = no_speed_row.locator(f'input[type="radio"][data-device-id]')
+                expect(radio).not_to_be_visible()
 
             # Test 1: Click fan speed 0 (OFF)
             logger.info("Testing fan speed 0 (OFF)")

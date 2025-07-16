@@ -116,3 +116,28 @@ button {
 #fan-status-container .pure-u-1.pure-u-md-1-2:first-child {
     max-width: 400px;
 }
+
+.temporal-links {
+    margin-top: 8px;
+    margin-bottom: 8px;
+    line-height: 1.5;
+}
+
+.temporal-links a {
+    margin-right: 8px;
+    padding: 2px 4px;
+    text-decoration: none;
+    color: #999;
+}
+
+.temporal-links a:hover {
+    background-color: #f0f0f0;
+    border-radius: 3px;
+}
+
+.column-unit {
+    width: 260px;
+    min-width: 220px;
+    max-width: 340px;
+    white-space: nowrap;
+}
