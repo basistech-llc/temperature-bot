@@ -260,15 +260,18 @@ def static_files(filename):
 def read_index(conn):
     # Get device data for the template
     device_data = get_last_db_data(conn)
-    
+
     # Annotate the device_data (same logic as in get_status endpoint)
     for data in device_data:
         if 'status' in data:
             data.update(ae200.extract_status(data['status']))
         if 'logtime' in data:
             data['age'] = github_style_duration(data['logtime']+data.get('duration',1))
-    
-    return render_template("index.html", develop=DEV, devices=device_data)
+
+    # Add current timestamp for temporal links
+    now = int(time.time())
+
+    return render_template("index.html", develop=DEV, devices=device_data, now=now)
 
 @app.route("/privacy")
 def privacy():

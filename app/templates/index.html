@@ -33,8 +33,13 @@
             {% for device in devices %}
             <tr class="device-row" data-device-id="{{ device.device_id }}">
               <td class="cell-unit">
-                <a href="/device_log/{{ device.device_id }}">{{ device.device_name }}</a>
+                {{ device.device_name }}
                 <span id="device-{{ device.device_id }}-status"></span>
+                <div class="temporal-links">
+                  <a href="/device_log/{{ device.device_id }}?start={{ (now - 86400) | int }}&end={{ now | int }}">[day]</a>
+                  <a href="/device_log/{{ device.device_id }}?start={{ (now - 604800) | int }}&end={{ now | int }}">[week]</a>
+                  <a href="/device_log/{{ device.device_id }}">[all]</a>
+                </div>
               </td>
               {% if device.temp10x %}
               <td class="cell-temp" id="temp-{{ device.device_id }}">--</td>
