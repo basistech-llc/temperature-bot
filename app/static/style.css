@@ -121,6 +121,8 @@ button {
     margin-top: 8px;
     margin-bottom: 8px;
     line-height: 1.5;
+    white-space: nowrap;
+    display: inline-block;
 }
 
 .temporal-links a {
@@ -136,8 +138,13 @@ button {
 }
 
 .column-unit {
-    width: 260px;
-    min-width: 220px;
-    max-width: 340px;
+    width: 320px;
+    min-width: 280px;
+    max-width: 400px;
     white-space: nowrap;
+}
+
+.cell-unit {
+    white-space: nowrap;
+    vertical-align: top;
 }

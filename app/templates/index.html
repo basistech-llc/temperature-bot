@@ -47,7 +47,7 @@
               {% else %}
               <td class="cell-temp cell-temp-na">n/a</td>
               {% endif %}
-              {% if device.drive_speed_val is not none %}
+              {% if device.has_speed_control %}
                 {% for speed in [-1, 0, 1, 2, 3, 4] %}
                 <td class="cell-speed cell-speed-{{ speed }}">
                   <input type="radio" name="fan_speed-{{ device.device_id }}" value="{{ speed }}" id="radio-{{ device.device_id }}-{{ speed }}" data-device-id="{{ device.device_id }}" data-speed="{{ speed }}" title="Set {{ device.device_name }} to speed {{ speed }}">

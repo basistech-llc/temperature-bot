@@ -192,13 +192,15 @@ async def get_devices_async():
     return await d.getDevicesAsync()
 
 def extract_status(data):
-    """Return a dict with drive/speed/drive_speed_val"""
+    """Return a dict with drive/speed/drive_speed_val/has_speed_control"""
     drive = data.get('Drive',None)
     speed = data.get('FanSpeed',None)
+    has_speed_control = (drive is not None and speed is not None and speed in SPEEDS.values())
     return {
         'drive': drive,
         'speed': speed,
-        'drive_speed_val': drive_speed_to_val(drive, speed)
+        'drive_speed_val': drive_speed_to_val(drive, speed),
+        'has_speed_control': has_speed_control
     }
 
 async def set_fan_speed_async(device, speed):
