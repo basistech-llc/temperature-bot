@@ -16,7 +16,7 @@ from pathlib import Path
 import pytest
 from playwright.sync_api import sync_playwright, Page, expect
 
-from fixtures import client, skip_on_github  # noqa: F401  # pylint: disable=unused-import
+from fixtures import client, skip_on_github, create_temporal_test_data  # noqa: F401  # pylint: disable=unused-import
 from app import ae200
 from app import db
 from app.paths import TEST_DATA_DIR
@@ -123,6 +123,50 @@ class BrowserTestHelper:
             extracted_status = ae200.extract_status(status_data)
             assert extracted_status['drive_speed_val'] == expected_speed, \
                 f"Expected drive_speed_val {expected_speed}, got {extracted_status['drive_speed_val']}"
+
+
+class TemperatureTestHelper:
+    """Helper class for temperature display testing operations"""
+
+    def __init__(self, page: Page, test_db_name: str):
+        self.page = page
+        self.test_db_name = test_db_name
+
+    def wait_for_chart_to_load(self):
+        """Wait for the chart page to load and be visible"""
+        # Wait for the main chart container
+        self.page.wait_for_selector('#main', timeout=10000)
+        # Wait for the record count to appear
+        self.page.wait_for_selector('#record-count', timeout=10000)
+
+    def get_record_count(self) -> int:
+        """Get the current record count from the page"""
+        record_count_element = self.page.locator('#record-count')
+        text = record_count_element.text_content()
+        # Extract number from "Records loaded: X"
+        count = int(text.split(': ')[1])
+        return count
+
+    def click_temporal_button(self, button_name: str):
+        """Click a temporal button (day, week, month)"""
+        button_map = {
+            'day': '#dayBtn',
+            'week': '#weekBtn',
+            'month': '#monthBtn'
+        }
+        button_selector = button_map.get(button_name)
+        if not button_selector:
+            raise ValueError(f"Unknown button: {button_name}")
+
+        self.page.click(button_selector)
+        # Wait for the record count to update
+        time.sleep(1)
+
+    def verify_record_count(self, expected_count: int):
+        """Verify that the record count matches the expected value"""
+        actual_count = self.get_record_count()
+        assert actual_count == expected_count, \
+            f"Expected {expected_count} records, got {actual_count}"
 
 
 # Set this flag to True to enable AQI testing, False to disable
@@ -429,6 +473,106 @@ def test_browser_page_loads_correctly(
 
     except Exception as e:
         logger.error("Browser page error: %s",e)
+        raise
+    finally:
+        # Clean up
+        pass
+
+
+@skip_on_github
+@patch("app.weather.get_weather_data")
+@patch("app.airnow.get_aqi_sync")
+def test_browser_temperature_display(
+    mock_get_aqi,
+    mock_get_weather_data,
+    client  # noqa: F811
+):
+    """
+    Comprehensive test for temperature display functionality:
+    1. Tests that temporal buttons (day, week, month) work correctly
+    2. Verifies record counts match expected values for different time ranges
+    3. Tests with temporal test data (1 hour, 26 hours, 200 hours, 2000 hours ago)
+    """
+
+    # Set up test database with temporal data
+    test_db_name = os.environ['TEST_DB_NAME']
+
+    with sqlite3.connect(test_db_name) as test_conn:
+        test_conn.row_factory = sqlite3.Row
+        # Create test device with temporal data
+        device_id, expected_counts = create_temporal_test_data(test_conn, "Temporal Test Device")
+        test_conn.commit()
+
+    # Mock weather and AQI data
+    mock_get_aqi.return_value = {"value": 45, "color": "#00e400", "name": "Good"}
+    mock_get_weather_data.return_value = {
+        "current": {"temperature": TEST_TEMP, "conditions": "Sunny"},
+        "forecast": []
+    }
+
+    # Start the Flask app in a separate thread
+    def run_app():
+        app.run(host='127.0.0.1', port=5003, debug=False, use_reloader=False)
+
+    server_thread = threading.Thread(target=run_app, daemon=True)
+    server_thread.start()
+
+    # Give the server time to start
+    time.sleep(3)
+
+    try:
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            page = browser.new_page()
+
+            # Navigate to the chart page for the specific device
+            page.goto(f'http://127.0.0.1:5003/chart?device_id={device_id}')
+
+            # Wait for the chart to load
+            helper = TemperatureTestHelper(page, test_db_name)
+            helper.wait_for_chart_to_load()
+
+            # Test initial load (should show all records)
+            logger.info("Testing initial load")
+            helper.verify_record_count(expected_counts["all"])
+
+            # Test day button (should show 2 records: 1 hour + 26 hours)
+            logger.info("Testing day button")
+            helper.click_temporal_button('day')
+            helper.verify_record_count(expected_counts["day"])
+
+            # Test week button (should show 3 records: 1 hour + 26 hours + 200 hours)
+            logger.info("Testing week button")
+            helper.click_temporal_button('week')
+            helper.verify_record_count(expected_counts["week"])
+
+            # Test month button (should show all 4 records)
+            logger.info("Testing month button")
+            helper.click_temporal_button('month')
+            helper.verify_record_count(expected_counts["month"])
+
+            # Test day button again to ensure it still works
+            logger.info("Testing day button again")
+            helper.click_temporal_button('day')
+            helper.verify_record_count(expected_counts["day"])
+
+            # Verify all temporal buttons are present and clickable
+            expect(page.locator('#dayBtn')).to_be_visible()
+            expect(page.locator('#weekBtn')).to_be_visible()
+            expect(page.locator('#monthBtn')).to_be_visible()
+
+            # Verify chart container is present and loaded
+            expect(page.locator('#main')).to_be_visible()
+
+            # Verify record count element is present and shows data
+            record_count_element = page.locator('#record-count')
+            expect(record_count_element).to_be_visible()
+            expect(record_count_element).to_contain_text("Records loaded:")
+
+            browser.close()
+
+    except Exception as e:
+        logger.error("Temperature display test failed: %s", e)
         raise
     finally:
         # Clean up

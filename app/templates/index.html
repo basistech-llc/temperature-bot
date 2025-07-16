@@ -15,8 +15,54 @@
 <div class="pure-g" >
   <div class="pure-u-1 pure-u-md-1-2"><!-- take 1/2 the row on a medium screen -->
     <div id="main-grid" class="maxwidth">
-        <div style="padding: 20px; text-align: center; color: #666;">Loading unit controls...</div>
-      </div>
+      <form>
+        <table class="pure-table pure-table-bordered">
+          <thead>
+            <tr>
+              <th class="column-unit">Unit</th>
+              <th class="column-temp" id="temp-header">Temp</th>
+              <th class="column-speed column-speed-auto">-1</th>
+              <th class="column-speed column-speed-off">0</th>
+              <th class="column-speed column-speed-low">1</th>
+              <th class="column-speed column-speed-mid2">2</th>
+              <th class="column-speed column-speed-mid1">3</th>
+              <th class="column-speed column-speed-high">4</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for device in devices %}
+            <tr class="device-row" data-device-id="{{ device.device_id }}">
+              <td class="cell-unit">
+                {{ device.device_name }}
+                <span id="device-{{ device.device_id }}-status"></span>
+                <div class="temporal-links">
+                  <a href="/device_log/{{ device.device_id }}?start={{ (now - 86400) | int }}&end={{ now | int }}">[day]</a>
+                  <a href="/device_log/{{ device.device_id }}?start={{ (now - 604800) | int }}&end={{ now | int }}">[week]</a>
+                  <a href="/device_log/{{ device.device_id }}">[all]</a>
+                  <a href="/chart?device_id={{ device.device_id }}">[graph]</a>
+                </div>
+              </td>
+              {% if device.temp10x %}
+              <td class="cell-temp" id="temp-{{ device.device_id }}">--</td>
+              {% else %}
+              <td class="cell-temp cell-temp-na">n/a</td>
+              {% endif %}
+              {% if device.drive_speed_val is not none %}
+                {% for speed in [-1, 0, 1, 2, 3, 4] %}
+                <td class="cell-speed cell-speed-{{ speed }}">
+                  <input type="radio" name="fan_speed-{{ device.device_id }}" value="{{ speed }}" id="radio-{{ device.device_id }}-{{ speed }}" data-device-id="{{ device.device_id }}" data-speed="{{ speed }}" title="Set {{ device.device_name }} to speed {{ speed }}">
+                  <label for="radio-{{ device.device_id }}-{{ speed }}" class="sr-only">Speed {{ speed }}</label>
+                </td>
+                {% endfor %}
+              {% else %}
+              <td class="cell-speed cell-speed-disabled" colspan="6"></td>
+              {% endif %}
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </form>
+    </div>
     </div>
     <div class="pure-u-1 pure-u-md-1-2" id="aqi-weather">
       <div id='aqi'>

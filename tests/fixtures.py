@@ -6,6 +6,7 @@ import os
 import tempfile
 import sqlite3
 import logging
+import time
 import pytest
 from app.main import app as flask_app
 from app.paths import SCHEMA_FILE_PATH
@@ -34,6 +35,51 @@ def setup_test_database(conn):
     except sqlite3.Error as e:
         logging.exception("Test database error during schema setup: %s", e)
         conn.rollback()
+
+def create_temporal_test_data(conn, device_name="Test Device"):
+    """
+    Creates test data with records at different time intervals:
+    - 1 hour ago
+    - 26 hours ago
+    - 200 hours ago
+    - 2000 hours ago
+
+    Returns the device_id and a dict with the expected record counts for different time ranges.
+    """
+    current_time = int(time.time())
+
+    # Create device
+    cursor = conn.cursor()
+    cursor.execute("INSERT INTO devices (device_name) VALUES (?)", (device_name,))
+    device_id = cursor.lastrowid
+
+    # Define time intervals in seconds
+    intervals = {
+        "1_hour": 1 * 60 * 60,
+        "26_hours": 26 * 60 * 60,
+        "200_hours": 200 * 60 * 60,
+        "2000_hours": 2000 * 60 * 60
+    }
+
+    # Add records at each interval
+    for interval_name, seconds in intervals.items():
+        record_time = current_time - seconds
+        cursor.execute("""
+            INSERT INTO devlog (device_id, logtime, duration, temp10x, status_json)
+            VALUES (?, ?, ?, ?, ?)
+        """, (device_id, record_time, 60, 240, '{"Drive": "ON", "FanSpeed": "LOW", "InletTemp": "24.0"}'))
+
+    conn.commit()
+
+    # Calculate expected record counts for different time ranges
+    expected_counts = {
+        "day": 1,    # Only 1 hour ago
+        "week": 2,   # 1 hour + 26 hours ago
+        "month": 3,  # 1 hour + 26 hours + 200 hours ago
+        "all": 4     # All records
+    }
+
+    return device_id, expected_counts
 
 @pytest.fixture
 def client():
