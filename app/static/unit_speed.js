@@ -126,11 +126,11 @@ async function setFanSpeed(device_id, speed) {
 
 // Add event listeners for radio buttons
 function setupRadioButtonListeners() {
-    const radioButtons = document.querySelectorAll('input[type="radio"][data-device-id]');
+    const radioButtons = document.querySelectorAll('input[type="radio"][x-data-device-id]');
     radioButtons.forEach(radio => {
         radio.addEventListener('change', function() {
-            const deviceId = parseInt(this.getAttribute('data-device-id'));
-            const speed = parseInt(this.getAttribute('data-speed'));
+            const deviceId = parseInt(this.getAttribute('x-data-device-id'));
+            const speed = parseInt(this.getAttribute('x-data-speed'));
             setFanSpeed(deviceId, speed);
         });
     });

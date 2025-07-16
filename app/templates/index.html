@@ -19,19 +19,22 @@
         <table class="pure-table pure-table-bordered">
           <thead>
             <tr>
-              <th class="column-unit">Unit</th>
-              <th class="column-temp" id="temp-header">Temp</th>
-              <th class="column-speed column-speed-auto"></th>
-              <th class="column-speed column-speed-off"></th>
-              <th class="column-speed column-speed-low"></th>
-              <th class="column-speed column-speed-mid2"></th>
-              <th class="column-speed column-speed-mid1"></th>
-              <th class="column-speed column-speed-high"></th>
+              <th class="column-unit" rowspan="2">Unit</th>
+              <th class="column-temp" id="temp-header" rowspan="2">Temp</th>
+              <th class="column-speed" colspan="6">Speed</th>
+            </tr>
+            <tr>
+              <th class="column-speed column-speed-auto">-1</th>
+              <th class="column-speed column-speed-off">0</th>
+              <th class="column-speed column-speed-low">1</th>
+              <th class="column-speed column-speed-mid2">2</th>
+              <th class="column-speed column-speed-mid1">3</th>
+              <th class="column-speed column-speed-high">4</th>
             </tr>
           </thead>
           <tbody>
             {% for device in devices %}
-            <tr class="device-row" data-device-id="{{ device.device_id }}">
+                          <tr class="device-row" x-data-device-id="{{ device.device_id }}">
               <td class="cell-unit">
                 {{ device.device_name }}
                 <span id="device-{{ device.device_id }}-status"></span>
@@ -50,8 +53,11 @@
               {% if device.has_speed_control %}
                 {% for speed in [-1, 0, 1, 2, 3, 4] %}
                 <td class="cell-speed cell-speed-{{ speed }}">
-                  <input type="radio" name="fan_speed-{{ device.device_id }}" value="{{ speed }}" id="radio-{{ device.device_id }}-{{ speed }}" data-device-id="{{ device.device_id }}" data-speed="{{ speed }}" title="Set {{ device.device_name }} to speed {{ speed }}">
-                  <label for="radio-{{ device.device_id }}-{{ speed }}" class="sr-only">Speed {{ speed }}</label>
+                  <input type="radio" name="fan_speed-{{ device.device_id }}"
+                  value="{{ speed }}" id="radio-{{ device.device_id }}-{{ speed }}"
+                  x-data-device-id="{{ device.device_id }}"
+                  x-data-speed="{{ speed }}"
+                  title="Set {{ device.device_name }} to speed {{ speed }}">
                 </td>
                 {% endfor %}
               {% else %}

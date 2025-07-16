@@ -98,12 +98,11 @@ class AsyncRunner:
         try:
             # Try to get the current running loop
             loop = asyncio.get_running_loop()
-            # We're already in an event loop, create a task
-            task = loop.create_task(coro)
-            # Wait for the task to complete by running the loop
-            while not task.done():
-                loop.run_until_complete(asyncio.sleep(0.01))
-            return task.result()
+            # We're already in an event loop, so we need to run in a separate thread
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                future = executor.submit(asyncio.run, coro)
+                return future.result()
         except RuntimeError:
             # No event loop running, use the app's event loop
             loop = self.get_loop()
