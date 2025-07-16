@@ -42,7 +42,7 @@
                   <a href="/device_log/{{ device.device_id }}?start={{ (now - 86400) | int }}&end={{ now | int }}" target="_blank">day</a>
                   <a href="/device_log/{{ device.device_id }}?start={{ (now - 604800) | int }}&end={{ now | int }}" target="_blank">week</a>
                   <a href="/device_log/{{ device.device_id }}" target="_blank">all</a>
-                  <a href="/chart?device_id={{ device.device_id }}" target="_blank">graph</a>
+                  <a href="/chart?device_ids={{ device.device_id }}" target="_blank">graph</a>
                 </div>
               </td>
               {% if device.temp10x %}

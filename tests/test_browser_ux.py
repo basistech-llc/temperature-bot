@@ -283,7 +283,7 @@ def test_browser_fan_speed_controls(
             # Verify that No Speed Device does not have any radio buttons
             no_speed_row = page.locator('tr:has-text("No Speed Device")')
             for speed in [0, 1, 2, 3, 4]:
-                radio = no_speed_row.locator(f'input[type="radio"][data-device-id]')
+                radio = no_speed_row.locator(f'input[type="radio"][x-data-device-id]')
                 expect(radio).not_to_be_visible()
 
             # Test 1: Click fan speed 0 (OFF)
@@ -598,3 +598,33 @@ def test_browser_temperature_display(
     finally:
         # Clean up
         pass
+
+
+def test_chart_page_no_dom_errors():
+    """
+    This test requires the Flask server to be running at http://localhost:8000.
+    It checks for DOM errors (like NotFoundError) in the chart page JavaScript.
+    """
+    from playwright.sync_api import sync_playwright
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        page = browser.new_page()
+        errors = []
+
+        # Listen for console errors
+        page.on("console", lambda msg: errors.append(msg) if msg.type == "error" else None)
+
+        # Go to the chart page
+        page.goto("http://localhost:8000/chart")
+        # Wait for the chart and controls to load
+        page.wait_for_selector("#main")
+        page.wait_for_selector("#addDeviceSelect")
+
+        # Wait a bit for JS to run
+        page.wait_for_timeout(1000)
+
+        # Check for NotFoundError in console errors
+        error_texts = [msg.text for msg in errors]
+        assert not any("NotFoundError" in text for text in error_texts), f"Console errors: {error_texts}"
+
+        browser.close()

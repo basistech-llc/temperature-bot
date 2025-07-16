@@ -193,32 +193,41 @@ def get_weather(conn):
     weather_data = weather.get_weather_data()
     return jsonify({"aqi": aqi_data, "weather": weather_data})
 
+# Removed /api/v1/devices endpoint; use /api/v1/status for device info
+
 @api_v1.route('/temperature')
 @with_db_connection
 def get_temperature_series(conn):
-    device_id = request.args.get('device_id', type=int)
+    device_ids_param = request.args.get('device_ids', '')
 
     c = conn.cursor()
     series = []
 
-    if device_id is not None:
-        # Get specific device
-        c.execute("SELECT * from devices where device_id=?", (device_id,))
-        device = c.fetchone()
-        if device:
-            cmd = """
-                SELECT logtime,temp10x from devlog
-                where device_id=? and logtime is not null and temp10x is not null
-            """
-            args = [device_id]
-            (cmd, args) = temporal_quantification(cmd, args)
-            cmd += " order by logtime"
+    if device_ids_param:
+        # Parse device_ids - can be single value or comma-separated list
+        try:
+            device_ids = [int(did.strip()) for did in device_ids_param.split(',') if did.strip()]
+        except ValueError:
+            return jsonify({'error': 'Invalid device_ids format'}), 400
 
-            c.execute(cmd, args)
-            rows = c.fetchall()
-            data = [[row['logtime'], row['temp10x']/10] for row in rows]
-            if data:
-                series.append({'name': device['device_name'], 'data': data})
+        # Get specific devices
+        for device_id in device_ids:
+            c.execute("SELECT * from devices where device_id=?", (device_id,))
+            device = c.fetchone()
+            if device:
+                cmd = """
+                    SELECT logtime,temp10x from devlog
+                    where device_id=? and logtime is not null and temp10x is not null
+                """
+                args = [device_id]
+                (cmd, args) = temporal_quantification(cmd, args)
+                cmd += " order by logtime"
+
+                c.execute(cmd, args)
+                rows = c.fetchall()
+                data = [[row['logtime'], row['temp10x']/10] for row in rows]
+                if data:
+                    series.append({'name': device['device_name'], 'data': data})
     else:
         # Get all devices
         c.execute("SELECT * from devices")
@@ -362,8 +371,17 @@ def device_log(conn, device_id):
 
 @app.route('/chart')
 def show_chart():
-    device_id = request.args.get('device_id', type=int)
-    return render_template('chart.html', device_id=device_id)
+    device_ids_param = request.args.get('device_ids', '')
+
+    # Parse device_ids - can be single value or comma-separated list
+    device_ids = None
+    if device_ids_param:
+        try:
+            device_ids = [int(did.strip()) for did in device_ids_param.split(',') if did.strip()]
+        except ValueError:
+            device_ids = None
+
+    return render_template('chart.html', device_ids=device_ids)
 
 # Error handler
 @app.errorhandler(HTTPException)

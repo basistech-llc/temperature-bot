@@ -22,6 +22,17 @@
       padding: 0.3em 0.8em;
       margin-bottom: 1em;
     }
+    #addDeviceContainer {
+      position: fixed;
+      top: 50px;
+      right: 20px;
+      z-index: 1000;
+      background: white;
+      padding: 10px;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    }
   </style>
 {% endblock %}
 {% block body %}
@@ -37,230 +48,20 @@
       <button id="monthBtn">month</button>
     </div>
   </div>
-
-  <script>
-    // Get device_id from template
-    const currentDeviceId = {% if device_id %}{{ device_id }}{% else %}null{% endif %};
-  </script>
-  <script>
-    const chart = echarts.init(document.getElementById('main'));
-    let rawData = []; // original data from API
-    let currentStart = null;
-    let currentEnd = null;
-
-    // Format time as Day HH:mm using local time
-    function formatTime(ts) {
-      return new Intl.DateTimeFormat(undefined, {
-        weekday: 'short',
-        hour: '2-digit',
-        minute: '2-digit'
-      }).format(new Date(ts));
-    }
-
-    // Load data from API with optional parameters
-    function loadData(deviceId = null, start = null, end = null) {
-      let url = '/api/v1/temperature';
-      const params = new URLSearchParams();
-
-      if (deviceId) params.append('device_id', deviceId);
-      if (start) params.append('start', start);
-      if (end) params.append('end', end);
-
-      if (params.toString()) {
-        url += '?' + params.toString();
-      }
-
-      fetch(url)
-        .then(response => response.json())
-        .then(json => {
-          rawData = json.series;
-          const checkboxContainer = document.getElementById('checkboxes');
-          checkboxContainer.innerHTML = '';
-
-          // Only show checkboxes if not filtering by device
-          if (!deviceId) {
-            rawData.forEach((series, index) => {
-              const id = `checkbox-${index}`;
-              const checkbox = document.createElement('input');
-              checkbox.type = 'checkbox';
-              checkbox.id = id;
-              checkbox.checked = true;
-
-              const label = document.createElement('label');
-              label.htmlFor = id;
-              label.innerText = series.name;
-
-              checkbox.addEventListener('change', updateChart);
-              checkboxContainer.appendChild(checkbox);
-              checkboxContainer.appendChild(label);
-            });
-          }
-
-          // Update record count display
-          updateRecordCount();
-          updateChart();
-        });
-    }
-
-    // Update record count display
-    function updateRecordCount() {
-      let totalRecords = 0;
-      rawData.forEach(series => {
-        totalRecords += series.data.length;
-      });
-
-      // Create or update record count element
-      let recordCountElement = document.getElementById('record-count');
-      if (!recordCountElement) {
-        recordCountElement = document.createElement('div');
-        recordCountElement.id = 'record-count';
-        recordCountElement.style.cssText = 'margin: 10px 0; padding: 5px; background: #f0f0f0; border-radius: 3px; font-family: monospace;';
-        document.getElementById('controls').insertBefore(recordCountElement, document.getElementById('checkboxes'));
-      }
-      recordCountElement.textContent = `Records loaded: ${totalRecords}`;
-    }
-
-    // Initial load
-    loadData(currentDeviceId);
-
-    function updateChart() {
-      const checkboxes = document.querySelectorAll('#checkboxes input[type=checkbox]');
-      const series = [];
-
-      // If filtering by device, show all data
-      if (currentDeviceId) {
-        rawData.forEach(s => {
-          series.push({
-            name: s.name,
-            type: 'line',
-            showSymbol: false,
-            data: s.data.map(([ts, val]) => [ts * 1000, val]) // convert to ms
-          });
-        });
-      } else {
-        // Show only checked series
-        checkboxes.forEach((cb, i) => {
-          if (cb.checked) {
-            series.push({
-              name: rawData[i].name,
-              type: 'line',
-              showSymbol: false,
-              data: rawData[i].data.map(([ts, val]) => [ts * 1000, val]) // convert to ms
-            });
-          }
-        });
-      }
-
-      const option = {
-        title: {
-          text: currentDeviceId ? `Temperature Time Series - Device ${currentDeviceId}` : 'Temperature Time Series',
-          top: 0
-        },
-        tooltip: {
-          trigger: 'axis',
-          formatter: function (params) {
-            const ts = params[0].value[0];
-            let output = `${formatTime(ts)}<br>`;
-            for (const p of params) {
-              output += `${p.marker} ${p.seriesName}: ${p.value[1]} °C<br>`;
-            }
-            return output;
-          }
-        },
-        legend: {
-          data: series.map(s => s.name),
-          top: 40
-        },
-        grid: {
-          top: 200,
-          left: 100,
-          right: 100,
-          bottom: 100
-        },
-        xAxis: {
-          type: 'time',
-          name: 'Time',
-          axisLabel: {
-            formatter: function (value) {
-              return formatTime(value);
-            }
-          }
-        },
-        yAxis: {
-          type: 'value',
-          name: 'Temperature (°C)'
-        },
-        series: series
-      };
-
-      chart.setOption(option, true);
-    }
-
-    // Temporal button handlers
-    document.getElementById('dayBtn').addEventListener('click', () => {
-      const now = Math.floor(Date.now() / 1000);
-      const dayAgo = now - 24 * 60 * 60;
-      currentStart = dayAgo;
-      currentEnd = now;
-      loadData(currentDeviceId, currentStart, currentEnd);
-    });
-
-    document.getElementById('weekBtn').addEventListener('click', () => {
-      const now = Math.floor(Date.now() / 1000);
-      const weekAgo = now - 7 * 24 * 60 * 60;
-      currentStart = weekAgo;
-      currentEnd = now;
-      loadData(currentDeviceId, currentStart, currentEnd);
-    });
-
-    document.getElementById('monthBtn').addEventListener('click', () => {
-      const now = Math.floor(Date.now() / 1000);
-      const monthAgo = now - 30 * 24 * 60 * 60;
-      currentStart = monthAgo;
-      currentEnd = now;
-      loadData(currentDeviceId, currentStart, currentEnd);
-    });
-
-    // CSV Export
-    document.getElementById('downloadCsv').addEventListener('click', () => {
-      const checkboxes = document.querySelectorAll('#checkboxes input[type=checkbox]');
-      const visibleSeries = [];
-
-      if (currentDeviceId) {
-        visibleSeries.push(...rawData);
-      } else {
-        checkboxes.forEach((cb, i) => {
-          if (cb.checked) {
-            visibleSeries.push(rawData[i]);
-          }
-        });
-      }
-
-      const timestamps = new Set();
-      visibleSeries.forEach(s => s.data.forEach(([t]) => timestamps.add(t)));
-      const sortedTimestamps = Array.from(timestamps).sort((a, b) => a - b);
-
-      let csv = 'Timestamp (s),Local Time';
-      visibleSeries.forEach(s => csv += `,${s.name}`);
-      csv += '\n';
-
-      for (const ts of sortedTimestamps) {
-        csv += `${ts},${formatTime(ts * 1000)}`;
-        for (const s of visibleSeries) {
-          const entry = s.data.find(([t]) => t === ts);
-          csv += `,${entry ? entry[1] : ''}`;
-        }
-        csv += '\n';
-      }
-
-      const blob = new Blob([csv], { type: 'text/csv' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'temperature.csv';
-      a.click();
-      URL.revokeObjectURL(url);
-    });
-  </script>
 </div>
+
+<!-- Add device dropdown in top right corner -->
+<div id="addDeviceContainer">
+  <label for="addDeviceSelect" style="font-weight: bold; display: block; margin-bottom: 5px;">Add device:</label>
+  <select id="addDeviceSelect" style="padding: 0.3em; min-width: 200px;">
+    <option value="">Select a device...</option>
+  </select>
+</div>
+
+  <script>
+    // Set device_ids for the chart.js script
+    window.currentDeviceIds = {% if device_ids %}{{ device_ids | tojson }}{% else %}null{% endif %};
+  </script>
+  <script src="/static/chart_support.js"></script>
+
 {% endblock %}
