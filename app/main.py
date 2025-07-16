@@ -196,18 +196,49 @@ def get_weather(conn):
 @api_v1.route('/temperature')
 @with_db_connection
 def get_temperature_series(conn):
-    now = time.time()
+    device_id = request.args.get('device_id', type=int)
+
     c = conn.cursor()
-    c.execute("SELECT * from devices")
-    devices = c.fetchall()
     series = []
-    for dev in devices:
-        c.execute("SELECT logtime,temp10x from devlog where device_id=? and logtime >= ? and logtime is not null and temp10x is not null order by logtime",(dev['device_id'],now-60*60*24*7,))
-        rows = c.fetchall()
-        data = [[row['logtime'],row['temp10x']/10] for row in rows]
-        if data:
-            series.append({'name':dev['device_name'],'data':data})
-    return jsonify({'series':series})
+
+    if device_id is not None:
+        # Get specific device
+        c.execute("SELECT * from devices where device_id=?", (device_id,))
+        device = c.fetchone()
+        if device:
+            cmd = """
+                SELECT logtime,temp10x from devlog
+                where device_id=? and logtime is not null and temp10x is not null
+            """
+            args = [device_id]
+            (cmd, args) = temporal_quantification(cmd, args)
+            cmd += " order by logtime"
+
+            c.execute(cmd, args)
+            rows = c.fetchall()
+            data = [[row['logtime'], row['temp10x']/10] for row in rows]
+            if data:
+                series.append({'name': device['device_name'], 'data': data})
+    else:
+        # Get all devices
+        c.execute("SELECT * from devices")
+        devices = c.fetchall()
+        for dev in devices:
+            cmd = """
+                SELECT logtime,temp10x from devlog
+                where device_id=? and logtime is not null and temp10x is not null
+            """
+            args = [dev['device_id']]
+            (cmd, args) = temporal_quantification(cmd, args)
+            cmd += " order by logtime"
+
+            c.execute(cmd, args)
+            rows = c.fetchall()
+            data = [[row['logtime'], row['temp10x']/10] for row in rows]
+            if data:
+                series.append({'name': dev['device_name'], 'data': data})
+
+    return jsonify({'series': series})
 
 @api_v1.route('/logs')
 @with_db_connection
@@ -331,7 +362,8 @@ def device_log(conn, device_id):
 
 @app.route('/chart')
 def show_chart():
-    return render_template('chart.html')
+    device_id = request.args.get('device_id', type=int)
+    return render_template('chart.html', device_id=device_id)
 
 # Error handler
 @app.errorhandler(HTTPException)

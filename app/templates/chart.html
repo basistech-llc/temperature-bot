@@ -6,6 +6,8 @@
     #main { width: 100%; height: 800px; }
     #controls { margin-top: 1em; font-family: sans-serif; }
     #checkboxes label { margin-right: 1em; }
+    .temporal-buttons { margin-top: 1em; }
+    .temporal-buttons button { margin-right: 0.5em; }
   </style>
 {% endblock %}
 {% block body %}
@@ -15,11 +17,22 @@
   <div id="controls">
     <div id="checkboxes"></div>
     <button id="downloadCsv">Download CSV</button>
+    <div class="temporal-buttons">
+      <button id="dayBtn">[day]</button>
+      <button id="weekBtn">[week]</button>
+      <button id="monthBtn">[month]</button>
+    </div>
   </div>
 
   <script>
+    // Get device_id from template
+    const currentDeviceId = {% if device_id %}{{ device_id }}{% else %}null{% endif %};
+  </script>
+  <script>
     const chart = echarts.init(document.getElementById('main'));
     let rawData = []; // original data from API
+    let currentStart = null;
+    let currentEnd = null;
 
     // Format time as Day HH:mm using local time
     function formatTime(ts) {
@@ -30,50 +43,105 @@
       }).format(new Date(ts));
     }
 
-    // Load from /api/temperature
-    fetch('/api/v1/temperature')
-      .then(response => response.json())
-      .then(json => {
-        rawData = json.series;
-        const checkboxContainer = document.getElementById('checkboxes');
-        checkboxContainer.innerHTML = '';
+    // Load data from API with optional parameters
+    function loadData(deviceId = null, start = null, end = null) {
+      let url = '/api/v1/temperature';
+      const params = new URLSearchParams();
 
-        rawData.forEach((series, index) => {
-          const id = `checkbox-${index}`;
-          const checkbox = document.createElement('input');
-          checkbox.type = 'checkbox';
-          checkbox.id = id;
-          checkbox.checked = true;
+      if (deviceId) params.append('device_id', deviceId);
+      if (start) params.append('start', start);
+      if (end) params.append('end', end);
 
-          const label = document.createElement('label');
-          label.htmlFor = id;
-          label.innerText = series.name;
+      if (params.toString()) {
+        url += '?' + params.toString();
+      }
 
-          checkbox.addEventListener('change', updateChart);
-          checkboxContainer.appendChild(checkbox);
-          checkboxContainer.appendChild(label);
+      fetch(url)
+        .then(response => response.json())
+        .then(json => {
+          rawData = json.series;
+          const checkboxContainer = document.getElementById('checkboxes');
+          checkboxContainer.innerHTML = '';
+
+          // Only show checkboxes if not filtering by device
+          if (!deviceId) {
+            rawData.forEach((series, index) => {
+              const id = `checkbox-${index}`;
+              const checkbox = document.createElement('input');
+              checkbox.type = 'checkbox';
+              checkbox.id = id;
+              checkbox.checked = true;
+
+              const label = document.createElement('label');
+              label.htmlFor = id;
+              label.innerText = series.name;
+
+              checkbox.addEventListener('change', updateChart);
+              checkboxContainer.appendChild(checkbox);
+              checkboxContainer.appendChild(label);
+            });
+          }
+
+          // Update record count display
+          updateRecordCount();
+          updateChart();
         });
+    }
 
-        updateChart();
+    // Update record count display
+    function updateRecordCount() {
+      let totalRecords = 0;
+      rawData.forEach(series => {
+        totalRecords += series.data.length;
       });
+
+      // Create or update record count element
+      let recordCountElement = document.getElementById('record-count');
+      if (!recordCountElement) {
+        recordCountElement = document.createElement('div');
+        recordCountElement.id = 'record-count';
+        recordCountElement.style.cssText = 'margin: 10px 0; padding: 5px; background: #f0f0f0; border-radius: 3px; font-family: monospace;';
+        document.getElementById('controls').insertBefore(recordCountElement, document.getElementById('checkboxes'));
+      }
+      recordCountElement.textContent = `Records loaded: ${totalRecords}`;
+    }
+
+    // Initial load
+    loadData(currentDeviceId);
 
     function updateChart() {
       const checkboxes = document.querySelectorAll('#checkboxes input[type=checkbox]');
       const series = [];
 
-      checkboxes.forEach((cb, i) => {
-        if (cb.checked) {
+      // If filtering by device, show all data
+      if (currentDeviceId) {
+        rawData.forEach(s => {
           series.push({
-            name: rawData[i].name,
+            name: s.name,
             type: 'line',
             showSymbol: false,
-            data: rawData[i].data.map(([ts, val]) => [ts * 1000, val]) // convert to ms
+            data: s.data.map(([ts, val]) => [ts * 1000, val]) // convert to ms
           });
-        }
-      });
+        });
+      } else {
+        // Show only checked series
+        checkboxes.forEach((cb, i) => {
+          if (cb.checked) {
+            series.push({
+              name: rawData[i].name,
+              type: 'line',
+              showSymbol: false,
+              data: rawData[i].data.map(([ts, val]) => [ts * 1000, val]) // convert to ms
+            });
+          }
+        });
+      }
 
       const option = {
-        title: { text: 'Temperature Time Series', top:0 },
+        title: {
+          text: currentDeviceId ? `Temperature Time Series - Device ${currentDeviceId}` : 'Temperature Time Series',
+          top: 0
+        },
         tooltip: {
           trigger: 'axis',
           formatter: function (params) {
@@ -87,14 +155,14 @@
         },
         legend: {
           data: series.map(s => s.name),
-	  top: 40
+          top: 40
         },
-	grid: {
-	  top: 200,
-	  left: 100,
-	  right: 100,
-	  bottom: 100
-	},
+        grid: {
+          top: 200,
+          left: 100,
+          right: 100,
+          bottom: 100
+        },
         xAxis: {
           type: 'time',
           name: 'Time',
@@ -114,16 +182,45 @@
       chart.setOption(option, true);
     }
 
+    // Temporal button handlers
+    document.getElementById('dayBtn').addEventListener('click', () => {
+      const now = Math.floor(Date.now() / 1000);
+      const dayAgo = now - 24 * 60 * 60;
+      currentStart = dayAgo;
+      currentEnd = now;
+      loadData(currentDeviceId, currentStart, currentEnd);
+    });
+
+    document.getElementById('weekBtn').addEventListener('click', () => {
+      const now = Math.floor(Date.now() / 1000);
+      const weekAgo = now - 7 * 24 * 60 * 60;
+      currentStart = weekAgo;
+      currentEnd = now;
+      loadData(currentDeviceId, currentStart, currentEnd);
+    });
+
+    document.getElementById('monthBtn').addEventListener('click', () => {
+      const now = Math.floor(Date.now() / 1000);
+      const monthAgo = now - 30 * 24 * 60 * 60;
+      currentStart = monthAgo;
+      currentEnd = now;
+      loadData(currentDeviceId, currentStart, currentEnd);
+    });
+
     // CSV Export
     document.getElementById('downloadCsv').addEventListener('click', () => {
       const checkboxes = document.querySelectorAll('#checkboxes input[type=checkbox]');
       const visibleSeries = [];
 
-      checkboxes.forEach((cb, i) => {
-        if (cb.checked) {
-          visibleSeries.push(rawData[i]);
-        }
-      });
+      if (currentDeviceId) {
+        visibleSeries.push(...rawData);
+      } else {
+        checkboxes.forEach((cb, i) => {
+          if (cb.checked) {
+            visibleSeries.push(rawData[i]);
+          }
+        });
+      }
 
       const timestamps = new Set();
       visibleSeries.forEach(s => s.data.forEach(([t]) => timestamps.add(t)));
