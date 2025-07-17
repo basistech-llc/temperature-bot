@@ -8,6 +8,7 @@ import logging
 import json
 import datetime
 import time
+import sys
 from functools import wraps
 
 from flask import Flask, request, jsonify, render_template, send_from_directory, Blueprint
@@ -33,7 +34,12 @@ LOG_LEVEL = os.getenv("LOG_LEVEL",DEFAULT_LOG_LEVEL).upper()
 
 ENABLE_AIRNOW = False
 
-logging.basicConfig(format=LOGGING_CONFIG, level=LOG_LEVEL, force=True)
+logging.basicConfig(
+    format=LOGGING_CONFIG,
+    level=LOG_LEVEL,
+    force=True,
+    stream=sys.stderr  # Ensure logs go to stderr for gunicorn
+)
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
