@@ -24,7 +24,7 @@ MAX_DURATION=3600                 # don't extend more than an hour
 
 class SpeedControl(BaseModel):
     """Pydantic model for speed control requests."""
-    device_id: conint(ge=0, le=20)
+    device_id: int
     speed: conint(ge=0, le=4)
 
 def _connect_db(db_name):

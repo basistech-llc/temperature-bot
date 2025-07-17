@@ -23,6 +23,8 @@ from app.util import get_config
 
 import traceback
 
+logger = logging.getLogger(__name__)
+
 # Fan mapping speeds
 SPEED_AUTO = -1
 SPEEDS = {-1:"AUTO", 0: "OFF", 1: "LOW", 2: "MID2", 3: "MID1", 4: "HIGH"}
@@ -141,35 +143,35 @@ def run_ae200cess(args, timeout=30):
         )
 
         if result.returncode != 0:
-            logging.error("AE200 subprocess failed: %s", result.stderr)
+            logger.error("AE200 subprocess failed: %s", result.stderr)
             raise RuntimeError(f"AE200 subprocess failed: {result.stderr}")
 
         # Parse the JSON output
         return json.loads(result.stdout.strip())
 
     except subprocess.TimeoutExpired:
-        logging.error("AE200bprocess timed out after %d seconds", timeout)
+        logger.error("AE200bprocess timed out after %d seconds", timeout)
         raise RuntimeError(f"AE200bprocess timed out after {timeout} seconds")
     except json.JSONDecodeError as e:
-        logging.error("Failed to parse AE200 subprocess output: %s", result.stdout)
+        logger.error("Failed to parse AE200 subprocess output: %s", result.stdout)
         raise RuntimeError(f"Failed to parse AE200 subprocess output: {e}")
     except Exception as e:
-        logging.error("AE200 subprocess error: %s", e)
+        logger.error("AE200 subprocess error: %s", e)
         raise
 
 def get_devices_subprocess():
     """Get list of devices using subprocess"""
-    logging.info("get_devices_subprocess()")
+    logger.info("get_devices_subprocess()")
     return run_ae200cess(["--subprocess", "get_devices"])
 
 def get_device_info_subprocess(device_id):
     """Get device info using subprocess"""
-    logging.info("get_device_info_subprocess(%s)", device_id)
+    logger.info("get_device_info_subprocess(%s)", device_id)
     return run_ae200cess(["--subprocess", "get_device_info", "--device-id", str(device_id)])
 
 def set_fan_speed_subprocess(ae200_device, speed):
     """Set fan speed using subprocess"""
-    logging.info("set_fan_speed_subprocess(%s,%s)", ae200_device, speed)
+    logger.info("set_fan_speed_subprocess(%s,%s)", ae200_device, speed)
     return run_ae200cess(["--subprocess", "set_fan_speed", "--device-id", str(ae200_device), "--speed", str(speed)])
 
 ################################################################
@@ -250,6 +252,35 @@ async def get_devices_async():
     d = AE200Functions()
     return await d.getDevicesAsync()
 
+async def set_fan_speed_async(device, speed):
+    logger.info("set_fan_speed_async(%s,%s)",device,speed)
+    d = AE200Functions()
+    if speed == 0:
+        await d.sendAsync(device, {"Drive": "OFF"})
+    else:
+        await d.sendAsync(device, {"Drive": "ON"})
+        await d.sendAsync(device, {"FanSpeed": SPEEDS[speed]})
+
+async def get_device_info_async(device):
+    logger.info("get_device_info_async(%s)", device)
+    d = AE200Functions()
+    return await d.getDeviceInfoAsync(device)
+
+################################################################
+
+def set_fan_speed(ae200_device, speed):
+    logger.info("set_fan_speed(%s,%s)", ae200_device, speed)
+    return set_fan_speed_subprocess(ae200_device, speed)
+
+def get_device_info(device):
+    logger.info("get_device_info(%s)", device)
+    return get_device_info_subprocess(device)
+
+def get_devices():
+    logger.info("get_devices()")
+    return get_devices_subprocess()
+
+
 def extract_status(data):
     """Return a dict with drive/speed/drive_speed_val/has_speed_control"""
     drive = data.get('Drive',None)
@@ -261,33 +292,6 @@ def extract_status(data):
         'drive_speed_val': drive_speed_to_val(drive, speed),
         'has_speed_control': has_speed_control
     }
-
-async def set_fan_speed_async(device, speed):
-    logging.info("set_fan_speed_async(%s,%s)",device,speed)
-    d = AE200Functions()
-    if speed == 0:
-        await d.sendAsync(device, {"Drive": "OFF"})
-    else:
-        await d.sendAsync(device, {"Drive": "ON"})
-        await d.sendAsync(device, {"FanSpeed": SPEEDS[speed]})
-
-def set_fan_speed(ae200_device, speed):
-    logging.info("set_fan_speed(%s,%s)", ae200_device, speed)
-    return set_fan_speed_subprocess(ae200_device, speed)
-
-async def get_device_info_async(device):
-    logging.info("get_device_info_async(%s)", device)
-    d = AE200Functions()
-    return await d.getDeviceInfoAsync(device)
-
-def get_device_info(device):
-    logging.info("get_device_info(%s)", device)
-    return get_device_info_subprocess(device)
-
-def get_devices():
-    logging.info("get_devices()")
-    return get_devices_subprocess()
-
 
 if __name__ == "__main__":
     import argparse

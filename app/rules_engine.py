@@ -10,7 +10,6 @@ from . import ae200
 from .db import SpeedControl
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
 
 def get_devices_dict(conn):
     """Add all of the devices in the devices table to the global environment"""
@@ -41,8 +40,10 @@ def get_rules():
         return f.read()
 
 def set_body_speed(conn, body: SpeedControl, addr, agent):
+    logger.info("set_body_speed body=%s addr=%s agent=%s",body,addr,agent)
     unit = db.get_ae200_unit(conn, body.device_id)
     db.insert_changelog(conn, addr, device_id=body.device_id, ae200_device_id=unit, new_value=str(body.speed), agent=agent)
+    logger.info("unit=%s new_value=%s",unit,body.speed)
     ae200.set_fan_speed(unit, body.speed)
     data = ae200.get_device_info(unit)
     temp = data.get('InletTemp', None)

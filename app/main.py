@@ -31,19 +31,20 @@ API_V1_PREFIX = "/api/v1"
 DEFAULT_LOG_LEVEL = 'DEBUG'
 LOGGING_CONFIG='%(asctime)s  %(filename)s:%(lineno)d %(levelname)s: %(message)s'
 LOG_LEVEL = os.getenv("LOG_LEVEL",DEFAULT_LOG_LEVEL).upper()
+LOG_LEVEL="DEBUG"
 
 ENABLE_AIRNOW = False
 
-logging.basicConfig(
-    format=LOGGING_CONFIG,
-    level=LOG_LEVEL,
-    force=True,
-    stream=sys.stderr  # Ensure logs go to stderr for gunicorn
-)
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
+#logging.basicConfig(
+#    format=LOGGING_CONFIG,
+#    level=LOG_LEVEL,
+#    force=True,
+#    stream=sys.stderr  # Ensure logs go to stderr for gunicorn
+#)
+#logger = logging.getLogger(__name__)
+#logger.setLevel(logging.DEBUG)
 
-#os.environ['TZ'] = 'EST5EDT'
+#logger.debug("HELP")
 
 def fix_boto_log_level():
     """Do not run boto loggers at debug level"""
@@ -54,10 +55,15 @@ def fix_boto_log_level():
 # https://flask.palletsprojects.com/en/stable/config/
 app = Flask(__name__)
 app.config["TEMPLATES_AUTO_RELOAD"] = True
-app.logger.setLevel(logging.DEBUG)
+log_level = os.getenv("LOG_LEVEL","INFO").upper()
+logger=app.logger
+logging.basicConfig(format=LOGGING_CONFIG, level=log_level, force=True)
+app.logger.setLevel(log_level)
+app.logger.info("new Flask(__name__=%s) log_level=%s",__name__,log_level)
+fix_boto_log_level()
 
 # Initialize logging and boto settings
-fix_boto_log_level()
+#fix_boto_log_level()
 
 ################################################################
 
@@ -175,7 +181,7 @@ def get_version_json():
 @with_db_connection
 def set_speed(conn, body: SpeedControl):
     """Sets the speed, records the speed in the changelog, and then updates the database, so status is always up-to-date"""
-    logger.info("set speed: body=%s",body)
+    logger.error("set_speed: body=%s",body)
     ret = rules_engine.set_body_speed(conn, body, request.remote_addr, 'web')
     logging.debug("ret=%s",ret)
     return jsonify({ "status": "ok", **ret })
@@ -260,6 +266,7 @@ def get_temperature_series(conn):
 @api_v1.route('/logs')
 @with_db_connection
 def get_logs(conn):
+    logger.info("/logs")
     draw = request.args.get('draw', 1, type=int)
     start_row = request.args.get('start_row', 0, type=int)
     length = request.args.get('length', 100, type=int)
@@ -272,7 +279,6 @@ def get_logs(conn):
 
     cmd += " ORDER BY logtime DESC LIMIT ? OFFSET ?"
     args.extend([length, start_row])
-    logger.info("cmd=%s args=%s", cmd, args)
 
     c = conn.cursor()
     c.execute("SELECT COUNT(*) FROM changelog")
@@ -395,5 +401,3 @@ def show_chart():
 @app.errorhandler(HTTPException)
 def handle_exception(e):
     return jsonify({"error": e.description}), e.code
-
-print(f"main.py: app id={id(app)}")

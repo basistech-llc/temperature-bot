@@ -108,6 +108,7 @@ function refreshLogTable() {
 
 // Function called to set the speed
 async function setFanSpeed(device_id, speed) {
+    console.log(`setFanSpeed(${device_id},${speed})`);
     try {
 	const response = await fetch('/api/v1/set_speed', {
 	    method: 'POST',
@@ -165,7 +166,6 @@ const refreshGrid = () => {
 
                 // Update the tables with the new data
 		for (const dev of data.devices) {
-		    console.log("dev=",dev);
 		    if (dev.temp10x) {
 			const cell = document.getElementById(`temp-${dev.device_id}`);
 			var myformat = Intl.NumberFormat('en-US', {minimumIntegerDigits:2,
