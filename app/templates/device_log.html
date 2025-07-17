@@ -29,7 +29,11 @@
     <table>
       <tr><th>Device ID</td><th>Time Range</th><th>Temp</th></tr>
       {% for row in devlog %}
-      <tr><td>{{row.device_id}}</td><td> {{row.start}} - {{row.end}} ({{row.duration}} s)</td> <td>{{row.temp10x / 10}}ºC</td></tr>
+        {% if row.temp10x %}
+        <tr><td>{{row.device_id}}</td><td> {{row.start}} - {{row.end}} ({{row.duration}} s)</td> <td>{{row.temp10x / 10}}ºC</td></tr>
+        {% else %}
+        <tr><td>{{row.device_id}}</td><td> {{row.start}} - {{row.end}} ({{row.duration}} s)</td> <td>missing</td></tr>
+        {% endif %}
     {% endfor %}
       </table>
   </div>
