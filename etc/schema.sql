@@ -3,6 +3,7 @@ CREATE TABLE changelog (
                     logtime INTEGER NOT NULL,
                     ipaddr TEXT NOT NULL,
                     device_id INTEGER NOT NULL,
+                    unit INTEGER,
                     current_values TEXT,
                     new_value TEXT,
                     agent TEXT,

@@ -15,6 +15,7 @@ import xml.etree.ElementTree as ET
 import logging
 import json
 
+import concurrent.futures
 import websockets
 from websockets.extensions import permessage_deflate
 
@@ -99,7 +100,6 @@ class AsyncRunner:
             # Try to get the current running loop
             loop = asyncio.get_running_loop()
             # We're already in an event loop, so we need to run in a separate thread
-            import concurrent.futures
             with concurrent.futures.ThreadPoolExecutor() as executor:
                 future = executor.submit(asyncio.run, coro)
                 return future.result()

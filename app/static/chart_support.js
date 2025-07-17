@@ -26,15 +26,30 @@ document.addEventListener('DOMContentLoaded', function() {
     setupEventListeners();
 });
 
-// Format time as Day HH:mm using local time
+// Format time intelligently based on time scale
 function formatTime(ts) {
-    return new Intl.DateTimeFormat(undefined, {
-        weekday: 'short',
-        month: 'short',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
-    }).format(new Date(ts));
+    const date = new Date(ts);
+    const now = new Date();
+
+    // Check if we're in day view (last 24 hours)
+    const isDayView = currentStart && currentEnd && (currentEnd - currentStart) <= 24 * 60 * 60;
+
+    if (isDayView) {
+        // For day view, show only time (HH:mm) since all data is same day
+        return new Intl.DateTimeFormat(undefined, {
+            hour: '2-digit',
+            minute: '2-digit'
+        }).format(date);
+    } else {
+        // For longer periods, show day and time
+        return new Intl.DateTimeFormat(undefined, {
+            weekday: 'short',
+            month: 'short',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+        }).format(date);
+    }
 }
 
 // Load data from API with optional parameters
@@ -173,12 +188,28 @@ function updateChart() {
     // --- End vertical lines ---
 
     const option = {
-        title: {
-            text: currentDeviceIds && currentDeviceIds.length > 1 ?
-                `Temperature Time Series - Multiple Devices` :
-                currentDeviceIds && currentDeviceIds.length === 1 ?
-                `Temperature Time Series - Device ${currentDeviceIds[0]}` :
-                'Temperature Time Series',
+                title: {
+            text: (() => {
+                let baseTitle = currentDeviceIds && currentDeviceIds.length > 1 ?
+                    `Temperature Time Series - Multiple Devices` :
+                    currentDeviceIds && currentDeviceIds.length === 1 ?
+                    `Temperature Time Series - Device ${currentDeviceIds[0]}` :
+                    'Temperature Time Series';
+
+                // Add date to title for day view
+                if (currentStart && currentEnd && (currentEnd - currentStart) <= 24 * 60 * 60) {
+                    const dayDate = new Date(currentStart * 1000);
+                    const dayStr = new Intl.DateTimeFormat(undefined, {
+                        weekday: 'long',
+                        month: 'long',
+                        day: 'numeric',
+                        year: 'numeric'
+                    }).format(dayDate);
+                    baseTitle += ` - ${dayStr}`;
+                }
+
+                return baseTitle;
+            })(),
             top: 0
         },
         tooltip: {
@@ -207,6 +238,7 @@ function updateChart() {
             type: 'time',
             name: 'Time',
             axisLabel: {
+                rotate: 45,
                 formatter: function (value) {
                     return formatTime(value);
                 }

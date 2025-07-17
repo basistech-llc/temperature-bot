@@ -62,7 +62,7 @@ def create_temporal_test_data(conn, device_name="Test Device"):
     }
 
     # Add records at each interval
-    for interval_name, seconds in intervals.items():
+    for interval_name, seconds in intervals.items(): # pylint: disable=unused-variable
         record_time = current_time - seconds
         cursor.execute("""
             INSERT INTO devlog (device_id, logtime, duration, temp10x, status_json)

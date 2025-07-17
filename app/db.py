@@ -250,15 +250,16 @@ def insert_devlog_entry(conn, *,
         conn.rollback()
         raise
 
-def insert_changelog( conn, ipaddr:str, device_id: int, new_value: str, agent: str = "", comment: str = ""):
+def insert_changelog(conn, ipaddr: str, device_id: int, ae200_device_id: int, new_value: str, agent: str = "", comment: str = ""):
+    assert ae200_device_id is not None, "ae200_device_id must be provided"
     logtime = int(time.time())
     c = conn.cursor()
     c.execute(
         """
-        INSERT INTO changelog (logtime, ipaddr, device_id, new_value, agent, comment)
-        VALUES (?, ?, ?, ?, ?, ?)
+        INSERT INTO changelog (logtime, ipaddr, device_id, unit, new_value, agent, comment)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
         """,
-        (logtime, ipaddr, device_id, new_value, agent, comment))
+        (logtime, ipaddr, device_id, ae200_device_id, new_value, agent, comment))
     conn.commit()
 
 def update_devlog_map(conn, device_name:str, ae200_device_id:int):

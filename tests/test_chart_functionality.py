@@ -1,6 +1,9 @@
+"""
+test_chart_functionality.py
+"""
+import json
 import pytest
 from app.main import app
-import json
 
 @pytest.fixture
 def client():

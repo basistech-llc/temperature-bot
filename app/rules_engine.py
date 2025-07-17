@@ -41,8 +41,8 @@ def get_rules():
         return f.read()
 
 def set_body_speed(conn, body: SpeedControl, addr, agent):
-    db.insert_changelog(conn, addr, device_id=body.device_id, new_value=str(body.speed), agent=agent)
     unit = db.get_ae200_unit(conn, body.device_id)
+    db.insert_changelog(conn, addr, device_id=body.device_id, ae200_device_id=unit, new_value=str(body.speed), agent=agent)
     ae200.set_fan_speed(unit, body.speed)
     data = ae200.get_device_info(unit)
     temp = data.get('InletTemp', None)
