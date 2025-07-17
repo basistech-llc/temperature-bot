@@ -15,7 +15,7 @@ import tabulate
 # runner is first to run so it needs to add . to the path
 sys.path.append(dirname(dirname(abspath(__file__))))
 
-from app.paths import DB_PATH,ETC_DIR
+from app.paths import ETC_DIR
 from app.rules_engine import run_rules
 import app.ae200 as ae200
 import app.db as db

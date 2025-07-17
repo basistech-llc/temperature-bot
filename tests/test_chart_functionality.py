@@ -2,8 +2,6 @@
 test_chart_functionality.py
 """
 import json
-import pytest
-from app.main import app
 from fixtures import client # noqa: F401 # pylint: disable=unused-import
 
 def test_status_api_endpoint_for_devices(client):  # noqa: F811 # pylint: disable=unused-argument
