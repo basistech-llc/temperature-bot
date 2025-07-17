@@ -14,6 +14,9 @@ import asyncio
 import xml.etree.ElementTree as ET
 import logging
 import json
+import traceback
+import subprocess
+import sys
 
 import concurrent.futures
 import websockets
@@ -21,10 +24,7 @@ from websockets.extensions import permessage_deflate
 
 from app.util import get_config
 
-import traceback
-
 logger = logging.getLogger(__name__)
-
 # Fan mapping speeds
 SPEED_AUTO = -1
 SPEEDS = {-1:"AUTO", 0: "OFF", 1: "LOW", 2: "MID2", 3: "MID1", 4: "HIGH"}
@@ -121,10 +121,6 @@ runner = AsyncRunner()
 
 def run_ae200cess(args, timeout=30):
     """Run ae200.py as a subprocess with the given arguments"""
-    import subprocess
-    import sys
-    import os
-
     try:
         # Get the path to this module
         module_path = os.path.abspath(__file__)
@@ -139,7 +135,8 @@ def run_ae200cess(args, timeout=30):
             text=True,
             timeout=timeout,
             cwd=os.getcwd(),
-            env=env
+            env=env,
+            check=False
         )
 
         if result.returncode != 0:
@@ -148,16 +145,12 @@ def run_ae200cess(args, timeout=30):
 
         # Parse the JSON output
         return json.loads(result.stdout.strip())
-
-    except subprocess.TimeoutExpired:
+    except subprocess.TimeoutExpired as e:
         logger.error("AE200bprocess timed out after %d seconds", timeout)
-        raise RuntimeError(f"AE200bprocess timed out after {timeout} seconds")
+        raise RuntimeError(f"AE200bprocess timed out after {timeout} seconds") from e
     except json.JSONDecodeError as e:
         logger.error("Failed to parse AE200 subprocess output: %s", result.stdout)
-        raise RuntimeError(f"Failed to parse AE200 subprocess output: {e}")
-    except Exception as e:
-        logger.error("AE200 subprocess error: %s", e)
-        raise
+        raise RuntimeError(f"Failed to parse AE200 subprocess output: {e}") from e
 
 def get_devices_subprocess():
     """Get list of devices using subprocess"""
@@ -229,17 +222,20 @@ class AE200Functions:
         return runner.run_async_safely(self.getDeviceInfoAsync(deviceId, clean=clean))
 
     async def sendAsync(self, deviceId, attributes):
-        assert 'PYTEST' not in os.environ
-        async with websockets.connect(
-            f"ws://{self.address}/b_xmlproc/",
-            extensions=[permessage_deflate.ClientPerMessageDeflateFactory()],
-            origin=f"http://{self.address}",
-            subprotocols=["b_xmlproc"],
-        ) as websocket:
-            attrs = " ".join([f'{key}="{attributes[key]}"' for key in attributes])
-            payload = setRequestPayload.format(deviceId=deviceId, attrs=attrs)
-            await websocket.send(payload)
-            await websocket.close()
+        try:
+            async with websockets.connect(
+                f"ws://{self.address}/b_xmlproc/",
+                extensions=[permessage_deflate.ClientPerMessageDeflateFactory()],
+                origin=f"http://{self.address}",
+                subprotocols=["b_xmlproc"],
+            ) as websocket:
+                attrs = " ".join([f'{key}="{attributes[key]}"' for key in attributes])
+                payload = setRequestPayload.format(deviceId=deviceId, attrs=attrs)
+                await websocket.send(payload)
+                await websocket.close()
+        except (websockets.exceptions.WebSocketException, OSError, ValueError) as e:
+            logging.error("Failed to send command to AE200: %s", e)
+            raise RuntimeError(f"Failed to send command to AE200: {e}") from e
 
     def send(self, deviceId, attributes):
         return runner.run_async_safely(self.sendAsync(deviceId, attributes))
@@ -295,8 +291,6 @@ def extract_status(data):
 
 if __name__ == "__main__":
     import argparse
-    import sys
-    import traceback
 
     parser = argparse.ArgumentParser(
         description="AE200troller subprocess interface",
@@ -332,7 +326,7 @@ if __name__ == "__main__":
                 # Get updated device info after setting speed
                 result = asyncio.run(get_device_info_async(args.device_id))
                 print(json.dumps(result))
-        except Exception as e:
+        except (RuntimeError, OSError, ValueError, json.JSONDecodeError) as e:
             tb = traceback.format_exc()
             print(json.dumps({"error": str(e), "traceback": tb}), file=sys.stderr)
             sys.exit(1)

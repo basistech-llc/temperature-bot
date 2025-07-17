@@ -1,8 +1,12 @@
+"""
+Integration tests for AE200 device communication.
+"""
 import socket
 import pytest
 from app import ae200
 
 def can_connect_to_ae200():
+    """Checks if the AE200 device is reachable for integration testing."""
     try:
         host = "air.basistech.net"
         port = 80  # Adjust if AE200 uses a different port
@@ -11,7 +15,7 @@ def can_connect_to_ae200():
         result = sock.connect_ex((host, port))
         sock.close()
         return result == 0
-    except Exception:
+    except (socket.error, OSError):
         return False
 
 @pytest.mark.skipif(

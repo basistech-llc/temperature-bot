@@ -8,7 +8,6 @@ import logging
 import json
 import datetime
 import time
-import sys
 from functools import wraps
 
 from flask import Flask, request, jsonify, render_template, send_from_directory, Blueprint

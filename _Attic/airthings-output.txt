@@ -1,0 +1,167 @@
+response.json(): {'access_token': 'eyJraWQiOiJYd280RUJXQmhmNlQ5R09xU1B1VG5GVTI3amhQdDZqbmZfRHZWVnEtZ2JFIiwiYWxnIjoiUlMyNTYifQ.eyJzdWIiOiJmNzU1YjVhNi0yZWJkLTQwNDEtYjA1Zi1mMzE4MDAwNDk5M2YiLCJhdWQiOiJkMjcxMmM5Mi05NTY5LTQ3YjktOTljNS03OTlhYjQxOTliMDQiLCJuYmYiOjE3MzczNjgyMTcsImF6cCI6ImQyNzEyYzkyLTk1NjktNDdiOS05OWM1LTc5OWFiNDE5OWIwNCIsInNjb3BlIjoicmVhZDpkZXZpY2U6Y3VycmVudF92YWx1ZXMiLCJpc3MiOiJodHRwczovL2FjY291bnRzLWFwaS5haXJ0aGluZ3MuY29tL3YxIiwidHlwIjoiQkVBUkVSIiwiZXhwIjoxNzM3Mzc5MDE3LCJpYXQiOjE3MzczNjgyMTcsImp0aSI6IjAwNmEwNzQwLTEwNTUtNGY0ZC1iM2VlLTNhNjk5ZTA2MmY3ZSJ9.Gm7ZgAp6ETQzmLVqzhjmSYjK_z6Ms37ik8ezS7xZcjHWbJbphL43ezI8GT9GJw_82Yko2qh7J-1-kn-QGr3nGf1wTzezKifUgyW9jp8k05Tcq8SAjOxItaU4vvj4lHoWrYNPldd6Eryh3aMIzHgDQVTNofZlRyp82bXePBxugfzOCXC9Xwns3EWBIIA5h2-ob-LPMArsplmF3fJChPz2iTaJ7YMrFVU8a2eNUbzcYJWBkhZg1T0Wk2wVsj1JzyRn4_Cg9RJj0bjfP9i-fr-vbr4QO6gVfXpmhdrt3Vfutoa2pkLo9bE2LeWraDCx-0-r2Sp9SQ0maHTvdG6ROriNrMte0KRm3sgbJiOjTlVDkUytjkIv5VB2GKWcL4Z3iGGY3I6bJsFlMPbFVsU1Yx_DIMvneITnl_bJP9x1IBfsCBl0P5djUGYgcIaDxH0YhxzVooJw4vwtrq6_7J9am9Aw74IZd51GXKdDRzKN8oBybyT3nEqFRc82Kuxmh545FEgJ9OJK5lJ2NkZtckSB24lOa5awvsFhHuzSVraak697SIKack1atEXDaBZniFebWjtWGb-JMjRxEJFveox9Klbgb-kJBMPmOtb1s16aSVmf-QsyK3mS5atCX2NU6D1rfSH6sypfZ42tvwAmcUwDGsubRSQ4DY1qbvbQjziTJZsVOK8', 'token_type': 'Bearer', 'expires_in': 10799}
+Air Monitors and Current Temperatures:
+{'id': '2960070762', 'deviceType': 'VIEW_PLUS', 'sensors': ['radonShortTermAvg', 'temp', 'humidity', 'pressure', 'co2', 'voc', 'pm1', 'pm25'], 'segment': {'id': 'f0d6ee8c-5809-450f-8ad8-51ab77cfdf43', 'name': 'CALA 203', 'started': '2024-01-03T02:50:48', 'active': True}, 'location': {'id': 'b8f84167-324b-4738-ba76-d02ffebfd99b', 'name': 'CALA 203'}, 'productName': 'View Plus'}
+CALA 203: Temperature data not available.
+{'id': '2960087271', 'deviceType': 'VIEW_PLUS', 'sensors': ['radonShortTermAvg', 'temp', 'humidity', 'pressure', 'co2', 'voc', 'pm1', 'pm25'], 'segment': {'id': '7addca06-c877-4396-9e67-264a74b16952', 'name': 'Broadway', 'started': '2024-04-30T13:46:19', 'active': True}, 'location': {'id': '05469597-b6b0-45e9-ac11-5884c72df0ea', 'name': 'BasisTech'}, 'productName': 'View Plus'}
+Broadway: Temperature data not available.
+{'id': '2960087450', 'deviceType': 'VIEW_PLUS', 'sensors': ['radonShortTermAvg', 'temp', 'humidity', 'pressure', 'co2', 'voc', 'pm1', 'pm25'], 'segment': {'id': 'f421c307-86ff-4726-a5e0-a2529db0b44a', 'name': 'Bamboo', 'started': '2024-10-17T19:45:17', 'active': True}, 'location': {'id': '05469597-b6b0-45e9-ac11-5884c72df0ea', 'name': 'BasisTech'}, 'productName': 'View Plus'}
+Bamboo: Temperature data not available.
+{'id': '2960091404', 'deviceType': 'VIEW_PLUS', 'sensors': ['radonShortTermAvg', 'temp', 'humidity', 'pressure', 'co2', 'voc', 'pm1', 'pm25'], 'segment': {'id': 'caf1d844-fe13-4da7-8509-c75e3af1cff4', 'name': 'Greenhouse', 'started': '2024-10-18T14:32:57', 'active': True}, 'location': {'id': '05469597-b6b0-45e9-ac11-5884c72df0ea', 'name': 'BasisTech'}, 'productName': 'View Plus'}
+Greenhouse: Temperature data not available.
+{'id': '2960098051', 'deviceType': 'VIEW_PLUS', 'sensors': ['radonShortTermAvg', 'temp', 'humidity', 'pressure', 'co2', 'voc', 'pm1', 'pm25'], 'segment': {'id': 'd4c79ff7-942d-49be-998f-7bb267269908', 'name': 'Area 51', 'started': '2024-10-18T19:46:28', 'active': True}, 'location': {'id': '05469597-b6b0-45e9-ac11-5884c72df0ea', 'name': 'BasisTech'}, 'productName': 'View Plus'}
+Area 51: Temperature data not available.
+{'id': '2960092756', 'deviceType': 'VIEW_PLUS', 'sensors': ['radonShortTermAvg', 'temp', 'humidity', 'pressure', 'co2', 'voc', 'pm1', 'pm25'], 'segment': {'id': '58cf9769-f266-4859-aff9-40e861a728bf', 'name': 'Dungeon', 'started': '2024-10-18T20:22:36', 'active': True}, 'location': {'id': '05469597-b6b0-45e9-ac11-5884c72df0ea', 'name': 'BasisTech'}, 'productName': 'View Plus'}
+Dungeon: Temperature data not available.
+<Response [200]>
+[
+    {
+        "id": "2960070762",
+        "deviceType": "VIEW_PLUS",
+        "sensors": [
+            "radonShortTermAvg",
+            "temp",
+            "humidity",
+            "pressure",
+            "co2",
+            "voc",
+            "pm1",
+            "pm25"
+        ],
+        "segment": {
+            "id": "f0d6ee8c-5809-450f-8ad8-51ab77cfdf43",
+            "name": "CALA 203",
+            "started": "2024-01-03T02:50:48",
+            "active": true
+        },
+        "location": {
+            "id": "b8f84167-324b-4738-ba76-d02ffebfd99b",
+            "name": "CALA 203"
+        },
+        "productName": "View Plus"
+    },
+    {
+        "id": "2960087271",
+        "deviceType": "VIEW_PLUS",
+        "sensors": [
+            "radonShortTermAvg",
+            "temp",
+            "humidity",
+            "pressure",
+            "co2",
+            "voc",
+            "pm1",
+            "pm25"
+        ],
+        "segment": {
+            "id": "7addca06-c877-4396-9e67-264a74b16952",
+            "name": "Broadway",
+            "started": "2024-04-30T13:46:19",
+            "active": true
+        },
+        "location": {
+            "id": "05469597-b6b0-45e9-ac11-5884c72df0ea",
+            "name": "BasisTech"
+        },
+        "productName": "View Plus"
+    },
+    {
+        "id": "2960087450",
+        "deviceType": "VIEW_PLUS",
+        "sensors": [
+            "radonShortTermAvg",
+            "temp",
+            "humidity",
+            "pressure",
+            "co2",
+            "voc",
+            "pm1",
+            "pm25"
+        ],
+        "segment": {
+            "id": "f421c307-86ff-4726-a5e0-a2529db0b44a",
+            "name": "Bamboo",
+            "started": "2024-10-17T19:45:17",
+            "active": true
+        },
+        "location": {
+            "id": "05469597-b6b0-45e9-ac11-5884c72df0ea",
+            "name": "BasisTech"
+        },
+        "productName": "View Plus"
+    },
+    {
+        "id": "2960091404",
+        "deviceType": "VIEW_PLUS",
+        "sensors": [
+            "radonShortTermAvg",
+            "temp",
+            "humidity",
+            "pressure",
+            "co2",
+            "voc",
+            "pm1",
+            "pm25"
+        ],
+        "segment": {
+            "id": "caf1d844-fe13-4da7-8509-c75e3af1cff4",
+            "name": "Greenhouse",
+            "started": "2024-10-18T14:32:57",
+            "active": true
+        },
+        "location": {
+            "id": "05469597-b6b0-45e9-ac11-5884c72df0ea",
+            "name": "BasisTech"
+        },
+        "productName": "View Plus"
+    },
+    {
+        "id": "2960098051",
+        "deviceType": "VIEW_PLUS",
+        "sensors": [
+            "radonShortTermAvg",
+            "temp",
+            "humidity",
+            "pressure",
+            "co2",
+            "voc",
+            "pm1",
+            "pm25"
+        ],
+        "segment": {
+            "id": "d4c79ff7-942d-49be-998f-7bb267269908",
+            "name": "Area 51",
+            "started": "2024-10-18T19:46:28",
+            "active": true
+        },
+        "location": {
+            "id": "05469597-b6b0-45e9-ac11-5884c72df0ea",
+            "name": "BasisTech"
+        },
+        "productName": "View Plus"
+    },
+    {
+        "id": "2960092756",
+        "deviceType": "VIEW_PLUS",
+        "sensors": [
+            "radonShortTermAvg",
+            "temp",
+            "humidity",
+            "pressure",
+            "co2",
+            "voc",
+            "pm1",
+            "pm25"
+        ],
+        "segment": {
+            "id": "58cf9769-f266-4859-aff9-40e861a728bf",
+            "name": "Dungeon",
+            "started": "2024-10-18T20:22:36",
+            "active": true
+        },
+        "location": {
+            "id": "05469597-b6b0-45e9-ac11-5884c72df0ea",
+            "name": "BasisTech"
+        },
+        "productName": "View Plus"
+    }
+]
