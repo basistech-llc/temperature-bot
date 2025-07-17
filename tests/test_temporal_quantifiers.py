@@ -5,10 +5,10 @@ import time
 import sqlite3
 import os
 import pytest
-from fixtures import create_temporal_test_data,client
+from fixtures import create_temporal_test_data,client # noqa: F401 # pylint: disable=unused-import
 
 
-def test_logs_endpoint_with_start(client):
+def test_logs_endpoint_with_start(client): # noqa: F811
     """Test /api/v1/logs with start parameter"""
     start_time = int(time.time()) - 86400  # 24 hours ago
     response = client.get(f"/api/v1/logs?start={start_time}")
@@ -18,7 +18,7 @@ def test_logs_endpoint_with_start(client):
     assert "recordsTotal" in data
 
 
-def test_logs_endpoint_with_end(client):
+def test_logs_endpoint_with_end(client): # noqa: F811
     """Test /api/v1/logs with end parameter"""
     end_time = int(time.time())
     response = client.get(f"/api/v1/logs?end={end_time}")
@@ -28,7 +28,7 @@ def test_logs_endpoint_with_end(client):
     assert "recordsTotal" in data
 
 
-def test_logs_endpoint_with_start_and_end(client):
+def test_logs_endpoint_with_start_and_end(client): # noqa: F811
     """Test /api/v1/logs with both start and end parameters"""
     start_time = int(time.time()) - 86400  # 24 hours ago
     end_time = int(time.time())
@@ -39,7 +39,7 @@ def test_logs_endpoint_with_start_and_end(client):
     assert "recordsTotal" in data
 
 
-def test_device_log_endpoint_with_start(client):
+def test_device_log_endpoint_with_start(client): # noqa: F811
     """Test /device_log/{device_id} with start parameter"""
     # Create a test device
     with sqlite3.connect(os.environ['TEST_DB_NAME']) as test_conn:
@@ -55,7 +55,7 @@ def test_device_log_endpoint_with_start(client):
     assert "Test Device" in response.data.decode('utf-8')
 
 
-def test_device_log_endpoint_with_end(client):
+def test_device_log_endpoint_with_end(client): # noqa: F811
     """Test /device_log/{device_id} with end parameter"""
 
     # Create a test device
@@ -72,7 +72,7 @@ def test_device_log_endpoint_with_end(client):
     assert "Test Device 2" in response.data.decode('utf-8')
 
 
-def test_device_log_endpoint_with_start_and_end(client):
+def test_device_log_endpoint_with_start_and_end(client): # noqa: F811
     """Test /device_log/{device_id} with both start and end parameters"""
     # Create a test device
     with sqlite3.connect(os.environ['TEST_DB_NAME']) as test_conn:
@@ -98,7 +98,7 @@ def device_in_db():
         test_conn.commit()
     yield device_id
 
-def test_temporal_links_in_template(client, device_in_db):
+def test_temporal_links_in_template(client, device_in_db):  # noqa: F811
     """Test that temporal links are generated correctly in the template"""
     device_id = device_in_db
     response = client.get("/")
@@ -115,7 +115,7 @@ def test_temporal_links_in_template(client, device_in_db):
     assert f"/device_log/{device_id}\" target=\"_blank\">all" in content
 
 
-def test_temperature_api_with_device_id(client, device_in_db):
+def test_temperature_api_with_device_id(client, device_in_db): # noqa: F811
     """Test /api/v1/temperature with device_id parameter"""
     device_id = device_in_db
     response = client.get(f"/api/v1/temperature?device_id={device_id}")
@@ -125,7 +125,7 @@ def test_temperature_api_with_device_id(client, device_in_db):
     # Should return data for the specific device
 
 
-def test_temperature_api_with_start_and_end(client, device_in_db):
+def test_temperature_api_with_start_and_end(client, device_in_db): # noqa: F811
     """Test /api/v1/temperature with start and end parameters"""
     device_id = device_in_db
     start_time = int(time.time()) - 86400  # 24 hours ago
@@ -136,7 +136,7 @@ def test_temperature_api_with_start_and_end(client, device_in_db):
     assert "series" in data
 
 
-def test_chart_page_with_device_id(client, device_in_db):
+def test_chart_page_with_device_id(client, device_in_db): # noqa: F811
     """Test /chart page with device_id parameter"""
     device_id = device_in_db
     response = client.get(f"/chart?device_id={device_id}")

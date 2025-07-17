@@ -20,13 +20,14 @@ logger = logging.getLogger(__name__)
 logger.debug("DB_PATH=%s",DB_PATH)
 
 DEVICE_MAP = {}
+MAX_DURATION=3600                 # don't extend more than an hour
 
 class SpeedControl(BaseModel):
     """Pydantic model for speed control requests."""
     device_id: conint(ge=0, le=20)
     speed: conint(ge=0, le=4)
 
-def connect_db(db_name):
+def _connect_db(db_name):
     """Establishes a connection to the SQLite database."""
     conn = sqlite3.connect(db_name)
     conn.row_factory = sqlite3.Row      # returns rows as dicts
@@ -51,7 +52,7 @@ def get_db_connection():
         else:
             db_path = DB_PATH
         logger.debug("db_path=%s",db_path)
-        conn = connect_db(db_path)
+        conn = _connect_db(db_path)
         return conn
     except sqlite3.Error as e:
         logger.exception("Database connection error: %s", e)
@@ -218,7 +219,7 @@ def insert_devlog_entry(conn, *,
         c.execute("SELECT * from devlog where device_id=? and logtime<=? order by logtime DESC limit 1",(device_id,logtime))
         r = c.fetchone()
         if r and r['logtime']==logtime:
-            # duplicate entry. Replace if duration is
+            # duplicate entry. Replace if duration is 1
             if r['duration']==1:
                 logger.debug("replace %s with temp10x=%s status=%s",dict(r),temp10x,status_json)
                 c.execute("UPDATE devlog set temp10x=?,status_json=? where log_id=?",(temp10x, status_json,r['log_id']))
@@ -228,11 +229,12 @@ def insert_devlog_entry(conn, *,
 
         if r and r['temp10x']==temp10x and r['status_json']==status_json and not force:
             duration = logtime-r['logtime']+1
-            logger.debug("update log_id=%s temp10x=%s duration=%s",device_id,temp10x,duration)
-            c.execute("UPDATE devlog set duration=? where log_id=?",(duration, r['log_id']))
-            if commit:
-                conn.commit()
-            return
+            if duration < MAX_DURATION:
+                logger.info("Updated devlog entry: device_id=%s temp10x=%s logtime=%s duration=%s",device_id,temp10x,time.asctime(time.localtime(r['logtime'])),duration)
+                c.execute("UPDATE devlog set duration=? where log_id=?",(duration, r['log_id']))
+                if commit:
+                    conn.commit()
+                return
 
         # Insert into devlog using the obtained device_id
         logger.debug("insert logtime=%s device_id=%s",logtime, device_id)
@@ -240,7 +242,7 @@ def insert_devlog_entry(conn, *,
                        (logtime, device_id, temp10x, status_json))
         if commit:
             conn.commit()
-        logger.info("Inserted devlog entry: device_name='%s' device_id=%s, temp10x=%s", device_name, device_id, temp10x)
+        logger.info("Inserted devlog entry: device_id=%s, temp10x=%s", device_id, temp10x)
     except sqlite3.Error as e:
         logger.error("Database error in insert_devlog_entry: %s", e)
         conn.rollback() # Rollback any partial transaction
