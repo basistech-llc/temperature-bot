@@ -61,28 +61,28 @@ def get_aqi_airnow():
 def get_aqi_google():
     """Get AQI data from Google API"""
     params = {'hours':1,
-              'location':get_config()['location']}
+              'location':{
+                  'longitude':get_config()['location']['longitude'],
+                  'latitude':get_config()['location']['latitude'] }
+              }
 
     API_KEY = get_secret('google', 'air_quality_api_key')
     url = GOOGLE_URL.format(API_KEY=API_KEY)
-    logger.info("get_aqi: %s", url)
+    logger.debug("get_aqi: %s params=%s", url,params)
 
     try:
         r = requests.post(url, json=params, timeout=TIMEOUT_SECONDS)
         r.raise_for_status()
-
-        if r.json() == []:
-            return {"error": "AirNow API returned []; likely rate-limited"}
         return r.json()['hoursInfo'][0]['indexes'][0]['aqi']
 
     except requests.exceptions.Timeout as e:
         raise AQIError("timeout") from e
     except requests.exceptions.HTTPError as e:
         logger.error("%s: %s", type(e), e)
-        return {"error": f"HTTP Status error: {e}"}
+        raise
     except Exception as e:      # pylint: disable=broad-exception-caught
         logger.error("Exception in get_aqi: %s", e)
-        return {"error": str(e)}
+        raise
 
 def get_aqi():
     return get_aqi_google()
