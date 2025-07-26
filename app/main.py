@@ -19,7 +19,7 @@ from flask_pydantic import validate
 from . import ae200
 from . import weather
 from . import db
-from . import airnow
+from . import airquality
 from . import rules_engine
 from .db import SpeedControl
 
@@ -95,7 +95,7 @@ def get_db_aqi(conn):
     c.execute("SELECT aqi FROM aqi order by logtime DESC limit 1")
     row = c.fetchone()
     aqi = row[0] if row is not None else 0
-    return airnow.aqi_decode( aqi )
+    return airquality.aqi_decode( aqi )
 
 def get_last_db_data(conn):
     def fix_status_json(devdict):

@@ -45,9 +45,9 @@ def test_status_endpoint(client):  # noqa: F811
 
 @skip_on_github
 @patch("app.weather.get_weather_data")
-@patch("app.airnow.get_aqi")
-def test_weather_endpoint(mock_get_aqi, mock_get_weather_data, client):  # noqa: F811
-    mock_get_aqi.return_value = 45
+@patch("app.airquality.get_aqi")
+def test_weather_endpoint(mock_get_airquality, mock_get_weather_data, client):  # noqa: F811
+    mock_get_airquality.return_value = 45
     mock_get_weather_data.return_value = {"current": {"temperature": 72, "conditions": "Sunny"}, "forecast": []}
 
     # If this status endpoint also uses db.get_db_connection,

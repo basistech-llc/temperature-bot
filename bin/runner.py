@@ -17,7 +17,7 @@ sys.path.append(dirname(dirname(abspath(__file__))))
 
 from app.paths import ETC_DIR
 from app.rules_engine import run_rules
-import app.airnow as airnow
+import app.airquality as airquality
 import app.ae200 as ae200
 import app.db as db
 import app.hubitat as hubitat
@@ -39,10 +39,10 @@ def update_from_hubitat(conn):
     for item in hubitat.extract_temperatures(hubitat.get_all_devices()):
         db.insert_devlog_entry(conn, device_name=item['name'], temp=item['temperature'])
 
-def update_airnow(conn):
-    aqi = airnow.get_aqi()
+def update_aqi(conn):
+    aqi = airquality.get_aqi()
     logging.info("aqi: %s",aqi)
-    conn.wet_execute("INSERT INTO aqi VALUES (?,?)",( int(time.time()), aqi))
+    conn.execute("INSERT INTO aqi VALUES (?,?)",( int(time.time()), aqi))
     conn.commit()
 
 def combine_temp_measurements(conn, start_time, end_time, seconds):
@@ -209,7 +209,7 @@ def setup_parser():
     parser.add_argument("--syslog", help="log to syslog", action='store_true')
     parser.add_argument("--daily", help='Run the daily cleanup', action='store_true')
     parser.add_argument("--rules", help='Also run the rules engine', action='store_true')
-    parser.add_argument("--airnow", help='Save AirNow AQI to database')
+    parser.add_argument("--aqi", help='Save AQI to database', action='store_true')
     clogging.add_argument(parser)
     return parser
 
@@ -224,8 +224,8 @@ def main():
 
     if args.csv:
         load_csv(conn, args.csv, args.csv_after, unsafe=args.unsafe)
-    elif args.airnow:
-        update_airnow(conn)
+    elif args.aqi:
+        update_aqi(conn)
     else:
         clock.lock_script()
         if args.daily:

@@ -178,9 +178,9 @@ TEST_AQI = False
 @patch("app.ae200.set_fan_speed")
 @patch("app.ae200.get_devices")
 @patch("app.weather.get_weather_data")
-@patch("app.airnow.get_aqi")
+@patch("app.airquality.get_aqi")
 def test_browser_fan_speed_controls(
-    mock_get_aqi,
+    mock_get_airquality,
     mock_get_weather_data,
     mock_get_devices,
     mock_set_fan_speed,
@@ -236,7 +236,7 @@ def test_browser_fan_speed_controls(
         mock_get_devices.return_value = json.load(f)
 
     # Mock weather and AQI data
-    mock_get_aqi.return_value = 45
+    mock_get_airquality.return_value = 45
     mock_get_weather_data.return_value = {
         "current": {"temperature": TEST_TEMP, "conditions": "Sunny"},
         "forecast": []
@@ -382,9 +382,9 @@ def test_browser_fan_speed_controls(
 @patch("app.ae200.set_fan_speed")
 @patch("app.ae200.get_devices")
 @patch("app.weather.get_weather_data")
-@patch("app.airnow.get_aqi")
+@patch("app.airquality.get_aqi")
 def test_browser_page_loads_correctly(
-    mock_get_aqi,
+    mock_get_airquality,
     mock_get_weather_data,
     mock_get_devices,
     mock_set_fan_speed,
@@ -427,7 +427,7 @@ def test_browser_page_loads_correctly(
     with open(Path(TEST_DATA_DIR) / 'get_device_10.json') as f:
         mock_get_device_info.return_value = json.load(f)
 
-    mock_get_aqi.return_value = 45
+    mock_get_airquality.return_value = 45
     mock_get_weather_data.return_value = {
         "current": {"temperature": TEST_TEMP, "conditions": "Sunny"},
         "forecast": []
@@ -502,9 +502,9 @@ def test_browser_page_loads_correctly(
 
 @skip_on_github
 @patch("app.weather.get_weather_data")
-@patch("app.airnow.get_aqi")
+@patch("app.airquality.get_aqi")
 def test_browser_temperature_display(
-    mock_get_aqi,
+    mock_get_airquality,
     mock_get_weather_data,
     client  # noqa: F811
 ):
@@ -525,7 +525,7 @@ def test_browser_temperature_display(
         test_conn.commit()
 
     # Mock weather and AQI data
-    mock_get_aqi.return_value = 45
+    mock_get_airquality.return_value = 45
     mock_get_weather_data.return_value = {
         "current": {"temperature": TEST_TEMP, "conditions": "Sunny"},
         "forecast": []

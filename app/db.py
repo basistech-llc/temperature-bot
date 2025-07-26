@@ -40,7 +40,7 @@ def _connect_db(db_name):
     conn.execute("PRAGMA synchronous=NORMAL;")
     return conn
 
-def get_db_connection(dry_run=False):
+def get_db_connection():
     """
     Returns a new SQLite connection for each request.
     The connection should be closed by the caller when done.
