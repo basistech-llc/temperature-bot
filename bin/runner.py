@@ -17,6 +17,7 @@ sys.path.append(dirname(dirname(abspath(__file__))))
 
 from app.paths import ETC_DIR
 from app.rules_engine import run_rules
+import app.airnow as airnow
 import app.ae200 as ae200
 import app.db as db
 import app.hubitat as hubitat
@@ -24,25 +25,25 @@ import app.hubitat as hubitat
 import lib.ctools.clogging as clogging
 import lib.ctools.lock as clock
 
-def update_from_ae200(conn, dry_run=False):
+def update_from_ae200(conn):
     d = ae200.AE200Functions()
     devs = d.getDevices()
     for dev in devs:
         data = d.getDeviceInfo(dev['id'])
         data['id'] = dev['id']
         temp = data.get("InletTemp",None)
-        if not dry_run:
-            device_id = db.update_devlog_map(conn, device_name=dev['name'], ae200_device_id=dev['id'])
-            db.insert_devlog_entry(conn, device_id=device_id, temp=temp, statusdict=data)
-        else:
-            print(dev,data)
+        device_id = db.update_devlog_map(conn, device_name=dev['name'], ae200_device_id=dev['id'])
+        db.insert_devlog_entry(conn, device_id=device_id, temp=temp, statusdict=data)
 
-def update_from_hubitat(conn, dry_run=False):
+def update_from_hubitat(conn):
     for item in hubitat.extract_temperatures(hubitat.get_all_devices()):
-        if not dry_run:
-            db.insert_devlog_entry(conn, device_name=item['name'], temp=item['temperature'])
-        else:
-            print(item)
+        db.insert_devlog_entry(conn, device_name=item['name'], temp=item['temperature'])
+
+def update_airnow(conn):
+    aqi = airnow.get_aqi()
+    logging.info("aqi: %s",aqi)
+    conn.wet_execute("INSERT INTO aqi VALUES (?,?)",( int(time.time()), aqi))
+    conn.commit()
 
 def combine_temp_measurements(conn, start_time, end_time, seconds):
     """
@@ -203,12 +204,12 @@ def setup_parser():
                                      formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("--csv", help='load csv file')
     parser.add_argument("--unsafe", help="Run without synchronous mode. Fast, but dangerous", action='store_true')
-    parser.add_argument("--dry-run", action='store_true')
     parser.add_argument("--csv-after", help="Date after which to import CSV in YYYY-MM-DD format",default="0000-00-00")
     parser.add_argument("--report", help="report on the database", action='store_true')
     parser.add_argument("--syslog", help="log to syslog", action='store_true')
     parser.add_argument("--daily", help='Run the daily cleanup', action='store_true')
     parser.add_argument("--rules", help='Also run the rules engine', action='store_true')
+    parser.add_argument("--airnow", help='Save AirNow AQI to database')
     clogging.add_argument(parser)
     return parser
 
@@ -218,26 +219,23 @@ def main():
     args = parser.parse_args()
     clogging.setup(args.loglevel, syslog=args.syslog, log_format=clogging.LOG_FORMAT,syslog_format=clogging.YEAR + " " + clogging.SYSLOG_FORMAT)
     conn = db.get_db_connection()
-    if args.dry_run:
-        print("=dry run=")
     if args.report:
         report(conn)
-        return
 
     if args.csv:
         load_csv(conn, args.csv, args.csv_after, unsafe=args.unsafe)
-        return
+    elif args.airnow:
+        update_airnow(conn)
+    else:
+        clock.lock_script()
+        if args.daily:
+            daily_cleanup(conn, datetime.datetime.now())
 
-    # Normal run
-    clock.lock_script()
-    if args.daily:
-        daily_cleanup(conn, datetime.datetime.now())
+        update_from_ae200(conn)
+        update_from_hubitat(conn)
 
-    update_from_ae200(conn, dry_run=args.dry_run)
-    update_from_hubitat(conn, dry_run=args.dry_run)
-
-    if args.rules:
-        run_rules(conn)
+        if args.rules:
+            run_rules(conn)
 
 if __name__=="__main__":
     main()

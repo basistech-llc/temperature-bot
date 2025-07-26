@@ -30,3 +30,11 @@ CREATE TABLE devlog (
 
 CREATE INDEX idx_templog_logtime ON devlog (logtime);
 CREATE INDEX idx_templog_device_id ON devlog (device_id);
+
+CREATE TABLE aqi (
+    logtime INTEGER NOT NULL,
+    aqi INTEGER NOT NULL
+);
+
+CREATE INDEX idx_aqi_logtime ON aqi(logtime);
+CREATE INDEX idx_aqi_aqi ON aqi(aqi);

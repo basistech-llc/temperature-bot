@@ -30,6 +30,7 @@ def setup_test_database(conn):
 
         cursor.executescript(schema_sql)
         conn.commit()
+        cursor.execute("INSERT INTO aqi VALUES (?,?)",(int(time.time()),45)) # insert AQI of 45
         logging.debug("*** sending schema")
         logging.info("Test database schema set up successfully from %s.", SCHEMA_FILE_PATH)
     except sqlite3.Error as e:

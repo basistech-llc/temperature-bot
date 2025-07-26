@@ -10,6 +10,9 @@ from app.paths import TIMEOUT_SECONDS
 
 AQI_URL = "https://www.airnowapi.org/aq/observation/zipCode/current/?format=application/json&zipCode={zipcode}&distance=15&API_KEY={API_KEY}"
 
+logger = logging.getLogger(__name__)
+
+
 # https://docs.airnowapi.org/aq101
 AQI_TABLE = [
     (0, 50, "Good", "Green", "#00e400", 1),
@@ -24,20 +27,19 @@ AQI_TABLE = [
 class AirnowError(Exception):
     """Generic errors"""
 
-
-def aqi_color(aqi):
+def aqi_decode(aqi):
+    aqi = int(aqi)
     for row in AQI_TABLE:
         if row[0] <= aqi <= row[1]:
-            return (row[2], row[4])
-    raise ValueError(f"invalid aqi={aqi}")
+            return {'value':aqi, 'name':row[2], 'color_name': row[3], 'color':row[4]}
+    raise ValueError(f"aqi={aqi}")
 
-
-def get_aqi_sync():
+def get_aqi():
     """Get AQI data from AirNow API synchronously"""
     zipcode = get_config()['location']['zipcode']
     API_KEY = get_secret('airnow', 'api_key')
     url = AQI_URL.format(zipcode=zipcode, API_KEY=API_KEY)
-    logging.info("get_aqi_sync: %s", url)
+    logger.info("get_aqi: %s", url)
 
     try:
         r = requests.get(url, timeout=TIMEOUT_SECONDS)
@@ -45,16 +47,13 @@ def get_aqi_sync():
 
         if r.json() == []:
             return {"error": "AirNow API returned []; likely rate-limited"}
-
-        aqi = r.json()[0]["AQI"]
-        (name, color) = aqi_color(aqi)
-        return {"value": aqi, "color": color, "name": name}
+        return r.json()[0]["AQI"]
 
     except requests.exceptions.Timeout as e:
         raise AirnowError("timeout") from e
     except requests.exceptions.HTTPError as e:
-        logging.error("%s: %s", type(e), e)
+        logger.error("%s: %s", type(e), e)
         return {"error": f"HTTP Status error: {e}"}
     except Exception as e:      # pylint: disable=broad-exception-caught
-        logging.error("Exception in get_aqi_sync: %s", e)
+        logger.error("Exception in get_aqi: %s", e)
         return {"error": str(e)}

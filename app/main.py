@@ -32,8 +32,6 @@ LOGGING_CONFIG='%(asctime)s  %(filename)s:%(lineno)d %(levelname)s: %(message)s'
 LOG_LEVEL = os.getenv("LOG_LEVEL",DEFAULT_LOG_LEVEL).upper()
 LOG_LEVEL="DEBUG"
 
-ENABLE_AIRNOW = False
-
 #logging.basicConfig(
 #    format=LOGGING_CONFIG,
 #    level=LOG_LEVEL,
@@ -84,37 +82,20 @@ def with_db_connection(f):
             conn.close()
     return decorated_function
 
-def get_cached_aqi(conn, cache_hours=1):
+def get_db_aqi(conn):
     """
-    Get AQI data from cache if available and recent, otherwise fetch from API.
+    Get AQI from database.
 
     :param conn: database connection
-    :param cache_hours: number of hours to cache AQI data
     :return: AQI data dict with value, color, name
     """
-    cache_seconds = cache_hours * 3600
 
     # Check for recent AQI data in database
-    if recent_logs:= db.get_recent_devlogs(conn, 'aqi', cache_seconds):
-        latest_log = recent_logs[0]
-        logger.debug("latest_log=%s",latest_log)
-        if latest_log['temp10x']:
-            return json.loads(latest_log['temp10x'])
-
-    try:
-        if not ENABLE_AIRNOW:
-            return {'error':f'ENABLE_AIRNOW={ENABLE_AIRNOW}'}
-        aqi_data = airnow.get_aqi_sync()
-        if 'error' in aqi_data:
-            logger.error("aqi_data=%s", aqi_data)
-        else:
-            logger.debug("aqi_data=%s",aqi_data)
-            db.insert_devlog_entry(conn, device_name='aqi', temp=aqi_data['value'])
-        return aqi_data
-
-    except airnow.AirnowError as api_error:
-        logger.error("api_error=%s",api_error)
-        return {"value": "N/A", "color": "#cccccc", "name": "Unavailable"}
+    c = conn.cursor()
+    c.execute("SELECT aqi FROM aqi order by logtime DESC limit 1")
+    row = c.fetchone()
+    aqi = row[0] if row is not None else 0
+    return airnow.aqi_decode( aqi )
 
 def get_last_db_data(conn):
     def fix_status_json(devdict):
@@ -202,7 +183,7 @@ def get_status(conn):
 @api_v1.route('/weather')
 @with_db_connection
 def get_weather(conn):
-    aqi_data = get_cached_aqi(conn, cache_hours=1)
+    aqi_data = get_db_aqi(conn)
     weather_data = weather.get_weather_data()
     return jsonify({"aqi": aqi_data, "weather": weather_data})
 
