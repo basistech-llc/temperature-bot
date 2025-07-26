@@ -14,7 +14,6 @@ def get_config():
     with open(CONFIG_YAML_PATH, 'r') as f:
         return yaml.safe_load(f)
 
-
 @functools.lru_cache(maxsize=1)
 def get_secrets():
     return get_config()['secrets']
