@@ -14,13 +14,13 @@ logger = logging.getLogger(__name__)
 
 class WeatherService:
     """Create a connection for a specific location"""
-    def __init__(self, lat=None, lon=None):
-        if lat is None:
-            lat = get_config()['location']['lat']
-        if lon is None:
-            lon = get_config()['location']['lon']
-        self.lat = lat
-        self.lon = lon
+    def __init__(self, latitude=None, longitude=None):
+        if latitude is None:
+            latitude = get_config()['location']['latitude']
+        if longitude is None:
+            longitude = get_config()['location']['longitude']
+        self.latitude = latitude
+        self.longitude = longitude
         self.weather_points = None
         self.session = None
 
@@ -30,7 +30,7 @@ class WeatherService:
                 self.session = requests.Session()
                 self.session.timeout = TIMEOUT_SECONDS
 
-            weather_points_url = f'https://api.weather.gov/points/{self.lat},{self.lon}'
+            weather_points_url = f'https://api.weather.gov/points/{self.latitude},{self.longitude}'
             response = self.session.get(weather_points_url)
             response.raise_for_status()
             self.weather_points = response.json()
@@ -113,10 +113,10 @@ class WeatherService:
             self.session.close()
 
 
-def get_weather_data(lat=None, lon=None):
+def get_weather_data(latitude=None, longitude=None):
     """Get both current weather and forecast data"""
     try:
-        service = WeatherService(lat=lat, lon=lon)
+        service = WeatherService(latitude=latitude, longitude=longitude)
         try:
             return service.get_all_weather_data()
         finally:
