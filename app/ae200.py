@@ -14,9 +14,6 @@ import asyncio
 import xml.etree.ElementTree as ET
 import logging
 import json
-import traceback
-import subprocess
-import sys
 
 import concurrent.futures
 import websockets
@@ -24,7 +21,6 @@ from websockets.extensions import permessage_deflate
 
 from app.util import get_config
 
-logger = logging.getLogger(__name__)
 # Fan mapping speeds
 SPEED_AUTO = -1
 SPEEDS = {-1:"AUTO", 0: "OFF", 1: "LOW", 2: "MID2", 3: "MID1", 4: "HIGH"}
@@ -116,58 +112,6 @@ class AsyncRunner:
 runner = AsyncRunner()
 
 ################################################################
-# Subprocess wrapper functions for gunicorn compatibility
-################################################################
-
-def run_ae200cess(args, timeout=30):
-    """Run ae200.py as a subprocess with the given arguments"""
-    try:
-        # Get the path to this module
-        module_path = os.path.abspath(__file__)
-        project_root = os.path.dirname(os.path.dirname(module_path))
-        env = os.environ.copy()
-        env["PYTHONPATH"] = project_root + (":" + env["PYTHONPATH"] if "PYTHONPATH" in env else "")
-
-        # Run the subprocess
-        result = subprocess.run(
-            [sys.executable, module_path] + args,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-            cwd=os.getcwd(),
-            env=env,
-            check=False
-        )
-
-        if result.returncode != 0:
-            logger.error("AE200 subprocess failed: %s", result.stderr)
-            raise RuntimeError(f"AE200 subprocess failed: {result.stderr}")
-
-        # Parse the JSON output
-        return json.loads(result.stdout.strip())
-    except subprocess.TimeoutExpired as e:
-        logger.error("AE200bprocess timed out after %d seconds", timeout)
-        raise RuntimeError(f"AE200bprocess timed out after {timeout} seconds") from e
-    except json.JSONDecodeError as e:
-        logger.error("Failed to parse AE200 subprocess output: %s", result.stdout)
-        raise RuntimeError(f"Failed to parse AE200 subprocess output: {e}") from e
-
-def get_devices_subprocess():
-    """Get list of devices using subprocess"""
-    logger.info("get_devices_subprocess()")
-    return run_ae200cess(["--subprocess", "get_devices"])
-
-def get_device_info_subprocess(device_id):
-    """Get device info using subprocess"""
-    logger.info("get_device_info_subprocess(%s)", device_id)
-    return run_ae200cess(["--subprocess", "get_device_info", "--device-id", str(device_id)])
-
-def set_fan_speed_subprocess(ae200_device, speed):
-    """Set fan speed using subprocess"""
-    logger.info("set_fan_speed_subprocess(%s,%s)", ae200_device, speed)
-    return run_ae200cess(["--subprocess", "set_fan_speed", "--device-id", str(ae200_device), "--speed", str(speed)])
-
-################################################################
 ### controller class
 class AE200Functions:
     """Originally from https://github.com/natevoci/ae200"""
@@ -180,7 +124,7 @@ class AE200Functions:
         self.address = address
 
     async def getDevicesAsync(self):
-        # Removed assertion to allow integration/system tests
+        assert 'PYTEST' not in os.environ
         async with websockets.connect(
             f"ws://{self.address}/b_xmlproc/",
             extensions=[permessage_deflate.ClientPerMessageDeflateFactory()],
@@ -193,6 +137,7 @@ class AE200Functions:
 
             groupList = []
             for r in unitsResultXML.findall( "./DatabaseManager/ControlGroup/MnetList/MnetRecord" ):
+                # print( ET.tostring(r) )
                 groupList.append({"id": r.get("Group"), "name": r.get("GroupNameWeb")})
             await websocket.close()
             return groupList
@@ -222,20 +167,17 @@ class AE200Functions:
         return runner.run_async_safely(self.getDeviceInfoAsync(deviceId, clean=clean))
 
     async def sendAsync(self, deviceId, attributes):
-        try:
-            async with websockets.connect(
-                f"ws://{self.address}/b_xmlproc/",
-                extensions=[permessage_deflate.ClientPerMessageDeflateFactory()],
-                origin=f"http://{self.address}",
-                subprotocols=["b_xmlproc"],
-            ) as websocket:
-                attrs = " ".join([f'{key}="{attributes[key]}"' for key in attributes])
-                payload = setRequestPayload.format(deviceId=deviceId, attrs=attrs)
-                await websocket.send(payload)
-                await websocket.close()
-        except (websockets.exceptions.WebSocketException, OSError, ValueError) as e:
-            logging.error("Failed to send command to AE200: %s", e)
-            raise RuntimeError(f"Failed to send command to AE200: {e}") from e
+        assert 'PYTEST' not in os.environ
+        async with websockets.connect(
+            f"ws://{self.address}/b_xmlproc/",
+            extensions=[permessage_deflate.ClientPerMessageDeflateFactory()],
+            origin=f"http://{self.address}",
+            subprotocols=["b_xmlproc"],
+        ) as websocket:
+            attrs = " ".join([f'{key}="{attributes[key]}"' for key in attributes])
+            payload = setRequestPayload.format(deviceId=deviceId, attrs=attrs)
+            await websocket.send(payload)
+            await websocket.close()
 
     def send(self, deviceId, attributes):
         return runner.run_async_safely(self.sendAsync(deviceId, attributes))
@@ -247,35 +189,6 @@ async def get_dev_status(unit_id):
 async def get_devices_async():
     d = AE200Functions()
     return await d.getDevicesAsync()
-
-async def set_fan_speed_async(device, speed):
-    logger.info("set_fan_speed_async(%s,%s)",device,speed)
-    d = AE200Functions()
-    if speed == 0:
-        await d.sendAsync(device, {"Drive": "OFF"})
-    else:
-        await d.sendAsync(device, {"Drive": "ON"})
-        await d.sendAsync(device, {"FanSpeed": SPEEDS[speed]})
-
-async def get_device_info_async(device):
-    logger.info("get_device_info_async(%s)", device)
-    d = AE200Functions()
-    return await d.getDeviceInfoAsync(device)
-
-################################################################
-
-def set_fan_speed(ae200_device, speed):
-    logger.info("set_fan_speed(%s,%s)", ae200_device, speed)
-    return set_fan_speed_subprocess(ae200_device, speed)
-
-def get_device_info(device):
-    logger.info("get_device_info(%s)", device)
-    return get_device_info_subprocess(device)
-
-def get_devices():
-    logger.info("get_devices()")
-    return get_devices_subprocess()
-
 
 def extract_status(data):
     """Return a dict with drive/speed/drive_speed_val/has_speed_control"""
@@ -289,48 +202,53 @@ def extract_status(data):
         'has_speed_control': has_speed_control
     }
 
+async def set_fan_speed_async(device, speed):
+    logging.info("set_fan_speed_async(%s,%s)",device,speed)
+    d = AE200Functions()
+    if speed == 0:
+        await d.sendAsync(device, {"Drive": "OFF"})
+    else:
+        await d.sendAsync(device, {"Drive": "ON"})
+        await d.sendAsync(device, {"FanSpeed": SPEEDS[speed]})
+
+def set_fan_speed(ae200_device, speed):
+    logging.info("set_fan_speed(%s,%s)",ae200_device,speed)
+    d = AE200Functions()
+    if speed == 0:
+        d.send(ae200_device, {"Drive": "OFF"})
+    else:
+        d.send(ae200_device, {"Drive": "ON"})
+        d.send(ae200_device, {"FanSpeed": SPEEDS[speed]})
+
+async def get_device_info_async(device):
+    logging.info("get_device_info_async(%s)",device)
+    d = AE200Functions()
+    return await d.getDeviceInfoAsync(device)
+
+def get_device_info(device):
+    logging.info("get_device_info(%s)",device)
+    d = AE200Functions()
+    return d.getDeviceInfo(device)
+
+
+def get_devices():
+    logging.info("get_devices()")
+    d = AE200Functions()
+    return d.getDevices()
+
+
 if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(
-        description="AE200troller subprocess interface",
+        description="Demo function",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter )
-    parser.add_argument( "--host", help='address of the AE200oller')
+    parser.add_argument( "--host", help='address of the AE200 controller')
     parser.add_argument( "--json", help='Full JSON dump of the device(s)', action="store_true")
     parser.add_argument( "--set",   help='Specifies a device to set', type=int)
     parser.add_argument( "--level", help="Specify level 0-4. 0 is off", type=int, default=0 )
-    # Subprocess interface arguments
-    parser.add_argument("--subprocess", help="Runas subprocess with command", choices=["get_devices", "get_device_info", "set_fan_speed"])
-    parser.add_argument("--device-id", help="Device ID for subprocess commands", type=int)
-    parser.add_argument("--speed", help="Speed for set_fan_speed command", type=int)
-
     args = parser.parse_args()
 
-    # Subprocess interface
-    if args.subprocess:
-        try:
-            if args.subprocess == "get_devices":
-                result = asyncio.run(get_devices_async())
-                print(json.dumps(result))
-            elif args.subprocess == "get_device_info":
-                if args.device_id is None:
-                    print(json.dumps({"error": "device-id required"}), file=sys.stderr)
-                    sys.exit(1)
-                result = asyncio.run(get_device_info_async(args.device_id))
-                print(json.dumps(result))
-            elif args.subprocess == "set_fan_speed":
-                if args.device_id is None or args.speed is None:
-                    print(json.dumps({"error": "device-id and speed required"}), file=sys.stderr)
-                    sys.exit(1)
-                asyncio.run(set_fan_speed_async(args.device_id, args.speed))
-                # Get updated device info after setting speed
-                result = asyncio.run(get_device_info_async(args.device_id))
-                print(json.dumps(result))
-        except (RuntimeError, OSError, ValueError, json.JSONDecodeError) as e:
-            tb = traceback.format_exc()
-            print(json.dumps({"error": str(e), "traceback": tb}), file=sys.stderr)
-            sys.exit(1)
-        sys.exit(0)
     d = AE200Functions(args.host)
 
     # Test reading device list
@@ -340,7 +258,7 @@ if __name__ == "__main__":
     for dev in devs:
         did = dev["id"]
         name = dev['name']
-        # print(did, json.dumps(d.getDeviceInfo(did), indent=4)
+        # print(did, json.dumps(d.getDeviceInfo(did), indent=4))
         data = d.getDeviceInfo(did)
         print(did, name, "drive: ", data["Drive"], "fan speed: ", data["FanSpeed"])
 
