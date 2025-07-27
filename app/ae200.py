@@ -230,6 +230,9 @@ def get_device_info(device):
     d = AE200Functions()
     return d.getDeviceInfo(device)
 
+def get_device_speed(device):
+    info = get_device_info(device)
+    return drive_speed_to_val(info['Drive'], info['FanSpeed'])
 
 def get_devices():
     logging.info("get_devices()")

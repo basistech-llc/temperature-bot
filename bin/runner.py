@@ -16,7 +16,7 @@ import tabulate
 sys.path.append(dirname(dirname(abspath(__file__))))
 
 from app.paths import ETC_DIR
-from app.rules_engine import run_rules
+from app.rules_engine import rules_results,run_rules
 import app.airquality as airquality
 import app.ae200 as ae200
 import app.db as db
@@ -208,7 +208,7 @@ def setup_parser():
     parser.add_argument("--report", help="report on the database", action='store_true')
     parser.add_argument("--syslog", help="log to syslog", action='store_true')
     parser.add_argument("--daily", help='Run the daily cleanup', action='store_true')
-    parser.add_argument("--rules", help='Also run the rules engine', action='store_true')
+    parser.add_argument("--rules", choices=["test", "commit"], help='Just run the rules engine')
     parser.add_argument("--aqi", help='Save AQI to database', action='store_true')
     clogging.add_argument(parser)
     return parser
@@ -226,16 +226,20 @@ def main():
         load_csv(conn, args.csv, args.csv_after, unsafe=args.unsafe)
     elif args.aqi:
         update_aqi(conn)
+    elif args.daily:
+        daily_cleanup(conn, datetime.datetime.now())
+    elif args.rules:
+        if args.rules=='test':
+            print(rules_results(conn))
+        else:
+            run_rules(conn)
     else:
         clock.lock_script()
-        if args.daily:
-            daily_cleanup(conn, datetime.datetime.now())
 
         update_from_ae200(conn)
         update_from_hubitat(conn)
+        run_rules(conn)
 
-        if args.rules:
-            run_rules(conn)
 
 if __name__=="__main__":
     main()

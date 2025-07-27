@@ -39,16 +39,29 @@ def get_rules():
     with open( join(ROOT_DIR,'bin','rules.py'), 'r') as f:
         return f.read()
 
-def set_body_speed(conn, body: SpeedControl, addr, agent):
-    logger.info("set_body_speed body=%s addr=%s agent=%s",body,addr,agent)
-    unit = db.get_ae200_unit(conn, body.device_id)
-    db.insert_changelog(conn, addr, device_id=body.device_id, ae200_device_id=unit, new_value=str(body.speed), agent=agent)
-    logger.info("unit=%s new_value=%s",unit,body.speed)
-    ae200.set_fan_speed(unit, body.speed)
-    data = ae200.get_device_info(unit)
+def set_body_speed(conn, body: SpeedControl, ipaddr, agent):
+    """
+    :param conn: SQLIte3 database conneciton
+    :param body: Unit to set, and new speed
+    :param ipaddr: Who requested the change
+    :param agent: What requested the change.
+    """
+
+    unit_id = db.get_ae200_unit(conn, body.device_id)
+
+    # Get the current speed of the unit
+    current_speed = ae200.get_device_speed(unit_id)
+    if current_speed==body.speed:
+        logger.info("set_body_speed body=[%s] ipaddr=%s agent=%s. Speed will not change",body,ipaddr,agent)
+    else:
+        logger.info("set_body_speed body=[%s] ipaddr=%s agent=%s. current_speed=",body,ipaddr,agent,current_speed)
+        db.insert_changelog(conn, ipaddr=ipaddr, device_id=body.device_id, ae200_device_id=unit_id,
+                            current_values=str(current_speed), new_value=str(body.speed), agent=agent)
+        ae200.set_fan_speed(unit_id, body.speed)
+    data = ae200.get_device_info(unit_id)
     temp = data.get('InletTemp', None)
     db.insert_devlog_entry(conn, device_id=body.device_id, temp=temp, statusdict=data)
-    return {'unit':unit, 'temp':temp, 'device_id':body.device_id, 'speed':body.speed}
+    return {'unit':unit_id, 'temp':temp, 'device_id':body.device_id, 'speed':body.speed}
 
 
 def rules_results(conn, when=None):
