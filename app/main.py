@@ -12,6 +12,8 @@ from functools import wraps
 
 from flask import Flask, request, jsonify, render_template, send_from_directory, Blueprint
 from werkzeug.exceptions import HTTPException
+from werkzeug.middleware.proxy_fix import ProxyFix
+
 
 from flask_pydantic import validate
 
@@ -51,6 +53,7 @@ def fix_boto_log_level():
 
 # https://flask.palletsprojects.com/en/stable/config/
 app = Flask(__name__)
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1)
 app.config["TEMPLATES_AUTO_RELOAD"] = True
 log_level = os.getenv("LOG_LEVEL","INFO").upper()
 logger=app.logger
@@ -259,11 +262,10 @@ def get_logs(conn):
 
     cmd += " ORDER BY logtime DESC LIMIT ? OFFSET ?"
     args.extend([length, start_row])
+    logger.debug("cmd=%s args=%s",cmd,args)
 
     c = conn.cursor()
-    c.execute("SELECT COUNT(*) FROM changelog")
-    total_records = c.fetchone()[0]
-    c.execute(cmd, args)
+    c.execute(cmd,args)
     rows = [dict(row) for row in c.fetchall()]  # Convert Row objects to dicts for JSON serialization
     for row in rows:
         try:
@@ -273,8 +275,8 @@ def get_logs(conn):
 
     return jsonify({
         "draw": draw,
-        "recordsTotal": total_records,
-        "recordsFiltered": total_records,  # Adjust if implementing search
+        "recordsTotal": len(rows),
+        "recordsFiltered": len(rows),  # Adjust if implementing search
         "data": rows
     })
 
