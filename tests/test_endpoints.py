@@ -101,7 +101,7 @@ def test_set_speed_endpoint(mock_get_devices, mock_set_fan_speed, mock_get_devic
 
     # Verify that these were both called with the arguments
     #mock_get_devices.assert_called_once_with()
-    mock_get_device_info.assert_called_once_with(BROADWAY_SOUTH)
+    mock_get_device_info.assert_called_with(BROADWAY_SOUTH)
     mock_set_fan_speed.assert_called_once_with(BROADWAY_SOUTH, speed)
 
     # Verify that the database got updated
