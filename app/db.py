@@ -104,7 +104,7 @@ def get_or_create_device_id(conn, device_name, use_cache=True):
         result = cursor.fetchone()
 
         if result:
-            logger.debug("get_or_create_device_id(%s) result=%s",device_name,result)
+            logger.debug("get_or_create_device_id(%s) result=%s",device_name,dict(result))
             DEVICE_MAP[device_name] = result['device_id']
             return DEVICE_MAP[device_name]
         else:

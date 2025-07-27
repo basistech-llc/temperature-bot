@@ -54,7 +54,7 @@ def set_body_speed(conn, body: SpeedControl, ipaddr, agent):
     if current_speed==body.speed:
         logger.info("set_body_speed body=[%s] ipaddr=%s agent=%s. Speed will not change",body,ipaddr,agent)
     else:
-        logger.info("set_body_speed body=[%s] ipaddr=%s agent=%s. current_speed=",body,ipaddr,agent,current_speed)
+        logger.info("set_body_speed body=[%s] ipaddr=%s agent=%s. Speed changed. current_speed=%s",body,ipaddr,agent,current_speed)
         db.insert_changelog(conn, ipaddr=ipaddr, device_id=body.device_id, ae200_device_id=unit_id,
                             current_values=str(current_speed), new_value=str(body.speed), agent=agent)
         ae200.set_fan_speed(unit_id, body.speed)

@@ -164,7 +164,7 @@ def get_version_json():
 @with_db_connection
 def set_speed(conn, body: SpeedControl):
     """Sets the speed, records the speed in the changelog, and then updates the database, so status is always up-to-date"""
-    logger.error("set_speed: body=%s",body)
+    logger.debug("/set_speed: body=[%s]",body)
     ret = rules_engine.set_body_speed(conn, body, request.remote_addr, 'web')
     logging.debug("ret=%s",ret)
     return jsonify({ "status": "ok", **ret })

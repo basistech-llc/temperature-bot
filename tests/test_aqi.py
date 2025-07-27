@@ -14,9 +14,9 @@ skip_on_github = pytest.mark.skipif(os.getenv("GITHUB_ACTIONS") == "true", reaso
 
 @skip_on_github
 @patch("app.airquality.get_aqi")
-def test_get_aqi(mock_get_airquality):
+def test_get_aqi(mock_get_aqi):
     # Mock the return value
-    mock_get_airquality.return_value = 45
+    mock_get_aqi.return_value = 45
 
     result = airquality.aqi_decode(airquality.get_aqi())
     assert isinstance(result, dict)

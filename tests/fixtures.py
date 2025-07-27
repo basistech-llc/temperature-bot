@@ -62,7 +62,7 @@ def create_temporal_test_data(conn, device_name="Test Device"):
         "2000_hours": 2000 * 60 * 60
     }
 
-    # Add records at each interval
+    # Add records at each interval. Initial speed is always LOW.
     for interval_name, seconds in intervals.items(): # pylint: disable=unused-variable
         record_time = current_time - seconds
         cursor.execute("""

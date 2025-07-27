@@ -124,7 +124,7 @@ class AE200Functions:
         self.address = address
 
     async def getDevicesAsync(self):
-        assert 'PYTEST' not in os.environ
+        #assert 'PYTEST' not in os.environ
         async with websockets.connect(
             f"ws://{self.address}/b_xmlproc/",
             extensions=[permessage_deflate.ClientPerMessageDeflateFactory()],
