@@ -5,7 +5,7 @@ import time
 import sqlite3
 import os
 import pytest
-from fixtures import create_temporal_test_data,client # noqa: F401 # pylint: disable=unused-import
+from fixtures import insert_temporal_test_data,client # noqa: F401 # pylint: disable=unused-import
 
 
 def test_logs_endpoint_with_start(client): # noqa: F811
@@ -94,7 +94,7 @@ def device_in_db():
     # Create test device with temporal data
     with sqlite3.connect(os.environ['TEST_DB_NAME']) as test_conn:
         test_conn.row_factory = sqlite3.Row
-        device_id, expected_counts = create_temporal_test_data(test_conn, "Fixture Device") # pylint: disable=unused-variable
+        device_id, expected_counts = insert_temporal_test_data(test_conn, "Fixture Device") # pylint: disable=unused-variable
         test_conn.commit()
     yield device_id
 

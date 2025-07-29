@@ -39,10 +39,33 @@
 
 <div class="pure-g" >
   <div class="pure-u-1">
+    {% if rules_disabled_until == 0 %}
+    <h2> Rules enabled </h2>
+    {% else %}
+    <h2> Rules disabled until {{ rules_disabled_until_asc }}</h2>
+    {% endif %}
+    <h2>Disable rules for</h2>
+    <div class="temporal-buttons suspend-rules-buttons">
+      <button x-seconds="3600">1 hour</button>
+      <button x-seconds="14400">4 hours</button>
+      <button x-seconds="86400">1 day</button>
+    </div>
+    <h2>Enable rules:</h2>
+    <div class="temporal-buttons suspend-rules-buttons">
+      <button x-seconds="0">enable rules</button>
+    </div>
+  </div>
+</div>
+
+<div class="pure-g" >
+  <div class="pure-u-1">
     <h2>Running these rules in the future will produce</h2>
        {{rules_results | safe}}
   </div>
 </div>
 
-
   {% endblock %}
+
+{% block head %}
+<script src="/static/rules.js"></script>
+{% endblock %}

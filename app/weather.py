@@ -5,7 +5,7 @@ Weather functions from the US National Weather Service
 import datetime
 import logging
 import json
-import requests
+import requests  # type: ignore
 
 from app.util import get_config
 from app.paths import TIMEOUT_SECONDS
@@ -63,7 +63,7 @@ class WeatherService:
         props = observation['properties']
 
         return {
-            'temperature': props.get('temperature', {}).get('value'),
+            'temperature': (props.get('temperature') or {}).get('value'),
             'conditions': props.get('textDescription', 'Unknown'),
             'icon': props.get('icon', ''),
             'station_name': nearest_station['properties']['name']

@@ -1,15 +1,25 @@
 """
 Run the rules engine
 """
+import json
 from os.path import join
 import time
 import logging
+
+from flask import request
+
+
 from .paths import ROOT_DIR
 from . import db
 from . import ae200
 from .db import SpeedControl
 
 logger = logging.getLogger(__name__)
+
+RULES_DEVICE_NAME = 'rules_engine'
+
+def rules_id(conn):
+    return  db.get_or_create_device_id(conn, RULES_DEVICE_NAME)
 
 def get_devices_dict(conn):
     """Add all of the devices in the devices table to the global environment"""
@@ -34,6 +44,37 @@ def get_time_dict(when=None):
             'SUNDAY':tm.tm_wday==6,
             'AM':tm.tm_hour<12,
             'PM':tm.tm_hour>=12 }
+
+def rules_disabled_until(conn):
+    """Rules are enabled by default. They are disabled if the last changelog entry for the rules device specifies a disable time in the new_value text"""
+    c = conn.cursor()
+    c.execute("SELECT * from changelog where device_id=? order by changelog_id DESC LIMIT 1",(rules_id(conn),))
+    row = c.fetchone()
+    if row is None:
+        logging.debug("rules_disabled_until row is None")
+        return 0
+    until_time = json.loads(row['new_value']).get('seconds',0) + row['logtime']
+    logging.debug("rules_disabled_until row=%s until_time=%s device_id=%s",dict(row),until_time,rules_id(conn))
+    if until_time < time.time():
+        return 0
+    return until_time
+
+
+def disable_rules(conn,seconds:int):
+    """Enter a database engtry to disable the rules until a specific time."""
+    if seconds==0:
+        msg = json.dumps({'comment':'enable rules', 'seconds':seconds})
+    else:
+        asc_when = time.asctime(time.localtime(time.time()+seconds))
+        msg = json.dumps({'comment':f'disable rules until {asc_when}',
+                          'seconds':seconds})
+    logging.debug("disable_rules(seconds=%s,msg=%s,device_id=%s)",seconds,msg,rules_id(conn))
+    c = conn.cursor()
+    c.execute("INSERT INTO changelog (logtime, ipaddr, device_id, new_value) VALUES (?,?,?,?)",
+              (time.time(), request.remote_addr, rules_id(conn), msg))
+    conn.commit()
+    logging.debug("rules_disabled_until=%s",rules_disabled_until(conn))
+
 
 def get_rules():
     with open( join(ROOT_DIR,'bin','rules.py'), 'r') as f:
@@ -78,7 +119,9 @@ def rules_results(conn, when=None):
     return "\n".join(results)
 
 def run_rules(conn, when=None):
-    """Run the rules now and returns the results"""
+    """Run the rules now and returns the results.
+    Note: runs rules even if they are disabled. That has to be decided elsewhere.
+    """
     logger.debug("when=%s",when)
 
     def set_fan(device_id, speed):

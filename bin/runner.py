@@ -9,14 +9,14 @@ import csv
 import logging
 import time
 from os.path import dirname,abspath
-import tabulate
+import tabulate  # type: ignore
 
 
 # runner is first to run so it needs to add . to the path
 sys.path.append(dirname(dirname(abspath(__file__))))
 
 from app.paths import ETC_DIR
-from app.rules_engine import rules_results,run_rules
+from app.rules_engine import rules_results,run_rules,rules_disabled_until
 import app.airquality as airquality
 import app.ae200 as ae200
 import app.db as db
@@ -24,6 +24,8 @@ import app.hubitat as hubitat
 
 import lib.ctools.clogging as clogging
 import lib.ctools.lock as clock
+
+logger = logging.getLogger(__name__)
 
 def update_from_ae200(conn):
     d = ae200.AE200Functions()
@@ -238,7 +240,10 @@ def main():
 
         update_from_ae200(conn)
         update_from_hubitat(conn)
-        run_rules(conn)
+        if rules_disabled_until(conn) < time.time():
+            run_rules(conn)
+        else:
+            logger.info("rules disabled")
 
 
 if __name__=="__main__":

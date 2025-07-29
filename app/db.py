@@ -12,20 +12,20 @@ import json
 import math
 import os
 
-from pydantic import BaseModel, conint
+from pydantic import BaseModel
 
 from app.paths import DB_PATH
 
 logger = logging.getLogger(__name__)
 logger.debug("DB_PATH=%s",DB_PATH)
 
-DEVICE_MAP = {}
+DEVICE_MAP: dict[str, int] = {}
 MAX_DURATION=3600                 # don't extend more than an hour
 
 class SpeedControl(BaseModel):
     """Pydantic model for speed control requests."""
     device_id: int
-    speed: conint(ge=0, le=4)
+    speed: int
 
 def _connect_db(db_name):
     """Establishes a connection to the SQLite database."""
@@ -50,7 +50,7 @@ def get_db_connection():
         if 'TEST_DB_NAME' in os.environ:
             db_path = os.environ['TEST_DB_NAME']
         else:
-            db_path = DB_PATH
+            db_path = str(DB_PATH)
         logger.debug("db_path=%s",db_path)
         conn = _connect_db(db_path)
         return conn
@@ -189,7 +189,7 @@ def get_recent_devlogs(conn, device_name: str, seconds: int):
 
 # pylint: disable=too-many-arguments, disable=too-many-positional-arguments
 def insert_devlog_entry(conn, *,
-                        device_id=None, device_name: str=None, temp=None, statusdict=None,
+                        device_id=None, device_name: str | None = None, temp=None, statusdict=None,
                         logtime=None, force=False, commit=True):
     """
     :param conn: database connection

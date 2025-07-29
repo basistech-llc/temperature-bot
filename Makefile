@@ -18,6 +18,7 @@ PYLINT_OPTS :=--output-format=parseable --rcfile .pylintrc --fail-under=$(PYLINT
 check: $(REQ)
 	$(PYTHON) -m ruff check .
 	$(PYTHON) -m pylint $(PYLINT_OPTS) app tests *.py
+	echo $(PYTHON) -m mypy app tests
 
 check-types: $(REQ)
 	$(PYTHON) -m mypy app

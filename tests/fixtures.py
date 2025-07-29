@@ -37,7 +37,7 @@ def setup_test_database(conn):
         logging.exception("Test database error during schema setup: %s", e)
         conn.rollback()
 
-def create_temporal_test_data(conn, device_name="Test Device"):
+def insert_temporal_test_data(conn: sqlite3.Connection, device_name: str = "Test Device"):
     """
     Creates test data with records at different time intervals:
     - 1 hour ago

@@ -1,7 +1,5 @@
 """
 End-to-end browser test for fan speed controls.
-Tests the complete user experience from clicking buttons to database updates.
-
 NOTE: AQI (air quality index) is not being tested in this file and can be ignored for now.
 """
 import os
@@ -16,7 +14,7 @@ from pathlib import Path
 import pytest
 from playwright.sync_api import sync_playwright, Page, expect
 
-from fixtures import client, skip_on_github, create_temporal_test_data  # noqa: F401  # pylint: disable=unused-import
+from fixtures import client, skip_on_github, insert_temporal_test_data  # noqa: F401  # pylint: disable=unused-import
 from app import ae200
 from app import db
 from app.paths import TEST_DATA_DIR
@@ -175,7 +173,6 @@ TEST_AQI = False
 # pylint: disable=too-many-arguments, disable=too-many-positional-arguments, disable=too-many-statements
 @skip_on_github
 @patch("app.ae200.get_device_info")
-@patch("app.ae200.set_fan_speed")
 @patch("app.ae200.get_devices")
 @patch("app.weather.get_weather_data")
 @patch("app.airquality.get_aqi")
@@ -183,7 +180,6 @@ def test_browser_fan_speed_controls(
     mock_get_airquality,
     mock_get_weather_data,
     mock_get_devices,
-    mock_set_fan_speed,
     mock_get_device_info,
     client     # noqa: F811 # pylint: disable=unused-argument
 ):
@@ -250,7 +246,6 @@ def test_browser_fan_speed_controls(
             return dev10
 
     # Start the Flask app in a separate thread
-
     def run_app():
         app.run(host='127.0.0.1', port=5001, debug=False, use_reloader=False)
 
@@ -522,7 +517,7 @@ def test_browser_temperature_display(
     with sqlite3.connect(test_db_name) as test_conn:
         test_conn.row_factory = sqlite3.Row
         # Create test device with temporal data
-        device_id, expected_counts = create_temporal_test_data(test_conn, "Temporal Test Device")
+        device_id, expected_counts = insert_temporal_test_data(test_conn, "Temporal Test Device")
         test_conn.commit()
 
     # Mock weather and AQI data

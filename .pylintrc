@@ -66,6 +66,7 @@ confidence=
 # R0914 - Too many local variables
 # W0105 - String statement has no effect
 # W1514 - unspecified-encoding
+# W1203 - logging-fstring-interpolation (ENABLED - use % formatting for logging)
 disable=C0103,C0301,R1720,R1705,C0116,E0012,W0621,R0914,W0105,W1514
 
 

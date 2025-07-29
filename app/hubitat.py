@@ -3,7 +3,7 @@ Hubitat implementation
 """
 
 import json
-import requests
+import requests  # type: ignore
 from app.util import get_config,get_secret
 from app.paths import TIMEOUT_SECONDS
 
