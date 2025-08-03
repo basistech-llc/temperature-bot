@@ -372,7 +372,6 @@ def get_version():
 def show_rules(conn):
     # Check if we should run the rules or skip them
     run_rules    = request.args.get("run_rules", "1", type=int)  # type: ignore
-    rule_results = ""
     hour_now = datetime.datetime.now().replace( minute=0, second=0, microsecond=0 )
 
     # If requests, see how the rules will render for the next seven days
@@ -386,7 +385,7 @@ def show_rules(conn):
             for aqi in (0, 50, 101, 151):
                 new_results = rules_engine.rules_results(conn, when.timestamp(), aqi=aqi)
                 rule_table.append(f"<td>{new_results}</td>")
-            rule_table.append(f"</tr>")
+            rule_table.append("</tr>")
 
     rules_disabled_until = rules_engine.rules_disabled_until(conn)
     rules_disabled_until_asc = time.asctime(time.localtime(rules_disabled_until))
