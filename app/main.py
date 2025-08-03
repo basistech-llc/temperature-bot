@@ -379,11 +379,11 @@ def show_rules(conn):
     rule_table = []
     if run_rules:
         rule_table.append("<table class='rules-table'>")
-        rule_table.append("<tr><th>Time</th><th>AQI 0</th><th>AQI 50</th><th>AQI 100</th><th>AQI 150</th></tr>")
+        rule_table.append("<tr><th>Time</th><th>AQI 0</th><th>AQI 50</th><th>AQI 101</th><th>AQI 151</th></tr>")
         for hour in range(24 * 7):
             when = hour_now + datetime.timedelta(hours=hour)
             rule_table.append(f"<tr><th>{str(when)}</th>")
-            for aqi in (0, 50, 100, 150):
+            for aqi in (0, 50, 101, 151):
                 new_results = rules_engine.rules_results(conn, when.timestamp(), aqi=aqi)
                 rule_table.append(f"<td>{new_results}</td>")
             rule_table.append(f"</tr>")
