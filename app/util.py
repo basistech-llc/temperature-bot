@@ -6,9 +6,10 @@ import sys
 import os
 import functools
 import yaml  # type: ignore
-import logger
+import logging
 from app.paths import CONFIG_YAML_PATH
 
+logger = logging.getLogger(__name__)
 
 @functools.lru_cache(maxsize=1)
 def get_config():
