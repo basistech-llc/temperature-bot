@@ -106,8 +106,8 @@ def set_body_speed(conn, body: SpeedControl, ipaddr, agent):
     return {'unit':unit_id, 'temp':temp, 'device_id':body.device_id, 'speed':body.speed}
 
 
-def rules_results(conn, when=None):
-    """Reports what would happen if the rules were run at `when` with an AQI of 50"""
+def rules_results(conn, when=None, aqi=50):
+    """Reports what would happen if the rules were run at `when` with a specific AQI"""
     logger.debug("when=%s",when)
 
     results = []
@@ -115,7 +115,7 @@ def rules_results(conn, when=None):
         results.append(f"Fan {device_id} set to {value}\n")
 
     global_vars = {**get_devices_dict(conn), **get_time_dict(when)}
-    global_vars['AQI'] = airquality.get_aqi()
+    global_vars['AQI'] = aqi
     local_vars = {'set_fan': set_fan_verbose}
     exec(get_rules(), global_vars, local_vars)   # pylint: disable=exec-used
     return "\n".join(results)
@@ -130,6 +130,6 @@ def run_rules(conn, when=None):
         set_body_speed(conn, SpeedControl(device_id=device_id, speed=speed), 'n/a', 'rule')
 
     v1 = {**get_devices_dict(conn), **get_time_dict(when)}
-    v1['AQI'] = airquality.get_aqi()
+    v1['AQI'] = db.get_last_aqi(conn)
     v2 = {'set_fan': set_fan}
     exec(get_rules(), v1, v2)   # pylint: disable=exec-used

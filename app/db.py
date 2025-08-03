@@ -184,9 +184,7 @@ def get_recent_devlogs(conn, device_name: str, seconds: int):
         logger.error("Error: %s", e)
         raise
 
-
 # Insertion
-
 # pylint: disable=too-many-arguments, disable=too-many-positional-arguments
 def insert_devlog_entry(conn, *,
                         device_id=None, device_name: str | None = None, temp=None, statusdict=None,
@@ -278,3 +276,10 @@ def get_ae200_unit(conn, device_id:int):
     ret = c.fetchone()['ae200_device_id']
     logger.debug("device_id=%s ae200_unit=%d",device_id,ret)
     return ret
+
+def get_last_aqi(conn):
+    c = conn.cursor()
+    c.execute("select aqi from aqi order by logtime DESC limit 1")
+    aqi = c.fetchone()[0]
+    logger.debug("last_aqi=%s",aqi)
+    return aqi
