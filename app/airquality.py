@@ -86,3 +86,7 @@ def get_aqi_google():
 
 def get_aqi():
     return get_aqi_google()
+
+
+if __name__=="__main__":
+    print("aqi:",get_aqi())
