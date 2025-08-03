@@ -78,6 +78,34 @@ button {
     padding-right: 5px;
 }
 
+/* rules */
+table.rules-table {
+    border: 1px solid #ccc;
+    border-collapse: collapse;
+}
+
+table.rules-table tr:nth-child(even) {
+    background: #CCC;
+}
+
+table.rules-table td  {
+    border-left: 4px solid blue;
+    border-right: 4px solid blue;
+}
+
+table.rules-table th  {
+    border-left: 4px solid blue;
+    border-right: 4px solid blue;
+    border-top: 1px solid blue;
+    border-bottom: 1px solid blue;
+}
+
+
+.suspend-rules-buttons {
+    width: 200px;
+}
+
+
 /* Debug styles for the fan-status-container */
 #fan-status-container {
     border: 1px solid #ccc;

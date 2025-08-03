@@ -373,19 +373,20 @@ def show_rules(conn):
     # Check if we should run the rules or skip them
     run_rules    = request.args.get("run_rules", "1", type=int)  # type: ignore
     rule_results = ""
+    hour_now = datetime.datetime.now().replace( minute=0, second=0, microsecond=0 )
 
     # If requests, see how the rules will render for the next seven days
+    rule_table = []
     if run_rules:
-        prev_results = ""
-        when = datetime.datetime.now().replace(
-            minute=0, second=0, microsecond=0
-        ) + datetime.timedelta(hours=1)
-        for _ in range(24 * 7):
-            new_results = rules_engine.rules_results(conn, when.timestamp())
-            if new_results and new_results != prev_results:
-                rule_results += f"<h3>{str(when)}</h3><pre>{new_results}</pre>\n"
-            prev_results = new_results
-            when += datetime.timedelta(hours=1)
+        rule_table.append("<table class='rules-table'>")
+        rule_table.append("<tr><th>Time</th><th>AQI 0</th><th>AQI 50</th><th>AQI 100</th><th>AQI 150</th></tr>")
+        for hour in range(24 * 7):
+            when = hour_now + datetime.timedelta(hours=hour)
+            rule_table.append(f"<tr><th>{str(when)}</th>")
+            for aqi in (0, 50, 100, 150):
+                new_results = rules_engine.rules_results(conn, when.timestamp(), aqi=aqi)
+                rule_table.append(f"<td>{new_results}</td>")
+            rule_table.append(f"</tr>")
 
     rules_disabled_until = rules_engine.rules_disabled_until(conn)
     rules_disabled_until_asc = time.asctime(time.localtime(rules_disabled_until))
@@ -393,7 +394,7 @@ def show_rules(conn):
         "rules.html",
         devices=rules_engine.get_devices_dict(conn),
         rules=rules_engine.get_rules(),
-        rules_results=rule_results,
+        rules_results="\n".join(rule_table),
         rules_disabled_until=rules_disabled_until,
         rules_disabled_until_asc=rules_disabled_until_asc,
         times=rules_engine.get_time_dict(),
