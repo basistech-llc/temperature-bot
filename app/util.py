@@ -6,6 +6,7 @@ import sys
 import os
 import functools
 import yaml  # type: ignore
+import logger
 from app.paths import CONFIG_YAML_PATH
 
 
@@ -27,5 +28,5 @@ def get_secret(category,name):
     try:
         return get_secrets()[category][name]
     except KeyError:
-        logger.debug("secrets=%s",get_secrets())
-        raise
+        logger.error("no secret [%s][%s]",category,name)
+        return None

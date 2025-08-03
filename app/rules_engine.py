@@ -12,7 +12,6 @@ from flask import request
 from .paths import ROOT_DIR
 from . import db
 from . import ae200
-from . import airquality
 from .db import SpeedControl
 
 logger = logging.getLogger(__name__)
