@@ -5,8 +5,8 @@ utility functions
 import sys
 import os
 import functools
-import yaml  # type: ignore
 import logging
+import yaml  # type: ignore
 from app.paths import CONFIG_YAML_PATH
 
 logger = logging.getLogger(__name__)

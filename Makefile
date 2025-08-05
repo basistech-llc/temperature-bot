@@ -23,8 +23,9 @@ check: $(REQ)
 check-types: $(REQ)
 	$(PYTHON) -m mypy app
 
-dump-schema:
-	echo ".schema"| sqlite3 $(DBFILE) | grep -v 'CREATE TABLE sqlite_sequence' > etc/schema.sql
+.PHONY: etc/schema.sql
+etc/schema.sql:
+	echo ".schema"| sqlite3 $(DEV_DB) | grep -v 'Run Time: real' | grep -v 'CREATE TABLE sqlite_sequence' > etc/schema.sql
 
 make-dev-db:
 	/bin/rm -f $(DEV_DB)

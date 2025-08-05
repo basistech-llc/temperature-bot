@@ -249,7 +249,8 @@ def test_browser_fan_speed_controls(
     def run_app():
         app.run(host='127.0.0.1', port=5001, debug=False, use_reloader=False)
 
-    server_thread = threading.Thread(target=run_app, daemon=True)
+
+    server_thread = threading.Thread(target=run_app, daemon=True) # pylint: disable=duplicate-code
     server_thread.start()
 
     # Give the server time to start
@@ -484,7 +485,7 @@ def test_browser_page_loads_correctly(
             expect(page.locator('#weather')).to_contain_text("Sunny")
 
             # Verify log table exists
-            expect(page.locator('#log-table')).to_be_visible()
+            expect(page.locator('#log-table')).to_be_visible() # pylint: disable=duplicate-code
 
             browser.close()
 

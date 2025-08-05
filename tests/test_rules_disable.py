@@ -10,13 +10,13 @@ import threading
 from typing import Any
 
 import pytest
+import playwright.sync_api
 from playwright.sync_api import sync_playwright, Page
 
 from fixtures import client, skip_on_github, insert_temporal_test_data  # noqa: F401  # pylint: disable=unused-import
 from app import rules_engine
 
 from app.main import app
-from playwright.sync_api import TimeoutError
 
 
 logger = logging.getLogger(__name__)
@@ -63,12 +63,12 @@ class RulesTestHelper:
         try:
             # Wait for page to refresh and check for disabled rules text
             self.page.wait_for_selector('h2:has-text("Rules disabled until")', timeout=10000)
-        except TimeoutError:
+        except playwright.sync_api.TimeoutError as e:
             # Dump full HTML for debugging
             html = self.page.content()
             with open("debug_dump.html", "w", encoding="utf-8") as f:
                 f.write(html)
-            raise AssertionError("Expected text 'Rules disabled until' not found. Page dumped to debug_dump.html")
+            raise AssertionError("Expected text 'Rules disabled until' not found. Page dumped to debug_dump.html") from e
 
         # Check the database to verify rules are actually disabled
         with sqlite3.connect(self.test_db_name) as conn:
@@ -113,7 +113,7 @@ def test_rules_disable_functionality(client: Any) -> None:  # noqa: F811 # pylin
         app.run(host="127.0.0.1", port=5100, debug=False, use_reloader=False)
 
     # Start the app in a separate thread
-    server_thread = threading.Thread(target=run_app, daemon=True)
+    server_thread = threading.Thread(target=run_app, daemon=True) # server for test_rules_disable.py
     server_thread.start()
 
     # Give the app time to start

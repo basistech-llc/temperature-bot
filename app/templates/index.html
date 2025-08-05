@@ -16,73 +16,85 @@
   <div class="pure-u-1 pure-u-md-1-2"><!-- take 1/2 the row on a medium screen -->
     <div id="main-grid" class="maxwidth">
       <form>
+        <!-- one form, two tables. Table #1 = devices that have fans. Table #2 = devices that do not have fans -->
+        {% for table in [1, 2] %}
         <table class="pure-table pure-table-bordered">
+          {% if table == 1 %}
+            <h2> Fan Controls </h2>
+            {% else %}
+            <h2> Temperature Panel </h2>
+          {% endif %}
           <thead>
             <tr>
               <th class="column-unit" rowspan="2">Unit</th>
               <th class="column-temp" id="temp-header" rowspan="2">Temp</th>
-              <th class="column-speed" colspan="6">Speed</th>
+              {% if table == 1  %}
+              <th class="column-speed" colspan="6"> Speed  </th>
+              {% endif %}
             </tr>
-            <tr>
-              <th class="column-speed column-speed-auto">-1</th>
-              <th class="column-speed column-speed-off">0</th>
-              <th class="column-speed column-speed-low">1</th>
-              <th class="column-speed column-speed-mid2">2</th>
-              <th class="column-speed column-speed-mid1">3</th>
-              <th class="column-speed column-speed-high">4</th>
-            </tr>
+            {% if table == 1 %}
+              <tr>
+                <th class="column-speed column-speed-auto">-1</th>
+                <th class="column-speed column-speed-off">0</th>
+                <th class="column-speed column-speed-low">1</th>
+                <th class="column-speed column-speed-mid2">2</th>
+                <th class="column-speed column-speed-mid1">3</th>
+                <th class="column-speed column-speed-high">4</th>
+              </tr>
+            {% endif %}
           </thead>
           <tbody>
             {% for device in devices %}
-                          <tr class="device-row" x-data-device-id="{{ device.device_id }}">
-              <td class="cell-unit">
-                {{ device.device_name }}
-                <span id="device-{{ device.device_id }}-status"></span>
-                <div class="temporal-links">
-                  <a href="/device_log/{{ device.device_id }}?start={{ (now - 86400) | int }}&end={{ now | int }}" target="_blank">day</a>
-                  <a href="/device_log/{{ device.device_id }}?start={{ (now - 604800) | int }}&end={{ now | int }}" target="_blank">week</a>
-                  <a href="/device_log/{{ device.device_id }}" target="_blank">all</a>
-                  <a href="/chart?device_ids={{ device.device_id }}" target="_blank">graph</a>
-                </div>
-              </td>
-              {% if device.temp10x %}
-              <td class="cell-temp" id="temp-{{ device.device_id }}">--</td>
-              {% else %}
-              <td class="cell-temp cell-temp-na">n/a</td>
+              {% if (device.has_speed_control and table==1) or (not device.has_speed_control and table==2) %}
+                <tr class="device-row" x-data-device-id="{{ device.device_id }}">
+                  <td class="cell-unit">
+                    {{ device.device_name }}
+                    <span id="device-{{ device.device_id }}-status"></span>
+                    <div class="temporal-links">
+                      <a href="/device_log/{{ device.device_id }}?start={{ (now - 86400) | int }}&end={{ now | int }}" target="_blank">day</a>
+                      <a href="/device_log/{{ device.device_id }}?start={{ (now - 604800) | int }}&end={{ now | int }}" target="_blank">week</a>
+                      <a href="/device_log/{{ device.device_id }}" target="_blank">all</a>
+                      <a href="/chart?device_ids={{ device.device_id }}" target="_blank">graph</a>
+                    </div>
+                  </td>
+                  {% if device.temp10x %}
+                    <td class="cell-temp" id="temp-{{ device.device_id }}">--</td>
+                  {% else %}
+                    <td class="cell-temp cell-temp-na">n/a</td>
+                  {% endif %}
+                  {% if device.has_speed_control %}
+                    {% for speed in [-1, 0, 1, 2, 3, 4] %}
+                      <td class="cell-speed cell-speed-{{ speed }}">
+                        <input type="radio" name="fan_speed-{{ device.device_id }}"
+                               value="{{ speed }}" id="radio-{{ device.device_id }}-{{ speed }}"
+                               x-data-device-id="{{ device.device_id }}"
+                               x-data-speed="{{ speed }}"
+                               title="Set {{ device.device_name }} to speed {{ speed }}">
+                      </td>
+                    {% endfor %}
+                  {% endif %}<!-- devices with speed controls -->
+                </tr><!-- table row -->
               {% endif %}
-              {% if device.has_speed_control %}
-                {% for speed in [-1, 0, 1, 2, 3, 4] %}
-                <td class="cell-speed cell-speed-{{ speed }}">
-                  <input type="radio" name="fan_speed-{{ device.device_id }}"
-                  value="{{ speed }}" id="radio-{{ device.device_id }}-{{ speed }}"
-                  x-data-device-id="{{ device.device_id }}"
-                  x-data-speed="{{ speed }}"
-                  title="Set {{ device.device_name }} to speed {{ speed }}">
-                </td>
-                {% endfor %}
-              {% else %}
-              <td class="cell-speed cell-speed-disabled" colspan="6"></td>
-              {% endif %}
-            </tr>
-            {% endfor %}
+            {% endfor %}<!-- device in devices -->
           </tbody>
         </table>
+        {% endfor %}<!-- for table in 1,2 -->
       </form>
+    </div> <!-- main-grid -->
+  </div><!-- first block -->
+  <div class="pure-u-1 pure-u-md-1-2" id="aqi-weather">
+    <div id='aqi'>
+      <div id="aqi-status">AQI <span id='aqi-value'></span> <span id='aqi-name'></span></div>
     </div>
+    <div id='weather'>
+      <div id="status"></div>
+      <div id='last-update'></div>
+      <div id='next-update'></div>
     </div>
-    <div class="pure-u-1 pure-u-md-1-2" id="aqi-weather">
-      <div id='aqi'>
-	<div id="aqi-status">AQI <span id='aqi-value'></span> <span id='aqi-name'></span></div>
-      </div>
-      <div id='weather'>
-	<div id="status"></div>
-	<div id='last-update'></div>
-	<div id='next-update'></div>
-      </div>
-    </div>
-    <div class='pure-u-1'>
-      <div id='last-refresh'></div>
-    </div>
+  </div>
+  <div class='pure-u-1'>
+    <div id='last-refresh'></div>
+  </div>
 </div>
 
 <div class="pure-g">
