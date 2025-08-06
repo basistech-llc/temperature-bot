@@ -27,6 +27,11 @@ class SpeedControl(BaseModel):
     device_id: int
     speed: int
 
+class DriveControl(BaseModel):
+    """Pydantic model for speed control requests."""
+    device_id: int
+    drive: int
+
 def _connect_db(db_name):
     """Establishes a connection to the SQLite database."""
     conn = sqlite3.connect(db_name)
@@ -123,7 +128,7 @@ def fetch_all_devlog_with_devices(conn):
     cursor = conn.cursor()
     cursor.execute("""
         SELECT
-            t.id, t.logtime, s.name AS device_name, t.temp10x
+            t.id, t.logtime, s.name AS device_name, t.temp10x, s.notes
         FROM
             devlog t
         JOIN
@@ -142,10 +147,11 @@ def fetch_all_devices(conn):
 def fetch_last_status(conn):
     """Fetches the last status for each device"""
     cursor = conn.cursor()
-    cursor.execute("""SELECT a.*,b.device_name
-                      FROM (SELECT * FROM devlog GROUP BY device_id HAVING logtime=max(logtime)) AS a
-                      LEFT JOIN devices b where a.device_id = b.device_id
-                      ORDER by b.device_name""")
+    cursor.execute("""
+        SELECT a.*,b.device_name,b.notes
+        FROM (SELECT * FROM devlog GROUP BY device_id HAVING logtime=max(logtime)) AS a
+        LEFT JOIN devices b where a.device_id = b.device_id
+        ORDER by b.device_name""")
     return cursor.fetchall()
 
 def get_recent_devlogs(conn, device_name: str, seconds: int):

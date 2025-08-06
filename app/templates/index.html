@@ -1,6 +1,7 @@
 {% extends 'base.html' %}
 {% block title %} Unit Speed Control {% endblock %}
 {% block head %}
+<link rel="stylesheet" href="/static/slider.css">
 <link href="https://unpkg.com/tabulator-tables@5.5.2/dist/css/tabulator.min.css" rel="stylesheet">
 <script src="https://unpkg.com/tabulator-tables@5.5.2/dist/js/tabulator.min.js"></script>
 {% endblock %}
@@ -20,22 +21,23 @@
         {% for table in [1, 2] %}
         <table class="pure-table pure-table-bordered">
           {% if table == 1 %}
-            <h2> Fan Controls </h2>
+            <h2> Fan drive speed controls </h2>
             {% else %}
             <h2> Temperature Panel </h2>
           {% endif %}
           <thead>
             <tr>
               <th class="column-unit" rowspan="2">Unit</th>
-              <th class="column-temp" id="temp-header" rowspan="2">Temp</th>
+              <th class="column-temp" rowspan="2">Temp</th>
               {% if table == 1  %}
-              <th class="column-speed" colspan="6"> Speed  </th>
+              <th class="column-drive"  rowspan="2">Drive</th>
+              <th class="column-speed" colspan="5">Speed  </th>
               {% endif %}
+              <th class="column-notes" rowspan="2">Notes</th>
             </tr>
             {% if table == 1 %}
               <tr>
-                <th class="column-speed column-speed-auto">-1</th>
-                <th class="column-speed column-speed-off">0</th>
+                <th class="column-speed column-speed-auto">auto</th>
                 <th class="column-speed column-speed-low">1</th>
                 <th class="column-speed column-speed-mid2">2</th>
                 <th class="column-speed column-speed-mid1">3</th>
@@ -49,7 +51,7 @@
                 <tr class="device-row" x-data-device-id="{{ device.device_id }}">
                   <td class="cell-unit">
                     {{ device.device_name }}
-                    <span id="device-{{ device.device_id }}-status"></span>
+                    <span id="device-{{ device.device_id }}-notes"></span>
                     <div class="temporal-links">
                       <a href="/device_log/{{ device.device_id }}?start={{ (now - 86400) | int }}&end={{ now | int }}" target="_blank">day</a>
                       <a href="/device_log/{{ device.device_id }}?start={{ (now - 604800) | int }}&end={{ now | int }}" target="_blank">week</a>
@@ -63,16 +65,27 @@
                     <td class="cell-temp cell-temp-na">n/a</td>
                   {% endif %}
                   {% if device.has_speed_control %}
-                    {% for speed in [-1, 0, 1, 2, 3, 4] %}
+                    <td class="cell-drive">
+                      <label class="switch">
+                        <input type="checkbox"
+                               id="fan_drive-{{ device.device_id }}"
+                               x-data-device-id="{{ device.device_id }}"
+                               x-drive="yes">
+                        <span class="slider round"></span>
+                      </label>
+                    </td>
+                    {% for speed in [-1, 1, 2, 3, 4] %}
                       <td class="cell-speed cell-speed-{{ speed }}">
                         <input type="radio" name="fan_speed-{{ device.device_id }}"
-                               value="{{ speed }}" id="radio-{{ device.device_id }}-{{ speed }}"
+                               value="{{ speed }}"
+                               id="radio-{{ device.device_id }}-{{ speed }}"
                                x-data-device-id="{{ device.device_id }}"
                                x-data-speed="{{ speed }}"
                                title="Set {{ device.device_name }} to speed {{ speed }}">
                       </td>
                     {% endfor %}
                   {% endif %}<!-- devices with speed controls -->
+                  <td class="cell-notes" id="notes-{{ device.device_id }}"></td>
                 </tr><!-- table row -->
               {% endif %}
             {% endfor %}<!-- device in devices -->

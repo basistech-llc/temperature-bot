@@ -55,8 +55,13 @@ button {
     max-width:1000px;
 }
 
-#temp-header {
-    width: 80px;
+.column-temp {
+    min-width: 80px;
+}
+
+/* Make a minimum width of 150 if the text is not empty */
+td.cell-notes:not(:empty) {
+    min-width: 150px;
 }
 
 #last-refresh {

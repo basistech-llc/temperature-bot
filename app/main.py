@@ -110,6 +110,7 @@ def get_db_aqi(conn):
 
 
 def get_last_db_data(conn):
+    """Runs db.fetch_last_status(conn) and then converts `status_json` into the actual dictionary for each status_json object"""
     def fix_status_json(devdict):
         devdict = dict(devdict)
         try:
@@ -186,12 +187,24 @@ def set_speed(conn, body: SpeedControl):
     return jsonify({"status": "ok", **ret})
 
 
+@api_v1.route("/set_drive", methods=["POST"])
+@validate()
+@with_db_connection
+def set_drive(conn, body: SpeedControl):
+    """Sets the speed, records the speed in the changelog, and then updates the database, so status is always up-to-date"""
+    logger.debug("/set_drive: body=[%s]", body)
+    ret = rules_engine.set_body_drive(conn, body, request.remote_addr, "web")
+    logging.debug("ret=%s", ret)
+    return jsonify({"status": "ok", **ret})
+
+
 @api_v1.route("/status")
 @with_db_connection
 def get_status(conn):
     device_data = get_last_db_data(conn)
 
     # Annotate the device_data
+    ct = 0
     for data in device_data:
         if "status" in data:
             data.update(ae200.extract_status(data["status"]))
@@ -199,6 +212,7 @@ def get_status(conn):
             data["age"] = github_style_duration(
                 data["logtime"] + data.get("duration", 1)
             )
+        ct += 1
 
     return jsonify({"devices": device_data})
 

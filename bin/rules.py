@@ -24,5 +24,14 @@ if AQI>150:
     restrooms_erv_speed = 0
 
 
-set_fan(ERV_KITCHEN,kitchen_erv_speed)
-set_fan(ERV_RESTROOMS,restrooms_erv_speed)
+if kitchen_erv_speed==0:
+    set_drive(ERV_KITCHEN,0)
+else:
+    set_drive(ERV_KITCHEN,1)
+    set_speed(DRV_KITCHEN,kitchen_erv_speed)
+
+if restroom_erv_speed==0:
+    set_drive(ERV_RESTROOMS,0)
+else:
+    set_drive(ERV_RESTROOMS,1)
+    set_speed(ERV_RESTROOMS,restrooms_erv_speed)
