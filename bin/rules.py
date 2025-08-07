@@ -28,9 +28,9 @@ if kitchen_erv_speed==0:
     set_drive(ERV_KITCHEN,0)
 else:
     set_drive(ERV_KITCHEN,1)
-    set_fan_speed(DRV_KITCHEN,kitchen_erv_speed)
+    set_fan_speed(ERV_KITCHEN,kitchen_erv_speed)
 
-if restroom_erv_speed==0:
+if restrooms_erv_speed==0:
     set_drive(ERV_RESTROOMS,0)
 else:
     set_drive(ERV_RESTROOMS,1)

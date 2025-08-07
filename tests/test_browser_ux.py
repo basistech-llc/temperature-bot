@@ -118,7 +118,7 @@ class BrowserTestHelper:
 
             assert devlog_entry is not None, "No devlog entry found"
             status_data = json.loads(devlog_entry['status_json'])
-            extracted_status = ae200.extract_status(status_data)
+            extracted_status = ae200.extract_drive_and_fan_speed(status_data)
             assert extracted_status['fan_speed'] == expected_fan_speed, \
                 f"Expected fan_speed {expected_fan_speed}, got {extracted_status['fan_speed']}"
 

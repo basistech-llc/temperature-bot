@@ -21,7 +21,7 @@
         {% for table in [1, 2] %}
         <table class="pure-table pure-table-bordered">
           {% if table == 1 %}
-            <h2> Fan drive speed controls </h2>
+            <h2> Fan drive and speed controls </h2>
             {% else %}
             <h2> Temperature Panel </h2>
           {% endif %}
@@ -74,14 +74,14 @@
                         <span class="slider round"></span>
                       </label>
                     </td>
-                    {% for speed in [-1, 1, 2, 3, 4] %}
-                      <td class="cell-speed cell-speed-{{ speed }}">
+                    {% for fan_speed in [-1, 1, 2, 3, 4] %}
+                      <td class="cell-speed cell-speed-{{ fan_speed }}">
                         <input type="radio" name="fan_speed-{{ device.device_id }}"
-                               value="{{ speed }}"
-                               id="radio-{{ device.device_id }}-{{ speed }}"
+                               value="{{ fan_speed }}"
+                               id="radio-{{ device.device_id }}-{{ fan_speed }}"
                                x-data-device-id="{{ device.device_id }}"
-                               x-data-speed="{{ speed }}"
-                               title="Set {{ device.device_name }} to speed {{ speed }}">
+                               x-data-fan_speed="{{ fan_speed }}"
+                               title="Set {{ device.device_name }} to fan_speed {{ fan_speed }}">
                       </td>
                     {% endfor %}
                   {% endif %}<!-- devices with speed controls -->

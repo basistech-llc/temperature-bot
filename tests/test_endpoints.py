@@ -124,5 +124,5 @@ def test_set_fan_speed_endpoint(mock_get_device_speed, mock_get_devices, mock_se
         device_id = row['device_id']
         cursor.execute("SELECT * from devlog where device_id=? order by logtime desc", (device_id,))
         row = cursor.fetchone()
-        extracted_status = ae200.extract_status(json.loads(row['status_json']))
+        extracted_status = ae200.extract_drive_and_fan_speed(json.loads(row['status_json']))
         assert extracted_status['drive_speed_val'] == speed

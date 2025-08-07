@@ -25,7 +25,7 @@ MAX_DURATION=3600                 # don't extend more than an hour
 class SpeedControl(BaseModel):
     """Pydantic model for speed control requests."""
     device_id: int
-    speed: int
+    fan_speed: int
 
 class DriveControl(BaseModel):
     """Pydantic model for speed control requests."""
@@ -165,7 +165,7 @@ def fetch_last_status_fixed(conn):
         del devdict["status_json"]
         return devdict
 
-    return [fix_status_json(dd) for dd in db.fetch_last_status(conn)]
+    return [fix_status_json(dd) for dd in fetch_last_status(conn)]
 
 
 

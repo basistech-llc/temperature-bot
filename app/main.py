@@ -5,10 +5,8 @@ app.py - Flask version
 from os.path import abspath
 import os
 import logging
-import json
 import datetime
 import time
-import sys
 from typing import Any
 from functools import wraps
 
@@ -24,7 +22,7 @@ from . import weather
 from . import db
 from . import airquality
 from . import rules_engine
-from .db import SpeedControl
+from .db import SpeedControl,DriveControl
 
 __version__ = "0.0.1"
 
@@ -34,18 +32,6 @@ DEFAULT_LOG_LEVEL = "DEBUG"
 LOGGING_CONFIG = "%(asctime)s  %(filename)s:%(lineno)d %(levelname)s: %(message)s"
 LOG_LEVEL = os.getenv("LOG_LEVEL", DEFAULT_LOG_LEVEL).upper()
 LOG_LEVEL = "DEBUG"
-
-# logging.basicConfig(
-#    format=LOGGING_CONFIG,
-#    level=LOG_LEVEL,
-#    force=True,
-#    stream=sys.stderr  # Ensure logs go to stderr for gunicorn
-# )
-# logger = logging.getLogger(__name__)
-# logger.setLevel(logging.DEBUG)
-
-# logger.debug("HELP")
-
 
 def fix_boto_log_level():
     """Do not run boto loggers at debug level"""
@@ -168,7 +154,7 @@ def get_version_json():
 def set_fan_speed(conn, body: SpeedControl):
     """Sets the speed, records the speed in the changelog, and then updates the database, so status is always up-to-date"""
     logger.debug("/set_fan_speed: body=[%s]", body)
-    ret = rules_engine.set_body_speed(conn, body, request.remote_addr, "web")
+    ret = rules_engine.set_body_fan_speed(conn, body, request.remote_addr, "web")
     logging.debug("ret=%s", ret)
     return jsonify({"status": "ok", **ret})
 
@@ -176,8 +162,11 @@ def set_fan_speed(conn, body: SpeedControl):
 @api_v1.route("/set_drive", methods=["POST"])
 @validate()
 @with_db_connection
-def set_drive(conn, body: SpeedControl):
+def set_drive(conn, body: DriveControl):
     """Sets the speed, records the speed in the changelog, and then updates the database, so status is always up-to-date"""
+    app.logger.debug("**************** /set_drive ****************")
+    rules_engine.logger = app.logger
+
     logger.debug("/set_drive: body=[%s]", body)
     ret = rules_engine.set_body_drive(conn, body, request.remote_addr, "web")
     logging.debug("ret=%s", ret)
@@ -187,13 +176,15 @@ def set_drive(conn, body: SpeedControl):
 @api_v1.route("/status")
 @with_db_connection
 def get_status(conn):
+    app.logger.debug("**************** /status ****************")
+    ae200.logger = app.logger
     device_data = db.fetch_last_status_fixed(conn)
 
-    # Annotate the device_data
+    # Extract and convert the top-level drive, speed, and other items
     ct = 0
     for data in device_data:
         if "status" in data:
-            data.update(ae200.extract_status(data["status"]))
+            data.update(ae200.extract_drive_and_fan_speed(data["status"]))
         if "logtime" in data:
             data["age"] = github_style_duration( data["logtime"] + data.get("duration", 1) )
         ct += 1
@@ -343,7 +334,7 @@ def read_index(conn):
     # Annotate the device_data (same logic as in get_status endpoint)
     for data in device_data:
         if "status" in data:
-            data.update(ae200.extract_status(data["status"]))
+            data.update(ae200.extract_drive_and_fan_speed(data["status"]))
         if "logtime" in data:
             data["age"] = github_style_duration(
                 data["logtime"] + data.get("duration", 1)

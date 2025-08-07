@@ -119,26 +119,27 @@ async function setDrive(device_id, drive) {
 	console.log("Set drive: result=",result)
 	forceRefresh = true;
     } catch (e) {
-	console.error('Failed to set speed:', e);
-	alert('Error setting speed.');
+	console.error('Failed to set fan_speed:', e);
+	alert('Error setting fan_speed.');
     }
 }
 
-// Function called to set the speed
-async function setFanSpeed(device_id, speed) {
-    console.log(`setFanSpeed(${device_id},${speed})`);
+// Function called to set the fan_speed
+async function setFanSpeed(device_id, fan_speed) {
+    console.log(`setFanSpeed(${device_id},${fan_speed})`);
     try {
+        console.log("sending",device_id,fan_speed);
 	const response = await fetch('/api/v1/set_fan_speed', {
 	    method: 'POST',
 	    headers: { 'Content-Type': 'application/json' },
-	    body: JSON.stringify({ device_id: device_id, speed: speed })
+	    body: JSON.stringify({ device_id: device_id, fan_speed: fan_speed })
 	});
 	const result = await response.json();
-	console.log("Set speed: result=",result)
+	console.log("Set fan_speed: result=",result)
 	forceRefresh = true;
     } catch (e) {
-	console.error('Failed to set speed:', e);
-	alert('Error setting speed.');
+	console.error('Failed to set fan_speed:', e);
+	alert('Error setting fan_speed.');
     }
 }
 
@@ -149,7 +150,8 @@ function setupMatrixListenerss() {
     driveSwitches.forEach(ds => {
         ds.addEventListener('change', function() {
             const deviceId = parseInt(this.getAttribute('x-data-device-id'));
-            setDrive(deviceId, this.value);
+            console.log("this=",this,"this.checked=",this.checked);
+            setDrive(deviceId, this.checked ? 1 : 0);
         });
     });
     // Add event listeners for radio buttons
@@ -157,8 +159,8 @@ function setupMatrixListenerss() {
     radioButtons.forEach(radio => {
         radio.addEventListener('change', function() {
             const deviceId = parseInt(this.getAttribute('x-data-device-id'));
-            const speed = parseInt(this.getAttribute('x-data-speed'));
-            setFanSpeed(deviceId, speed);
+            const fan_speed = parseInt(this.getAttribute('x-data-fan_speed'));
+            setFanSpeed(deviceId, fan_speed);
         });
     });
 }
@@ -182,7 +184,7 @@ const refreshGridRows = () => {
             secondsUntilRefresh <= 0 ? 'Refreshing...' : `Next refresh in ${secondsUntilRefresh} seconds`;
     }
 
-    // If it's time to refresh, run the status api and update all of the temps, speeds, and status columsn
+    // If it's time to refresh, run the status api and update all of the temps, fan_speeds, and status columsn
     if (secondsUntilRefresh <= 0) {
         refreshLogTable();
         const formData = new FormData();
@@ -198,14 +200,21 @@ const refreshGridRows = () => {
 			var myformat = Intl.NumberFormat('en-US', {minimumIntegerDigits:2,
 								   minimumFractionDigits:1});
 			cell.innerHTML = myformat.format(dev.temp10x/10) + (dev.age ? ` <span class='age'>(${dev.age})</span> ` : '');
-
 		    }
-		    if (dev.speed) {
-			const radio = document.getElementById(`radio-${dev.device_id}-${dev.speed}`);
+                    if (dev.drive) {
+                        const slider = document.getElementById(`fan_drive-${dev.device_id}`);
+                        if (slider) {
+                            slider.checked = dev.drive ? true : false;
+                        } else {
+                            console.warn(`Drive slider not found for fan_drive${dev.device_ide} dev=`,dev);
+                        }
+                    }
+		    if (dev.fan_speed) {
+			const radio = document.getElementById(`radio-${dev.device_id}-${dev.fan_speed}`);
 			if (radio) {
 			    radio.checked = true;
 			} else {
-			    console.warn(`Radio button not found for radio-${dev.device_id}-${dev.speed} dev=`,dev);
+			    console.warn(`Radio button not found for radio-${dev.device_id}-${dev.fan_speed} dev=`,dev);
 			}
 		    }
                     if (dev.notes) {

@@ -12,7 +12,7 @@ from flask import request
 from .paths import ROOT_DIR
 from . import db
 from . import ae200
-from .db import SpeedControl
+from .db import SpeedControl,DriveControl
 
 logger = logging.getLogger(__name__)
 
@@ -80,7 +80,7 @@ def get_rules():
     with open( join(ROOT_DIR,'bin','rules.py'), 'r') as f:
         return f.read()
 
-def set_body_speed(conn, body: SpeedControl, ipaddr, agent):
+def set_body_fan_speed(conn, body: SpeedControl, ipaddr, agent):
     """
     :param conn: SQLIte3 database conneciton
     :param body: Unit to set, and new speed
@@ -91,18 +91,18 @@ def set_body_speed(conn, body: SpeedControl, ipaddr, agent):
     unit_id = db.get_ae200_unit(conn, body.device_id)
 
     # Get the current speed of the unit
-    current_speed = ae200.get_device_speed(unit_id)
-    if current_speed==body.speed:
-        logger.info("set_body_speed body=[%s] ipaddr=%s agent=%s. Speed will not change",body,ipaddr,agent)
+    current_fan_speed = ae200.get_device_fan_speed(unit_id)
+    if current_fan_speed==body.fan_speed:
+        logger.info("set_body_fan_speed body=[%s] ipaddr=%s agent=%s. Speed will not change",body,ipaddr,agent)
     else:
-        logger.info("set_body_speed body=[%s] ipaddr=%s agent=%s. Speed changed. current_speed=%s",body,ipaddr,agent,current_speed)
+        logger.info("set_body_fan_speed body=[%s] ipaddr=%s agent=%s. Speed changed. current_fan_speed=%s",body,ipaddr,agent,current_fan_speed)
         db.insert_changelog(conn, ipaddr=ipaddr, device_id=body.device_id, ae200_device_id=unit_id,
-                            current_values=str(current_speed), new_value=str(body.speed), agent=agent)
-        ae200.set_fan_speed(unit_id, body.speed)
+                            current_values=str(current_fan_speed), new_value=str(body.fan_speed), agent=agent)
+        ae200.set_fan_speed(unit_id, body.fan_speed)
     data = ae200.get_device_info(unit_id)
     temp = data.get('InletTemp', None)
     db.insert_devlog_entry(conn, device_id=body.device_id, temp=temp, statusdict=data)
-    return {'unit':unit_id, 'temp':temp, 'device_id':body.device_id, 'speed':body.speed}
+    return {'unit':unit_id, 'temp':temp, 'device_id':body.device_id, 'speed':body.fan_speed}
 
 def set_body_drive(conn, body: SpeedControl, ipaddr, agent):
     """
@@ -111,6 +111,7 @@ def set_body_drive(conn, body: SpeedControl, ipaddr, agent):
     :param ipaddr: Who requested the change
     :param agent: What requested the change.
     """
+    logger.debug("==== set_body_drive body=%s",body)
 
     unit_id = db.get_ae200_unit(conn, body.device_id)
 
@@ -141,8 +142,7 @@ def rules_results(conn, when=None, aqi=50):
 
     global_vars = {**get_devices_dict(conn), **get_time_dict(when)}
     global_vars['AQI'] = aqi
-    local_vars = {'set_drive': set_drive_verbose}
-    local_vars = {'set_fan_speed': set_fan_speed_verbose}
+    local_vars = {'set_drive': set_drive_verbose, 'set_fan_speed': set_fan_speed_verbose}
     exec(get_rules(), global_vars, local_vars)   # pylint: disable=exec-used
     return "\n".join(results)
 
@@ -152,10 +152,13 @@ def run_rules(conn, when=None):
     """
     logger.debug("when=%s",when)
 
-    def set_fan(device_id, speed):
-        set_body_speed(conn, SpeedControl(device_id=device_id, speed=speed), 'n/a', 'rule')
+    def set_drive(device_id, drive):
+        set_body_drive(conn, DriveControl(device_id=device_id, drive=drive), 'n/a', 'rule')
+
+    def set_fan_speed(device_id, fan_speed):
+        set_body_fan_speed(conn, SpeedControl(device_id=device_id, fan_speed=fan_speed), 'n/a', 'rule')
 
     v1 = {**get_devices_dict(conn), **get_time_dict(when)}
     v1['AQI'] = db.get_last_aqi(conn)
-    v2 = {'set_fan': set_fan}
+    v2 = {'set_drive': set_drive, 'set_fan_speed':set_fan_speed }
     exec(get_rules(), v1, v2)   # pylint: disable=exec-used
