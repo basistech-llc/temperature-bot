@@ -1,7 +1,7 @@
 CREATE TABLE devices (
     device_id INTEGER PRIMARY KEY AUTOINCREMENT,
     device_name TEXT UNIQUE NOT NULL
-, ae200_device_id INTEGER, disabled_until INTEGER);
+, ae200_device_id INTEGER, disabled_until INTEGER, notes TEXT);
 CREATE INDEX idx_devices_device_name ON devices (device_name);
 CREATE TABLE devlog (
     log_id INTEGER PRIMARY KEY AUTOINCREMENT,

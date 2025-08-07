@@ -125,10 +125,10 @@ async function setDrive(device_id, drive) {
 }
 
 // Function called to set the speed
-async function setSpeed(device_id, speed) {
-    console.log(`setSpeed(${device_id},${speed})`);
+async function setFanSpeed(device_id, speed) {
+    console.log(`setFanSpeed(${device_id},${speed})`);
     try {
-	const response = await fetch('/api/v1/set_speed', {
+	const response = await fetch('/api/v1/set_fan_speed', {
 	    method: 'POST',
 	    headers: { 'Content-Type': 'application/json' },
 	    body: JSON.stringify({ device_id: device_id, speed: speed })
@@ -158,7 +158,7 @@ function setupMatrixListenerss() {
         radio.addEventListener('change', function() {
             const deviceId = parseInt(this.getAttribute('x-data-device-id'));
             const speed = parseInt(this.getAttribute('x-data-speed'));
-            setSpeed(deviceId, speed);
+            setFanSpeed(deviceId, speed);
         });
     });
 }

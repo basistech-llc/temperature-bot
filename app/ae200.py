@@ -22,9 +22,11 @@ from websockets.extensions import permessage_deflate
 from app.util import get_config
 
 # Fan mapping speeds. Note that there is no 'OFF'
-SPEED_AUTO = -1
-SPEEDS = {-1:"AUTO", 1: "LOW", 2: "MID2", 3: "MID1", 4: "HIGH"}
-SPEED_NAMES = {value: key for key, value in SPEEDS.items()}
+FAN_SPEED_AUTO = -1
+DRIVES = {0:"OFF", 1:"ON"}
+FAN_SPEEDS = {-1:"AUTO", 1: "LOW", 2: "MID2", 3: "MID1", 4: "HIGH"}
+FAN_SPEED_NAMES = {value: key for key, value in FAN_SPEEDS.items()}
+DRIVE_NAMES = {value: key for key, value in DRIVES.items()}
 
 getUnitsPayload = """<?xml version="1.0" encoding="UTF-8" ?>
 <Packet>
@@ -182,22 +184,22 @@ def extract_status(data):
     """Return a dict with drive/speed/has_speed_control"""
     drive = data.get('Drive',None)
     speed = data.get('FanSpeed',None)
-    has_speed_control = (drive is not None and speed is not None and speed in SPEEDS.values())
+    has_speed_control = (drive is not None and speed is not None and speed in FAN_SPEEDS.values())
     return {
         'drive': drive,
         'speed': speed,
         'has_speed_control': has_speed_control
     }
 
-async def set_speed_async(device, speed):
-    logging.info("set_speed_async(%s,%s)",device,speed)
+async def set_fan_speed_async(device, speed):
+    logging.info("set_fan_speed_async(%s,%s)",device,speed)
     d = AE200Functions()
-    await d.sendAsync(device, {"FanSpeed": SPEEDS[speed]})
+    await d.sendAsync(device, {"FanSpeed": FAN_SPEEDS[speed]})
 
-def set_speed(ae200_device, speed):
+def set_fan_speed(ae200_device, speed):
     logging.info("set_fan_speed(%s,%s)",ae200_device,speed)
     d = AE200Functions()
-    d.send(ae200_device, {"FanSpeed": SPEEDS[speed]})
+    d.send(ae200_device, {"FanSpeed": FAN_SPEEDS[speed]})
 
 def int_to_drive(drive):
     if str(drive).upper() in ["1","TRUE","ON","YES"]:
@@ -228,10 +230,15 @@ def get_device_info(device):
     d = AE200Functions()
     return d.getDeviceInfo(device)
 
-def get_device_speed(device):
+def get_device_fan_speed(device):
     """Returns the device fanspeed as a number"""
     info = get_device_info(device)
-    return SPEED_NAMES[info['FanSpeed']]
+    return FAN_SPEED_NAMES[info['FanSpeed']]
+
+def get_device_drive(device):
+    """Returns the device fanspeed as a number"""
+    info = get_device_info(device)
+    return DRIVE_NAMES[info['Drive']]
 
 def get_devices():
     logging.info("get_devices()")

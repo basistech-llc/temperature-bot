@@ -154,6 +154,22 @@ def fetch_last_status(conn):
         ORDER by b.device_name""")
     return cursor.fetchall()
 
+def fetch_last_status_fixed(conn):
+    """Runs db.fetch_last_status(conn) and then converts `status_json` into the actual dictionary for each status_json object"""
+    def fix_status_json(devdict):
+        devdict = dict(devdict)
+        try:
+            devdict["status"] = json.loads(devdict["status_json"])
+        except (TypeError, json.JSONDecodeError):
+            pass
+        del devdict["status_json"]
+        return devdict
+
+    return [fix_status_json(dd) for dd in db.fetch_last_status(conn)]
+
+
+
+
 def get_recent_devlogs(conn, device_name: str, seconds: int):
     """
     Get recent devlog entries for a device within the specified time window.

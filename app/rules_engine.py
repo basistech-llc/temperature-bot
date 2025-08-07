@@ -98,7 +98,7 @@ def set_body_speed(conn, body: SpeedControl, ipaddr, agent):
         logger.info("set_body_speed body=[%s] ipaddr=%s agent=%s. Speed changed. current_speed=%s",body,ipaddr,agent,current_speed)
         db.insert_changelog(conn, ipaddr=ipaddr, device_id=body.device_id, ae200_device_id=unit_id,
                             current_values=str(current_speed), new_value=str(body.speed), agent=agent)
-        ae200.set_speed(unit_id, body.speed)
+        ae200.set_fan_speed(unit_id, body.speed)
     data = ae200.get_device_info(unit_id)
     temp = data.get('InletTemp', None)
     db.insert_devlog_entry(conn, device_id=body.device_id, temp=temp, statusdict=data)
@@ -136,13 +136,13 @@ def rules_results(conn, when=None, aqi=50):
     results = []
     def set_drive_verbose(device_id, value):
         results.append(f"Device {device_id} drive set to {value}\n")
-    def set_speed_verbose(device_id, value):
+    def set_fan_speed_verbose(device_id, value):
         results.append(f"Device {device_id} speed set to {value}\n")
 
     global_vars = {**get_devices_dict(conn), **get_time_dict(when)}
     global_vars['AQI'] = aqi
     local_vars = {'set_drive': set_drive_verbose}
-    local_vars = {'set_speed': set_speed_verbose}
+    local_vars = {'set_fan_speed': set_fan_speed_verbose}
     exec(get_rules(), global_vars, local_vars)   # pylint: disable=exec-used
     return "\n".join(results)
 

@@ -8,13 +8,13 @@ import logging
 import json
 import datetime
 import time
+import sys
 from typing import Any
 from functools import wraps
 
 from flask import Flask, Blueprint, request, jsonify, render_template, send_from_directory
 from werkzeug.exceptions import HTTPException
 from werkzeug.middleware.proxy_fix import ProxyFix
-
 
 from flask_pydantic import validate
 
@@ -56,14 +56,14 @@ def fix_boto_log_level():
 
 # https://flask.palletsprojects.com/en/stable/config/
 app = Flask(__name__)
+app.logger.error("e1")
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1)
 app.config["TEMPLATES_AUTO_RELOAD"] = True
 log_level = os.getenv("LOG_LEVEL", "INFO").upper()
-logger = app.logger
 logging.basicConfig(format=LOGGING_CONFIG, level=log_level, force=True)
-logger.setLevel(log_level)
 app.logger.info("new Flask(__name__=%s) log_level=%s", __name__, log_level)
 fix_boto_log_level()
+logger = app.logger
 
 # Initialize logging and boto settings
 # fix_boto_log_level()
@@ -107,20 +107,6 @@ def get_db_aqi(conn):
     row = c.fetchone()
     aqi = row[0] if row is not None else 0
     return airquality.aqi_decode(aqi)
-
-
-def get_last_db_data(conn):
-    """Runs db.fetch_last_status(conn) and then converts `status_json` into the actual dictionary for each status_json object"""
-    def fix_status_json(devdict):
-        devdict = dict(devdict)
-        try:
-            devdict["status"] = json.loads(devdict["status_json"])
-        except (TypeError, json.JSONDecodeError):
-            pass
-        del devdict["status_json"]
-        return devdict
-
-    return [fix_status_json(dd) for dd in db.fetch_last_status(conn)]
 
 
 ################################################################
@@ -176,12 +162,12 @@ def get_version_json():
     return jsonify({"version": __version__})
 
 
-@api_v1.route("/set_speed", methods=["POST"])
+@api_v1.route("/set_fan_speed", methods=["POST"])
 @validate()
 @with_db_connection
-def set_speed(conn, body: SpeedControl):
+def set_fan_speed(conn, body: SpeedControl):
     """Sets the speed, records the speed in the changelog, and then updates the database, so status is always up-to-date"""
-    logger.debug("/set_speed: body=[%s]", body)
+    logger.debug("/set_fan_speed: body=[%s]", body)
     ret = rules_engine.set_body_speed(conn, body, request.remote_addr, "web")
     logging.debug("ret=%s", ret)
     return jsonify({"status": "ok", **ret})
@@ -201,7 +187,7 @@ def set_drive(conn, body: SpeedControl):
 @api_v1.route("/status")
 @with_db_connection
 def get_status(conn):
-    device_data = get_last_db_data(conn)
+    device_data = db.fetch_last_status_fixed(conn)
 
     # Annotate the device_data
     ct = 0
@@ -209,9 +195,7 @@ def get_status(conn):
         if "status" in data:
             data.update(ae200.extract_status(data["status"]))
         if "logtime" in data:
-            data["age"] = github_style_duration(
-                data["logtime"] + data.get("duration", 1)
-            )
+            data["age"] = github_style_duration( data["logtime"] + data.get("duration", 1) )
         ct += 1
 
     return jsonify({"devices": device_data})
@@ -354,7 +338,7 @@ def static_files(filename):
 @with_db_connection
 def read_index(conn):
     # Get device data for the template
-    device_data = get_last_db_data(conn)
+    device_data = db.fetch_last_status_fixed(conn)
 
     # Annotate the device_data (same logic as in get_status endpoint)
     for data in device_data:

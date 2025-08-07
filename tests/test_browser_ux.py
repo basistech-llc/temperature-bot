@@ -84,7 +84,7 @@ class BrowserTestHelper:
         radio = self.get_fan_speed_radio(speed)
         expect(radio).not_to_be_checked()
 
-    def verify_database_speed(self, expected_speed: int):
+    def verify_database_speed(self, expected_fan_speed: int):
         """Verify that the database has been updated with the expected speed"""
         device_id = self.get_broadway_south_device_id()
 
@@ -102,8 +102,8 @@ class BrowserTestHelper:
             changelog_entry = cursor.fetchone()
 
             assert changelog_entry is not None, "No changelog entry found"
-            assert changelog_entry['new_value'] == str(expected_speed), \
-                f"Expected speed {expected_speed}, got {changelog_entry['new_value']}"
+            assert changelog_entry['new_value'] == str(expected_fan_speed), \
+                f"Expected speed {expected_fan_speed}, got {changelog_entry['new_value']}"
             assert changelog_entry['agent'] == 'web', \
                 f"Expected agent 'web', got {changelog_entry['agent']}"
 
@@ -119,8 +119,8 @@ class BrowserTestHelper:
             assert devlog_entry is not None, "No devlog entry found"
             status_data = json.loads(devlog_entry['status_json'])
             extracted_status = ae200.extract_status(status_data)
-            assert extracted_status['drive_speed_val'] == expected_speed, \
-                f"Expected drive_speed_val {expected_speed}, got {extracted_status['drive_speed_val']}"
+            assert extracted_status['fan_speed'] == expected_fan_speed, \
+                f"Expected fan_speed {expected_fan_speed}, got {extracted_status['fan_speed']}"
 
 
 class TemperatureTestHelper:
@@ -250,7 +250,8 @@ def test_browser_fan_speed_controls(
         app.run(host='127.0.0.1', port=5001, debug=False, use_reloader=False)
 
 
-    server_thread = threading.Thread(target=run_app, daemon=True) # pylint: disable=duplicate-code
+    # pylint: disable=duplicate-code
+    server_thread = threading.Thread(target=run_app, daemon=True)
     server_thread.start()
 
     # Give the server time to start
@@ -435,6 +436,7 @@ def test_browser_page_loads_correctly(
     def run_app():
         app.run(host='127.0.0.1', port=5002, debug=False, use_reloader=False)
 
+    # pylint: disable=duplicate-code
     server_thread = threading.Thread(target=run_app, daemon=True)
     server_thread.start()
 
@@ -487,8 +489,10 @@ def test_browser_page_loads_correctly(
             # Verify log table exists
             expect(page.locator('#log-table')).to_be_visible() # pylint: disable=duplicate-code
 
+            # pylint: disable=duplicate-code
             browser.close()
 
+    # pylint: disable=duplicate-code
     except Exception as e:
         logger.error("Browser page error: %s",e)
         raise
@@ -536,6 +540,7 @@ def test_browser_temperature_display(
     server_thread.start()
 
     # Give the server time to start
+    # pylint: disable=duplicate-code
     time.sleep(3)
 
     try:
