@@ -344,6 +344,7 @@ def read_index(conn):
 
     return render_template("index.html", develop=DEV, devices=device_data, now=now)
 
+
 @app.route("/rules")
 @with_db_connection
 def show_rules(conn):

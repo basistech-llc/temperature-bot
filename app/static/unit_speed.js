@@ -3,9 +3,9 @@
 console.log("unit_speed.js loaded");
 
 // Constants
+const DEBUG=false;
 const REFRESH_INTERVAL = 10; // seconds between refreshes
 const RUNNING_MINUTES = 10; // minutes to run before stopping
-const DEBUG=false;
 const SHOW_REFRESH_COUNTDOWN = false;
 let lastRefreshTime = 0;
 
