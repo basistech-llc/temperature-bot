@@ -345,10 +345,13 @@ def read_index(conn):
     return render_template("index.html", develop=DEV, devices=device_data, now=now)
 
 
+@app.route("/buttons")
+def buttons():
+    return render_template("buttons.html")
+
 @app.route("/privacy")
 def privacy():
     return render_template("privacy.html")
-
 
 @app.route("/version")
 def get_version():

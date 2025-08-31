@@ -3,9 +3,9 @@
 console.log("unit_speed.js loaded");
 
 // Constants
+const DEBUG=false;
 const REFRESH_INTERVAL = 10; // seconds between refreshes
 const RUNNING_MINUTES = 10; // minutes to run before stopping
-const DEBUG=false;
 const SHOW_REFRESH_COUNTDOWN = false;
 let lastRefreshTime = 0;
 
@@ -16,8 +16,6 @@ const SECONDS_PER_DAY=60*60*24;
 var start = Date.now();
 var forceRefresh = false;
 const FAN_SPEEDS = [-1, 0, 1, 2, 3, 4];
-
-const DEBUG=false;
 
 ////////////////////////////////////////////////////////////////
 // Weather display functions
