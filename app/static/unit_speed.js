@@ -200,7 +200,7 @@ const refreshGridRows = () => {
                 }
 
                 // Update the tables with the new data
-		for (const dev of data.devices) {
+		if (data.devices) for (const dev of data.devices) {
 		    if (dev.temp10x) {
 			const cell = document.getElementById(`temp-${dev.device_id}`);
 			var myformat = Intl.NumberFormat('en-US', {minimumIntegerDigits:2,
@@ -239,7 +239,7 @@ const refreshGridRows = () => {
                     zeroPad(currentdate.getHours(), 2) + ":" +
                     zeroPad(currentdate.getMinutes(), 2) + ":" +
                     zeroPad(currentdate.getSeconds(), 2);
-                document.querySelector('#last-refresh').innerHTML = datetime;
+                $('#last-refresh').html(datetime);
 
                 // Update the refresh time
                 lastRefreshTime = now;
@@ -288,7 +288,6 @@ async function loadWeatherAndStartRefresh() {
 	console.error("Error in loadWeatherAndStartRefresh():", e);
     }
 }
-
 
 createLogTable();
 window.addEventListener('DOMContentLoaded', function() {

@@ -345,22 +345,6 @@ def read_index(conn):
     return render_template("index.html", develop=DEV, devices=device_data, now=now)
 
 
-@app.route("/buttons")
-def buttons():
-    return render_template("buttons.html")
-
-@app.route("/privacy")
-def privacy():
-    return render_template("privacy.html")
-
-@app.route("/version")
-def get_version():
-    return f"version: {__version__}"
-
-@app.route("/logs")
-def do_logs():
-    return render_template("logs.html")
-
 @app.route("/rules")
 @with_db_connection
 def show_rules(conn):
@@ -396,6 +380,9 @@ def show_rules(conn):
         times=rules_engine.get_time_dict(),
     )
 
+@app.route("/logs")
+def do_logs():
+    return render_template("logs.html")
 
 @app.route("/device_log/<device_id>")
 @with_db_connection
@@ -444,6 +431,18 @@ def show_chart():
 
     return render_template("chart.html", device_ids=device_ids)
 
+
+@app.route("/privacy")
+def privacy():
+    return render_template("privacy.html")
+
+@app.route("/buttons")
+def buttons():
+    return render_template("buttons.html")
+
+@app.route("/version")
+def get_version():
+    return f"version: {__version__}"
 
 # Error handler
 @app.errorhandler(HTTPException)
