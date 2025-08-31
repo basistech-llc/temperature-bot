@@ -20,7 +20,7 @@ body {
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
-.top-banner a {color:white; pad-left: 1em;}
+.top-banner a {color:white; padding-left: 1em;}
 .left-gutter {
     padding-left: 50px;
 }
@@ -31,6 +31,10 @@ body {
   max-width: 800px;
   padding-bottom: 10px;
   min-height: 200px; /* Ensure it takes up space for grid layout */
+}
+
+.pure-g {
+    overflow:hidden;
 }
 
 th {
@@ -71,6 +75,10 @@ td.cell-notes:not(:empty) {
 
 .age {
     color: #aaa;
+}
+
+#weather {
+    width: 300px;
 }
 
 .weather-icon {
@@ -127,11 +135,6 @@ table.rules-table th  {
     margin: 5px;
 }
 
-#weather {
-    background-color: #f0f8ff;
-    min-height: 100px;
-}
-
 /* On small screens, remove the left margin */
 @media (max-width: 767px) {
     #weather {
@@ -140,8 +143,13 @@ table.rules-table th  {
     }
 }
 
+#aqi-weather {
+    width: 400px;
+    background-color: #f0f8ff;
+    min-height: 100px;
+}
+
 #aqi-status {
-    width: auto;
     display: inline-block;
     padding: 5px 10px;
     border: 1px solid #ccc;
@@ -173,11 +181,12 @@ table.rules-table th  {
     border-radius: 3px;
 }
 
+/* optional: avoid a hard fixed width on the header */
 .column-unit {
-    width: 260px;
-    min-width: 220px;
-    max-width: 340px;
-    white-space: nowrap;
+    white-space: normal;
+    min-width: 400px;
+    max-width: 5000px;
+    word-break: break-word;
 }
 
 .column-speed {
@@ -187,4 +196,19 @@ table.rules-table th  {
 .cell-unit {
     white-space: nowrap;
     vertical-align: top;
+}
+
+/* optional: make tables respect the column width instead of expanding it */
+
+/* *************** Rules */
+.rule-result {
+    padding: 5px;
+    line-height: 1.0;
+    vertical-align: top;
+}
+
+.rule-result br {
+    display: block;
+    margin-top: 0px;
+    line-height: 0px;
 }

@@ -4,19 +4,54 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title> {% block title %} {{title}} {% endblock %}</title>
-  <link rel="stylesheet" href="https://unpkg.com/purecss@3.0.0/build/pure-min.css">
+  <!-- use Pure.css - https://purecss.io/ -->
+  <link rel="stylesheet"
+        href="https://cdn.jsdelivr.net/npm/purecss@3.0.0/build/pure-min.css"
+        integrity="sha384-X38yfunGUhNzHpBaEBsWLO+A0HDYOQi8ufWDkZ0k9e0eXz/tH3II7uKZ9msv++Ls" crossorigin="anonymous"/>
   <link rel="stylesheet" href="/static/style.css">
   <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+  <script src="https://code.jquery.com/jquery-3.3.1.slim.min.js"
+          integrity="sha384-q8i/X+965DzO0rT7abK41JStQIAqVgRVzpbzo5smXKp4YfRvH+8abtTE1Pi6jizo"
+          crossorigin="anonymous">
+  </script>
+
   {% block head %}
   {% endblock %}
 
 </head>
 <body>
-    {% if develop %}
-    <div class="top-banner">
-        <p>🚧 This is the develop site. Please use <a href='https://air.basistech.net/'> https://air.basistech.net/</a>.</p>
-    </div>
-    {% endif %}
+  <header>
+  {% if develop %}
+  <div class="top-banner">
+    <p>🚧 This is the develop site. Please use <a href='https://air.basistech.net/'> https://air.basistech.net/</a>.</p>
+  </div>
+  {% endif %}
+
+  <div class="pure-menu pure-menu-horizontal">
+    <a href="." class="pure-menu-heading pure-menu-link">Temperature Bot</a>
+    <ul class="pure-menu-list">
+      <li class="pure-menu-item">
+        <a href="/chart" class="pure-menu-link">Chart</a>
+      </li>
+      <li class="pure-menu-item">
+        <a href="/logs" class="pure-menu-link">Logs</a>
+      </li>
+      <li class="pure-menu-item">
+        <a href="/rules" class="pure-menu-link">Rules</a>
+      </li>
+      <li class="pure-menu-item">
+        <a href="/privacy" class="pure-menu-link">Privacy</a>
+      </li>
+      <li class="pure-menu-item">
+        <a href="/terms" class="pure-menu-link">Terms</a>
+      </li>
+      <li class="pure-menu-item">
+        <a href="mailto:simsong@basistech.com" class="pure-menu-link">Contact</a>
+      </li>
+    </ul>
+  </div>
+  </header>
+
 
   {% block body %}
   {% endblock %}

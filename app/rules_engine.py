@@ -136,9 +136,9 @@ def rules_results(conn, when=None, aqi=50):
 
     results = []
     def set_drive_verbose(device_id, value):
-        results.append(f"Device {device_id} drive set to {value}\n")
+        results.append(f"Device {device_id} drive set to {value}")
     def set_fan_speed_verbose(device_id, value):
-        results.append(f"Device {device_id} speed set to {value}\n")
+        results.append(f"Device {device_id} speed set to {value}")
 
     global_vars = {**get_devices_dict(conn), **get_time_dict(when)}
     global_vars['AQI'] = aqi
