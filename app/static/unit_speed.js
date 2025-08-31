@@ -3,11 +3,14 @@
 console.log("unit_speed.js loaded");
 
 // Constants
+const DEBUG=false;
 const REFRESH_INTERVAL = 10; // seconds between refreshes
 const RUNNING_MINUTES = 10; // minutes to run before stopping
-const DEBUG=false;
 const SHOW_REFRESH_COUNTDOWN = false;
 let lastRefreshTime = 0;
+
+const LOG_DAYS=5;
+const SECONDS_PER_DAY=60*60*24;
 
 // Refresh logic
 var start = Date.now();
@@ -56,8 +59,9 @@ function displayWeather(weatherInfo) {
 // Log tables
 function getTodayUnixRange() {
     const now = new Date();
-    const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const end = new Date(start.getTime() + 86400000); // midnight next day
+    const start_today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const start = new Date(start_today.getTime() - (LOG_DAYS-1) * SECONDS_PER_DAY * 1000);
+    const end = new Date(start_today.getTime() + 86400000); // midnight next day
     return {
         start: Math.floor(start.getTime() / 1000),
         end: Math.floor(end.getTime() / 1000)
@@ -191,7 +195,9 @@ const refreshGridRows = () => {
         fetch(window.location.href + 'api/v1/status', { method: "GET"})
             .then(response => response.json())
             .then(data => {
-                console.log('Status data received:', data);
+                if (DEBUG) {
+                    console.log('Status data received:', data);
+                }
 
                 // Update the tables with the new data
 		for (const dev of data.devices) {

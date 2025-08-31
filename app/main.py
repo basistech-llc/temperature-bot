@@ -191,7 +191,6 @@ def get_status(conn):
 
     return jsonify({"devices": device_data})
 
-
 @api_v1.route("/weather")
 @with_db_connection
 def get_weather(conn):
@@ -346,15 +345,21 @@ def read_index(conn):
     return render_template("index.html", develop=DEV, devices=device_data, now=now)
 
 
+@app.route("/buttons")
+def buttons():
+    return render_template("buttons.html")
+
 @app.route("/privacy")
 def privacy():
     return render_template("privacy.html")
-
 
 @app.route("/version")
 def get_version():
     return f"version: {__version__}"
 
+@app.route("/logs")
+def do_logs():
+    return render_template("logs.html")
 
 @app.route("/rules")
 @with_db_connection
@@ -365,15 +370,18 @@ def show_rules(conn):
 
     # If requests, see how the rules will render for the next seven days
     rule_table = []
+    AQI_LIST = [0, 51, 101, 151]
     if run_rules:
         rule_table.append("<table class='rules-table'>")
-        rule_table.append("<tr><th>Time</th><th>AQI 0</th><th>AQI 50</th><th>AQI 101</th><th>AQI 151</th></tr>")
+        rule_table.append("<tr><th>Time</th>" +
+                          "".join([f"<th>AQI {aqi}</th>" for aqi in AQI_LIST]) +
+                          "</tr>")
         for hour in range(24 * 7):
             when = hour_now + datetime.timedelta(hours=hour)
             rule_table.append(f"<tr><th>{str(when)}</th>")
-            for aqi in (0, 50, 101, 151):
+            for aqi in AQI_LIST:
                 new_results = rules_engine.rules_results(conn, when.timestamp(), aqi=aqi)
-                rule_table.append(f"<td>{new_results}</td>")
+                rule_table.append(f"<td class='rule-result'>{new_results.replace("\n","<br>")}</td>")
             rule_table.append("</tr>")
 
     rules_disabled_until = rules_engine.rules_disabled_until(conn)
