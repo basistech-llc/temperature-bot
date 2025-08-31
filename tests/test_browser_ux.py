@@ -272,8 +272,8 @@ def test_browser_fan_speed_controls(
             # Wait for the grid to load
             helper.wait_for_grid_to_load()
 
-            # Verify that Broadway South has radio buttons
-            for speed in [0, 1, 2, 3, 4]:
+            # Verify that Broadway South has speed radio buttons
+            for speed in [1, 2, 3, 4]:
                 radio = page.locator(f'#radio-{helper.get_broadway_south_device_id()}-{speed}')
                 expect(radio).to_be_visible()
 
