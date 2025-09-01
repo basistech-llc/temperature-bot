@@ -29,6 +29,7 @@ dependencies = [
     "flask-pydantic (>=0.13.1,<0.14.0)",
     "gunicorn (>=23.0.0,<24.0.0)",
     "mypy (>=1.17.0,<2.0.0)",
+    "pymodbus (>=3.11.1,<4.0.0)",
 ]
 
 authors = [

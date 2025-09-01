@@ -1229,6 +1229,26 @@ spelling = ["pyenchant (>=3.2,<4.0)"]
 testutils = ["gitpython (>3)"]
 
 [[package]]
+name = "pymodbus"
+version = "3.11.1"
+description = "A fully featured modbus protocol stack in python"
+optional = false
+python-versions = ">=3.10.0"
+groups = ["main"]
+files = [
+    {file = "pymodbus-3.11.1-py3-none-any.whl", hash = "sha256:3119a925e7723a0e729d0dd07388d2abb1b7ee7dd99be48078e88bfe7a3d024d"},
+    {file = "pymodbus-3.11.1.tar.gz", hash = "sha256:e738178d0ac5063f095d61be37422ac4105faab19fbacea9eb5a574e8e2b3122"},
+]
+
+[package.extras]
+all = ["pymodbus[development,documentation,repl,serial,simulator]"]
+development = ["build (>=1.2.2)", "codespell (>=2.3.0)", "coverage (>=7.6.1)", "mypy (>=1.11.2)", "pylint (>=3.3.0)", "pytest (>=8.3.3)", "pytest-aiohttp (>=1.0.5)", "pytest-asyncio (>=0.24.0)", "pytest-cov (>=5.0.0)", "pytest-profiling (>=1.7.0) ; python_version < \"3.13\"", "pytest-timeout (>=2.3.1)", "pytest-xdist (>=3.6.1)", "ruff (>=0.8.2)", "twine (>=5.1.1)", "types-Pygments", "types-pyserial"]
+documentation = ["Sphinx (>=7.3.7)", "recommonmark (>=0.7.1)", "sphinx-rtd-theme (>=2.0.0)"]
+repl = ["pymodbus-repl (>=2.0.4)"]
+serial = ["pyserial (>=3.5)"]
+simulator = ["aiohttp (>=3.10.6) ; python_version >= \"3.12\"", "aiohttp (>=3.8.6) ; python_version < \"3.12\""]
+
+[[package]]
 name = "pyparsing"
 version = "3.2.3"
 description = "pyparsing module - Classes and methods to define and execute parsing grammars"
@@ -1709,4 +1729,4 @@ watchdog = ["watchdog (>=2.3)"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.12"
-content-hash = "42b76d4422d4670b64cbfd7da666db1c852697969027aaeacf9589e96180c8a0"
+content-hash = "dda41940167824558a1d98325f5357b349b049b5926770bf4e1a0f45b6ba0374"
