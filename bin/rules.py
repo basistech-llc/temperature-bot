@@ -4,9 +4,11 @@ Rules for BasisTech HVAC robot.
 # ruff: noqa
 # pylint: disable=global-statement, invalid-name, missing-function-docstring, unused-variable, undefined-variable, name-defined
 
-DEFAULT_ERV_SPEED = 2
-kitchen_erv_speed = DEFAULT_ERV_SPEED
-restrooms_erv_speed = DEFAULT_ERV_SPEED
+DEFAULT_KITCHEN_ERV_SPEED = 2
+DEFAULT_RESTROOMS_ERV_SPEED = 4
+
+kitchen_erv_speed = DEFAULT_KITCHEN_ERV_SPEED
+restrooms_erv_speed = DEFAULT_RESTROOMS_ERV_SPEED
 
 # AQI > 100 is unhealthy for sensitive groups
 # AQI > 150 is unhealthy
