@@ -10,6 +10,7 @@ import logging
 import time
 from os.path import dirname,abspath
 import tabulate  # type: ignore
+import requests
 
 
 # runner is first to run so it needs to add . to the path
@@ -38,7 +39,12 @@ def update_from_ae200(conn):
         db.insert_devlog_entry(conn, device_id=device_id, temp=temp, statusdict=data)
 
 def update_from_hubitat(conn):
-    for item in hubitat.extract_temperatures(hubitat.get_all_devices()):
+    try:
+        temps = hubitat.extract_temperatures(hubitat.get_all_devices())
+    except requests.exceptions.ConnectTimeout as e:
+        logger.error("update_from_hubitat: timeout %s",e)
+        return
+    for item in temps:
         db.insert_devlog_entry(conn, device_name=item['name'], temp=item['temperature'])
 
 def update_aqi(conn):

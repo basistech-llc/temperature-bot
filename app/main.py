@@ -5,7 +5,6 @@ app.py - Flask version
 from os.path import abspath
 import os
 import logging
-import json
 import datetime
 import time
 from typing import Any
@@ -15,7 +14,6 @@ from flask import Flask, Blueprint, request, jsonify, render_template, send_from
 from werkzeug.exceptions import HTTPException
 from werkzeug.middleware.proxy_fix import ProxyFix
 
-
 from flask_pydantic import validate
 
 
@@ -24,7 +22,7 @@ from . import weather
 from . import db
 from . import airquality
 from . import rules_engine
-from .db import SpeedControl
+from .db import SpeedControl,DriveControl
 
 __version__ = "0.0.1"
 
@@ -35,18 +33,6 @@ LOGGING_CONFIG = "%(asctime)s  %(filename)s:%(lineno)d %(levelname)s: %(message)
 LOG_LEVEL = os.getenv("LOG_LEVEL", DEFAULT_LOG_LEVEL).upper()
 LOG_LEVEL = "DEBUG"
 
-# logging.basicConfig(
-#    format=LOGGING_CONFIG,
-#    level=LOG_LEVEL,
-#    force=True,
-#    stream=sys.stderr  # Ensure logs go to stderr for gunicorn
-# )
-# logger = logging.getLogger(__name__)
-# logger.setLevel(logging.DEBUG)
-
-# logger.debug("HELP")
-
-
 def fix_boto_log_level():
     """Do not run boto loggers at debug level"""
     for name in logging.root.manager.loggerDict:  # pylint: disable=no-member
@@ -56,14 +42,14 @@ def fix_boto_log_level():
 
 # https://flask.palletsprojects.com/en/stable/config/
 app = Flask(__name__)
+app.logger.error("e1")
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1)
 app.config["TEMPLATES_AUTO_RELOAD"] = True
 log_level = os.getenv("LOG_LEVEL", "INFO").upper()
-logger = app.logger
 logging.basicConfig(format=LOGGING_CONFIG, level=log_level, force=True)
-logger.setLevel(log_level)
 app.logger.info("new Flask(__name__=%s) log_level=%s", __name__, log_level)
 fix_boto_log_level()
+logger = app.logger
 
 # Initialize logging and boto settings
 # fix_boto_log_level()
@@ -107,19 +93,6 @@ def get_db_aqi(conn):
     row = c.fetchone()
     aqi = row[0] if row is not None else 0
     return airquality.aqi_decode(aqi)
-
-
-def get_last_db_data(conn):
-    def fix_status_json(devdict):
-        devdict = dict(devdict)
-        try:
-            devdict["status"] = json.loads(devdict["status_json"])
-        except (TypeError, json.JSONDecodeError):
-            pass
-        del devdict["status_json"]
-        return devdict
-
-    return [fix_status_json(dd) for dd in db.fetch_last_status(conn)]
 
 
 ################################################################
@@ -175,13 +148,27 @@ def get_version_json():
     return jsonify({"version": __version__})
 
 
-@api_v1.route("/set_speed", methods=["POST"])
+@api_v1.route("/set_fan_speed", methods=["POST"])
 @validate()
 @with_db_connection
-def set_speed(conn, body: SpeedControl):
+def set_fan_speed(conn, body: SpeedControl):
     """Sets the speed, records the speed in the changelog, and then updates the database, so status is always up-to-date"""
-    logger.debug("/set_speed: body=[%s]", body)
-    ret = rules_engine.set_body_speed(conn, body, request.remote_addr, "web")
+    logger.debug("/set_fan_speed: body=[%s]", body)
+    ret = rules_engine.set_body_fan_speed(conn, body, request.remote_addr, "web")
+    logging.debug("ret=%s", ret)
+    return jsonify({"status": "ok", **ret})
+
+
+@api_v1.route("/set_drive", methods=["POST"])
+@validate()
+@with_db_connection
+def set_drive(conn, body: DriveControl):
+    """Sets the speed, records the speed in the changelog, and then updates the database, so status is always up-to-date"""
+    app.logger.debug("**************** /set_drive ****************")
+    rules_engine.logger = app.logger
+
+    logger.debug("/set_drive: body=[%s]", body)
+    ret = rules_engine.set_body_drive(conn, body, request.remote_addr, "web")
     logging.debug("ret=%s", ret)
     return jsonify({"status": "ok", **ret})
 
@@ -189,19 +176,20 @@ def set_speed(conn, body: SpeedControl):
 @api_v1.route("/status")
 @with_db_connection
 def get_status(conn):
-    device_data = get_last_db_data(conn)
+    app.logger.debug("**************** /status ****************")
+    ae200.logger = app.logger
+    device_data = db.fetch_last_status_fixed(conn)
 
-    # Annotate the device_data
+    # Extract and convert the top-level drive, speed, and other items
+    ct = 0
     for data in device_data:
         if "status" in data:
-            data.update(ae200.extract_status(data["status"]))
+            data.update(ae200.extract_drive_and_fan_speed(data["status"]))
         if "logtime" in data:
-            data["age"] = github_style_duration(
-                data["logtime"] + data.get("duration", 1)
-            )
+            data["age"] = github_style_duration( data["logtime"] + data.get("duration", 1) )
+        ct += 1
 
     return jsonify({"devices": device_data})
-
 
 @api_v1.route("/weather")
 @with_db_connection
@@ -340,12 +328,12 @@ def static_files(filename):
 @with_db_connection
 def read_index(conn):
     # Get device data for the template
-    device_data = get_last_db_data(conn)
+    device_data = db.fetch_last_status_fixed(conn)
 
     # Annotate the device_data (same logic as in get_status endpoint)
     for data in device_data:
         if "status" in data:
-            data.update(ae200.extract_status(data["status"]))
+            data.update(ae200.extract_drive_and_fan_speed(data["status"]))
         if "logtime" in data:
             data["age"] = github_style_duration(
                 data["logtime"] + data.get("duration", 1)
@@ -357,16 +345,6 @@ def read_index(conn):
     return render_template("index.html", develop=DEV, devices=device_data, now=now)
 
 
-@app.route("/privacy")
-def privacy():
-    return render_template("privacy.html")
-
-
-@app.route("/version")
-def get_version():
-    return f"version: {__version__}"
-
-
 @app.route("/rules")
 @with_db_connection
 def show_rules(conn):
@@ -376,15 +354,18 @@ def show_rules(conn):
 
     # If requests, see how the rules will render for the next seven days
     rule_table = []
+    AQI_LIST = [0, 51, 101, 151]
     if run_rules:
         rule_table.append("<table class='rules-table'>")
-        rule_table.append("<tr><th>Time</th><th>AQI 0</th><th>AQI 50</th><th>AQI 101</th><th>AQI 151</th></tr>")
+        rule_table.append("<tr><th>Time</th>" +
+                          "".join([f"<th>AQI {aqi}</th>" for aqi in AQI_LIST]) +
+                          "</tr>")
         for hour in range(24 * 7):
             when = hour_now + datetime.timedelta(hours=hour)
             rule_table.append(f"<tr><th>{str(when)}</th>")
-            for aqi in (0, 50, 101, 151):
+            for aqi in AQI_LIST:
                 new_results = rules_engine.rules_results(conn, when.timestamp(), aqi=aqi)
-                rule_table.append(f"<td>{new_results}</td>")
+                rule_table.append(f"<td class='rule-result'>{new_results.replace("\n","<br>")}</td>")
             rule_table.append("</tr>")
 
     rules_disabled_until = rules_engine.rules_disabled_until(conn)
@@ -399,6 +380,9 @@ def show_rules(conn):
         times=rules_engine.get_time_dict(),
     )
 
+@app.route("/logs")
+def do_logs():
+    return render_template("logs.html")
 
 @app.route("/device_log/<device_id>")
 @with_db_connection
@@ -447,6 +431,18 @@ def show_chart():
 
     return render_template("chart.html", device_ids=device_ids)
 
+
+@app.route("/privacy")
+def privacy():
+    return render_template("privacy.html")
+
+@app.route("/buttons")
+def buttons():
+    return render_template("buttons.html")
+
+@app.route("/version")
+def get_version():
+    return f"version: {__version__}"
 
 # Error handler
 @app.errorhandler(HTTPException)

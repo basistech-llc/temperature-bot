@@ -3,11 +3,14 @@
 console.log("unit_speed.js loaded");
 
 // Constants
+const DEBUG=false;
 const REFRESH_INTERVAL = 10; // seconds between refreshes
 const RUNNING_MINUTES = 10; // minutes to run before stopping
-const DEBUG=false;
 const SHOW_REFRESH_COUNTDOWN = false;
 let lastRefreshTime = 0;
+
+const LOG_DAYS=5;
+const SECONDS_PER_DAY=60*60*24;
 
 // Refresh logic
 var start = Date.now();
@@ -56,8 +59,9 @@ function displayWeather(weatherInfo) {
 // Log tables
 function getTodayUnixRange() {
     const now = new Date();
-    const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const end = new Date(start.getTime() + 86400000); // midnight next day
+    const start_today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const start = new Date(start_today.getTime() - (LOG_DAYS-1) * SECONDS_PER_DAY * 1000);
+    const end = new Date(start_today.getTime() + 86400000); // midnight next day
     return {
         start: Math.floor(start.getTime() / 1000),
         end: Math.floor(end.getTime() / 1000)
@@ -106,38 +110,67 @@ function refreshLogTable() {
 ////////////////////////////////////////////////////////////////
 
 
-// Function called to set the speed
-async function setFanSpeed(device_id, speed) {
-    console.log(`setFanSpeed(${device_id},${speed})`);
+// Function called to set the fan drive
+async function setDrive(device_id, drive) {
+    console.log(`setDrive(${device_id},${drive})`);
     try {
-	const response = await fetch('/api/v1/set_speed', {
+	const response = await fetch('/api/v1/set_drive', {
 	    method: 'POST',
 	    headers: { 'Content-Type': 'application/json' },
-	    body: JSON.stringify({ device_id: device_id, speed: speed })
+	    body: JSON.stringify({ device_id: device_id, drive: drive })
 	});
-
 	const result = await response.json();
-	console.log("Set speed: result=",result)
+	console.log("Set drive: result=",result)
 	forceRefresh = true;
     } catch (e) {
-	console.error('Failed to set speed:', e);
-	alert('Error setting speed.');
+	console.error('Failed to set fan_speed:', e);
+	alert('Error setting fan_speed.');
     }
 }
 
-// Add event listeners for radio buttons
-function setupRadioButtonListeners() {
+// Function called to set the fan_speed
+async function setFanSpeed(device_id, fan_speed) {
+    console.log(`setFanSpeed(${device_id},${fan_speed})`);
+    try {
+        console.log("sending",device_id,fan_speed);
+	const response = await fetch('/api/v1/set_fan_speed', {
+	    method: 'POST',
+	    headers: { 'Content-Type': 'application/json' },
+	    body: JSON.stringify({ device_id: device_id, fan_speed: fan_speed })
+	});
+	const result = await response.json();
+	console.log("Set fan_speed: result=",result)
+	forceRefresh = true;
+    } catch (e) {
+	console.error('Failed to set fan_speed:', e);
+	alert('Error setting fan_speed.');
+    }
+}
+
+// Handle all user events
+function setupMatrixListenerss() {
+    // Add event listeners for fan sliders
+    const driveSwitches = document.querySelectorAll('input[type="checkbox"][x-drive]');
+    driveSwitches.forEach(ds => {
+        ds.addEventListener('change', function() {
+            const deviceId = parseInt(this.getAttribute('x-data-device-id'));
+            console.log("this=",this,"this.checked=",this.checked);
+            setDrive(deviceId, this.checked ? 1 : 0);
+        });
+    });
+    // Add event listeners for radio buttons
     const radioButtons = document.querySelectorAll('input[type="radio"][x-data-device-id]');
     radioButtons.forEach(radio => {
         radio.addEventListener('change', function() {
             const deviceId = parseInt(this.getAttribute('x-data-device-id'));
-            const speed = parseInt(this.getAttribute('x-data-speed'));
-            setFanSpeed(deviceId, speed);
+            const fan_speed = parseInt(this.getAttribute('x-data-fan_speed'));
+            setFanSpeed(deviceId, fan_speed);
         });
     });
 }
 
-const refreshGrid = () => {
+// Refresh the rows in the fan control and temperature panel grid.
+const refreshGridRows = () => {
     const now = Date.now();
     const secondsSinceRefresh = Math.floor((now - lastRefreshTime) / 1000);
     const secondsUntilRefresh = forceRefresh ? 0 : (REFRESH_INTERVAL - secondsSinceRefresh);
@@ -149,38 +182,51 @@ const refreshGrid = () => {
         return;
     }
 
-    // Update countdown display
+    // Update countdown display if there is a #text-update field
     if (SHOW_REFRESH_COUNTDOWN) {
         document.querySelector('#next-update').innerHTML =
             secondsUntilRefresh <= 0 ? 'Refreshing...' : `Next refresh in ${secondsUntilRefresh} seconds`;
     }
 
-    // If it's time to refresh
+    // If it's time to refresh, run the status api and update all of the temps, fan_speeds, and status columsn
     if (secondsUntilRefresh <= 0) {
         refreshLogTable();
         const formData = new FormData();
         fetch(window.location.href + 'api/v1/status', { method: "GET"})
             .then(response => response.json())
             .then(data => {
-                console.log('Status data received:', data);
+                if (DEBUG) {
+                    console.log('Status data received:', data);
+                }
 
                 // Update the tables with the new data
-		for (const dev of data.devices) {
+		if (data.devices) for (const dev of data.devices) {
 		    if (dev.temp10x) {
 			const cell = document.getElementById(`temp-${dev.device_id}`);
 			var myformat = Intl.NumberFormat('en-US', {minimumIntegerDigits:2,
 								   minimumFractionDigits:1});
 			cell.innerHTML = myformat.format(dev.temp10x/10) + (dev.age ? ` <span class='age'>(${dev.age})</span> ` : '');
-
 		    }
-		    if (dev.speed) {
-			const radio = document.getElementById(`radio-${dev.device_id}-${dev.drive_speed_val}`);
+                    if (dev.drive) {
+                        const slider = document.getElementById(`fan_drive-${dev.device_id}`);
+                        if (slider) {
+                            slider.checked = dev.drive ? true : false;
+                        } else {
+                            console.warn(`Drive slider not found for fan_drive${dev.device_ide} dev=`,dev);
+                        }
+                    }
+		    if (dev.fan_speed) {
+			const radio = document.getElementById(`radio-${dev.device_id}-${dev.fan_speed}`);
 			if (radio) {
 			    radio.checked = true;
 			} else {
-			    console.warn(`Radio button not found for radio-${dev.device_id}-${dev.drive_speed_val} dev=`,dev);
+			    console.warn(`Radio button not found for radio-${dev.device_id}-${dev.fan_speed} dev=`,dev);
 			}
 		    }
+                    if (dev.notes) {
+                        const cell = document.getElementById(`notes-${dev.device_id}`);
+                        cell.innerHTML = dev.notes;
+                    }
 		}
 
 		// Update last refresh time
@@ -193,7 +239,7 @@ const refreshGrid = () => {
                     zeroPad(currentdate.getHours(), 2) + ":" +
                     zeroPad(currentdate.getMinutes(), 2) + ":" +
                     zeroPad(currentdate.getSeconds(), 2);
-                document.querySelector('#last-refresh').innerHTML = datetime;
+                $('#last-refresh').html(datetime);
 
                 // Update the refresh time
                 lastRefreshTime = now;
@@ -205,7 +251,7 @@ const refreshGrid = () => {
                 lastRefreshTime = now;
             });
     }
-    setTimeout(refreshGrid, 1000);    // Schedule next check in 1 second
+    setTimeout(refreshGridRows, 1000);    // Schedule next check in 1 second
 };
 
 /* This loads weather and starts the refresh cycle. */
@@ -237,15 +283,14 @@ async function loadWeatherAndStartRefresh() {
 	    });
 
         // Start the refresh cycle
-        refreshGrid();
+        refreshGridRows();
     } catch (e) {
 	console.error("Error in loadWeatherAndStartRefresh():", e);
     }
 }
 
-
 createLogTable();
 window.addEventListener('DOMContentLoaded', function() {
-    setupRadioButtonListeners();
+    setupMatrixListenerss();
     loadWeatherAndStartRefresh();
 });

@@ -16,9 +16,7 @@ from app import ae200
 from app import db
 from app.paths import TEST_DATA_DIR
 
-
 logger = logging.getLogger(__name__)
-
 
 # Disable websockets debug
 @pytest.fixture(autouse=True)
@@ -70,10 +68,10 @@ BROADWAY_SOUTH=10
 @patch("app.ae200.get_device_info")
 @patch("app.ae200.set_fan_speed")
 @patch("app.ae200.get_devices")  # note patch args are in reverse order
-@patch("app.ae200.get_device_speed")
-def test_set_speed_endpoint(mock_get_device_speed, mock_get_devices, mock_set_fan_speed, mock_get_device_info, client, device_name, speed, name): # noqa: F811
+@patch("app.ae200.get_device_fan_speed")
+def test_set_fan_speed_endpoint(mock_get_device_fan_speed, mock_get_devices, mock_set_fan_speed, mock_get_device_info, client, device_name, speed, name): # noqa: F811
     # get device_id
-    mock_get_device_speed.return_value = 3 # always make it a 3
+    mock_get_device_fan_speed.return_value = 3 # always make it a 3
     with sqlite3.connect(os.environ['TEST_DB_NAME']) as test_conn:
         test_conn.row_factory = sqlite3.Row
         device_id = db.get_or_create_device_id(test_conn, device_name)
@@ -89,9 +87,9 @@ def test_set_speed_endpoint(mock_get_device_speed, mock_get_devices, mock_set_fa
         dev10['FanSpeed'] = name        # it should be set to this name
         mock_get_device_info.return_value = dev10
 
-    # Send the /set_speed
+    # Send the /set_fan_speed
     response = client.post(
-        "/api/v1/set_speed",
+        "/api/v1/set_fan_speed",
         json={"device_id": device_id, "speed": speed}
     )
     assert response.status_code == 200  # Check for successful HTTP status
@@ -126,5 +124,5 @@ def test_set_speed_endpoint(mock_get_device_speed, mock_get_devices, mock_set_fa
         device_id = row['device_id']
         cursor.execute("SELECT * from devlog where device_id=? order by logtime desc", (device_id,))
         row = cursor.fetchone()
-        extracted_status = ae200.extract_status(json.loads(row['status_json']))
+        extracted_status = ae200.extract_drive_and_fan_speed(json.loads(row['status_json']))
         assert extracted_status['drive_speed_val'] == speed

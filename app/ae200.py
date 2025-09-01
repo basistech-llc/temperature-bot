@@ -21,9 +21,14 @@ from websockets.extensions import permessage_deflate
 
 from app.util import get_config
 
-# Fan mapping speeds
-SPEED_AUTO = -1
-SPEEDS = {-1:"AUTO", 0: "OFF", 1: "LOW", 2: "MID2", 3: "MID1", 4: "HIGH"}
+logger = logging.getLogger(__name__)
+
+# Fan mapping speeds. Note that there is no 'OFF'
+FAN_SPEED_AUTO = -1
+DRIVES = {0:"OFF", 1:"ON"}
+FAN_SPEEDS = {-1:"AUTO", 1: "LOW", 2: "MID2", 3: "MID1", 4: "HIGH"}
+FAN_SPEED_NAMES = {value: key for key, value in FAN_SPEEDS.items()}
+DRIVE_NAMES = {value: key for key, value in DRIVES.items()}
 
 getUnitsPayload = """<?xml version="1.0" encoding="UTF-8" ?>
 <Packet>
@@ -67,19 +72,6 @@ def getMnetDetails(deviceIds):
 def cleanDeviceInfo(statusdict):
     """Given the statusdict, remove empty values"""
     return {key:value for (key,value) in statusdict.items() if value!=""}
-
-def drive_speed_to_val(drive, speed):
-    """Converts an AE200 drive and speed to a single value (-1 for auto)"""
-    if drive is None or speed is None:
-        return None
-    if drive == "OFF":
-        return 0
-    if speed=="AUTO":
-        return -1
-    for n, v in SPEEDS.items():
-        if speed == v:
-            return n
-    raise ValueError(f"Unknown drive={drive} speed={speed}")
 
 class AsyncRunner:
     """Manages async operations for the application"""
@@ -190,55 +182,71 @@ async def get_devices_async():
     d = AE200Functions()
     return await d.getDevicesAsync()
 
-def extract_status(data):
-    """Return a dict with drive/speed/drive_speed_val/has_speed_control"""
+def extract_drive_and_fan_speed(data):
+    """Return a dict with drive/speed/has_speed_control"""
     drive = data.get('Drive',None)
     speed = data.get('FanSpeed',None)
-    has_speed_control = (drive is not None and speed is not None and speed in SPEEDS.values())
+    if drive is None or speed is None:
+        return {'has_speed_control':False}
     return {
-        'drive': drive,
-        'speed': speed,
-        'drive_speed_val': drive_speed_to_val(drive, speed),
-        'has_speed_control': has_speed_control
+        'drive': DRIVE_NAMES[drive],
+        'fan_speed': FAN_SPEED_NAMES[speed],
+        'has_speed_control': True
     }
 
 async def set_fan_speed_async(device, speed):
-    logging.info("set_fan_speed_async(%s,%s)",device,speed)
+    logger.info("set_fan_speed_async(%s,%s)",device,speed)
     d = AE200Functions()
-    if speed == 0:
-        await d.sendAsync(device, {"Drive": "OFF"})
-    else:
-        await d.sendAsync(device, {"Drive": "ON"})
-        await d.sendAsync(device, {"FanSpeed": SPEEDS[speed]})
+    await d.sendAsync(device, {"FanSpeed": FAN_SPEEDS[speed]})
 
 def set_fan_speed(ae200_device, speed):
-    logging.info("set_fan_speed(%s,%s)",ae200_device,speed)
+    logger.info("set_fan_speed(%s,%s)",ae200_device,speed)
     d = AE200Functions()
-    if speed == 0:
-        d.send(ae200_device, {"Drive": "OFF"})
+    d.send(ae200_device, {"FanSpeed": FAN_SPEEDS[speed]})
+
+def int_to_drive(drive):
+    if str(drive).upper() in ["1","TRUE","ON","YES"]:
+        return "ON"
     else:
-        d.send(ae200_device, {"Drive": "ON"})
-        d.send(ae200_device, {"FanSpeed": SPEEDS[speed]})
+        return "OFF"
+
+
+async def set_drive_async(device, drive_int):
+    drive_str = int_to_drive(drive_int)
+    logger.error("set_drive_async(%s,%s,%s)",device,drive_int,drive_str)
+    d = AE200Functions()
+    await d.sendAsync(device, {"Drive": drive_str})
+
+def set_drive(ae200_device, drive_int):
+    drive_str = int_to_drive(drive_int)
+    logger.info("set_fan_speed(%s,%s,%s)",ae200_device,drive_int,drive_str)
+    d = AE200Functions()
+    d.send(ae200_device, {"Drive": drive_str})
 
 async def get_device_info_async(device):
-    logging.info("get_device_info_async(%s)",device)
+    logger.info("get_device_info_async(%s)",device)
     d = AE200Functions()
     return await d.getDeviceInfoAsync(device)
 
 def get_device_info(device):
-    logging.info("get_device_info(%s)",device)
+    logger.info("get_device_info(%s)",device)
     d = AE200Functions()
     return d.getDeviceInfo(device)
 
-def get_device_speed(device):
+def get_device_fan_speed(device):
+    """Returns the device fanspeed as a number"""
     info = get_device_info(device)
-    return drive_speed_to_val(info['Drive'], info['FanSpeed'])
+    return FAN_SPEED_NAMES[info['FanSpeed']]
+
+def get_device_drive(device):
+    """Returns the device fanspeed as a number"""
+    info = get_device_info(device)
+    return DRIVE_NAMES[info['Drive']]
 
 def get_devices():
-    logging.info("get_devices()")
+    logger.info("get_devices()")
     d = AE200Functions()
     return d.getDevices()
-
 
 if __name__ == "__main__":
     import argparse
@@ -248,7 +256,6 @@ if __name__ == "__main__":
         formatter_class=argparse.ArgumentDefaultsHelpFormatter )
     parser.add_argument( "--host", help='address of the AE200 controller')
     parser.add_argument( "--json", help='Full JSON dump of the device(s)', action="store_true")
-    parser.add_argument( "--set",   help='Specifies a device to set', type=int)
     parser.add_argument( "--level", help="Specify level 0-4. 0 is off", type=int, default=0 )
     args = parser.parse_args()
 
