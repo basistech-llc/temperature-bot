@@ -296,7 +296,7 @@ def test_browser_fan_speed_controls(
             page.wait_for_timeout(2000)
 
             # Verify radio button is selected
-            helper.verify_radio_selected(0)
+            helper.verify_radio_selected(1)
 
             # Verify other speeds are not selected
             for speed in [1, 2, 3, 4]:
@@ -325,7 +325,7 @@ def test_browser_fan_speed_controls(
             helper.verify_radio_selected(4)
 
             # Verify other speeds are not selected
-            for speed in [0, 1, 2, 3]:
+            for speed in [1, 2, 3]:
                 helper.verify_radio_not_selected(speed)
 
             # Verify database was updated

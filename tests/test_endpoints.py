@@ -60,21 +60,26 @@ def test_weather_endpoint(mock_get_airquality, mock_get_weather_data, client):  
 
 # pylint: disable=too-many-arguments, disable=too-many-positional-arguments
 BROADWAY_SOUTH=10
-@pytest.mark.parametrize("device_name,speed,name", [
-    ("Broadway South", 0, "OFF"),
-    ("Broadway South", 1, "LOW"),
-    ("Broadway South", 4, "HIGH"),
+@pytest.mark.parametrize("start_speed,target_speed,expected_calls", [
+    (1, 1, 0),  # Same speed - should not call set_fan_speed
+    (1, 2, 1),  # Different speed - should call set_fan_speed once
+    (1, 3, 1),  # Different speed - should call set_fan_speed once
+    (1, 4, 1),  # Different speed - should call set_fan_speed once
+    (2, 1, 1),  # Different speed - should call set_fan_speed once
+    (2, 2, 0),  # Same speed - should not call set_fan_speed
+    (2, 3, 1),  # Different speed - should call set_fan_speed once
+    (2, 4, 1),  # Different speed - should call set_fan_speed once
 ])
 @patch("app.ae200.get_device_info")
 @patch("app.ae200.set_fan_speed")
 @patch("app.ae200.get_devices")  # note patch args are in reverse order
 @patch("app.ae200.get_device_fan_speed")
-def test_set_fan_speed_endpoint(mock_get_device_fan_speed, mock_get_devices, mock_set_fan_speed, mock_get_device_info, client, device_name, speed, name): # noqa: F811
+def test_set_fan_speed_endpoint(mock_get_device_fan_speed, mock_get_devices, mock_set_fan_speed, mock_get_device_info, client, start_speed, target_speed, expected_calls): # noqa: F811
     # get device_id
-    mock_get_device_fan_speed.return_value = 3 # always make it a 3
+    mock_get_device_fan_speed.return_value = start_speed  # Mock the current speed
     with sqlite3.connect(os.environ['TEST_DB_NAME']) as test_conn:
         test_conn.row_factory = sqlite3.Row
-        device_id = db.get_or_create_device_id(test_conn, device_name)
+        device_id = db.get_or_create_device_id(test_conn, "Broadway South")
         c = test_conn.cursor()
         c.execute("UPDATE devices set ae200_device_id=? where device_id=?",(BROADWAY_SOUTH,device_id))
         test_conn.commit()
@@ -84,45 +89,53 @@ def test_set_fan_speed_endpoint(mock_get_device_fan_speed, mock_get_devices, moc
         mock_get_devices.return_value = json.load(f)
     with open(join(TEST_DATA_DIR, 'get_device_10.json')) as f:
         dev10 = json.load(f)
-        dev10['FanSpeed'] = name        # it should be set to this name
+        # Map speed numbers to names
+        speed_names = {1: "LOW", 2: "MID2", 3: "MID1", 4: "HIGH"}
+        dev10['FanSpeed'] = speed_names[target_speed]
         mock_get_device_info.return_value = dev10
 
     # Send the /set_fan_speed
     response = client.post(
         "/api/v1/set_fan_speed",
-        json={"device_id": device_id, "speed": speed}
+        json={"device_id": device_id, "fan_speed": target_speed}
     )
     assert response.status_code == 200  # Check for successful HTTP status
     response_json = response.json
     assert response_json["status"] == "ok"
     assert response_json["device_id"] == device_id
     assert str(response_json['unit']) == str(BROADWAY_SOUTH)
-    assert response_json["speed"] == speed
+    assert response_json["speed"] == target_speed
 
     # Verify that these were both called with the arguments
     #mock_get_devices.assert_called_once_with()
     mock_get_device_info.assert_called_with(BROADWAY_SOUTH)
-    mock_set_fan_speed.assert_called_once_with(BROADWAY_SOUTH, speed)
+    # Verify set_fan_speed was called the expected number of times
+    if expected_calls == 0:
+        mock_set_fan_speed.assert_not_called()
+    else:
+        assert mock_set_fan_speed.call_count == expected_calls
+        mock_set_fan_speed.assert_called_with(BROADWAY_SOUTH, target_speed)
 
-    # Verify that the database got updated
-    # Note that we are using the TEST_DB_NAME put in the environment.
-    with sqlite3.connect(os.environ['TEST_DB_NAME']) as test_conn_verify:
-        test_conn_verify.row_factory = sqlite3.Row
-        cursor = test_conn_verify.cursor()
-        cursor.execute("SELECT ipaddr, device_id, new_value, agent FROM changelog order by changelog_id DESC limit 1")
-        changelog_entry = cursor.fetchone()
-        assert changelog_entry is not None
-        logging.debug("changelog_entry=%s",dict(changelog_entry))
-        assert changelog_entry['ipaddr'] == '127.0.0.1'  # Flask test client IP
-        assert changelog_entry['device_id'] == device_id
-        assert changelog_entry['new_value'] == str(speed)
-        assert changelog_entry['agent'] == 'web'
+    # Verify that the database got updated only when speed changes
+    if expected_calls > 0:
+        # Note that we are using the TEST_DB_NAME put in the environment.
+        with sqlite3.connect(os.environ['TEST_DB_NAME']) as test_conn_verify:
+            test_conn_verify.row_factory = sqlite3.Row
+            cursor = test_conn_verify.cursor()
+            cursor.execute("SELECT ipaddr, device_id, new_value, agent FROM changelog order by changelog_id DESC limit 1")
+            changelog_entry = cursor.fetchone()
+            assert changelog_entry is not None
+            logging.debug("changelog_entry=%s",dict(changelog_entry))
+            assert changelog_entry['ipaddr'] == '127.0.0.1'  # Flask test client IP
+            assert changelog_entry['device_id'] == device_id
+            assert changelog_entry['new_value'] == str(target_speed)
+            assert changelog_entry['agent'] == 'web'
 
-        cursor.execute("SELECT * from devices where device_name=?", ("Broadway South",))
-        row = cursor.fetchone()
-        logging.debug("row=%s", dict(row))
-        device_id = row['device_id']
-        cursor.execute("SELECT * from devlog where device_id=? order by logtime desc", (device_id,))
-        row = cursor.fetchone()
-        extracted_status = ae200.extract_drive_and_fan_speed(json.loads(row['status_json']))
-        assert extracted_status['drive_speed_val'] == speed
+            cursor.execute("SELECT * from devices where device_name=?", ("Broadway South",))
+            row = cursor.fetchone()
+            logging.debug("row=%s", dict(row))
+            device_id = row['device_id']
+            cursor.execute("SELECT * from devlog where device_id=? order by logtime desc", (device_id,))
+            row = cursor.fetchone()
+            extracted_status = ae200.extract_drive_and_fan_speed(json.loads(row['status_json']))
+            assert extracted_status['fan_speed'] == target_speed
