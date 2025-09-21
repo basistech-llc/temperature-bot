@@ -22,12 +22,11 @@ def get_secrets():
 
 def get_secret(category,name):
     """Get a secret value, checking environment variables first, then secrets file"""
-    print("get_secrets()=",get_secrets(),file=sys.stderr)
     env_name = category.upper()+"_"+name.upper()
     if env_name in os.environ:
         return os.environ[env_name]
     try:
         return get_secrets()[category][name]
-    except KeyError:
-        logger.error("no secret [%s][%s]",category,name)
-        return None
+    except KeyError as e:
+        logger.error("no secret [%s][%s] in %s",category,name,CONFIG_YAML_PATH)
+        raise RuntimeError("no secret") from e

@@ -5,6 +5,7 @@ You need an API key
 
 import logging
 import requests  # type: ignore
+import json
 from app.util import get_config, get_secret
 from app.paths import TIMEOUT_SECONDS
 
@@ -60,11 +61,15 @@ def get_aqi_airnow():
 
 def get_aqi_google():
     """Get AQI data from Google API"""
-    params = {'hours':1,
-              'location':{
-                  'longitude':get_config()['location']['longitude'],
-                  'latitude':get_config()['location']['latitude'] }
-              }
+    try:
+        params = {'hours':1,
+                  'location':{
+                      'longitude':get_config()['location']['lon'],
+                      'latitude':get_config()['location']['lat'] }
+                  }
+    except KeyError:
+        print(f"longitude and latitude missing from location:\n{json.dumps(get_config(),indent=4)}")
+        raise
 
     API_KEY = get_secret('google', 'air_quality_api_key')
     url = GOOGLE_URL.format(API_KEY=API_KEY)
@@ -84,9 +89,31 @@ def get_aqi_google():
         logger.error("Exception in get_aqi: %s", e)
         raise
 
+# aqicn.org
+# https://aqicn.org/json-api/doc/
+
+def get_aqi_aqicn():
+    try:
+        city = get_config()['location']['city']
+    except KeyError:
+        print(f"city missing from location:\n{json.dumps(get_config(),indent=4)}")
+        raise
+    print('city:',city)
+    token = get_secret('aqicn', 'token')
+    r = requests.get(f'https://api.waqi.info/feed/{city}/?token={token}')
+    r.raise_for_status()
+    data = r.json()
+    print("data:",data)
+    if data['status']=='ok':
+        return data['data']['aqi']
+    else:
+        raise AQIError("cannot get AQI")
+
 def get_aqi():
-    return get_aqi_google()
+    return get_aqi_aqicn()
 
 
 if __name__=="__main__":
-    print("aqi:",get_aqi())
+    print("get_aqi_google:",get_aqi_google())
+    print("get_aqi_airnow:",get_aqi_airnow())
+    print("get_aaqi_aqicn:",get_aqi_aqicn())
