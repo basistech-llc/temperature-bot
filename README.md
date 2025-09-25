@@ -25,3 +25,4 @@ https://github.com/dpb587/hubitat-cli
 ### Temperature Bot
 - Runs every minute
 - Queries every sensor and puts the results into the database.
+# Test commit
