@@ -17,7 +17,6 @@ from pydantic import BaseModel
 from app.paths import DB_PATH
 
 logger = logging.getLogger(__name__)
-logger.debug("DB_PATH=%s",DB_PATH)
 
 DEVICE_MAP: dict[str, int] = {}
 MAX_DURATION=3600                 # don't extend more than an hour

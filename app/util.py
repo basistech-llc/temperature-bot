@@ -25,8 +25,10 @@ def get_secrets():
 
 def get_secret(category,name):
     """Get a secret value, checking environment variables first, then secrets file"""
+    logger.debug("get_secret(%s,%s)",category,name)
     env_name = category.upper()+"_"+name.upper()
     if env_name in os.environ:
+        logger.debug("SECRET (%s,%s) from environment %s",category,name,env_name)
         return os.environ[env_name]
     try:
         return get_secrets()[category][name]

@@ -114,6 +114,15 @@ def get_aqi():
 
 
 if __name__=="__main__":
-    print("get_aqi_google:",get_aqi_google())
-    print("get_aqi_airnow:",get_aqi_airnow())
-    print("get_aaqi_aqicn:",get_aqi_aqicn())
+    try:
+        print("get_aqi_google:",get_aqi_google())
+    except AQIError as e:
+        print("get_aqi_google: ",e)
+    try:
+        print("get_aqi_airnow:",get_aqi_airnow())
+    except AQIError as e:
+        print("get_aqi_airnow: ",e)
+    try:
+        print("get_aqi_aqicn:",get_aqi_aqicn())
+    except AQIError as e:
+        print("get_aqi_aqicn: ",e)
