@@ -29,14 +29,25 @@ import lib.ctools.lock as clock
 logger = logging.getLogger(__name__)
 
 def update_from_ae200(conn):
-    d = ae200.AE200Functions()
-    devs = d.getDevices()
-    for dev in devs:
-        data = d.getDeviceInfo(dev['id'])
-        data['id'] = dev['id']
-        temp = data.get("InletTemp",None)
-        device_id = db.update_devlog_map(conn, device_name=dev['name'], ae200_device_id=dev['id'])
-        db.insert_devlog_entry(conn, device_id=device_id, temp=temp, statusdict=data)
+    if ae200.AE200_SIMULATOR:
+        # Use simulator functions
+        devs = ae200.get_devices()
+        for dev in devs:
+            data = ae200.get_device_info(dev['id'])
+            data['id'] = dev['id']
+            temp = data.get("InletTemp",None)
+            device_id = db.update_devlog_map(conn, device_name=dev['name'], ae200_device_id=dev['id'])
+            db.insert_devlog_entry(conn, device_id=device_id, temp=temp, statusdict=data)
+    else:
+        # Use real AE200 device
+        d = ae200.AE200Functions()
+        devs = d.getDevices()
+        for dev in devs:
+            data = d.getDeviceInfo(dev['id'])
+            data['id'] = dev['id']
+            temp = data.get("InletTemp",None)
+            device_id = db.update_devlog_map(conn, device_name=dev['name'], ae200_device_id=dev['id'])
+            db.insert_devlog_entry(conn, device_id=device_id, temp=temp, statusdict=data)
 
 def update_from_hubitat(conn):
     try:

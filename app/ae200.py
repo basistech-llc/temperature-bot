@@ -243,7 +243,7 @@ async def get_device_info_async(device):
 simulated_devices = {}
 DEVICES='devices'
 if AE200_SIMULATOR:
-    logger.info("SIMULATOR ENABLED")
+    logger.debug("SIMULATOR ENABLED")
     simulated_devices[DEVICES] = json.loads( (SIMULATOR_DIR / 'ae200_get_devices.json').read_bytes())
     for dev in simulated_devices[DEVICES]:
         id = dev['id']

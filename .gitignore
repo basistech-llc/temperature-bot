@@ -16,3 +16,5 @@ temps.csv
 token.json
 .coverage
 temperature-bot-config.yaml
+*.db-shm
+*.db-wal

@@ -11,6 +11,7 @@ from os.path import dirname, abspath
 sys.path.append(dirname(dirname(abspath(__file__))))
 
 from app.ae200 import AE200Functions
+import app.ae200 as ae200
 
 import lib.ctools.clogging as clogging
 import lib.ctools.lock as clock
@@ -35,8 +36,13 @@ def main():
 if __name__=="__main__":
     main()
     now = datetime.datetime.now()
-    d = AE200Functions()
-    pprint(d.getDevices())
+    if ae200.AE200_SIMULATOR:
+        # Use simulator functions
+        pprint(ae200.get_devices())
+    else:
+        # Use real AE200 device
+        d = AE200Functions()
+        pprint(d.getDevices())
     print("now=", now)
     print("are 51 status:")
     # Note: get_dev_status is async, so we can't call it directly here

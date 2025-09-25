@@ -10,6 +10,9 @@ import pytest
 from app.main import app as flask_app
 from app.paths import SCHEMA_FILE_PATH
 
+# Set AE200_SIMULATOR environment variable for all tests
+os.environ['AE200_SIMULATOR'] = '1'
+
 logger = logging.getLogger(__name__)
 
 skip_on_github = pytest.mark.skipif(

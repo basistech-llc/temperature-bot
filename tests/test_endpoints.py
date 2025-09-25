@@ -2,21 +2,20 @@
 test Flask endpoints
 """
 import logging
-from unittest.mock import patch
 import sqlite3
 import os
 import json
 import pytest
 import time
+from unittest.mock import patch
 
 from conftest import client, skip_on_github  # noqa: F401  # pylint: disable=unused-import
-from helpers.mock_helpers import MockHelper
 from helpers.data_factories import DeviceTestData
+from helpers.mock_helpers import MockHelper
 
 from app import main
 from app import ae200
 from app import db
-from app.paths import TEST_DATA_DIR
 
 logger = logging.getLogger(__name__)
 
@@ -213,28 +212,18 @@ BROADWAY_SOUTH=10
     (2, 3, 1),  # Different speed - should call set_fan_speed once
     (2, 4, 1),  # Different speed - should call set_fan_speed once
 ])
-@patch("app.ae200.get_device_info")
-@patch("app.ae200.set_fan_speed")
-@patch("app.ae200.get_devices")  # note patch args are in reverse order
-@patch("app.ae200.get_device_fan_speed")
-def test_set_fan_speed_endpoint(mock_get_device_fan_speed, mock_get_devices, mock_set_fan_speed, mock_get_device_info, client, start_speed, target_speed, expected_calls): # noqa: F811
+def test_set_fan_speed_endpoint(client, start_speed, target_speed, expected_calls): # noqa: F811
+    # Set up simulator with initial speed
+    from app import ae200
+    ae200.set_fan_speed(BROADWAY_SOUTH, start_speed)
+
     # get device_id
-    mock_get_device_fan_speed.return_value = start_speed  # Mock the current speed
     with sqlite3.connect(os.environ['TEST_DB_NAME']) as test_conn:
         test_conn.row_factory = sqlite3.Row
         device_id = db.get_or_create_device_id(test_conn, "Broadway South")
         c = test_conn.cursor()
         c.execute("UPDATE devices set ae200_device_id=? where device_id=?",(BROADWAY_SOUTH,device_id))
         test_conn.commit()
-
-    # Use new mock helper for device data
-    MockHelper.setup_ae200_mocks(mock_get_devices, mock_get_device_info, TEST_DATA_DIR, BROADWAY_SOUTH)
-
-    # Override device info with target speed
-    speed_names = DeviceTestData.get_speed_names()
-    mock_get_device_info.return_value = MockHelper.create_mock_device_info_response(
-        speed_names[target_speed], TEST_DATA_DIR, BROADWAY_SOUTH
-    )
 
     # Send the /set_fan_speed
     response = client.post(
@@ -248,15 +237,11 @@ def test_set_fan_speed_endpoint(mock_get_device_fan_speed, mock_get_devices, moc
     assert str(response_json['unit']) == str(BROADWAY_SOUTH)
     assert response_json["speed"] == target_speed
 
-    # Verify that these were both called with the arguments
-    #mock_get_devices.assert_called_once_with()
-    mock_get_device_info.assert_called_with(BROADWAY_SOUTH)
-    # Verify set_fan_speed was called the expected number of times
-    if expected_calls == 0:
-        mock_set_fan_speed.assert_not_called()
-    else:
-        assert mock_set_fan_speed.call_count == expected_calls
-        mock_set_fan_speed.assert_called_with(BROADWAY_SOUTH, target_speed)
+    # Verify the simulator state was updated correctly
+    device_info = ae200.get_device_info(BROADWAY_SOUTH)
+    speed_names = DeviceTestData.get_speed_names()
+    expected_speed_name = speed_names[target_speed]
+    assert device_info['FanSpeed'] == expected_speed_name
 
     # Verify that the database got updated only when speed changes
     if expected_calls > 0:

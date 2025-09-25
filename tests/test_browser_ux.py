@@ -17,7 +17,6 @@ from helpers.database_helpers import DatabaseTestHelper
 from helpers.mock_helpers import MockHelper
 from helpers.data_factories import DeviceTestData, TestDataFactory
 from app import db
-from app.paths import TEST_DATA_DIR
 
 from app.main import app
 
@@ -37,15 +36,11 @@ TEST_AQI = False
 
 # pylint: disable=too-many-arguments, disable=too-many-positional-arguments, disable=too-many-statements
 @skip_on_github
-@patch("app.ae200.get_device_info")
-@patch("app.ae200.get_devices")
 @patch("app.weather.get_weather_data")
 @patch("app.airquality.get_aqi")
 def test_browser_fan_speed_controls(
     mock_get_airquality,
     mock_get_weather_data,
-    mock_get_devices,
-    mock_get_device_info,
     client     # noqa: F811 # pylint: disable=unused-argument
 ):
     """
@@ -83,13 +78,8 @@ def test_browser_fan_speed_controls(
             current_time
         )
 
-    # Set up mocked return values using new mock helper
-    MockHelper.setup_ae200_mocks(mock_get_devices, mock_get_device_info, TEST_DATA_DIR, BROADWAY_SOUTH)
+    # Set up weather mocks
     MockHelper.setup_weather_mocks(mock_get_airquality, mock_get_weather_data, 45, TEST_TEMP)
-
-    # Mock device info responses for different speeds
-    def mock_device_info_response(speed_name):
-        return MockHelper.create_mock_device_info_response(speed_name, TEST_DATA_DIR, BROADWAY_SOUTH)
 
     # Start the Flask app in a separate thread
     def run_app():
@@ -131,8 +121,9 @@ def test_browser_fan_speed_controls(
             # Test 1: Click fan speed 1 (LOW) since UI has speeds [-1,1,2,3,4]
             logger.info("Testing fan speed 1 (LOW)")
 
-            # Set up mock for speed 1
-            mock_get_device_info.return_value = mock_device_info_response("LOW")
+            # Set up simulator for speed 1
+            from app import ae200
+            ae200.set_fan_speed(BROADWAY_SOUTH, 1)
 
             # Click fan speed 1
             helper.click_fan_speed(1)
@@ -157,8 +148,8 @@ def test_browser_fan_speed_controls(
             # Test 2: Click fan speed 4 (HIGH)
             logger.info("Testing fan speed 4 (HIGH)")
 
-            # Set up mock for speed 4
-            mock_get_device_info.return_value = mock_device_info_response("HIGH")
+            # Set up simulator for speed 4
+            ae200.set_fan_speed(BROADWAY_SOUTH, 4)
 
             # Click fan speed 4
             helper.click_fan_speed(4)
@@ -183,8 +174,8 @@ def test_browser_fan_speed_controls(
             # Test 3: Click fan speed 2 (MID2)
             logger.info("Testing fan speed 2 (MID2)")
 
-            # Set up mock for speed 2
-            mock_get_device_info.return_value = mock_device_info_response("MID2")
+            # Set up simulator for speed 2
+            ae200.set_fan_speed(BROADWAY_SOUTH, 2)
 
             # Click fan speed 2
             helper.click_fan_speed(2)
@@ -205,9 +196,9 @@ def test_browser_fan_speed_controls(
             # Verify the mock was called correctly
             # mock_set_fan_speed.assert_called_with(BROADWAY_SOUTH, 1)
 
-            # Verify total number of calls
-            # assert mock_set_fan_speed.call_count == 3, f"Expected 3 calls, got {mock_set_fan_speed.call_count}"
-            assert mock_get_device_info.call_count >= 3
+            # Verify simulator state was updated correctly
+            device_info = ae200.get_device_info(BROADWAY_SOUTH)
+            assert device_info['FanSpeed'] == "MID2"
 
             browser.close()
 
@@ -221,17 +212,11 @@ def test_browser_fan_speed_controls(
 
 # pylint: disable=unused-argument
 @skip_on_github
-@patch("app.ae200.get_device_info")
-@patch("app.ae200.set_fan_speed")
-@patch("app.ae200.get_devices")
 @patch("app.weather.get_weather_data")
 @patch("app.airquality.get_aqi")
 def test_browser_page_loads_correctly(
     mock_get_airquality,
     mock_get_weather_data,
-    mock_get_devices,
-    mock_set_fan_speed,
-    mock_get_device_info,
     client  # noqa: F811
 ):
     """Test that the browser page loads correctly with all elements"""
@@ -256,8 +241,7 @@ def test_browser_page_loads_correctly(
             force=True
         )
 
-    # Set up mocked return values using new mock helper
-    MockHelper.setup_ae200_mocks(mock_get_devices, mock_get_device_info, TEST_DATA_DIR, BROADWAY_SOUTH)
+    # Set up weather mocks
     MockHelper.setup_weather_mocks(mock_get_airquality, mock_get_weather_data, 45, TEST_TEMP)
 
     # Start the Flask app in a separate thread

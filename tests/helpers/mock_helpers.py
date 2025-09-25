@@ -19,38 +19,6 @@ class MockHelper:
             "forecast": []
         }
 
-    @staticmethod
-    def setup_ae200_mocks(mock_get_devices, mock_get_device_info,
-                          test_data_dir: str, device_id: int = 10):
-        """Setup common AE200 device mocks."""
-        # Load test data
-        with open(Path(test_data_dir) / 'get_devices.json') as f:
-            mock_get_devices.return_value = json.load(f)
-
-        with open(Path(test_data_dir) / f'get_device_{device_id}.json') as f:
-            mock_get_device_info.return_value = json.load(f)
-
-    @staticmethod
-    def create_mock_device_info_response(speed_name: str, test_data_dir: str, device_id: int = 10) -> Dict[str, Any]:
-        """Create a mock device info response with a specific speed."""
-        with open(Path(test_data_dir) / f'get_device_{device_id}.json') as f:
-            dev_data = json.load(f)
-            dev_data['FanSpeed'] = speed_name
-            return dev_data
-
-    @staticmethod
-    def setup_ae200_device_mocks(mock_get_devices, mock_get_device_info, mock_set_fan_speed,
-                                 test_data_dir: str, device_id: int = 10):
-        """Setup comprehensive AE200 device mocks."""
-        MockHelper.setup_ae200_mocks(mock_get_devices, mock_get_device_info, test_data_dir, device_id)
-        mock_set_fan_speed.return_value = None  # set_fan_speed doesn't return anything
-
-    @staticmethod
-    def setup_ae200_drive_mocks(mock_get_devices, mock_get_device_info, mock_set_drive,
-                               test_data_dir: str, device_id: int = 10):
-        """Setup AE200 drive control mocks."""
-        MockHelper.setup_ae200_mocks(mock_get_devices, mock_get_device_info, test_data_dir, device_id)
-        mock_set_drive.return_value = None  # set_drive doesn't return anything
 
     @staticmethod
     def create_mock_weather_data(temperature: int = 32, conditions: str = "Sunny") -> Dict[str, Any]:
