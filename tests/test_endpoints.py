@@ -7,6 +7,7 @@ import sqlite3
 import os
 import json
 import pytest
+import time
 
 from conftest import client, skip_on_github  # noqa: F401  # pylint: disable=unused-import
 from helpers.mock_helpers import MockHelper
@@ -26,13 +27,15 @@ def reduce_websockets_logging():
 
 
 def test_get_version(client):   # noqa: F811
+    from app.constants import __version__
+
     response = client.get("/version")
     assert response.status_code == 200
-    assert response.data.decode('utf-8') == 'version: 0.0.1'
+    assert response.data.decode('utf-8') == f'version: {__version__}'
 
     response = client.get("/api/v1/version")
     assert response.status_code == 200
-    assert response.json == {'version': '0.0.1'}
+    assert response.json == {'version': __version__}
 
 
 def test_status_endpoint(client):  # noqa: F811
@@ -41,6 +44,145 @@ def test_status_endpoint(client):  # noqa: F811
     response_json = response.json
     logging.info(" /status: %s", response_json)
     assert "devices" in response_json
+
+
+def test_status_endpoint_with_schema_validation(client):  # noqa: F811
+    """Test that the status endpoint works with a database that has all required columns.
+
+    This test ensures that the database schema matches what the code expects,
+    preventing 'no such column' errors in production.
+    """
+    # First, verify the test database has the expected schema
+    test_db_path = os.environ.get('TEST_DB_NAME')
+    assert test_db_path, "TEST_DB_NAME environment variable should be set"
+
+    with sqlite3.connect(test_db_path) as conn:
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+
+        # Get the schema for the devices table
+        cursor.execute("PRAGMA table_info(devices)")
+        columns = [row['name'] for row in cursor.fetchall()]
+
+        # Verify all expected columns exist
+        expected_columns = ['device_id', 'device_name', 'ae200_device_id', 'disabled_until', 'notes']
+        for expected_col in expected_columns:
+            assert expected_col in columns, f"Missing required column '{expected_col}' in devices table. Found columns: {columns}"
+
+    # Add a test device with all columns to ensure the query works
+    with sqlite3.connect(test_db_path) as conn:
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO devices (device_name, ae200_device_id, disabled_until, notes)
+            VALUES (?, ?, ?, ?)
+        """, ("Test Device", 1, None, "Test notes"))
+
+        # Add a status entry
+        cursor.execute("""
+            INSERT INTO devlog (device_id, logtime, duration, temp10x, status_json)
+            VALUES (?, ?, ?, ?, ?)
+        """, (cursor.lastrowid, int(time.time()), 60, 240, '{"Drive": "ON", "FanSpeed": "LOW"}'))
+        conn.commit()
+
+    # Now test the endpoint - this should work without schema errors
+    response = client.get("/api/v1/status")
+    assert response.status_code == 200
+    response_json = response.json
+    assert "devices" in response_json
+    assert len(response_json["devices"]) >= 1
+
+    # Verify the device data includes all expected fields
+    test_device = next((d for d in response_json["devices"] if d["device_name"] == "Test Device"), None)
+    assert test_device is not None, "Test device should be returned"
+    assert "notes" in test_device, "Device should include notes field"
+    assert test_device["notes"] == "Test notes"
+
+
+def test_status_endpoint_schema_mismatch_detection():
+    """Test that detects when the database schema doesn't match code expectations.
+
+    This test simulates the production issue where the database was created
+    with an older schema missing the 'notes' column.
+    """
+    import tempfile
+
+    # Create a temporary database with the old schema (missing notes column)
+    with tempfile.NamedTemporaryFile(suffix='.db', delete=False) as tf:
+        db_path = tf.name
+
+    try:
+        with sqlite3.connect(db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+
+            # Create devices table WITHOUT the notes column (simulating old schema)
+            cursor.execute("""
+                CREATE TABLE devices (
+                    device_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    device_name TEXT UNIQUE NOT NULL,
+                    ae200_device_id INTEGER,
+                    disabled_until INTEGER
+                )
+            """)
+
+            # Create devlog table
+            cursor.execute("""
+                CREATE TABLE devlog (
+                    log_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    device_id INTEGER NOT NULL,
+                    logtime INTEGER NOT NULL,
+                    duration INTEGER NOT NULL DEFAULT 1,
+                    temp10x INTEGER,
+                    status_json TEXT,
+                    FOREIGN KEY (device_id) REFERENCES devices (device_id)
+                )
+            """)
+
+            # Add test data
+            cursor.execute("INSERT INTO devices (device_name, ae200_device_id) VALUES (?, ?)", ("Test Device", 1))
+            device_id = cursor.lastrowid
+            cursor.execute("""
+                INSERT INTO devlog (device_id, logtime, duration, temp10x, status_json)
+                VALUES (?, ?, ?, ?, ?)
+            """, (device_id, int(time.time()), 60, 240, '{"Drive": "ON", "FanSpeed": "LOW"}'))
+            conn.commit()
+
+        # Set up environment to use this database
+        original_db_path = os.environ.get('DB_PATH')
+        original_test_db_name = os.environ.get('TEST_DB_NAME')
+
+        try:
+            os.environ['DB_PATH'] = db_path
+            os.environ['TEST_DB_NAME'] = db_path
+
+            # This should fail with the same error we saw in production
+            from app.services.device_service import DeviceService
+            device_service = DeviceService()
+
+            with sqlite3.connect(db_path) as conn:
+                conn.row_factory = sqlite3.Row
+
+                # This should raise sqlite3.OperationalError: no such column: b.notes
+                with pytest.raises(sqlite3.OperationalError, match="no such column: b.notes"):
+                    device_service.get_device_status(conn)
+
+        finally:
+            # Restore environment
+            if original_db_path is not None:
+                os.environ['DB_PATH'] = original_db_path
+            elif 'DB_PATH' in os.environ:
+                del os.environ['DB_PATH']
+
+            if original_test_db_name is not None:
+                os.environ['TEST_DB_NAME'] = original_test_db_name
+            elif 'TEST_DB_NAME' in os.environ:
+                del os.environ['TEST_DB_NAME']
+
+    finally:
+        # Clean up temporary file
+        os.unlink(db_path)
+
 
 @skip_on_github
 @patch("app.weather.get_weather_data")

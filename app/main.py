@@ -12,8 +12,6 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 from .routes.api_routes import api_v1
 from .routes.web_routes import create_web_routes
 
-__version__ = "1.0.0"
-
 DEV = "/home/simsong" in abspath(__file__)
 DEFAULT_LOG_LEVEL = "DEBUG"
 LOGGING_CONFIG = "%(asctime)s  %(filename)s:%(lineno)d %(levelname)s: %(message)s"
