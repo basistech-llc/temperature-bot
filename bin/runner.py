@@ -60,7 +60,7 @@ def update_from_hubitat(conn):
 
 def update_aqi(conn):
     aqi = airquality.get_aqi()
-    logging.info("aqi: %s",aqi)
+    logger.info("aqi: %s",aqi)
     conn.execute("INSERT INTO aqi VALUES (?,?)",( int(time.time()), aqi))
     conn.commit()
 
@@ -79,7 +79,7 @@ def combine_temp_measurements(conn, start_time, end_time, seconds):
     :param end_time: unix time_t of end of time period.
     :param divisions: number of divisions to create
     """
-    logging.info("combine_temp_measurements(%s,%s,%s",start_time, end_time, seconds)
+    logger.info("combine_temp_measurements(%s,%s,%s",start_time, end_time, seconds)
     conn.isolation_level = None
     c = conn.cursor()
     while True:
@@ -88,7 +88,7 @@ def combine_temp_measurements(conn, start_time, end_time, seconds):
         r = c.fetchone()
         if not r:
             return
-        logging.debug("%s",dict(r))
+        logger.debug("%s",dict(r))
         slot = (r['logtime']-start_time) / seconds
         t0 = start_time + seconds * slot
         t1 = start_time + seconds * (slot+1)
@@ -100,7 +100,7 @@ def combine_temp_measurements(conn, start_time, end_time, seconds):
             rows = c.fetchall()
             c.execute("DELETE FROM devlog WHERE logtime >= ? and logtime < ? """, (t0,t1))
             for row in rows:
-                logging.debug("%s",dict(row))
+                logger.debug("%s",dict(row))
                 c.execute("INSERT INTO devlog (device_id,logtime,duration,temp10x) VALUES (?,?,?,?)",
                           (row['device_id'], t0, seconds, row['avgtemp']))
             c.execute("commit")
@@ -125,7 +125,7 @@ def daily_cleanup(conn, when):
               (prev_week_start, prev_week_end))
     row = c.fetchone()
     if row:
-        logging.info("Found an entry on %s with duration=%s",time.asctime(time.localtime(row['logtime'])), row['duration'])
+        logger.info("Found an entry on %s with duration=%s",time.asctime(time.localtime(row['logtime'])), row['duration'])
         combine_temp_measurements(conn, prev_week_start, prev_week_end, 5*60)
 
     # See if there are any in the previous month that need to be
@@ -143,7 +143,7 @@ def daily_cleanup(conn, when):
               (prev_month_start, prev_month_end))
     row = c.fetchone()
     if row:
-        logging.info("Found an entry on %s with duration=%s",time.asctime(time.localtime(row['logtime'])), row['duration'])
+        logger.info("Found an entry on %s with duration=%s",time.asctime(time.localtime(row['logtime'])), row['duration'])
         combine_temp_measurements(conn, prev_month_start, prev_month_end, 20*60)
 
 
@@ -232,14 +232,16 @@ def setup_parser():
     parser.add_argument("--daily", help='Run the daily cleanup', action='store_true')
     parser.add_argument("--rules", choices=["test", "commit"], help='Just run the rules engine')
     parser.add_argument("--aqi", help='Save AQI to database', action='store_true')
-    clogging.add_argument(parser)
+    clogger.add_argument(parser)
     return parser
 
 def main():
-    logging.info("%s %s",__file__," ".join(sys.argv))
+    print("runner.py")
+    os.system("printenv")
+    logger.info("%s %s",__file__," ".join(sys.argv))
     parser = setup_parser()
     args = parser.parse_args()
-    clogging.setup(args.loglevel, syslog=args.syslog, log_format=clogging.LOG_FORMAT,syslog_format=clogging.YEAR + " " + clogging.SYSLOG_FORMAT)
+    clogger.setup(args.loglevel, syslog=args.syslog, log_format=clogger.LOG_FORMAT,syslog_format=clogger.YEAR + " " + clogger.SYSLOG_FORMAT)
     conn = db.get_db_connection()
     if args.report:
         report(conn)
