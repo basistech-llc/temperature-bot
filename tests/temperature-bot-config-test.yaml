@@ -7,12 +7,14 @@ hubitat:
   host: 10.2.3.51
 ae200:
   host: 10.2.1.20
-secrets:
-  airnow:
-    api_key: AT0
-  hubitat:
-    access_token: AT1
-  google:
-    air_quality_api_key: AT2
-  aqicn:
-    token: AT3
+#
+# Please put secrets in environment variables e.g. AQICN_TOKEN
+# secrets:
+#   airnow:
+#     api_key: AT0
+#   hubitat:
+#     access_token: AT1
+#   google:
+#     air_quality_api_key: AT2
+#   aqicn:
+#     token: AT3
