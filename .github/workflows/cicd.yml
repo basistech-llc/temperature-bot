@@ -14,6 +14,8 @@ jobs:
     env:
       TEMPERATURE_BOT_CONFIG: "tests/temperature-bot-config-test.yaml"
       AE200_SIMULATOR: 1
+      AQICN_TOKEN: ${{ secrets.AQICN_TOKENY }}
+      AIRNOW_API_KEY: ${{ secrets.AIRNOW_API_KEY }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -45,12 +47,10 @@ jobs:
 
       - name: Run pytest
         run: |
-          export AIRNOW_API_KEY=${{ secrets.AIRNOW_API_KEY }}
           make pytest
 
       - name: Run pytest with coverage
         run: |
-          export AIRNOW_API_KEY=${{ secrets.AIRNOW_API_KEY }}
           make pytest-coverage
 
       - name: Lint with pylint
