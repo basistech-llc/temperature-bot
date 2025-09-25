@@ -3,8 +3,11 @@ Browser test helpers for Playwright-based tests.
 """
 import logging
 import time
-from typing import Optional
+import sqlite3
 from playwright.sync_api import Page, expect
+import playwright.sync_api
+from app import db, rules_engine
+from tests.helpers.test_utils import verify_changelog_entry, verify_devlog_entry
 
 logger = logging.getLogger(__name__)
 
@@ -41,9 +44,7 @@ class BrowserTestHelper:
 
     def get_broadway_south_device_id(self) -> int:
         """Get the device ID for Broadway South from the database"""
-        import sqlite3
-        from app import db
-        
+
         with sqlite3.connect(self.test_db_name) as conn:
             conn.row_factory = sqlite3.Row
             device_id = db.get_or_create_device_id(conn, "Broadway South")
@@ -66,45 +67,13 @@ class BrowserTestHelper:
 
     def verify_database_speed(self, expected_fan_speed: int):
         """Verify that the database has been updated with the expected speed"""
-        import sqlite3
-        import json
-        from app import ae200
-        
+
         device_id = self.get_broadway_south_device_id()
 
         with sqlite3.connect(self.test_db_name) as conn:
             conn.row_factory = sqlite3.Row
-            cursor = conn.cursor()
-
-            # Check the most recent changelog entry
-            cursor.execute("""
-                SELECT new_value, agent FROM changelog
-                WHERE device_id = ?
-                ORDER BY changelog_id DESC
-                LIMIT 1
-            """, (device_id,))
-            changelog_entry = cursor.fetchone()
-
-            assert changelog_entry is not None, "No changelog entry found"
-            assert changelog_entry['new_value'] == str(expected_fan_speed), \
-                f"Expected speed {expected_fan_speed}, got {changelog_entry['new_value']}"
-            assert changelog_entry['agent'] == 'web', \
-                f"Expected agent 'web', got {changelog_entry['agent']}"
-
-            # Check the most recent devlog entry
-            cursor.execute("""
-                SELECT status_json FROM devlog
-                WHERE device_id = ?
-                ORDER BY logtime DESC
-                LIMIT 1
-            """, (device_id,))
-            devlog_entry = cursor.fetchone()
-
-            assert devlog_entry is not None, "No devlog entry found"
-            status_data = json.loads(devlog_entry['status_json'])
-            extracted_status = ae200.extract_drive_and_fan_speed(status_data)
-            assert extracted_status['fan_speed'] == expected_fan_speed, \
-                f"Expected fan_speed {expected_fan_speed}, got {extracted_status['fan_speed']}"
+            verify_changelog_entry(conn, device_id, str(expected_fan_speed), 'web')
+            verify_devlog_entry(conn, device_id, expected_fan_speed)
 
 
 class TemperatureTestHelper:
@@ -182,11 +151,7 @@ class RulesTestHelper:
 
     def verify_rules_disabled_until(self, expected_minutes: int) -> None:
         """Verify that rules are disabled for at least the expected number of minutes"""
-        import sqlite3
-        import time
-        from app import rules_engine
-        import playwright.sync_api
-        
+
         # Wait for page to refresh and check for disabled rules text
         try:
             # Wait for page to refresh and check for disabled rules text
@@ -216,9 +181,7 @@ class RulesTestHelper:
 
     def check_database_rules_enabled(self) -> None:
         """Check that the database shows rules are enabled"""
-        import sqlite3
-        from app import rules_engine
-        
+
         with sqlite3.connect(self.test_db_name) as conn:
             conn.row_factory = sqlite3.Row
             disabled_until = rules_engine.rules_disabled_until(conn)

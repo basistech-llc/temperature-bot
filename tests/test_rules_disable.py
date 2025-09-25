@@ -3,20 +3,17 @@ Test the rules disable functionality through the browser interface.
 """
 
 import os
-import sqlite3
 import time
 import logging
 import threading
 from typing import Any
 
 import pytest
-import playwright.sync_api
-from playwright.sync_api import sync_playwright, Page
+from playwright.sync_api import sync_playwright
 
 from conftest import client, skip_on_github, insert_temporal_test_data  # noqa: F401  # pylint: disable=unused-import
 from helpers.browser_helpers import RulesTestHelper
 from helpers.database_helpers import DatabaseTestHelper
-from app import rules_engine
 
 from app.main import app
 

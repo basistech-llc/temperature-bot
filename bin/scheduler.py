@@ -2,17 +2,14 @@
 Runs every minute to implement rules.
 """
 import datetime
-import json
 from pprint import pprint
 
 import sys
-import os.path
 from os.path import dirname, abspath
 
 # Add the parent directory to the path so we can import app modules
 sys.path.append(dirname(dirname(abspath(__file__))))
 
-import app.ae200 as ae200
 from app.ae200 import AE200Functions
 
 import lib.ctools.clogging as clogging

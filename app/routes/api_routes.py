@@ -8,9 +8,7 @@ from flask_pydantic import validate
 from ..db import SpeedControl, DriveControl
 from ..services.device_service import DeviceService
 from ..services.weather_service import WeatherService
-from ..services.log_service import LogService
-from ..utils.db_utils import with_db_connection
-from .. import rules_engine
+from .common import LogService, with_db_connection, parse_device_ids, rules_engine, __version__
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +23,6 @@ log_service = LogService()
 
 @api_v1.route("/version")
 def get_version_json():
-    from ..main import __version__
     return jsonify({"version": __version__})
 
 
@@ -72,17 +69,9 @@ def get_weather(conn):
 @with_db_connection
 def get_temperature_series(conn):
     """Get temperature series data"""
-    device_ids_param = request.args.get("device_ids", "")
-
-    device_ids = None
-    if device_ids_param:
-        # Parse device_ids - can be single value or comma-separated list
-        try:
-            device_ids = [
-                int(did.strip()) for did in device_ids_param.split(",") if did.strip()
-            ]
-        except ValueError:
-            return jsonify({"error": "Invalid device_ids format"}), 400
+    device_ids = parse_device_ids()
+    if device_ids is None and request.args.get("device_ids"):
+        return jsonify({"error": "Invalid device_ids format"}), 400
 
     series = device_service.get_temperature_series(conn, device_ids)
     return jsonify({"series": series})

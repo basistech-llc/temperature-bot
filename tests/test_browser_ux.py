@@ -3,23 +3,19 @@ End-to-end browser test for fan speed controls.
 NOTE: AQI (air quality index) is not being tested in this file and can be ignored for now.
 """
 import os
-import json
-import sqlite3
 import time
 import logging
 import threading
 from unittest.mock import patch
-from pathlib import Path
 
 import pytest
-from playwright.sync_api import sync_playwright, Page, expect
+from playwright.sync_api import sync_playwright, expect
 
-from conftest import client, skip_on_github, insert_temporal_test_data  # noqa: F401  # pylint: disable=unused-import
+from conftest import client, skip_on_github  # noqa: F401  # pylint: disable=unused-import
 from helpers.browser_helpers import BrowserTestHelper, TemperatureTestHelper
 from helpers.database_helpers import DatabaseTestHelper
 from helpers.mock_helpers import MockHelper
-from helpers.data_factories import DeviceTestData, WeatherTestData
-from app import ae200
+from helpers.data_factories import DeviceTestData, TestDataFactory
 from app import db
 from app.paths import TEST_DATA_DIR
 
@@ -66,8 +62,8 @@ def test_browser_fan_speed_controls(
     # Use new database helper
     db_helper = DatabaseTestHelper(test_db_name)
     with db_helper.get_connection() as test_conn:
-        device_id = db_helper.create_broadway_south_device(BROADWAY_SOUTH)
-        
+        device_id = TestDataFactory.create_broadway_south_device(test_conn, BROADWAY_SOUTH)
+
         # Add initial devlog entry for Broadway South so it appears in status API
         current_time = int(time.time())
         initial_status = DeviceTestData.get_initial_status()
@@ -80,8 +76,9 @@ def test_browser_fan_speed_controls(
             force=True
         )
         # Add a second device without speed control
-        no_speed_device_id = db_helper.create_device_with_initial_status(
-            "No Speed Device", 
+        TestDataFactory.create_device_with_status(
+            test_conn,
+            "No Speed Device",
             DeviceTestData.get_no_speed_status(),
             current_time
         )
@@ -245,8 +242,8 @@ def test_browser_page_loads_correctly(
 
     db_helper = DatabaseTestHelper(test_db_name)
     with db_helper.get_connection() as test_conn:
-        device_id = db_helper.create_broadway_south_device(BROADWAY_SOUTH)
-        
+        device_id = TestDataFactory.create_broadway_south_device(test_conn, BROADWAY_SOUTH)
+
         # Add initial devlog entry for Broadway South so it appears in status API
         current_time = int(time.time())
         initial_status = DeviceTestData.get_initial_status()
@@ -353,7 +350,8 @@ def test_browser_temperature_display(
     db_helper = DatabaseTestHelper(test_db_name)
     with db_helper.get_connection() as test_conn:
         # Create test device with temporal data
-        device_id, expected_counts = db_helper.insert_temporal_test_data("Temporal Test Device")
+        from tests.conftest import insert_temporal_test_data  # pylint: disable=import-outside-toplevel
+        device_id, expected_counts = insert_temporal_test_data(test_conn, "Temporal Test Device")
 
     # Mock weather and AQI data using new mock helper
     MockHelper.setup_weather_mocks(mock_get_airquality, mock_get_weather_data, 45, TEST_TEMP)

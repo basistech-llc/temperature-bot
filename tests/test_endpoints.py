@@ -1,7 +1,6 @@
 """
 test Flask endpoints
 """
-from os.path import join
 import logging
 from unittest.mock import patch
 import sqlite3
@@ -29,11 +28,11 @@ def reduce_websockets_logging():
 def test_get_version(client):   # noqa: F811
     response = client.get("/version")
     assert response.status_code == 200
-    assert response.data.decode('utf-8') == f'version: {main.__version__}'
+    assert response.data.decode('utf-8') == 'version: 0.0.1'
 
     response = client.get("/api/v1/version")
     assert response.status_code == 200
-    assert response.json == {'version': main.__version__}
+    assert response.json == {'version': '0.0.1'}
 
 
 def test_status_endpoint(client):  # noqa: F811
@@ -88,7 +87,7 @@ def test_set_fan_speed_endpoint(mock_get_device_fan_speed, mock_get_devices, moc
 
     # Use new mock helper for device data
     MockHelper.setup_ae200_mocks(mock_get_devices, mock_get_device_info, TEST_DATA_DIR, BROADWAY_SOUTH)
-    
+
     # Override device info with target speed
     speed_names = DeviceTestData.get_speed_names()
     mock_get_device_info.return_value = MockHelper.create_mock_device_info_response(

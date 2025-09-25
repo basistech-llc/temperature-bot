@@ -2,7 +2,7 @@
 Weather and AQI-related business logic
 """
 import logging
-from .. import airquality, weather, db
+from .. import airquality, weather
 
 logger = logging.getLogger(__name__)
 

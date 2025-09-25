@@ -5,6 +5,7 @@ import logging
 from typing import List, Dict, Any
 from .. import ae200, db
 from ..utils.time_utils import github_style_duration
+from ..utils.query_utils import temporal_quantification
 
 logger = logging.getLogger(__name__)
 
@@ -32,8 +33,7 @@ class DeviceService:
 
     def get_temperature_series(self, conn, device_ids: List[int] = None) -> List[Dict[str, Any]]:
         """Get temperature series data for devices"""
-        from ..utils.query_utils import temporal_quantification
-        
+
         c = conn.cursor()
         series = []
 

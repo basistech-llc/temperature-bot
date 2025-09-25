@@ -6,9 +6,7 @@ import datetime
 import time
 from flask import render_template, request
 from ..services.device_service import DeviceService
-from ..services.log_service import LogService
-from ..utils.db_utils import with_db_connection
-from .. import rules_engine
+from .common import LogService, with_db_connection, parse_device_ids, rules_engine, __version__
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +17,7 @@ log_service = LogService()
 
 def create_web_routes(app):
     """Create web routes and register them with the app"""
-    
+
     @app.route("/")
     @with_db_connection
     def read_index(conn):
@@ -88,17 +86,7 @@ def create_web_routes(app):
     @app.route("/chart")
     def show_chart():
         """Chart page"""
-        device_ids_param = request.args.get("device_ids", "")
-
-        # Parse device_ids - can be single value or comma-separated list
-        device_ids = None
-        if device_ids_param:
-            try:
-                device_ids = [
-                    int(did.strip()) for did in device_ids_param.split(",") if did.strip()
-                ]
-            except ValueError:
-                device_ids = None
+        device_ids = parse_device_ids()
 
         return render_template("chart.html", device_ids=device_ids)
 
@@ -115,5 +103,4 @@ def create_web_routes(app):
     @app.route("/version")
     def get_version():
         """Version page"""
-        from ..main import __version__
         return f"version: {__version__}"

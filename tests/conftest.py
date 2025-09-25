@@ -5,15 +5,15 @@ import os
 import tempfile
 import sqlite3
 import logging
+import time
 import pytest
 from app.main import app as flask_app
 from app.paths import SCHEMA_FILE_PATH
-from app import db
 
 logger = logging.getLogger(__name__)
 
 skip_on_github = pytest.mark.skipif(
-    os.getenv("GITHUB_ACTIONS") == "true", 
+    os.getenv("GITHUB_ACTIONS") == "true",
     reason="Disabled in GitHub Actions"
 )
 
@@ -34,7 +34,6 @@ def setup_test_database(conn):
 
         cursor.executescript(schema_sql)
         conn.commit()
-        import time
         cursor.execute("INSERT INTO aqi VALUES (?,?)", (int(time.time()), 45))  # insert AQI of 45
         logging.debug("*** sending schema")
         logging.info("Test database schema set up successfully from %s.", SCHEMA_FILE_PATH)
@@ -53,8 +52,6 @@ def insert_temporal_test_data(conn: sqlite3.Connection, device_name: str = "Test
 
     Returns the device_id and a dict with the expected record counts for different time ranges.
     """
-    import time
-    
     current_time = int(time.time())
 
     # Create device
@@ -94,31 +91,18 @@ def insert_temporal_test_data(conn: sqlite3.Connection, device_name: str = "Test
 @pytest.fixture
 def client():
     """Provides a Flask test client with overridden database connection using a temporary file DB."""
+    from tests.helpers.test_utils import create_test_database_with_schema  # pylint: disable=import-outside-toplevel
     # Create a temporary directory for the database file
-    with tempfile.NamedTemporaryFile(suffix='.db') as tf:
-        logging.info("Created temporary database file for test: %s", tf.name)
+    create_test_database_with_schema()
 
-        # Temporarily set an environment variable to tell lifespan we are testing
-        os.environ['IS_TESTING'] = 'True'
-        # IMPORTANT: Also set TEST_DB_NAME environment variable for db.py's get_db_connection
-        # to ensure it connects to this temporary file.
-        os.environ['TEST_DB_NAME'] = tf.name
+    # Override the database connection function
+    flask_app.config['TESTING'] = True
+    with flask_app.test_client() as test_client:
+        yield test_client
 
-        # Set up the database schema in the temporary file
-        conn = sqlite3.connect(tf.name)
-        conn.row_factory = sqlite3.Row
-        conn.execute("PRAGMA foreign_keys = ON;")
-        setup_test_database(conn)
-        conn.close()
-
-        # Override the database connection function
-        flask_app.config['TESTING'] = True
-        with flask_app.test_client() as test_client:
-            yield test_client
-
-        # Clean up the environment variables after the test
-        os.environ.pop("IS_TESTING", None)
-        os.environ.pop("TEST_DB_NAME", None)
+    # Clean up the environment variables after the test
+    os.environ.pop("IS_TESTING", None)
+    os.environ.pop("TEST_DB_NAME", None)
 
 
 @pytest.fixture
@@ -136,20 +120,16 @@ def test_db_connection():
 @pytest.fixture
 def test_db_name():
     """Provides a test database file name."""
-    with tempfile.NamedTemporaryFile(suffix='.db', delete=False) as tf:
-        conn = sqlite3.connect(tf.name)
-        conn.row_factory = sqlite3.Row
-        conn.execute("PRAGMA foreign_keys = ON;")
-        setup_test_database(conn)
-        conn.close()
-        
-        # Set environment variable for the test
-        os.environ['TEST_DB_NAME'] = tf.name
-        yield tf.name
-        
-        # Clean up
-        os.environ.pop("TEST_DB_NAME", None)
-        os.unlink(tf.name)
+    from tests.helpers.test_utils import create_test_database_with_schema  # pylint: disable=import-outside-toplevel
+    tf_name = create_test_database_with_schema()
+
+    # Set environment variable for the test
+    os.environ['TEST_DB_NAME'] = tf_name
+    yield tf_name
+
+    # Clean up
+    os.environ.pop("TEST_DB_NAME", None)
+    os.unlink(tf_name)
 
 
 @pytest.fixture(autouse=True)

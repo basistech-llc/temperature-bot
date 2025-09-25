@@ -47,8 +47,7 @@ class LogService:
 
     def get_device_log(self, conn, device_id: int) -> Dict[str, Any]:
         """Get device log data"""
-        from ..utils.query_utils import temporal_quantification
-        
+
         c = conn.cursor()
         c.execute("""SELECT * from devices where device_id=?""", (device_id,))
         device = dict(c.fetchone())
@@ -72,7 +71,7 @@ class LogService:
 
         c.execute(cmd, args)
         changelog = c.fetchall()
-        
+
         return {
             "device": device,
             "devlog": devlog,

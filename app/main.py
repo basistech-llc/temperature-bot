@@ -5,14 +5,14 @@ Refactored main.py - Flask application with modular structure
 import os
 import logging
 from os.path import abspath
-from flask import Flask, send_from_directory
+from flask import Flask, send_from_directory, jsonify
 from werkzeug.exceptions import HTTPException
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 from .routes.api_routes import api_v1
 from .routes.web_routes import create_web_routes
 
-__version__ = "0.0.1"
+__version__ = "1.0.0"
 
 DEV = "/home/simsong" in abspath(__file__)
 DEFAULT_LOG_LEVEL = "DEBUG"
@@ -34,30 +34,29 @@ def create_app():
     app = Flask(__name__)
     app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1)
     app.config["TEMPLATES_AUTO_RELOAD"] = True
-    
+
     # Configure logging
     log_level = os.getenv("LOG_LEVEL", "INFO").upper()
     logging.basicConfig(format=LOGGING_CONFIG, level=log_level, force=True)
     app.logger.info("new Flask(__name__=%s) log_level=%s", __name__, log_level)
     fix_boto_log_level()
-    
+
     # Register blueprints
     app.register_blueprint(api_v1, url_prefix="/api/v1")
-    
+
     # Register web routes
     create_web_routes(app)
-    
+
     # Serve static files
     @app.route("/static/<path:filename>")
     def static_files(filename):
         return send_from_directory("static", filename)
-    
+
     # Error handler
     @app.errorhandler(HTTPException)
     def handle_exception(e):
-        from flask import jsonify
         return jsonify({"error": e.description}), e.code
-    
+
     return app
 
 

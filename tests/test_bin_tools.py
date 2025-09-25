@@ -6,9 +6,9 @@ import os
 import sys
 import tempfile
 import subprocess
-import pytest
 import sqlite3
 from pathlib import Path
+import pytest
 
 from app.paths import SCHEMA_FILE_PATH
 from app import db
@@ -22,16 +22,16 @@ class TestBinTools:
         """Create a temporary database for testing"""
         with tempfile.NamedTemporaryFile(suffix='.db', delete=False) as tf:
             db_path = tf.name
-        
+
         # Set up the database schema
         conn = sqlite3.connect(db_path)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA foreign_keys = ON;")
         db.setup_database(conn, SCHEMA_FILE_PATH)
         conn.close()
-        
+
         yield db_path
-        
+
         # Cleanup
         os.unlink(db_path)
 
@@ -46,9 +46,10 @@ class TestBinTools:
             [sys.executable, str(bin_dir / "runner.py"), "--help"],
             capture_output=True,
             text=True,
-            timeout=30
+            timeout=30,
+            check=False
         )
-        
+
         assert result.returncode == 0, f"runner.py --help failed: {result.stderr}"
         assert "BasisTech LLC Runner" in result.stdout
         assert "--csv" in result.stdout
@@ -60,16 +61,17 @@ class TestBinTools:
         # Set up environment for database access
         env = os.environ.copy()
         env['TEST_DB_NAME'] = temp_db
-        
+
         # Test with --report to verify database access
         result = subprocess.run(
             [sys.executable, str(bin_dir / "runner.py"), "--report"],
             capture_output=True,
             text=True,
             timeout=30,
-            env=env
+            env=env,
+            check=False
         )
-        
+
         # Should not crash, even if no data (may fail due to Hubitat config, but that's OK)
         # The important thing is that it can access the database
         if result.returncode != 0:
@@ -83,15 +85,16 @@ class TestBinTools:
         """Test that runner.py can update AQI in database"""
         env = os.environ.copy()
         env['TEST_DB_NAME'] = temp_db
-        
+
         result = subprocess.run(
             [sys.executable, str(bin_dir / "runner.py"), "--aqi"],
             capture_output=True,
             text=True,
             timeout=30,
-            env=env
+            env=env,
+            check=False
         )
-        
+
         # Should complete without error
         assert result.returncode == 0, f"runner.py --aqi failed: {result.stderr}"
 
@@ -101,9 +104,10 @@ class TestBinTools:
             [sys.executable, str(bin_dir / "scheduler.py"), "--help"],
             capture_output=True,
             text=True,
-            timeout=30
+            timeout=30,
+            check=False
         )
-        
+
         assert result.returncode == 0, f"scheduler.py --help failed: {result.stderr}"
         assert "BasisTech LLC Rules Scheduler" in result.stdout
         assert "--debug" in result.stdout
@@ -115,9 +119,10 @@ class TestBinTools:
             [sys.executable, str(bin_dir / "scheduler.py"), "--dry-run"],
             capture_output=True,
             text=True,
-            timeout=30
+            timeout=30,
+            check=False
         )
-        
+
         assert result.returncode == 0, f"scheduler.py --dry-run failed: {result.stderr}"
         assert "=dry run=" in result.stdout
         # Should show device list
@@ -129,20 +134,21 @@ class TestBinTools:
             [sys.executable, str(bin_dir / "scheduler.py"), "--verbose", "--dry-run"],
             capture_output=True,
             text=True,
-            timeout=30
+            timeout=30,
+            check=False
         )
-        
+
         assert result.returncode == 0, f"scheduler.py --verbose failed: {result.stderr}"
 
     def test_rules_file_exists(self, bin_dir):
         """Test that rules.py file exists and is readable"""
         rules_file = bin_dir / "rules.py"
         assert rules_file.exists(), "rules.py file not found"
-        
+
         # Read the file to ensure it's valid Python
         with open(rules_file, 'r') as f:
             content = f.read()
-        
+
         # Should contain rule definitions
         assert "kitchen_erv_speed" in content
         assert "restrooms_erv_speed" in content
@@ -152,11 +158,11 @@ class TestBinTools:
     def test_rules_syntax_valid(self, bin_dir):
         """Test that rules.py has valid Python syntax"""
         rules_file = bin_dir / "rules.py"
-        
+
         # Try to compile the file to check syntax
         with open(rules_file, 'r') as f:
             source = f.read()
-        
+
         try:
             compile(source, str(rules_file), 'exec')
         except SyntaxError as e:
@@ -174,9 +180,10 @@ print('runner.py imports successfully')
 """],
             capture_output=True,
             text=True,
-            timeout=30
+            timeout=30,
+            check=False
         )
-        
+
         assert result.returncode == 0, f"runner.py import failed: {result.stderr}"
         assert "runner.py imports successfully" in result.stdout
 
@@ -191,9 +198,10 @@ print('scheduler.py imports successfully')
 """],
             capture_output=True,
             text=True,
-            timeout=30
+            timeout=30,
+            check=False
         )
-        
+
         assert result.returncode == 0, f"scheduler.py import failed: {result.stderr}"
         assert "scheduler.py imports successfully" in result.stdout
 
@@ -203,33 +211,34 @@ print('scheduler.py imports successfully')
         conn = sqlite3.connect(temp_db)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA foreign_keys = ON;")
-        
+
         # Insert test device
         cursor = conn.cursor()
         cursor.execute("INSERT INTO devices (device_name) VALUES (?)", ("Test Device",))
         device_id = cursor.lastrowid
-        
+
         # Insert test devlog entry
         conn.execute("""
             INSERT INTO devlog (device_id, logtime, temp10x, duration, status_json)
             VALUES (?, ?, ?, ?, ?)
         """, (device_id, 1609459200, 250, 60, '{"temp": 25.0}'))
-        
+
         conn.commit()
         conn.close()
-        
+
         # Test runner with this database
         env = os.environ.copy()
         env['TEST_DB_NAME'] = temp_db
-        
+
         result = subprocess.run(
             [sys.executable, str(bin_dir / "runner.py"), "--report"],
             capture_output=True,
             text=True,
             timeout=30,
-            env=env
+            env=env,
+            check=False
         )
-        
+
         # The test data should be visible in the output, even if Hubitat fails
         if result.returncode != 0:
             # If it fails due to Hubitat config, check that our test data is still visible
@@ -242,15 +251,16 @@ print('scheduler.py imports successfully')
         """Test runner.py daily cleanup functionality"""
         env = os.environ.copy()
         env['TEST_DB_NAME'] = temp_db
-        
+
         result = subprocess.run(
             [sys.executable, str(bin_dir / "runner.py"), "--daily"],
             capture_output=True,
             text=True,
             timeout=30,
-            env=env
+            env=env,
+            check=False
         )
-        
+
         # Should complete without error
         assert result.returncode == 0, f"runner.py --daily failed: {result.stderr}"
 
@@ -258,15 +268,16 @@ print('scheduler.py imports successfully')
         """Test runner.py rules test functionality"""
         env = os.environ.copy()
         env['TEST_DB_NAME'] = temp_db
-        
+
         result = subprocess.run(
             [sys.executable, str(bin_dir / "runner.py"), "--rules", "test"],
             capture_output=True,
             text=True,
             timeout=30,
-            env=env
+            env=env,
+            check=False
         )
-        
+
         # Rules test may fail due to missing device definitions, but that's OK for this test
         # The important thing is that it can access the database and attempt to run rules
         if result.returncode != 0:
@@ -281,24 +292,26 @@ print('scheduler.py imports successfully')
         # Simulate GitHub Actions environment
         env = os.environ.copy()
         env['GITHUB_ACTIONS'] = 'true'
-        
+
         # Test runner help
         result = subprocess.run(
             [sys.executable, str(bin_dir / "runner.py"), "--help"],
             capture_output=True,
             text=True,
             timeout=30,
-            env=env
+            env=env,
+            check=False
         )
         assert result.returncode == 0, "runner.py failed in GitHub Actions simulation"
-        
+
         # Test scheduler help
         result = subprocess.run(
             [sys.executable, str(bin_dir / "scheduler.py"), "--help"],
             capture_output=True,
             text=True,
             timeout=30,
-            env=env
+            env=env,
+            check=False
         )
         assert result.returncode == 0, "scheduler.py failed in GitHub Actions simulation"
 
@@ -306,24 +319,25 @@ print('scheduler.py imports successfully')
         """Test runner.py CSV import functionality"""
         # Create a simple test CSV file with a device name that exists in the sample data
         csv_content = "time,Broadway North\n2025-01-01T12:00:00,25.0\n"
-        
+
         with tempfile.NamedTemporaryFile(mode='w', suffix='.csv', delete=False) as csv_file:
             csv_file.write(csv_content)
             csv_path = csv_file.name
-        
+
         try:
             env = os.environ.copy()
             env['TEST_DB_NAME'] = temp_db
-            
+
             # Use a valid date for csv-after to avoid the year 0 error
             result = subprocess.run(
                 [sys.executable, str(bin_dir / "runner.py"), "--csv", csv_path, "--csv-after", "2024-01-01"],
                 capture_output=True,
                 text=True,
                 timeout=30,
-                env=env
+                env=env,
+                check=False
             )
-            
+
             # Should complete (may have warnings about missing devices)
             # CSV import may fail due to missing device mapping, but that's OK for this test
             if result.returncode != 0:
@@ -332,22 +346,23 @@ print('scheduler.py imports successfully')
             else:
                 # Should complete successfully
                 assert result.returncode == 0
-            
+
         finally:
             os.unlink(csv_path)
 
     def test_all_tools_help_consistency(self, bin_dir):
         """Test that all tools have consistent help output"""
         tools = ["runner.py", "scheduler.py"]
-        
+
         for tool in tools:
             result = subprocess.run(
                 [sys.executable, str(bin_dir / tool), "--help"],
                 capture_output=True,
                 text=True,
-                timeout=30
+                timeout=30,
+                check=False
             )
-            
+
             assert result.returncode == 0, f"{tool} --help failed: {result.stderr}"
             assert "usage:" in result.stdout.lower() or "options:" in result.stdout.lower()
             assert "--help" in result.stdout
