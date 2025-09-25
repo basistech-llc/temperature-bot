@@ -26,3 +26,4 @@ https://github.com/dpb587/hubitat-cli
 - Runs every minute
 - Queries every sensor and puts the results into the database.
 # Test commit
+# Test commit 2
