@@ -2,6 +2,9 @@
 ae200 controller.
 Originally from https://github.com/natevoci/ae200.
 Includes both async routines and synchronous covers.
+
+Simulator if AE200_SIMULATOR is set
+
 """
 
 # pylint: disable=invalid-name
@@ -10,6 +13,8 @@ Includes both async routines and synchronous covers.
 # pylint: disable=redefined-outer-name
 
 import os
+from os.path import dirname,join
+from pathlib import Path
 import asyncio
 import xml.etree.ElementTree as ET
 import logging
@@ -30,6 +35,9 @@ FAN_SPEEDS = {-1:"AUTO", 1: "LOW", 2: "MID2", 3: "MID1", 4: "HIGH"}
 FAN_SPEED_NAMES = {value: key for key, value in FAN_SPEEDS.items()}
 DRIVE_NAMES = {value: key for key, value in DRIVES.items()}
 
+AE200_SIMULATOR = os.getenv('AE200_SIMULATOR')
+SIMULATOR_DIR = Path(join(dirname(__file__),"test_data"))
+
 getUnitsPayload = """<?xml version="1.0" encoding="UTF-8" ?>
 <Packet>
 <Command>getRequest</Command>
@@ -49,7 +57,6 @@ setRequestPayload = """<?xml version="1.0" encoding="UTF-8" ?>
 </DatabaseManager>
 </Packet>
 """
-
 
 def getMnetDetails(deviceIds):
     mnets = "\n".join(
@@ -72,6 +79,34 @@ def getMnetDetails(deviceIds):
 def cleanDeviceInfo(statusdict):
     """Given the statusdict, remove empty values"""
     return {key:value for (key,value) in statusdict.items() if value!=""}
+
+def int_to_drive(drive):
+    if str(drive).upper() in ["1","TRUE","ON","YES"]:
+        return "ON"
+    else:
+        return "OFF"
+
+def extract_drive_and_fan_speed(data):
+    """Return a dict with drive/speed/has_speed_control"""
+    drive = data.get('Drive',None)
+    speed = data.get('FanSpeed',None)
+    if drive is None or speed is None:
+        return {'has_speed_control':False}
+    return {
+        'drive': DRIVE_NAMES[drive],
+        'fan_speed': FAN_SPEED_NAMES[speed],
+        'has_speed_control': True
+    }
+
+def get_device_fan_speed(device):
+    """Returns the device fanspeed as a number"""
+    info = get_device_info(device)
+    return FAN_SPEED_NAMES[info['FanSpeed']]
+
+def get_device_drive(device):
+    """Returns the device fanspeed as a number"""
+    info = get_device_info(device)
+    return DRIVE_NAMES[info['Drive']]
 
 class AsyncRunner:
     """Manages async operations for the application"""
@@ -106,8 +141,6 @@ runner = AsyncRunner()
 ################################################################
 ### controller class
 class AE200Functions:
-    """Originally from https://github.com/natevoci/ae200"""
-
     def __init__(self, address=None):
         self._json = None
         self._temp_list = []
@@ -116,13 +149,13 @@ class AE200Functions:
         self.address = address
 
     async def getDevicesAsync(self):
-        #assert 'PYTEST' not in os.environ
+        if AE200_SIMULATOR:
+            raise RuntimeError("AE200_SIMULATOR not compatiable with AE200Functions")
         async with websockets.connect(
             f"ws://{self.address}/b_xmlproc/",
             extensions=[permessage_deflate.ClientPerMessageDeflateFactory()],
             origin=f"http://{self.address}",
-            subprotocols=["b_xmlproc"],
-        ) as websocket:
+            subprotocols=["b_xmlproc"] ) as websocket:
             await websocket.send(getUnitsPayload)
             unitsResultStr = await websocket.recv()
             unitsResultXML = ET.fromstring(unitsResultStr)
@@ -141,6 +174,8 @@ class AE200Functions:
         """:param deviceId: The numeric ID of the device to get
         :param clean: if True (default), then remove keys with empty values.
         """
+        if AE200_SIMULATOR:
+            raise RuntimeError("AE200_SIMULATOR not compatiable with AE200Functions")
         async with websockets.connect( f"ws://{self.address}/b_xmlproc/",
                                        extensions=[permessage_deflate.ClientPerMessageDeflateFactory()],
                                        origin=f"http://{self.address}",
@@ -160,6 +195,8 @@ class AE200Functions:
 
     async def sendAsync(self, deviceId, attributes):
         assert 'PYTEST' not in os.environ
+        if AE200_SIMULATOR:
+            raise RuntimeError("AE200_SIMULATOR not compatiable with AE200Functions")
         async with websockets.connect(
             f"ws://{self.address}/b_xmlproc/",
             extensions=[permessage_deflate.ClientPerMessageDeflateFactory()],
@@ -182,34 +219,10 @@ async def get_devices_async():
     d = AE200Functions()
     return await d.getDevicesAsync()
 
-def extract_drive_and_fan_speed(data):
-    """Return a dict with drive/speed/has_speed_control"""
-    drive = data.get('Drive',None)
-    speed = data.get('FanSpeed',None)
-    if drive is None or speed is None:
-        return {'has_speed_control':False}
-    return {
-        'drive': DRIVE_NAMES[drive],
-        'fan_speed': FAN_SPEED_NAMES[speed],
-        'has_speed_control': True
-    }
-
 async def set_fan_speed_async(device, speed):
     logger.info("set_fan_speed_async(%s,%s)",device,speed)
     d = AE200Functions()
     await d.sendAsync(device, {"FanSpeed": FAN_SPEEDS[speed]})
-
-def set_fan_speed(ae200_device, speed):
-    logger.info("set_fan_speed(%s,%s)",ae200_device,speed)
-    d = AE200Functions()
-    d.send(ae200_device, {"FanSpeed": FAN_SPEEDS[speed]})
-
-def int_to_drive(drive):
-    if str(drive).upper() in ["1","TRUE","ON","YES"]:
-        return "ON"
-    else:
-        return "OFF"
-
 
 async def set_drive_async(device, drive_int):
     drive_str = int_to_drive(drive_int)
@@ -217,37 +230,62 @@ async def set_drive_async(device, drive_int):
     d = AE200Functions()
     await d.sendAsync(device, {"Drive": drive_str})
 
-def set_drive(ae200_device, drive_int):
-    drive_str = int_to_drive(drive_int)
-    logger.info("set_fan_speed(%s,%s,%s)",ae200_device,drive_int,drive_str)
-    d = AE200Functions()
-    d.send(ae200_device, {"Drive": drive_str})
-
 async def get_device_info_async(device):
     logger.info("get_device_info_async(%s)",device)
     d = AE200Functions()
     return await d.getDeviceInfoAsync(device)
 
+
+################################################################
+## Everything after here works with the simulator
+################################################################
+
+simulated_devices = {}
+DEVICES='devices'
+if AE200_SIMULATOR:
+    logger.info("SIMULATOR ENABLED")
+    simulated_devices[DEVICES] = json.loads( (SIMULATOR_DIR / 'ae200_get_devices.json').read_bytes())
+    for dev in simulated_devices[DEVICES]:
+        id = dev['id']
+        simulated_devices[id] = json.loads( (SIMULATOR_DIR / f'ae200_get_device_{id}.json').read_bytes())
+
+
+def set_drive(ae200_device, drive_int):
+    drive_str = int_to_drive(drive_int)
+    logger.info("set_fan_speed(%s,%s,%s)",ae200_device,drive_int,drive_str)
+
+    if AE200_SIMULATOR:
+        simulated_devices[str(ae200_device)]['Drive'] = drive_str
+        return
+
+    d = AE200Functions()
+    d.send(ae200_device, {"Drive": drive_str})
+
+def set_fan_speed(ae200_device, speed):
+    fan_speed = FAN_SPEEDS[speed]
+    logger.info("set_fan_speed(%s,%s)=%s",ae200_device,speed,fan_speed)
+    if AE200_SIMULATOR:
+        simulated_devices[str(ae200_device)]['FanSpeed'] = fan_speed
+        return
+    d = AE200Functions()
+    d.send(ae200_device, {"FanSpeed": fan_speed})
+
 def get_device_info(device):
     logger.info("get_device_info(%s)",device)
+    if AE200_SIMULATOR:
+        return simulated_devices[str(device)]
+
     d = AE200Functions()
     return d.getDeviceInfo(device)
 
-def get_device_fan_speed(device):
-    """Returns the device fanspeed as a number"""
-    info = get_device_info(device)
-    return FAN_SPEED_NAMES[info['FanSpeed']]
-
-def get_device_drive(device):
-    """Returns the device fanspeed as a number"""
-    info = get_device_info(device)
-    return DRIVE_NAMES[info['Drive']]
-
 def get_devices():
     logger.info("get_devices()")
+    if AE200_SIMULATOR:
+        return simulated_devices[DEVICES]
     d = AE200Functions()
     return d.getDevices()
 
+################################################################
 if __name__ == "__main__":
     import argparse
 
@@ -262,18 +300,18 @@ if __name__ == "__main__":
     d = AE200Functions(args.host)
 
     # Test reading device list
-    devs = d.getDevices()
+    devs = get_devices()
     print(json.dumps(devs))
 
     for dev in devs:
         did = dev["id"]
         name = dev['name']
         # print(did, json.dumps(d.getDeviceInfo(did), indent=4))
-        data = d.getDeviceInfo(did)
+        data = get_device_info(did)
         print(did, name, "drive: ", data["Drive"], "fan speed: ", data["FanSpeed"])
 
     if args.json:
         for dev in args.devices:
             did = int(dev)
-            data = d.getDeviceInfo(did)
+            data = get_device_info(did)
             print(json.dumps(data,indent=4,default=str))
