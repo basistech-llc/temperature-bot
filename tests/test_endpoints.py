@@ -9,7 +9,9 @@ import os
 import json
 import pytest
 
-from fixtures import client, skip_on_github  # noqa: F401  # pylint: disable=unused-import
+from conftest import client, skip_on_github  # noqa: F401  # pylint: disable=unused-import
+from helpers.mock_helpers import MockHelper
+from helpers.data_factories import DeviceTestData
 
 from app import main
 from app import ae200
@@ -45,8 +47,8 @@ def test_status_endpoint(client):  # noqa: F811
 @patch("app.weather.get_weather_data")
 @patch("app.airquality.get_aqi")
 def test_weather_endpoint(mock_get_airquality, mock_get_weather_data, client):  # noqa: F811
-    mock_get_airquality.return_value = 45
-    mock_get_weather_data.return_value = {"current": {"temperature": 72, "conditions": "Sunny"}, "forecast": []}
+    # Use new mock helper
+    MockHelper.setup_weather_mocks(mock_get_airquality, mock_get_weather_data, 45, 72)
 
     # If this status endpoint also uses db.get_db_connection,
     # it will now correctly use the overridden test DB.
@@ -84,15 +86,14 @@ def test_set_fan_speed_endpoint(mock_get_device_fan_speed, mock_get_devices, moc
         c.execute("UPDATE devices set ae200_device_id=? where device_id=?",(BROADWAY_SOUTH,device_id))
         test_conn.commit()
 
-    # Get the mocked return value
-    with open(join(TEST_DATA_DIR, 'get_devices.json')) as f:
-        mock_get_devices.return_value = json.load(f)
-    with open(join(TEST_DATA_DIR, 'get_device_10.json')) as f:
-        dev10 = json.load(f)
-        # Map speed numbers to names
-        speed_names = {1: "LOW", 2: "MID2", 3: "MID1", 4: "HIGH"}
-        dev10['FanSpeed'] = speed_names[target_speed]
-        mock_get_device_info.return_value = dev10
+    # Use new mock helper for device data
+    MockHelper.setup_ae200_mocks(mock_get_devices, mock_get_device_info, TEST_DATA_DIR, BROADWAY_SOUTH)
+    
+    # Override device info with target speed
+    speed_names = DeviceTestData.get_speed_names()
+    mock_get_device_info.return_value = MockHelper.create_mock_device_info_response(
+        speed_names[target_speed], TEST_DATA_DIR, BROADWAY_SOUTH
+    )
 
     # Send the /set_fan_speed
     response = client.post(

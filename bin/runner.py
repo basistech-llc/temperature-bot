@@ -204,7 +204,10 @@ def report(conn):
                   ]:
         c.execute(query)
         data = c.fetchall()
-        print(tabulate.tabulate([dict(x).values() for x in data], data[0].keys()))
+        if data:
+            print(tabulate.tabulate([dict(x).values() for x in data], data[0].keys()))
+        else:
+            print("No data found")
 
 def setup_parser():
     import argparse

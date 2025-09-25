@@ -4,11 +4,14 @@ Integration tests for AE200 device communication.
 import socket
 import pytest
 from app import ae200
+from app.util import get_config
 
 def can_connect_to_ae200():
-    """Checks if the AE200 device is reachable for integration testing."""
+    """Checks if the AE200 device is reachable for integration testing.
+    Uses configured host to avoid false negatives.
+    """
     try:
-        host = "air.basistech.net"
+        host = get_config().get('ae200', {}).get('host', '127.0.0.1')
         port = 80  # Adjust if AE200 uses a different port
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.settimeout(0.2)
