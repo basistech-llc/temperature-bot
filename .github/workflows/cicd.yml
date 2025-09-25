@@ -12,7 +12,7 @@ jobs:
         python-version: [3.12]
     runs-on: ${{ matrix.os }}
     env:
-      TEMPERATURE_BOT_CONFIG: "temperature-bot/tests/temperature-bot-config-test.yaml"
+      TEMPERATURE_BOT_CONFIG: "tests/temperature-bot-config-test.yaml"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
