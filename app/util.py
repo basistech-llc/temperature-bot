@@ -12,8 +12,12 @@ logger = logging.getLogger(__name__)
 
 @functools.lru_cache(maxsize=1)
 def get_config():
-    with open(CONFIG_YAML_PATH, 'r') as f:
-        return yaml.safe_load(f)
+    try:
+        with CONFIG_YAML_PATH.open('r') as f:
+            return yaml.safe_load(f)
+    except FileNotFoundError as e:
+        logger.error("File not found: %s",CONFIG_YAML_PATH)
+        raise
 
 @functools.lru_cache(maxsize=1)
 def get_secrets():
