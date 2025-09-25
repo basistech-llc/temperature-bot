@@ -23,7 +23,6 @@ import app.ae200 as ae200
 import app.db as db
 import app.hubitat as hubitat
 
-import lib.ctools.clogging as clogging
 import lib.ctools.lock as clock
 
 logger = logging.getLogger(__name__)
@@ -232,7 +231,6 @@ def setup_parser():
     parser.add_argument("--daily", help='Run the daily cleanup', action='store_true')
     parser.add_argument("--rules", choices=["test", "commit"], help='Just run the rules engine')
     parser.add_argument("--aqi", help='Save AQI to database', action='store_true')
-    clogger.add_argument(parser)
     return parser
 
 def main():
@@ -241,7 +239,6 @@ def main():
     logger.info("%s %s",__file__," ".join(sys.argv))
     parser = setup_parser()
     args = parser.parse_args()
-    clogger.setup(args.loglevel, syslog=args.syslog, log_format=clogger.LOG_FORMAT,syslog_format=clogger.YEAR + " " + clogger.SYSLOG_FORMAT)
     conn = db.get_db_connection()
     if args.report:
         report(conn)
