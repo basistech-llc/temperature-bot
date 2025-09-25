@@ -28,3 +28,4 @@ https://github.com/dpb587/hubitat-cli
 # Test commit
 # Test commit 2
 # Test commit 3
+# Test commit 4
