@@ -6,15 +6,15 @@ import tempfile
 import sqlite3
 import logging
 import json
+import time
 from app import ae200
-from tests.conftest import setup_test_database
+from app.paths import SCHEMA_FILE_PATH
 
 
 def create_test_database_with_schema():
     """Create a temporary test database with schema and return the file path."""
-    tf = tempfile.NamedTemporaryFile(suffix='.db', delete=False)
-    tf.close()  # Close the file handle but keep the file
-    db_path = tf.name
+    with  tempfile.NamedTemporaryFile(suffix='.db', delete=False) as tf:
+        db_path = tf.name
 
     logging.info("Created temporary database file for test: %s", db_path)
 
@@ -70,3 +70,27 @@ def verify_devlog_entry(conn: sqlite3.Connection, device_id: int, expected_fan_s
     extracted_status = ae200.extract_drive_and_fan_speed(status_data)
     assert extracted_status['fan_speed'] == expected_fan_speed, \
         f"Expected fan_speed {expected_fan_speed}, got {extracted_status['fan_speed']}"
+
+
+def setup_test_database(conn):
+    """
+    Sets up the database schema on a given connection by reading from schema.sql.
+    """
+    logging.debug("*** setup_test_database")
+    cursor = conn.cursor()
+    try:
+        if not os.path.exists(SCHEMA_FILE_PATH):
+            logging.error("Schema file not found at %s. Please ensure it exists.", SCHEMA_FILE_PATH)
+            raise FileNotFoundError(f"Schema file not found at {SCHEMA_FILE_PATH}")
+
+        with open(SCHEMA_FILE_PATH, 'r') as f:
+            schema_sql = f.read()
+
+        cursor.executescript(schema_sql)
+        conn.commit()
+        cursor.execute("INSERT INTO aqi VALUES (?,?)", (int(time.time()), 45))  # insert AQI of 45
+        logging.debug("*** sending schema")
+        logging.info("Test database schema set up successfully from %s.", SCHEMA_FILE_PATH)
+    except sqlite3.Error as e:
+        logging.exception("Test database error during schema setup: %s", e)
+        conn.rollback()

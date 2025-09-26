@@ -1,8 +1,6 @@
 """
 Mock helpers for consistent test mocking patterns.
 """
-import json
-from pathlib import Path
 from typing import Any, Dict
 
 

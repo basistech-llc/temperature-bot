@@ -5,17 +5,19 @@ import logging
 import sqlite3
 import os
 import json
-import pytest
 import time
+import tempfile
 from unittest.mock import patch
 
+import pytest
 from conftest import client, skip_on_github  # noqa: F401  # pylint: disable=unused-import
 from helpers.data_factories import DeviceTestData
 from helpers.mock_helpers import MockHelper
 
-from app import main
 from app import ae200
 from app import db
+from app.constants import __version__
+from app.services.device_service import DeviceService
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +28,6 @@ def reduce_websockets_logging():
 
 
 def test_get_version(client):   # noqa: F811
-    from app.constants import __version__
 
     response = client.get("/version")
     assert response.status_code == 200
@@ -104,7 +105,6 @@ def test_status_endpoint_schema_mismatch_detection():
     This test simulates the production issue where the database was created
     with an older schema missing the 'notes' column.
     """
-    import tempfile
 
     # Create a temporary database with the old schema (missing notes column)
     with tempfile.NamedTemporaryFile(suffix='.db', delete=False) as tf:
@@ -156,7 +156,6 @@ def test_status_endpoint_schema_mismatch_detection():
             os.environ['TEST_DB_NAME'] = db_path
 
             # This should fail with the same error we saw in production
-            from app.services.device_service import DeviceService
             device_service = DeviceService()
 
             with sqlite3.connect(db_path) as conn:
@@ -214,7 +213,6 @@ BROADWAY_SOUTH=10
 ])
 def test_set_fan_speed_endpoint(client, start_speed, target_speed, expected_calls): # noqa: F811
     # Set up simulator with initial speed
-    from app import ae200
     ae200.set_fan_speed(BROADWAY_SOUTH, start_speed)
 
     # get device_id

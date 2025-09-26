@@ -17,7 +17,7 @@ from helpers.database_helpers import DatabaseTestHelper
 from helpers.mock_helpers import MockHelper
 from helpers.data_factories import DeviceTestData, TestDataFactory
 from app import db
-
+from app import ae200
 from app.main import app
 
 
@@ -122,7 +122,6 @@ def test_browser_fan_speed_controls(
             logger.info("Testing fan speed 1 (LOW)")
 
             # Set up simulator for speed 1
-            from app import ae200
             ae200.set_fan_speed(BROADWAY_SOUTH, 1)
 
             # Click fan speed 1

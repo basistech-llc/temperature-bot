@@ -15,7 +15,7 @@ def get_config():
     try:
         with CONFIG_YAML_PATH.open('r') as f:
             return yaml.safe_load(f)
-    except FileNotFoundError as e:
+    except FileNotFoundError:
         logger.error("File not found: %s",CONFIG_YAML_PATH)
         raise
 

@@ -141,6 +141,7 @@ runner = AsyncRunner()
 ################################################################
 ### controller class
 class AE200Functions:
+    """ae200 implementation."""
     def __init__(self, address=None):
         self._json = None
         self._temp_list = []
@@ -246,8 +247,8 @@ if AE200_SIMULATOR:
     logger.debug("SIMULATOR ENABLED")
     simulated_devices[DEVICES] = json.loads( (SIMULATOR_DIR / 'ae200_get_devices.json').read_bytes())
     for dev in simulated_devices[DEVICES]:
-        id = dev['id']
-        simulated_devices[id] = json.loads( (SIMULATOR_DIR / f'ae200_get_device_{id}.json').read_bytes())
+        did = dev['id']
+        simulated_devices[did] = json.loads( (SIMULATOR_DIR / f'ae200_get_device_{did}.json').read_bytes())
 
 
 def set_drive(ae200_device, drive_int):
