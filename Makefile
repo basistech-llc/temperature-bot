@@ -29,6 +29,9 @@ make-dev-db:
 local-dev: $(REQ)
 	FLASK_DEBUG=True $(PYTHON) run_local.py
 
+fetch-slg:
+	rsync --verbose --delete --archive slg1.basistech.net:/var/db var/
+
 tags:
 	etags */*.py
 

@@ -7,6 +7,8 @@ import requests  # type: ignore
 from app.util import get_config,get_secret
 from app.paths import TIMEOUT_SECONDS
 
+OFFLINE = 'OFFLINE - '
+
 HUBITAT_GET_ALL_DEVICES_FULL_DETAILS = "http://{host}/apps/api/{appId}/devices/all?access_token={access_token}"
 HUBITAT_GET_DEVICE_INFO = "http://{host}/apps/api/{appId}/devices/{device_id}?access_token={access_token}"
 HUBITAT_GET_DEVICE_EVENT_HISTORY = "http://{host}/apps/api/{appId}/devices/{device_id}/events?access_token={access_token}"
@@ -26,7 +28,14 @@ def get_all_devices():
     appId = get_config()['hubitat']['appId']
     access_token = get_secret('hubitat','access_token')
     r = requests.get(HUBITAT_GET_ALL_DEVICES_FULL_DETAILS.format(host=host,appId=appId,access_token=access_token),timeout=TIMEOUT_SECONDS)
-    return r.json()
+    data = r.json()
+
+    # Sometimes hubitat changes name to 'offline' ... remove that
+    for dev in data:
+        if dev['name'].startswith(OFFLINE):
+            dev['name'] = dev['name'].replace(OFFLINE,'')
+
+    return dev
 
 if __name__=="__main__":
     """A little test program"""

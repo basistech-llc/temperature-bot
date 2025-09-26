@@ -234,8 +234,6 @@ def setup_parser():
     return parser
 
 def main():
-    print("runner.py")
-    os.system("printenv")
     logger.info("%s %s",__file__," ".join(sys.argv))
     parser = setup_parser()
     args = parser.parse_args()
