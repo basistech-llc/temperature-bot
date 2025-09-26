@@ -10,7 +10,7 @@ pytest: $(REQ)
 PYLINT_THRESHOLD := 9.5
 PYLINT_OPTS :=--output-format=parseable --rcfile .pylintrc --fail-under=$(PYLINT_THRESHOLD) --verbose
 check: $(REQ)
-	$(PYTHON) -m ruff check .
+	$(PYTHON) -m ruff check --fix .
 	$(PYTHON) -m pylint $(PYLINT_OPTS) app tests *.py
 	echo $(PYTHON) -m mypy app tests
 
@@ -28,6 +28,9 @@ make-dev-db:
 
 local-dev: $(REQ)
 	FLASK_DEBUG=True $(PYTHON) run_local.py
+
+fetch-slg:
+	rsync --verbose --delete --archive slg1.basistech.net:/var/db var/
 
 tags:
 	etags */*.py
