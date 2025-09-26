@@ -15,3 +15,6 @@ temps.csv
 *.pyx
 token.json
 .coverage
+temperature-bot-config.yaml
+*.db-shm
+*.db-wal

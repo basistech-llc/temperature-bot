@@ -101,22 +101,11 @@ def main():
     sn = [dev['serialNumber'] for dev in devices]
     print("Serial Numbers:",sn)
 
-    sensors = get_sensors(access_token,accountId,sn)
+    sensors = get_sensors(access_token, accountId, sn)
     if not devices:
         print("No sensors found.")
     print('sensors',sensors)
-    exit(0)
-
-    print("Air Monitors and Current Temperatures:")
-    for device in devices:
-        print("device=",device)
-        device_name = device.get('segment', {}).get('name', 'Unknown Device')
-        current_temperature = get_temperature_from_device(device)
-        if current_temperature is not None:
-            print(f"{device_name}: {current_temperature}°C")
-        else:
-            print(f"{device_name}: Temperature data not available.")
-    print(json.dumps(get_sensors(access_token),indent=4))
+    return 0
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

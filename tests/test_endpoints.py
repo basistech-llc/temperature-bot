@@ -1,20 +1,23 @@
 """
 test Flask endpoints
 """
-from os.path import join
 import logging
-from unittest.mock import patch
 import sqlite3
 import os
 import json
+import time
+import tempfile
+from unittest.mock import patch
+
 import pytest
+from conftest import client, skip_on_github  # noqa: F401  # pylint: disable=unused-import
+from helpers.data_factories import DeviceTestData
+from helpers.mock_helpers import MockHelper
 
-from fixtures import client, skip_on_github  # noqa: F401  # pylint: disable=unused-import
-
-from app import main
 from app import ae200
 from app import db
-from app.paths import TEST_DATA_DIR
+from app.constants import __version__
+from app.services.device_service import DeviceService
 
 logger = logging.getLogger(__name__)
 
@@ -25,13 +28,14 @@ def reduce_websockets_logging():
 
 
 def test_get_version(client):   # noqa: F811
+
     response = client.get("/version")
     assert response.status_code == 200
-    assert response.data.decode('utf-8') == f'version: {main.__version__}'
+    assert response.data.decode('utf-8') == f'version: {__version__}'
 
     response = client.get("/api/v1/version")
     assert response.status_code == 200
-    assert response.json == {'version': main.__version__}
+    assert response.json == {'version': __version__}
 
 
 def test_status_endpoint(client):  # noqa: F811
@@ -41,12 +45,149 @@ def test_status_endpoint(client):  # noqa: F811
     logging.info(" /status: %s", response_json)
     assert "devices" in response_json
 
+
+def test_status_endpoint_with_schema_validation(client):  # noqa: F811
+    """Test that the status endpoint works with a database that has all required columns.
+
+    This test ensures that the database schema matches what the code expects,
+    preventing 'no such column' errors in production.
+    """
+    # First, verify the test database has the expected schema
+    test_db_path = os.environ.get('TEST_DB_NAME')
+    assert test_db_path, "TEST_DB_NAME environment variable should be set"
+
+    with sqlite3.connect(test_db_path) as conn:
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+
+        # Get the schema for the devices table
+        cursor.execute("PRAGMA table_info(devices)")
+        columns = [row['name'] for row in cursor.fetchall()]
+
+        # Verify all expected columns exist
+        expected_columns = ['device_id', 'device_name', 'ae200_device_id', 'disabled_until', 'notes']
+        for expected_col in expected_columns:
+            assert expected_col in columns, f"Missing required column '{expected_col}' in devices table. Found columns: {columns}"
+
+    # Add a test device with all columns to ensure the query works
+    with sqlite3.connect(test_db_path) as conn:
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO devices (device_name, ae200_device_id, disabled_until, notes)
+            VALUES (?, ?, ?, ?)
+        """, ("Test Device", 1, None, "Test notes"))
+
+        # Add a status entry
+        cursor.execute("""
+            INSERT INTO devlog (device_id, logtime, duration, temp10x, status_json)
+            VALUES (?, ?, ?, ?, ?)
+        """, (cursor.lastrowid, int(time.time()), 60, 240, '{"Drive": "ON", "FanSpeed": "LOW"}'))
+        conn.commit()
+
+    # Now test the endpoint - this should work without schema errors
+    response = client.get("/api/v1/status")
+    assert response.status_code == 200
+    response_json = response.json
+    assert "devices" in response_json
+    assert len(response_json["devices"]) >= 1
+
+    # Verify the device data includes all expected fields
+    test_device = next((d for d in response_json["devices"] if d["device_name"] == "Test Device"), None)
+    assert test_device is not None, "Test device should be returned"
+    assert "notes" in test_device, "Device should include notes field"
+    assert test_device["notes"] == "Test notes"
+
+
+def test_status_endpoint_schema_mismatch_detection():
+    """Test that detects when the database schema doesn't match code expectations.
+
+    This test simulates the production issue where the database was created
+    with an older schema missing the 'notes' column.
+    """
+
+    # Create a temporary database with the old schema (missing notes column)
+    with tempfile.NamedTemporaryFile(suffix='.db', delete=False) as tf:
+        db_path = tf.name
+
+    try:
+        with sqlite3.connect(db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+
+            # Create devices table WITHOUT the notes column (simulating old schema)
+            cursor.execute("""
+                CREATE TABLE devices (
+                    device_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    device_name TEXT UNIQUE NOT NULL,
+                    ae200_device_id INTEGER,
+                    disabled_until INTEGER
+                )
+            """)
+
+            # Create devlog table
+            cursor.execute("""
+                CREATE TABLE devlog (
+                    log_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    device_id INTEGER NOT NULL,
+                    logtime INTEGER NOT NULL,
+                    duration INTEGER NOT NULL DEFAULT 1,
+                    temp10x INTEGER,
+                    status_json TEXT,
+                    FOREIGN KEY (device_id) REFERENCES devices (device_id)
+                )
+            """)
+
+            # Add test data
+            cursor.execute("INSERT INTO devices (device_name, ae200_device_id) VALUES (?, ?)", ("Test Device", 1))
+            device_id = cursor.lastrowid
+            cursor.execute("""
+                INSERT INTO devlog (device_id, logtime, duration, temp10x, status_json)
+                VALUES (?, ?, ?, ?, ?)
+            """, (device_id, int(time.time()), 60, 240, '{"Drive": "ON", "FanSpeed": "LOW"}'))
+            conn.commit()
+
+        # Set up environment to use this database
+        original_db_path = os.environ.get('DB_PATH')
+        original_test_db_name = os.environ.get('TEST_DB_NAME')
+
+        try:
+            os.environ['DB_PATH'] = db_path
+            os.environ['TEST_DB_NAME'] = db_path
+
+            # This should fail with the same error we saw in production
+            device_service = DeviceService()
+
+            with sqlite3.connect(db_path) as conn:
+                conn.row_factory = sqlite3.Row
+
+                # This should raise sqlite3.OperationalError: no such column: b.notes
+                with pytest.raises(sqlite3.OperationalError, match="no such column: b.notes"):
+                    device_service.get_device_status(conn)
+
+        finally:
+            # Restore environment
+            if original_db_path is not None:
+                os.environ['DB_PATH'] = original_db_path
+            elif 'DB_PATH' in os.environ:
+                del os.environ['DB_PATH']
+
+            if original_test_db_name is not None:
+                os.environ['TEST_DB_NAME'] = original_test_db_name
+            elif 'TEST_DB_NAME' in os.environ:
+                del os.environ['TEST_DB_NAME']
+
+    finally:
+        # Clean up temporary file
+        os.unlink(db_path)
+
+
 @skip_on_github
 @patch("app.weather.get_weather_data")
 @patch("app.airquality.get_aqi")
 def test_weather_endpoint(mock_get_airquality, mock_get_weather_data, client):  # noqa: F811
-    mock_get_airquality.return_value = 45
-    mock_get_weather_data.return_value = {"current": {"temperature": 72, "conditions": "Sunny"}, "forecast": []}
+    # Use new mock helper
+    MockHelper.setup_weather_mocks(mock_get_airquality, mock_get_weather_data, 45, 72)
 
     # If this status endpoint also uses db.get_db_connection,
     # it will now correctly use the overridden test DB.
@@ -70,29 +211,17 @@ BROADWAY_SOUTH=10
     (2, 3, 1),  # Different speed - should call set_fan_speed once
     (2, 4, 1),  # Different speed - should call set_fan_speed once
 ])
-@patch("app.ae200.get_device_info")
-@patch("app.ae200.set_fan_speed")
-@patch("app.ae200.get_devices")  # note patch args are in reverse order
-@patch("app.ae200.get_device_fan_speed")
-def test_set_fan_speed_endpoint(mock_get_device_fan_speed, mock_get_devices, mock_set_fan_speed, mock_get_device_info, client, start_speed, target_speed, expected_calls): # noqa: F811
+def test_set_fan_speed_endpoint(client, start_speed, target_speed, expected_calls): # noqa: F811
+    # Set up simulator with initial speed
+    ae200.set_fan_speed(BROADWAY_SOUTH, start_speed)
+
     # get device_id
-    mock_get_device_fan_speed.return_value = start_speed  # Mock the current speed
     with sqlite3.connect(os.environ['TEST_DB_NAME']) as test_conn:
         test_conn.row_factory = sqlite3.Row
         device_id = db.get_or_create_device_id(test_conn, "Broadway South")
         c = test_conn.cursor()
         c.execute("UPDATE devices set ae200_device_id=? where device_id=?",(BROADWAY_SOUTH,device_id))
         test_conn.commit()
-
-    # Get the mocked return value
-    with open(join(TEST_DATA_DIR, 'get_devices.json')) as f:
-        mock_get_devices.return_value = json.load(f)
-    with open(join(TEST_DATA_DIR, 'get_device_10.json')) as f:
-        dev10 = json.load(f)
-        # Map speed numbers to names
-        speed_names = {1: "LOW", 2: "MID2", 3: "MID1", 4: "HIGH"}
-        dev10['FanSpeed'] = speed_names[target_speed]
-        mock_get_device_info.return_value = dev10
 
     # Send the /set_fan_speed
     response = client.post(
@@ -106,15 +235,11 @@ def test_set_fan_speed_endpoint(mock_get_device_fan_speed, mock_get_devices, moc
     assert str(response_json['unit']) == str(BROADWAY_SOUTH)
     assert response_json["speed"] == target_speed
 
-    # Verify that these were both called with the arguments
-    #mock_get_devices.assert_called_once_with()
-    mock_get_device_info.assert_called_with(BROADWAY_SOUTH)
-    # Verify set_fan_speed was called the expected number of times
-    if expected_calls == 0:
-        mock_set_fan_speed.assert_not_called()
-    else:
-        assert mock_set_fan_speed.call_count == expected_calls
-        mock_set_fan_speed.assert_called_with(BROADWAY_SOUTH, target_speed)
+    # Verify the simulator state was updated correctly
+    device_info = ae200.get_device_info(BROADWAY_SOUTH)
+    speed_names = DeviceTestData.get_speed_names()
+    expected_speed_name = speed_names[target_speed]
+    assert device_info['FanSpeed'] == expected_speed_name
 
     # Verify that the database got updated only when speed changes
     if expected_calls > 0:

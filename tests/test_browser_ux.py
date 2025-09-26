@@ -3,22 +3,21 @@ End-to-end browser test for fan speed controls.
 NOTE: AQI (air quality index) is not being tested in this file and can be ignored for now.
 """
 import os
-import json
-import sqlite3
 import time
 import logging
 import threading
 from unittest.mock import patch
-from pathlib import Path
 
 import pytest
-from playwright.sync_api import sync_playwright, Page, expect
+from playwright.sync_api import sync_playwright, expect
 
-from fixtures import client, skip_on_github, insert_temporal_test_data  # noqa: F401  # pylint: disable=unused-import
-from app import ae200
+from conftest import client, skip_on_github  # noqa: F401  # pylint: disable=unused-import
+from helpers.browser_helpers import BrowserTestHelper, TemperatureTestHelper
+from helpers.database_helpers import DatabaseTestHelper
+from helpers.mock_helpers import MockHelper
+from helpers.data_factories import DeviceTestData, TestDataFactory
 from app import db
-from app.paths import TEST_DATA_DIR
-
+from app import ae200
 from app.main import app
 
 
@@ -32,155 +31,16 @@ def reduce_websockets_logging():
     logging.getLogger("websockets.client").setLevel(logging.INFO)
 
 
-class BrowserTestHelper:
-    """Helper class for browser testing operations"""
-
-    def __init__(self, page: Page, test_db_name: str):
-        self.page = page
-        self.test_db_name = test_db_name
-
-    def wait_for_grid_to_load(self):
-        """Wait for the main grid to load and be visible"""
-        # Wait for the table to be created
-        self.page.wait_for_selector('table.pure-table', timeout=10000)
-        # Wait for at least one device row to be present
-        self.page.wait_for_selector('tr:has(td)', timeout=10000)
-
-    def find_broadway_south_row(self):
-        """Find the Broadway South row in the table"""
-        # Look for a row containing "Broadway South"
-        return self.page.locator('tr:has-text("Broadway South")')
-
-    def get_fan_speed_radio(self, speed: int):
-        """Get the radio button for a specific fan speed for Broadway South"""
-        # Find the Broadway South row and get the radio button for the specified speed
-        row = self.find_broadway_south_row()
-        logger.debug("row=%s",row)
-        assert row is not None
-        # The radio button ID format is radio-{device_id}-{speed}
-        # We need to find the device_id first
-        device_id = self.get_broadway_south_device_id()
-        return self.page.locator(f'#radio-{device_id}-{speed}')
-
-    def get_broadway_south_device_id(self) -> int:
-        """Get the device ID for Broadway South from the database"""
-        with sqlite3.connect(self.test_db_name) as conn:
-            conn.row_factory = sqlite3.Row
-            device_id = db.get_or_create_device_id(conn, "Broadway South")
-            return device_id
-
-    def click_fan_speed(self, speed: int):
-        """Click on a fan speed radio button for Broadway South"""
-        radio = self.get_fan_speed_radio(speed)
-        radio.click()
-
-    def verify_radio_selected(self, speed: int):
-        """Verify that the specified fan speed radio button is selected"""
-        radio = self.get_fan_speed_radio(speed)
-        expect(radio).to_be_checked()
-
-    def verify_radio_not_selected(self, speed: int):
-        """Verify that the specified fan speed radio button is not selected"""
-        radio = self.get_fan_speed_radio(speed)
-        expect(radio).not_to_be_checked()
-
-    def verify_database_speed(self, expected_fan_speed: int):
-        """Verify that the database has been updated with the expected speed"""
-        device_id = self.get_broadway_south_device_id()
-
-        with sqlite3.connect(self.test_db_name) as conn:
-            conn.row_factory = sqlite3.Row
-            cursor = conn.cursor()
-
-            # Check the most recent changelog entry
-            cursor.execute("""
-                SELECT new_value, agent FROM changelog
-                WHERE device_id = ?
-                ORDER BY changelog_id DESC
-                LIMIT 1
-            """, (device_id,))
-            changelog_entry = cursor.fetchone()
-
-            assert changelog_entry is not None, "No changelog entry found"
-            assert changelog_entry['new_value'] == str(expected_fan_speed), \
-                f"Expected speed {expected_fan_speed}, got {changelog_entry['new_value']}"
-            assert changelog_entry['agent'] == 'web', \
-                f"Expected agent 'web', got {changelog_entry['agent']}"
-
-            # Check the most recent devlog entry
-            cursor.execute("""
-                SELECT status_json FROM devlog
-                WHERE device_id = ?
-                ORDER BY logtime DESC
-                LIMIT 1
-            """, (device_id,))
-            devlog_entry = cursor.fetchone()
-
-            assert devlog_entry is not None, "No devlog entry found"
-            status_data = json.loads(devlog_entry['status_json'])
-            extracted_status = ae200.extract_drive_and_fan_speed(status_data)
-            assert extracted_status['fan_speed'] == expected_fan_speed, \
-                f"Expected fan_speed {expected_fan_speed}, got {extracted_status['fan_speed']}"
-
-
-class TemperatureTestHelper:
-    """Helper class for temperature display testing operations"""
-
-    def __init__(self, page: Page, test_db_name: str):
-        self.page = page
-        self.test_db_name = test_db_name
-
-    def wait_for_chart_to_load(self):
-        """Wait for the chart page to load and be visible"""
-        # Wait for the main chart container
-        self.page.wait_for_selector('#main', timeout=10000)
-        # Wait for the record count to appear
-        self.page.wait_for_selector('#record-count', timeout=10000)
-
-    def get_record_count(self) -> int:
-        """Get the current record count from the page"""
-        record_count_element = self.page.locator('#record-count')
-        text = record_count_element.text_content()
-        # Extract number from "Records loaded: X"
-        count = int(text.split(': ')[1])
-        return count
-
-    def click_temporal_button(self, button_name: str):
-        """Click a temporal button (day, week, month)"""
-        button_map = {
-            'day': '#dayBtn',
-            'week': '#weekBtn',
-            'month': '#monthBtn'
-        }
-        button_selector = button_map.get(button_name)
-        if not button_selector:
-            raise ValueError(f"Unknown button: {button_name}")
-
-        self.page.click(button_selector)
-        # Wait for the record count to update
-        time.sleep(1)
-
-    def verify_record_count(self, expected_count: int):
-        """Verify that the record count matches the expected value"""
-        actual_count = self.get_record_count()
-        assert actual_count == expected_count, \
-            f"Expected {expected_count} records, got {actual_count}"
-
-
 # Set this flag to True to enable AQI testing, False to disable
 TEST_AQI = False
 
 # pylint: disable=too-many-arguments, disable=too-many-positional-arguments, disable=too-many-statements
 @skip_on_github
-@patch("app.ae200.get_device_info")
-@patch("app.ae200.get_devices")
 @patch("app.weather.get_weather_data")
 @patch("app.airquality.get_aqi")
 def test_browser_fan_speed_controls(
     mock_get_airquality,
     mock_get_weather_data,
-    mock_get_devices,
-    mock_get_device_info,
     client     # noqa: F811 # pylint: disable=unused-argument
 ):
     """
@@ -194,19 +54,14 @@ def test_browser_fan_speed_controls(
     test_db_name = os.environ['TEST_DB_NAME']
     BROADWAY_SOUTH = 10
 
-    with sqlite3.connect(test_db_name) as test_conn:
-        test_conn.row_factory = sqlite3.Row
-        device_id = db.get_or_create_device_id(test_conn, "Broadway South")
-        c = test_conn.cursor()
-        c.execute("UPDATE devices set ae200_device_id=? where device_id=?", (BROADWAY_SOUTH, device_id))
+    # Use new database helper
+    db_helper = DatabaseTestHelper(test_db_name)
+    with db_helper.get_connection() as test_conn:
+        device_id = TestDataFactory.create_broadway_south_device(test_conn, BROADWAY_SOUTH)
 
         # Add initial devlog entry for Broadway South so it appears in status API
         current_time = int(time.time())
-        initial_status = {
-            "Drive": "ON",
-            "FanSpeed": "LOW",
-            "InletTemp": "24.0"
-        }
+        initial_status = DeviceTestData.get_initial_status()
         db.insert_devlog_entry(
             test_conn,
             device_id=device_id,
@@ -216,39 +71,19 @@ def test_browser_fan_speed_controls(
             force=True
         )
         # Add a second device without speed control
-        no_speed_device_id = db.get_or_create_device_id(test_conn, "No Speed Device")
-        db.insert_devlog_entry(
+        TestDataFactory.create_device_with_status(
             test_conn,
-            device_id=no_speed_device_id,
-            temp=22.0,
-            statusdict={"Drive": "ON", "InletTemp": "22.0"},
-            logtime=current_time,
-            force=True
+            "No Speed Device",
+            DeviceTestData.get_no_speed_status(),
+            current_time
         )
-        test_conn.commit()
 
-    # Set up mocked return values
-    with open(Path(TEST_DATA_DIR) / 'get_devices.json') as f:
-        mock_get_devices.return_value = json.load(f)
-
-    # Mock weather and AQI data
-    mock_get_airquality.return_value = 45
-    mock_get_weather_data.return_value = {
-        "current": {"temperature": TEST_TEMP, "conditions": "Sunny"},
-        "forecast": []
-    }
-
-    # Mock device info responses for different speeds
-    def mock_device_info_response(speed_name):
-        with open(Path(TEST_DATA_DIR) / 'get_device_10.json') as f:
-            dev10 = json.load(f)
-            dev10['FanSpeed'] = speed_name
-            return dev10
+    # Set up weather mocks
+    MockHelper.setup_weather_mocks(mock_get_airquality, mock_get_weather_data, 45, TEST_TEMP)
 
     # Start the Flask app in a separate thread
     def run_app():
         app.run(host='127.0.0.1', port=5001, debug=False, use_reloader=False)
-
 
     # pylint: disable=duplicate-code
     server_thread = threading.Thread(target=run_app, daemon=True)
@@ -283,14 +118,14 @@ def test_browser_fan_speed_controls(
                 radio = no_speed_row.locator('input[type="radio"][x-data-device-id]')
                 expect(radio).not_to_be_visible()
 
-            # Test 1: Click fan speed 0 (OFF)
-            logger.info("Testing fan speed 0 (OFF)")
+            # Test 1: Click fan speed 1 (LOW) since UI has speeds [-1,1,2,3,4]
+            logger.info("Testing fan speed 1 (LOW)")
 
-            # Set up mock for speed 0
-            mock_get_device_info.return_value = mock_device_info_response("OFF")
+            # Set up simulator for speed 1
+            ae200.set_fan_speed(BROADWAY_SOUTH, 1)
 
-            # Click fan speed 0
-            helper.click_fan_speed(0)
+            # Click fan speed 1
+            helper.click_fan_speed(1)
 
             # Wait for the request to complete
             page.wait_for_timeout(2000)
@@ -299,7 +134,7 @@ def test_browser_fan_speed_controls(
             helper.verify_radio_selected(1)
 
             # Verify other speeds are not selected
-            for speed in [1, 2, 3, 4]:
+            for speed in [2, 3, 4]:
                 helper.verify_radio_not_selected(speed)
 
             #  Verify database was updated
@@ -312,8 +147,8 @@ def test_browser_fan_speed_controls(
             # Test 2: Click fan speed 4 (HIGH)
             logger.info("Testing fan speed 4 (HIGH)")
 
-            # Set up mock for speed 4
-            mock_get_device_info.return_value = mock_device_info_response("HIGH")
+            # Set up simulator for speed 4
+            ae200.set_fan_speed(BROADWAY_SOUTH, 4)
 
             # Click fan speed 4
             helper.click_fan_speed(4)
@@ -335,23 +170,23 @@ def test_browser_fan_speed_controls(
             # mock_set_fan_speed.assert_called_with(BROADWAY_SOUTH, 4)
             # mock_get_device_info.assert_called_with(BROADWAY_SOUTH)
 
-            # Test 3: Click fan speed 1 (LOW)
-            logger.info("Testing fan speed 1 (LOW)")
+            # Test 3: Click fan speed 2 (MID2)
+            logger.info("Testing fan speed 2 (MID2)")
 
-            # Set up mock for speed 1
-            mock_get_device_info.return_value = mock_device_info_response("LOW")
+            # Set up simulator for speed 2
+            ae200.set_fan_speed(BROADWAY_SOUTH, 2)
 
-            # Click fan speed 1
-            helper.click_fan_speed(1)
+            # Click fan speed 2
+            helper.click_fan_speed(2)
 
             # Wait for the request to complete
             page.wait_for_timeout(2000)
 
             # Verify radio button is selected
-            helper.verify_radio_selected(1)
+            helper.verify_radio_selected(2)
 
             # Verify other speeds are not selected
-            for speed in [0, 2, 3, 4]:
+            for speed in [1, 3, 4]:
                 helper.verify_radio_not_selected(speed)
 
             # Verify database was updated
@@ -360,9 +195,9 @@ def test_browser_fan_speed_controls(
             # Verify the mock was called correctly
             # mock_set_fan_speed.assert_called_with(BROADWAY_SOUTH, 1)
 
-            # Verify total number of calls
-            # assert mock_set_fan_speed.call_count == 3, f"Expected 3 calls, got {mock_set_fan_speed.call_count}"
-            assert mock_get_device_info.call_count == 6, f"Expected 6 calls, got {mock_get_device_info.call_count}"
+            # Verify simulator state was updated correctly
+            device_info = ae200.get_device_info(BROADWAY_SOUTH)
+            assert device_info['FanSpeed'] == "MID2"
 
             browser.close()
 
@@ -376,38 +211,26 @@ def test_browser_fan_speed_controls(
 
 # pylint: disable=unused-argument
 @skip_on_github
-@patch("app.ae200.get_device_info")
-@patch("app.ae200.set_fan_speed")
-@patch("app.ae200.get_devices")
 @patch("app.weather.get_weather_data")
 @patch("app.airquality.get_aqi")
 def test_browser_page_loads_correctly(
     mock_get_airquality,
     mock_get_weather_data,
-    mock_get_devices,
-    mock_set_fan_speed,
-    mock_get_device_info,
     client  # noqa: F811
 ):
     """Test that the browser page loads correctly with all elements"""
 
-    # Set up test database
+    # Set up test database using new helpers
     test_db_name = os.environ['TEST_DB_NAME']
     BROADWAY_SOUTH = 10
 
-    with sqlite3.connect(test_db_name) as test_conn:
-        test_conn.row_factory = sqlite3.Row
-        device_id = db.get_or_create_device_id(test_conn, "Broadway South")
-        c = test_conn.cursor()
-        c.execute("UPDATE devices set ae200_device_id=? where device_id=?", (BROADWAY_SOUTH, device_id))
+    db_helper = DatabaseTestHelper(test_db_name)
+    with db_helper.get_connection() as test_conn:
+        device_id = TestDataFactory.create_broadway_south_device(test_conn, BROADWAY_SOUTH)
 
         # Add initial devlog entry for Broadway South so it appears in status API
         current_time = int(time.time())
-        initial_status = {
-            "Drive": "ON",
-            "FanSpeed": "LOW",
-            "InletTemp": "24.0"
-        }
+        initial_status = DeviceTestData.get_initial_status()
         db.insert_devlog_entry(
             test_conn,
             device_id=device_id,
@@ -416,23 +239,11 @@ def test_browser_page_loads_correctly(
             logtime=current_time,
             force=True
         )
-        test_conn.commit()
 
-    # Set up mocked return values
-    with open(Path(TEST_DATA_DIR) / 'get_devices.json') as f:
-        mock_get_devices.return_value = json.load(f)
-
-    with open(Path(TEST_DATA_DIR) / 'get_device_10.json') as f:
-        mock_get_device_info.return_value = json.load(f)
-
-    mock_get_airquality.return_value = 45
-    mock_get_weather_data.return_value = {
-        "current": {"temperature": TEST_TEMP, "conditions": "Sunny"},
-        "forecast": []
-    }
+    # Set up weather mocks
+    MockHelper.setup_weather_mocks(mock_get_airquality, mock_get_weather_data, 45, TEST_TEMP)
 
     # Start the Flask app in a separate thread
-
     def run_app():
         app.run(host='127.0.0.1', port=5002, debug=False, use_reloader=False)
 
@@ -468,7 +279,7 @@ def test_browser_page_loads_correctly(
             helper = BrowserTestHelper(page, test_db_name)
             device_id = helper.get_broadway_south_device_id()
 
-            for speed in [0, 1, 2, 3, 4]:
+            for speed in [1, 2, 3, 4]:
                 radio = page.locator(f'#radio-{device_id}-{speed}')
                 expect(radio).to_be_visible()
                 expect(radio).to_have_attribute('type', 'radio')
@@ -516,21 +327,17 @@ def test_browser_temperature_display(
     3. Tests with temporal test data (1 hour, 26 hours, 200 hours, 2000 hours ago)
     """
 
-    # Set up test database with temporal data
+    # Set up test database with temporal data using new helpers
     test_db_name = os.environ['TEST_DB_NAME']
 
-    with sqlite3.connect(test_db_name) as test_conn:
-        test_conn.row_factory = sqlite3.Row
+    db_helper = DatabaseTestHelper(test_db_name)
+    with db_helper.get_connection() as test_conn:
         # Create test device with temporal data
+        from tests.conftest import insert_temporal_test_data  # pylint: disable=import-outside-toplevel
         device_id, expected_counts = insert_temporal_test_data(test_conn, "Temporal Test Device")
-        test_conn.commit()
 
-    # Mock weather and AQI data
-    mock_get_airquality.return_value = 45
-    mock_get_weather_data.return_value = {
-        "current": {"temperature": TEST_TEMP, "conditions": "Sunny"},
-        "forecast": []
-    }
+    # Mock weather and AQI data using new mock helper
+    MockHelper.setup_weather_mocks(mock_get_airquality, mock_get_weather_data, 45, TEST_TEMP)
 
     # Start the Flask app in a separate thread
     def run_app():
@@ -602,6 +409,7 @@ def test_browser_temperature_display(
         pass
 
 
+@skip_on_github
 def test_chart_page_no_dom_errors():
     """
     This test requires the Flask server to be running at http://localhost:8000.

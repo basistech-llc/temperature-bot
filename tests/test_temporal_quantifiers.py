@@ -5,7 +5,7 @@ import time
 import sqlite3
 import os
 import pytest
-from fixtures import insert_temporal_test_data,client # noqa: F401 # pylint: disable=unused-import
+from conftest import insert_temporal_test_data, client  # noqa: F401 # pylint: disable=unused-import
 
 
 def test_logs_endpoint_with_start(client): # noqa: F811
