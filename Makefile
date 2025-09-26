@@ -4,14 +4,8 @@ REQ := .venv/pyvenv.cfg
 PYTHON := .venv/bin/python
 
 pytest: $(REQ)
-	AE200_SIMULATOR=1 $(PYTHON) -m pytest . --log-cli-level=DEBUG --log-file-level=DEBUG
-
-pytest-coverage: $(REQ)
 	AE200_SIMULATOR=1 $(PYTHON) -m pytest . -v --cov=. --cov-report=xml --cov-report=html --log-cli-level=DEBUG --log-file-level=DEBUG
 	@echo covreage report in htmlcov/
-
-tags:
-	etags */*.py
 
 PYLINT_THRESHOLD := 9.5
 PYLINT_OPTS :=--output-format=parseable --rcfile .pylintrc --fail-under=$(PYLINT_THRESHOLD) --verbose
@@ -34,6 +28,9 @@ make-dev-db:
 
 local-dev: $(REQ)
 	FLASK_DEBUG=True $(PYTHON) run_local.py
+
+tags:
+	etags */*.py
 
 ################################################################
 ## Every minutes
