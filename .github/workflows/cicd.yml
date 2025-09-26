@@ -58,7 +58,7 @@ jobs:
           make pytest
 
       - name: Upload coverage test to codecov.io
-        if: runner.os == 'Linux'
+        if: runner.os == 'Linux-DISABLED-UNTIL-WE-ADD-IT'
         uses: codecov/codecov-action@v4
         with:
           fail_ci_if_error: true
