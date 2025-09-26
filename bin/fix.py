@@ -2,28 +2,15 @@
 Runs every minute to get temperature and fan speeds
 """
 import sys
-import os.path
-import datetime
-import json
-import csv
 import logging
-import time
 from os.path import dirname,abspath
-import tabulate  # type: ignore
-import requests
 
 
 # runner is first to run so it needs to add . to the path
 sys.path.append(dirname(dirname(abspath(__file__))))
 
-from app.paths import ETC_DIR
-from app.rules_engine import rules_results,run_rules,rules_disabled_until
-import app.airquality as airquality
-import app.ae200 as ae200
 import app.db as db
-import app.hubitat as hubitat
 
-import lib.ctools.lock as clock
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +24,7 @@ def main():
     logger.info("%s %s",__file__," ".join(sys.argv))
     parser = setup_parser()
     args = parser.parse_args()
+    logger.info("args=%s",args)
     conn = db.get_db_connection()
 
     c = conn.cursor()

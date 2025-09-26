@@ -34,8 +34,7 @@ def get_all_devices():
     for dev in data:
         if dev['name'].startswith(OFFLINE):
             dev['name'] = dev['name'].replace(OFFLINE,'')
-
-    return dev
+    return data
 
 if __name__=="__main__":
     """A little test program"""
