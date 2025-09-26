@@ -410,6 +410,7 @@ def test_browser_temperature_display(
         pass
 
 
+@skip_on_github
 def test_chart_page_no_dom_errors():
     """
     This test requires the Flask server to be running at http://localhost:8000.
