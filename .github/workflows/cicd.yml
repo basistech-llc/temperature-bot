@@ -45,14 +45,6 @@ jobs:
         run: |
           .venv/bin/playwright install
 
-      - name: Run pytest
-        run: |
-          make pytest
-
-      - name: Run pytest with coverage
-        run: |
-          make pytest-coverage
-
       - name: Lint with pylint
         run: |
           make check
@@ -61,8 +53,12 @@ jobs:
         run: |
           make eslint
 
+      - name: Run pytest with coverage
+        run: |
+          make pytest
+
       - name: Upload coverage test to codecov.io
-        if: runner.os == 'Linux-X'
+        if: runner.os == 'Linux'
         uses: codecov/codecov-action@v4
         with:
           fail_ci_if_error: true
