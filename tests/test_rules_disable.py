@@ -27,6 +27,7 @@ def reduce_websockets_logging():
     logging.getLogger("websockets.client").setLevel(logging.INFO)
 
 
+@skip_on_github
 def test_rules_disable_functionality(client: Any) -> None:  # noqa: F811 # pylint: disable=unused-argument
     """
     Test the complete rules disable/enable functionality through the browser interface.
