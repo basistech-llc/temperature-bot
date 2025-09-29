@@ -24,6 +24,7 @@ import app.db as db
 import app.hubitat as hubitat
 
 import lib.ctools.lock as clock
+import lib.ctools.clogging as clogging
 
 logger = logging.getLogger(__name__)
 
@@ -231,12 +232,15 @@ def setup_parser():
     parser.add_argument("--daily", help='Run the daily cleanup', action='store_true')
     parser.add_argument("--rules", choices=["test", "commit"], help='Just run the rules engine')
     parser.add_argument("--aqi", help='Save AQI to database', action='store_true')
+    clogging.add_argument(parser)
     return parser
 
 def main():
     logger.info("%s %s",__file__," ".join(sys.argv))
     parser = setup_parser()
     args = parser.parse_args()
+    clogging.setup(args.loglevel, syslog=True, filename=args.logfilename,
+                   log_format=clogging.LOG_FORMAT, syslog_format=clogging.YEAR + " " + clogging.SYSLOG_FORMAT)
     conn = db.get_db_connection()
     if args.report:
         report(conn)
