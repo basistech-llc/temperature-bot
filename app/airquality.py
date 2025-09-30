@@ -104,6 +104,7 @@ def get_aqi_aqicn_full():
     data = r.json()
     if data['status']=='ok':
         return data['data']
+    raise ValueError("status not okay")
 
 def get_aqi_aqicn():
     return get_aqi_aqicn_full()['aqi']

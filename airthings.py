@@ -2,9 +2,10 @@
 test program
 """
 
+import os
 import json
 import requests
-from airthings_secrets import CLIENT_ID, CLIENT_SECRET
+#from airthings_secrets import CLIENT_ID, CLIENT_SECRET
 
 # Replace with your Airthings OAuth app credentials
 #CLIENT_ID = "YOUR_CLIENT_ID"
@@ -64,8 +65,6 @@ def get_sensors(access_token,accountId,sn_array):
         'Authorization': f'Bearer {access_token}'
     }
 
-
-
     url = SENSORS_URL.format(accountId=accountId,sn_param="&".join([f"sn={_}" for _ in sn_array]))
     print("url:",url)
     response = requests.get(url, headers=headers, timeout=TIMEOUT)
@@ -84,9 +83,9 @@ def get_temperature_from_device(device):
             return sensor['value']
     return None
 
+# Get an access token
 def main():
-    # Get an access token
-    access_token = get_access_token(CLIENT_ID, CLIENT_SECRET)
+    access_token = get_access_token(os.getenv("CLIENT_ID"), os.getenv("CLIENT_SECRET"))
 
     accountId = get_account(access_token)
     print("account:",accountId)
