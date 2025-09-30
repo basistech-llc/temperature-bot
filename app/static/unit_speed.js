@@ -147,6 +147,16 @@ async function setFanSpeed(device_id, fan_speed) {
     }
 }
 
+function asctime(date) {
+    const zeroPad = (num, places) => String(num).padStart(places, '0');
+    return date.getFullYear() + "-" +
+        zeroPad(date.getMonth() + 1, 2) + "-" +
+        zeroPad(date.getDate(), 2) + " " +
+        zeroPad(date.getHours(), 2) + ":" +
+        zeroPad(date.getMinutes(), 2) + ":" +
+        zeroPad(date.getSeconds(), 2);
+}
+
 // Handle all user events
 function setupMatrixListenerss() {
     // Add event listeners for fan sliders
@@ -154,7 +164,6 @@ function setupMatrixListenerss() {
     driveSwitches.forEach(ds => {
         ds.addEventListener('change', function() {
             const deviceId = parseInt(this.getAttribute('x-data-device-id'));
-            console.log("this=",this,"this.checked=",this.checked);
             setDrive(deviceId, this.checked ? 1 : 0);
         });
     });
@@ -227,19 +236,15 @@ const refreshGridRows = () => {
                         const cell = document.getElementById(`notes-${dev.device_id}`);
                         cell.innerHTML = dev.notes;
                     }
+                    if (dev.disabled_until) {
+                        dt = new Date(dev.disabled_until*1000);
+                        const cell = document.getElementById(`notes-disabled-${dev.device_id}`);
+                        cell.innerHTML = `Rules disabled until ${asctime(dt)}`;
+                    }
 		}
 
 		// Update last refresh time
-                var currentdate = new Date();
-                const zeroPad = (num, places) => String(num).padStart(places, '0');
-                var datetime = "Last Refresh: " +
-                    currentdate.getFullYear() + "-" +
-                    zeroPad(currentdate.getMonth() + 1, 2) + "-" +
-                    zeroPad(currentdate.getDate(), 2) + " " +
-                    zeroPad(currentdate.getHours(), 2) + ":" +
-                    zeroPad(currentdate.getMinutes(), 2) + ":" +
-                    zeroPad(currentdate.getSeconds(), 2);
-                $('#last-refresh').html(datetime);
+                $('#last-refresh').html( "Last Refresh: " + asctime(new Date()) );
 
                 // Update the refresh time
                 lastRefreshTime = now;

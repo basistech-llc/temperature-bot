@@ -10,8 +10,7 @@ pytest: $(REQ)
 PYLINT_THRESHOLD := 9.5
 PYLINT_OPTS :=--output-format=parseable --rcfile .pylintrc --fail-under=$(PYLINT_THRESHOLD) --verbose
 check: $(REQ)
-	$(PYTHON) -m ruff check --fix .
-	$(PYTHON) -m pylint $(PYLINT_OPTS) app tests *.py
+	make lint
 	echo $(PYTHON) -m mypy app tests
 
 check-types: $(REQ)
@@ -63,8 +62,17 @@ install-macos:
 	echo disabled - npm install browser-sync -g
 
 
+################################################################
+.PHONY: eslint pylint lint
 eslint:
 	(cd app/static; make eslint)
+pylint:
+	$(PYTHON) -m ruff check --fix .
+	$(PYTHON) -m pylint $(PYLINT_OPTS) app tests *.py
+
+lint:
+	make pylint
+	make eslint
 
 # Create the virtual environment and install both host requirements
 # and the lambda requirements for testing

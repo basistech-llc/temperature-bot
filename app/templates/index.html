@@ -31,7 +31,7 @@
                   <th class="column-unit" rowspan="2">Unit</th>
                   <th class="column-temp" rowspan="2">Temp</th>
                   {% if table == 1  %}
-                  <th class="column-drive"  rowspan="2">Drive</th>
+                  <th class="column-drive"  rowspan="2">Fan Drive</th>
                   <th class="column-speed" colspan="5">Speed  </th>
                   {% endif %}
                   <th class="column-notes" rowspan="2">Notes</th>
@@ -54,7 +54,7 @@
                     {{ device.device_name }}
                     <span id="device-{{ device.device_id }}-notes"></span>
                     <div class="temporal-links">
-                      <a href="/device_log/{{ device.device_id }}?start={{ (now - 86400) | int }}&end={{ now | int }}" target="_blank">day</a>
+                      <a href="/device_log/{{ device.device_id }}?start={{ (now -  86400) | int }}&end={{ now | int }}" target="_blank">day</a>
                       <a href="/device_log/{{ device.device_id }}?start={{ (now - 604800) | int }}&end={{ now | int }}" target="_blank">week</a>
                       <a href="/device_log/{{ device.device_id }}" target="_blank">all</a>
                       <a href="/chart?device_ids={{ device.device_id }}" target="_blank">graph</a>
@@ -86,7 +86,10 @@
                   </td>
                   {% endfor %}
                   {% endif %}<!-- devices with speed controls -->
-                  <td class="cell-notes" id="notes-{{ device.device_id }}"></td>
+                  <td class="cell-notes">
+                    <span class='notes' id="notes-{{ device.device_id }}"></span>
+                    <span class='notes-disabled' id="notes-disabled-{{ device.device_id }}"></span>
+                  </td>
                 </tr><!-- table row -->
                 {% endif %}
                 {% endfor %}<!-- device in devices -->
