@@ -73,12 +73,16 @@ td.cell-notes:not(:empty) {
     font-style: italic;
 }
 
-.age {
-    color: #aaa;
-}
-
 #weather {
     width: 300px;
+}
+
+td span.notes-disabled {
+    color: red;
+}
+
+.age {
+    color: #aaa;
 }
 
 .weather-icon {

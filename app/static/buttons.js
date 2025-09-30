@@ -78,14 +78,28 @@ const setupButtons = () => {
 
 	    for (const dev of data.devices) {
                 if (dev.device_name=='ERV Kitchen'){
-                    const mb = document.getElementById('kitchen-max');
-                    mb.addEventListener('click', function() {
+                    const km = document.getElementById('kitchen-max');
+                    km.addEventListener('click', function() {
                         console.log('clicked. dev=',dev);
                         setDrive(dev.device_id, 1);
                         setFanSpeed(dev.device_id, 4);
                     });
-                    const m1 = document.getElementById('kitchen-1');
-                    m1.addEventListener('click', function() {
+                    const k1 = document.getElementById('kitchen-1');
+                    k1.addEventListener('click', function() {
+                        console.log('clicked. dev=',dev);
+                        setDrive(dev.device_id, 1);
+                        setFanSpeed(dev.device_id, 1);
+                    });
+                }
+                if (dev.device_name=='ERV Restrooms'){
+                    const rm = document.getElementById('restrooms-max');
+                    rm.addEventListener('click', function() {
+                        console.log('clicked. dev=',dev);
+                        setDrive(dev.device_id, 1);
+                        setFanSpeed(dev.device_id, 4);
+                    });
+                    const r1 = document.getElementById('restrooms-1');
+                    r1.addEventListener('click', function() {
                         console.log('clicked. dev=',dev);
                         setDrive(dev.device_id, 1);
                         setFanSpeed(dev.device_id, 1);
