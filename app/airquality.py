@@ -64,8 +64,8 @@ def get_aqi_google():
     try:
         params = {'hours':1,
                   'location':{
-                      'longitude':get_config()['location']['lon'],
-                      'latitude':get_config()['location']['lat'] }
+                      'longitude':get_config()['location']['longitude'],
+                      'latitude':get_config()['location']['latitude'] }
                   }
     except KeyError:
         print(f"longitude and latitude missing from location:\n{json.dumps(get_config(),indent=4)}")
