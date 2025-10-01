@@ -1,5 +1,5 @@
 DBFILE = '/var/db/temperature-bot.db'
-DEV_DB = './temperature-bot.db'
+DEV_DB = 'var/db/temperature-bot.db'
 REQ := .venv/pyvenv.cfg
 PYTHON := .venv/bin/python
 
@@ -30,6 +30,8 @@ local-dev: $(REQ)
 
 fetch-slg:
 	rsync --verbose --delete --archive slg1.basistech.net:/var/db var/
+	echo 'select "devices",count(*) from devices;select "devlog",count(*) from devlog;select "changelog",count(*) from changelog; select "aqi",count(*) from aqi;' | sqlite3 var/db/temperature-bot.db
+	echo '.schema' | sqlite3 var/db/temperature-bot.db
 
 tags:
 	etags */*.py
