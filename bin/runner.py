@@ -59,9 +59,14 @@ def update_from_hubitat(conn):
         db.insert_devlog_entry(conn, device_name=item['name'], temp=item['temperature'])
 
 def update_aqi(conn):
-    aqi = airquality.get_aqi()
-    logger.info("aqi: %s",aqi)
-    conn.execute("INSERT INTO aqi VALUES (?,?)",( int(time.time()), aqi))
+    data  = airquality.get_aqi_aqicn_full()
+    print(json.dumps(data,indent=4))
+    values = {k:data['iaqi'][k]['v'] for k in ['co','h','no2','o3','p','pm10','pm25','so2','t','w']}
+    values['aqi'] = data['aqi']
+    values['logtime'] = int(time.time())
+    print("values:",values)
+    cur = conn.cursor()
+    cur.execute("INSERT INTO aqi (logtime,aqi,co,h,no2,o3,p,pm10,pm25,so2,t,w) values (:logtime,:aqi,:co,:h,:no2,:o3,:p,:pm10,:pm25,:so2,:t,:w)",values)
     conn.commit()
 
 def combine_temp_measurements(conn, start_time, end_time, seconds):

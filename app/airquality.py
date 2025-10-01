@@ -92,22 +92,22 @@ def get_aqi_google():
 # aqicn.org
 # https://aqicn.org/json-api/doc/
 
-def get_aqi_aqicn():
+def get_aqi_aqicn_full():
     try:
         city = get_config()['location']['city']
     except KeyError:
         print(f"city missing from location:\n{json.dumps(get_config(),indent=4)}")
         raise
-    print('city:',city)
     token = get_secret('aqicn', 'token')
     r = requests.get(f'https://api.waqi.info/feed/{city}/?token={token}', timeout=TIMEOUT_SECONDS)
     r.raise_for_status()
     data = r.json()
-    print("data:",data)
     if data['status']=='ok':
-        return data['data']['aqi']
-    else:
-        raise AQIError("cannot get AQI")
+        return data['data']
+    raise ValueError("status not okay")
+
+def get_aqi_aqicn():
+    return get_aqi_aqicn_full()['aqi']
 
 def get_aqi():
     return get_aqi_aqicn()
@@ -123,6 +123,7 @@ if __name__=="__main__":
     except AQIError as e:
         print("get_aqi_airnow: ",e)
     try:
-        print("get_aqi_aqicn:",get_aqi_aqicn())
+        print("get_aqi_aqicn:",json.dumps(get_aqi_aqicn(),indent=4))
+        print("get_aqi_aqicn:",json.dumps(get_aqi_aqicn_full(),indent=4))
     except AQIError as e:
         print("get_aqi_aqicn: ",e)
