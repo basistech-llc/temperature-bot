@@ -1,5 +1,5 @@
 DBFILE = '/var/db/temperature-bot.db'
-DEV_DB = './temperature-bot.db'
+DEV_DB = 'var/db/temperature-bot.db'
 REQ := .venv/pyvenv.cfg
 PYTHON := .venv/bin/python
 
