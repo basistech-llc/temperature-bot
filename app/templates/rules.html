@@ -41,10 +41,10 @@
 
 <div class="pure-g" >
   <div class="pure-u-1">
-    {% if rules_disabled_until == 0 %}
+    {% if disable_rules_until == 0 %}
     <h2> Rules enabled </h2>
     {% else %}
-    <h2> Rules disabled until {{ rules_disabled_until_asc }}</h2>
+    <h2> Rules disabled until {{ disable_rules_until_asc }}</h2>
     {% endif %}
     <h2>Disable rules for</h2>
     <div class="temporal-buttons suspend-rules-buttons">

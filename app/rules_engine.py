@@ -45,16 +45,16 @@ def get_time_dict(when=None):
             'AM':tm.tm_hour<12,
             'PM':tm.tm_hour>=12 }
 
-def rules_disabled_until(conn):
+def disable_rules_until(conn):
     """Rules are enabled by default. They are disabled if the last changelog entry for the rules device specifies a disable time in the new_value text"""
     c = conn.cursor()
     c.execute("SELECT * from changelog where device_id=? order by changelog_id DESC LIMIT 1",(rules_id(conn),))
     row = c.fetchone()
     if row is None:
-        logging.debug("rules_disabled_until row is None")
+        logging.debug("disable_rules_until row is None")
         return 0
     until_time = json.loads(row['new_value']).get('seconds',0) + row['logtime']
-    logging.debug("rules_disabled_until row=%s until_time=%s device_id=%s",dict(row),until_time,rules_id(conn))
+    logging.debug("disable_rules_until row=%s until_time=%s device_id=%s",dict(row),until_time,rules_id(conn))
     if until_time < time.time():
         return 0
     return until_time
@@ -73,7 +73,7 @@ def disable_rules(conn,seconds:int):
     c.execute("INSERT INTO changelog (logtime, ipaddr, device_id, new_value) VALUES (?,?,?,?)",
               (time.time(), request.remote_addr, rules_id(conn), msg))
     conn.commit()
-    logging.debug("rules_disabled_until=%s",rules_disabled_until(conn))
+    logging.debug("disable_rules_until=%s",disable_rules_until(conn))
 
 
 def get_rules():

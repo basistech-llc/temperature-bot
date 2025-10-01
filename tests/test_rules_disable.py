@@ -80,7 +80,7 @@ def test_rules_disable_functionality(client: Any) -> None:  # noqa: F811 # pylin
             # Wait for page refresh and verify rules are disabled
             # Should be disabled for at least 50 minutes
             #time.sleep(1)       # this shouldn't be needed.
-            helper.verify_rules_disabled_until( 50 )
+            helper.verify_disable_rules_until( 50 )
 
             browser.close()
 

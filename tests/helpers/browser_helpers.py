@@ -149,7 +149,7 @@ class RulesTestHelper:
         # Wait for page to refresh and check for "Rules enabled" text
         self.page.wait_for_selector('h2:has-text("Rules enabled")', timeout=10000)
 
-    def verify_rules_disabled_until(self, expected_minutes: int) -> None:
+    def verify_disable_rules_until(self, expected_minutes: int) -> None:
         """Verify that rules are disabled for at least the expected number of minutes"""
 
         # Wait for page to refresh and check for disabled rules text
@@ -166,7 +166,7 @@ class RulesTestHelper:
         # Check the database to verify rules are actually disabled
         with sqlite3.connect(self.test_db_name) as conn:
             conn.row_factory = sqlite3.Row
-            disabled_until = rules_engine.rules_disabled_until(conn)
+            disabled_until = rules_engine.disable_rules_until(conn)
             logger.info("disabled_until=%s", disabled_until)
             assert disabled_until != 0
 
@@ -184,5 +184,5 @@ class RulesTestHelper:
 
         with sqlite3.connect(self.test_db_name) as conn:
             conn.row_factory = sqlite3.Row
-            disabled_until = rules_engine.rules_disabled_until(conn)
+            disabled_until = rules_engine.disable_rules_until(conn)
             assert disabled_until == 0, "Rules should be enabled (disabled_until=0), but got {disabled_until}"

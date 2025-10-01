@@ -54,15 +54,15 @@ def create_web_routes(app):
                     rule_table.append(f"<td class='rule-result'>{new_results.replace('\n', '<br>')}</td>")
                 rule_table.append("</tr>")
 
-        rules_disabled_until = rules_engine.rules_disabled_until(conn)
-        rules_disabled_until_asc = time.asctime(time.localtime(rules_disabled_until))
+        disable_rules_until = rules_engine.disable_rules_until(conn)
+        disable_rules_until_asc = time.asctime(time.localtime(disable_rules_until))
         return render_template(
             "rules.html",
             devices=rules_engine.get_devices_dict(conn),
             rules=rules_engine.get_rules(),
             rules_results="\n".join(rule_table),
-            rules_disabled_until=rules_disabled_until,
-            rules_disabled_until_asc=rules_disabled_until_asc,
+            disable_rules_until=disable_rules_until,
+            disable_rules_until_asc=disable_rules_until_asc,
             times=rules_engine.get_time_dict(),
         )
 
