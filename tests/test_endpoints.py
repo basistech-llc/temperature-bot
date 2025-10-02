@@ -10,7 +10,7 @@ import tempfile
 from unittest.mock import patch
 
 import pytest
-from conftest import client, skip_on_github  # noqa: F401  # pylint: disable=unused-import
+from conftest import client_with_db, skip_on_github  # noqa: F401  # pylint: disable=unused-import
 from helpers.data_factories import DeviceTestData
 from helpers.mock_helpers import MockHelper
 
@@ -24,29 +24,29 @@ logger = logging.getLogger(__name__)
 # Disable websockets debug
 @pytest.fixture(autouse=True)
 def reduce_websockets_logging():
-    logging.getLogger("websockets.client").setLevel(logging.INFO)
+    logging.getLogger("websockets.client_with_db").setLevel(logging.INFO)
 
 
-def test_get_version(client):   # noqa: F811
+def test_get_version(client_with_db):   # noqa: F811
 
-    response = client.get("/version")
+    response = client_with_db.get("/version")
     assert response.status_code == 200
     assert response.data.decode('utf-8') == f'version: {__version__}'
 
-    response = client.get("/api/v1/version")
+    response = client_with_db.get("/api/v1/version")
     assert response.status_code == 200
     assert response.json == {'version': __version__}
 
 
-def test_status_endpoint(client):  # noqa: F811
-    response = client.get("/api/v1/status")
+def test_status_endpoint(client_with_db):  # noqa: F811
+    response = client_with_db.get("/api/v1/status")
     assert response.status_code == 200
     response_json = response.json
     logging.info(" /status: %s", response_json)
     assert "devices" in response_json
 
 
-def test_status_endpoint_with_schema_validation(client):  # noqa: F811
+def test_status_endpoint_with_schema_validation(client_with_db):  # noqa: F811
     """Test that the status endpoint works with a database that has all required columns.
 
     This test ensures that the database schema matches what the code expects,
@@ -86,7 +86,7 @@ def test_status_endpoint_with_schema_validation(client):  # noqa: F811
         conn.commit()
 
     # Now test the endpoint - this should work without schema errors
-    response = client.get("/api/v1/status")
+    response = client_with_db.get("/api/v1/status")
     assert response.status_code == 200
     response_json = response.json
     assert "devices" in response_json
@@ -185,13 +185,13 @@ def test_status_endpoint_schema_mismatch_detection():
 @skip_on_github
 @patch("app.weather.get_weather_data")
 @patch("app.airquality.get_aqi")
-def test_weather_endpoint(mock_get_airquality, mock_get_weather_data, client):  # noqa: F811
+def test_weather_endpoint(mock_get_airquality, mock_get_weather_data, client_with_db):  # noqa: F811
     # Use new mock helper
     MockHelper.setup_weather_mocks(mock_get_airquality, mock_get_weather_data, 45, 72)
 
     # If this status endpoint also uses db.get_db_connection,
     # it will now correctly use the overridden test DB.
-    response = client.get("/api/v1/weather")
+    response = client_with_db.get("/api/v1/weather")
     assert response.status_code == 200
     response_json = response.json
     logging.info(" /weather: %s", response_json)
@@ -211,7 +211,7 @@ BROADWAY_SOUTH=10
     (2, 3, 1),  # Different speed - should call set_fan_speed once
     (2, 4, 1),  # Different speed - should call set_fan_speed once
 ])
-def test_set_fan_speed_endpoint(client, start_speed, target_speed, expected_calls): # noqa: F811
+def test_set_fan_speed_endpoint(client_with_db, start_speed, target_speed, expected_calls): # noqa: F811
     # Set up simulator with initial speed
     ae200.set_fan_speed(BROADWAY_SOUTH, start_speed)
 
@@ -224,7 +224,7 @@ def test_set_fan_speed_endpoint(client, start_speed, target_speed, expected_call
         test_conn.commit()
 
     # Send the /set_fan_speed
-    response = client.post(
+    response = client_with_db.post(
         "/api/v1/set_fan_speed",
         json={"device_id": device_id, "fan_speed": target_speed}
     )

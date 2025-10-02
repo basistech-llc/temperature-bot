@@ -10,7 +10,7 @@ import pytest
 
 from app.main import app as flask_app
 
-from tests.helpers.test_utils import create_test_database_with_schema,setup_test_database
+from tests.helpers.test_utils import create_test_database_with_schema,cleanup_test_database_with_schema
 
 # Set AE200_SIMULATOR environment variable for all tests
 os.environ['AE200_SIMULATOR'] = '1'
@@ -47,7 +47,7 @@ def insert_temporal_test_data(conn: sqlite3.Connection, device_name: str = "Test
     }
 
     # Add records at each interval. Initial speed is always LOW.
-    for interval_name, seconds in intervals.items():  # pylint: disable=unused-variable
+    for _, seconds in intervals.items():
         record_time = current_time - seconds
         cursor.execute("""
             INSERT INTO devlog (device_id, logtime, duration, temp10x, status_json)
@@ -68,7 +68,7 @@ def insert_temporal_test_data(conn: sqlite3.Connection, device_name: str = "Test
 
 
 @pytest.fixture
-def client():
+def client_with_db():
     """Provides a Flask test client with overridden database connection using a temporary file DB."""
     # Create a temporary directory for the database file
     create_test_database_with_schema()
@@ -79,8 +79,7 @@ def client():
         yield test_client
 
     # Clean up the environment variables after the test
-    os.environ.pop("IS_TESTING", None)
-    os.environ.pop("TEST_DB_PATH", None)
+    cleanup_test_database_with_schema()
 
 
 @pytest.fixture
@@ -93,7 +92,6 @@ def test_db_connection():
         setup_test_database(conn)
         yield conn
         conn.close()
-
 
 @pytest.fixture
 def test_db_name():

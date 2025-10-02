@@ -94,7 +94,7 @@ def get_logs(conn):
 @with_db_connection
 def disable_rules(conn):
     """Disable rules for a specified number of seconds.
-    :param seconds: - number of seconds to disable rules for
+    :param seconds: - number of seconds to disable rules. 0 enables rules
     :param device_id: - just disable for this device
     """
     seconds = request.args.get("seconds", type=int)

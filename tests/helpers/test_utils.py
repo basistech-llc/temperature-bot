@@ -8,8 +8,8 @@ import logging
 import json
 import time
 from app import ae200
+from app import db
 from app.paths import SCHEMA_FILE_PATH
-
 
 def create_test_database_with_schema():
     """Create a temporary test database with schema and return the file path."""
@@ -17,21 +17,19 @@ def create_test_database_with_schema():
         db_path = tf.name
 
     logging.info("Created temporary database file for test: %s", db_path)
-
     os.environ['IS_TESTING'] = 'True'
     os.environ['TEST_DB_PATH'] = db_path
-
-    # Set up the database schema in the temporary file
-    conn = sqlite3.connect(db_path)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA foreign_keys = ON;")
-
-    # Setup database schema
-    setup_test_database(conn)
+    conn = db.get_db_connection(schema_file = SCHEMA_FILE_PATH, testing=True)
+    cursor = conn.cursor()
+    cursor.execute("INSERT INTO aqi (logtime,aqi) VALUES (?,?)", (int(time.time()), 45))  # insert AQI of 45
+    conn.commit()
     conn.close()
-
     return db_path
 
+def cleanup_test_database_with_schema():
+    os.unlink(os.environ['TEST_DB_PATH'])
+    os.environ.pop("IS_TESTING", None)
+    os.environ.pop("TEST_DB_PATH", None)
 
 def verify_changelog_entry(conn: sqlite3.Connection, device_id: int, expected_value: str, expected_agent: str = "web"):
     """Verify the most recent changelog entry for a device."""
@@ -67,27 +65,3 @@ def verify_devlog_entry(conn: sqlite3.Connection, device_id: int, expected_fan_s
     extracted_status = ae200.extract_drive_and_fan_speed(status_data)
     assert extracted_status['fan_speed'] == expected_fan_speed, \
         f"Expected fan_speed {expected_fan_speed}, got {extracted_status['fan_speed']}"
-
-
-def setup_test_database(conn):
-    """
-    Sets up the database schema on a given connection by reading from schema.sql.
-    """
-    logging.debug("*** setup_test_database")
-    cursor = conn.cursor()
-    try:
-        if not os.path.exists(SCHEMA_FILE_PATH):
-            logging.error("Schema file not found at %s. Please ensure it exists.", SCHEMA_FILE_PATH)
-            raise FileNotFoundError(f"Schema file not found at {SCHEMA_FILE_PATH}")
-
-        with open(SCHEMA_FILE_PATH, 'r') as f:
-            schema_sql = f.read()
-
-        cursor.executescript(schema_sql)
-        conn.commit()
-        cursor.execute("INSERT INTO aqi (logtime,aqi) VALUES (?,?)", (int(time.time()), 45))  # insert AQI of 45
-        logging.debug("*** sending schema")
-        logging.info("Test database schema set up successfully from %s.", SCHEMA_FILE_PATH)
-    except sqlite3.Error as e:
-        logging.exception("Test database error during schema setup: %s", e)
-        conn.rollback()

@@ -32,7 +32,7 @@ def get_time_dict(when=None):
             'AM':tm.tm_hour<12,
             'PM':tm.tm_hour>=12 }
 
-def get_rules():
+def get_python_rules():
     with open( join(ROOT_DIR,'bin','rules.py'), 'r') as f:
         return f.read()
 

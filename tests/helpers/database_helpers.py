@@ -11,6 +11,7 @@ from .test_utils import verify_changelog_entry, verify_devlog_entry
 
 logger = logging.getLogger(__name__)
 
+
 class DatabaseTestHelper:
     """Helper class for database testing operations."""
 

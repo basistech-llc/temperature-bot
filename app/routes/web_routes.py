@@ -29,7 +29,6 @@ def create_web_routes(app):
 
         # Add current timestamp for temporal links
         now = int(time.time())
-
         return render_template("index.html", develop=False, devices=device_data, now=now)
 
     @app.route("/rules")
@@ -56,13 +55,11 @@ def create_web_routes(app):
                     rule_table.append(f"<td class='rule-result'>{new_results.replace('\n', '<br>')}</td>")
                 rule_table.append("</tr>")
 
-        return render_template(
-            "rules.html",
-            devices=db.get_devices_dict(conn),
-            rules=rules_engine.get_rules(),
-            rules_results="\n".join(rule_table),
-            times=rules_engine.get_time_dict(),
-        )
+        return render_template( "rules.html",
+                                devices=db.get_devices_dict(conn),
+                                rules_python_file=rules_engine.get_python_rules(),
+                                rules_results_table="\n".join(rule_table),
+                                times=rules_engine.get_time_dict())
 
     @app.route("/logs")
     def do_logs():

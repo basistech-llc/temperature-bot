@@ -142,29 +142,26 @@ class RulesTestHelper:
     def click_disable_rules_button(self, seconds: int) -> None:
         """Click a disable rules button with the specified seconds"""
         button = self.page.locator(f'button[x-seconds="{seconds}"]')
+        assert button is not None
         button.click()
 
-    def verify_rules_enabled(self) -> None:
-        """Verify that rules are enabled by checking the page content"""
-        # Wait for page to refresh and check for "Rules enabled" text
-        self.page.wait_for_selector('h2:has-text("Rules enabled")', timeout=10000)
-
-    def verify_disable_rules_until(self, expected_minutes: int) -> None:
-        """Verify that rules all rules are disabled for at least the expected number of minutes"""
+    def verify_disable_rules_until(self, expected_seconds: int) -> None:
+        """Verify that rules all rules are disabled for at least the expected number of seconds"""
 
         # Wait for page to refresh and check for disabled rules text
-        try:
-            # Wait for page to refresh and check for disabled rules text
-            self.page.wait_for_selector('h2:has-text("Rules disabled until")', timeout=10000)
-        except playwright.sync_api.TimeoutError as e:
-            # Dump full HTML for debugging
-            html = self.page.content()
-            with open("debug_dump.html", "w", encoding="utf-8") as f:
-                f.write(html)
-            raise AssertionError("Expected text 'Rules disabled until' not found. Page dumped to debug_dump.html") from e
+        # the rules.html page no longer does this.
+        #try:
+        #    # Wait for page to refresh and check for disabled rules text
+        #    self.page.wait_for_selector('h2:has-text("Rules disabled until")', timeout=10000)
+        #except playwright.sync_api.TimeoutError as e:
+        #    # Dump full HTML for debugging
+        #    html = self.page.content()
+        #    with open("debug_dump.html", "w", encoding="utf-8") as f:
+        #        f.write(html)
+        #    raise AssertionError("Expected text 'Rules disabled until' not found. Page dumped to debug_dump.html") from e
 
         # Check the database to verify rules are actually disabled
-        disabled_until = time.time() + expected_minutes*60
+        disabled_until_atleast = int(time.time()) + expected_seconds
         with sqlite3.connect(self.test_db_name) as conn:
             conn.row_factory = sqlite3.Row
             drr = db.disable_rules_report(conn)
@@ -172,8 +169,9 @@ class RulesTestHelper:
 
             # Assert that every device has a disabled rule
             for (k,v) in drr.items():
-                logger.info("k=%s v=%s",k,v)
-                assert k['disabled_until'] > disabled_until
+                logger.info("verify_disable_rules_until "
+                            "k=%s v=%s disabled_until_atleast=%s",k,dict(v),disabled_until_atleast)
+                assert v['disabled_until'] > disabled_until_atleast
 
     def check_database_rules_enabled(self) -> None:
         """Check that the database shows rules are enabled"""
@@ -184,6 +182,6 @@ class RulesTestHelper:
             logger.info("drr=%s", drr)
 
             # Assert that every device has a disabled rule
-            for (k,v) in drr.items():
-                logger.info("k=%s v=%s",k,v)
-                assert k['disabled_until'] == 0
+            for (device_id,row) in drr.items():
+                logger.info("check_database_rules_enabled: device_id=%s row=%s",device_id,dict(row))
+                assert row['disabled_until'] == 0

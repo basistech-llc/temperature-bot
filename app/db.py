@@ -329,21 +329,24 @@ def disable_rules(conn, device_id:int, seconds:int):
     """Enter a database engtry to disable the rules until a specific time.
     device_id=0 means all devices.
     """
+    now=int(time.time())
     logging.debug("disable_rules device_id=%s seconds=%s",device_id, seconds)
     if seconds==0:
         msg = json.dumps({'comment':'enable rules', 'seconds':seconds, 'device_id':device_id})
         disabled_until = 0
     else:
-        disabled_until = int(time.time)+seconds
-        asc_when = time.asctime(disabled_until)
+        disabled_until = now+seconds
+        asc_when = time.asctime(time.localtime(disabled_until))
         msg = json.dumps({'comment':f'disable rules until {asc_when}',
                           'device_id':device_id,
                           'seconds':seconds})
-    logging.debug("disable_rules(seconds=%s,msg=%s,device_id=%s)",seconds,msg,device_id)
+    logging.debug("disable_rules(seconds=%s,msg=%s,device_id=%s) now=%s disabled_until=%s",
+                  seconds,msg,device_id,now,disabled_until)
     c = conn.cursor()
     c.execute("INSERT INTO changelog (logtime, ipaddr, device_id, new_value) VALUES (?,?,?,?)",
               (time.time(), request.remote_addr, device_id, msg))
     if device_id==0:
+        logging.debug("setting disabled_until to %s for all devices",disabled_until)
         c.execute("UPDATE devices set disabled_until=?",(disabled_until,))
     else:
         c.execute("UPDATE devices set disabled_until=? WHERE device_id=?",(disabled_until, device_id))
