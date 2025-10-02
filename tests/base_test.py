@@ -62,8 +62,6 @@ class DatabaseTest(BaseTest):
 
         return db_path
 
-
-
 class BrowserTest(BaseTest):
     """Browser test utilities with common helpers."""
 
@@ -121,4 +119,4 @@ class APITest(BaseTest):
 
         # Clean up the environment variables after the test
         os.environ.pop("IS_TESTING", None)
-        os.environ.pop("TEST_DB_NAME", None)
+        os.environ.pop("TEST_DB_PATH", None)

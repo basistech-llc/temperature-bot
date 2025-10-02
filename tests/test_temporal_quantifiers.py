@@ -42,7 +42,7 @@ def test_logs_endpoint_with_start_and_end(client): # noqa: F811
 def test_device_log_endpoint_with_start(client): # noqa: F811
     """Test /device_log/{device_id} with start parameter"""
     # Create a test device
-    with sqlite3.connect(os.environ['TEST_DB_NAME']) as test_conn:
+    with sqlite3.connect(os.environ['TEST_DB_PATH']) as test_conn:
         test_conn.row_factory = sqlite3.Row
         cursor = test_conn.cursor()
         cursor.execute("INSERT INTO devices (device_name) VALUES (?)", ("Test Device",))
@@ -59,7 +59,7 @@ def test_device_log_endpoint_with_end(client): # noqa: F811
     """Test /device_log/{device_id} with end parameter"""
 
     # Create a test device
-    with sqlite3.connect(os.environ['TEST_DB_NAME']) as test_conn:
+    with sqlite3.connect(os.environ['TEST_DB_PATH']) as test_conn:
         test_conn.row_factory = sqlite3.Row
         cursor = test_conn.cursor()
         cursor.execute("INSERT INTO devices (device_name) VALUES (?)", ("Test Device 2",))
@@ -75,7 +75,7 @@ def test_device_log_endpoint_with_end(client): # noqa: F811
 def test_device_log_endpoint_with_start_and_end(client): # noqa: F811
     """Test /device_log/{device_id} with both start and end parameters"""
     # Create a test device
-    with sqlite3.connect(os.environ['TEST_DB_NAME']) as test_conn:
+    with sqlite3.connect(os.environ['TEST_DB_PATH']) as test_conn:
         test_conn.row_factory = sqlite3.Row
         cursor = test_conn.cursor()
         cursor.execute("INSERT INTO devices (device_name) VALUES (?)", ("Test Device 3",))
@@ -92,7 +92,7 @@ def test_device_log_endpoint_with_start_and_end(client): # noqa: F811
 @pytest.fixture
 def device_in_db():
     # Create test device with temporal data
-    with sqlite3.connect(os.environ['TEST_DB_NAME']) as test_conn:
+    with sqlite3.connect(os.environ['TEST_DB_PATH']) as test_conn:
         test_conn.row_factory = sqlite3.Row
         device_id, expected_counts = insert_temporal_test_data(test_conn, "Fixture Device") # pylint: disable=unused-variable
         test_conn.commit()

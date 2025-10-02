@@ -1,12 +1,10 @@
 """
 Run the rules engine
 """
-import json
 from os.path import join
 import time
 import logging
 
-from flask import request
 
 
 from .paths import ROOT_DIR
@@ -17,17 +15,6 @@ from .db import SpeedControl,DriveControl
 logger = logging.getLogger(__name__)
 
 RULES_DEVICE_NAME = 'rules_engine'
-
-def rules_id(conn):
-    return  db.get_or_create_device_id(conn, RULES_DEVICE_NAME)
-
-def get_devices_dict(conn):
-    """Add all of the devices in the devices table to the global environment"""
-    c = conn.cursor()
-    c.execute("SELECT * from devices order by device_name")
-    ret = {dev['device_name'].replace(' ','_').upper() : dev['device_id'] for dev in c.fetchall()}
-    logging.debug("ret=%s",ret)
-    return ret
 
 def get_time_dict(when=None):
     if when is None:
@@ -44,37 +31,6 @@ def get_time_dict(when=None):
             'SUNDAY':tm.tm_wday==6,
             'AM':tm.tm_hour<12,
             'PM':tm.tm_hour>=12 }
-
-def disable_rules_until(conn):
-    """Rules are enabled by default. They are disabled if the last changelog entry for the rules device specifies a disable time in the new_value text"""
-    c = conn.cursor()
-    c.execute("SELECT * from changelog where device_id=? order by changelog_id DESC LIMIT 1",(rules_id(conn),))
-    row = c.fetchone()
-    if row is None:
-        logging.debug("disable_rules_until row is None")
-        return 0
-    until_time = json.loads(row['new_value']).get('seconds',0) + row['logtime']
-    logging.debug("disable_rules_until row=%s until_time=%s device_id=%s",dict(row),until_time,rules_id(conn))
-    if until_time < time.time():
-        return 0
-    return until_time
-
-
-def disable_rules(conn,seconds:int):
-    """Enter a database engtry to disable the rules until a specific time."""
-    if seconds==0:
-        msg = json.dumps({'comment':'enable rules', 'seconds':seconds})
-    else:
-        asc_when = time.asctime(time.localtime(time.time()+seconds))
-        msg = json.dumps({'comment':f'disable rules until {asc_when}',
-                          'seconds':seconds})
-    logging.debug("disable_rules(seconds=%s,msg=%s,device_id=%s)",seconds,msg,rules_id(conn))
-    c = conn.cursor()
-    c.execute("INSERT INTO changelog (logtime, ipaddr, device_id, new_value) VALUES (?,?,?,?)",
-              (time.time(), request.remote_addr, rules_id(conn), msg))
-    conn.commit()
-    logging.debug("disable_rules_until=%s",disable_rules_until(conn))
-
 
 def get_rules():
     with open( join(ROOT_DIR,'bin','rules.py'), 'r') as f:
@@ -140,25 +96,35 @@ def rules_results(conn, when=None, aqi=50):
     def set_fan_speed_verbose(device_id, value):
         results.append(f"Device {device_id} speed set to {value}")
 
-    global_vars = {**get_devices_dict(conn), **get_time_dict(when)}
+    global_vars = {**db.get_devices_dict(conn), **get_time_dict(when)}
     global_vars['AQI'] = aqi
     local_vars = {'set_drive': set_drive_verbose, 'set_fan_speed': set_fan_speed_verbose}
     exec(get_rules(), global_vars, local_vars)   # pylint: disable=exec-used
     return "\n".join(results)
 
-def run_rules(conn, when=None):
+def run_rules(conn, when):
     """Run the rules now and returns the results.
     Note: runs rules even if they are disabled. That has to be decided elsewhere.
     """
-    logger.debug("when=%s",when)
+    logger.debug("run_rules now==%s",when)
+
+    rules_report = db.disable_rules_report(conn)
 
     def set_drive(device_id, drive):
-        set_body_drive(conn, DriveControl(device_id=device_id, drive=drive), 'n/a', 'rule')
+        disabled_until = rules_report.get(device_id,{}).get('disabled_until',0)
+        if disabled_until > 0 and when < disabled_until:
+            logging.info("set_drive disabled for device_id=%s",device_id)
+        else:
+            set_body_drive(conn, DriveControl(device_id=device_id, drive=drive), 'n/a', 'rule')
 
     def set_fan_speed(device_id, fan_speed):
-        set_body_fan_speed(conn, SpeedControl(device_id=device_id, fan_speed=fan_speed), 'n/a', 'rule')
+        disabled_until = rules_report.get(device_id,{}).get('disabled_until',0)
+        if disabled_until > 0 and when < disabled_until:
+            logging.info("set_fan_speed disabled for device_id=%s",device_id)
+        else:
+            set_body_fan_speed(conn, SpeedControl(device_id=device_id, fan_speed=fan_speed), 'n/a', 'rule')
 
-    v1 = {**get_devices_dict(conn), **get_time_dict(when)}
+    v1 = {**db.get_devices_dict(conn), **get_time_dict(when)}
     v1['AQI'] = db.get_last_aqi(conn)
     v2 = {'set_drive': set_drive, 'set_fan_speed':set_fan_speed }
     exec(get_rules(), v1, v2)   # pylint: disable=exec-used

@@ -53,8 +53,8 @@ def test_status_endpoint_with_schema_validation(client):  # noqa: F811
     preventing 'no such column' errors in production.
     """
     # First, verify the test database has the expected schema
-    test_db_path = os.environ.get('TEST_DB_NAME')
-    assert test_db_path, "TEST_DB_NAME environment variable should be set"
+    test_db_path = os.environ.get('TEST_DB_PATH')
+    assert test_db_path, "TEST_DB_PATH environment variable should be set"
 
     with sqlite3.connect(test_db_path) as conn:
         conn.row_factory = sqlite3.Row
@@ -149,11 +149,11 @@ def test_status_endpoint_schema_mismatch_detection():
 
         # Set up environment to use this database
         original_db_path = os.environ.get('DB_PATH')
-        original_test_db_name = os.environ.get('TEST_DB_NAME')
+        original_test_db_name = os.environ.get('TEST_DB_PATH')
 
         try:
             os.environ['DB_PATH'] = db_path
-            os.environ['TEST_DB_NAME'] = db_path
+            os.environ['TEST_DB_PATH'] = db_path
 
             # This should fail with the same error we saw in production
             device_service = DeviceService()
@@ -173,9 +173,9 @@ def test_status_endpoint_schema_mismatch_detection():
                 del os.environ['DB_PATH']
 
             if original_test_db_name is not None:
-                os.environ['TEST_DB_NAME'] = original_test_db_name
-            elif 'TEST_DB_NAME' in os.environ:
-                del os.environ['TEST_DB_NAME']
+                os.environ['TEST_DB_PATH'] = original_test_db_name
+            elif 'TEST_DB_PATH' in os.environ:
+                del os.environ['TEST_DB_PATH']
 
     finally:
         # Clean up temporary file
@@ -216,7 +216,7 @@ def test_set_fan_speed_endpoint(client, start_speed, target_speed, expected_call
     ae200.set_fan_speed(BROADWAY_SOUTH, start_speed)
 
     # get device_id
-    with sqlite3.connect(os.environ['TEST_DB_NAME']) as test_conn:
+    with sqlite3.connect(os.environ['TEST_DB_PATH']) as test_conn:
         test_conn.row_factory = sqlite3.Row
         device_id = db.get_or_create_device_id(test_conn, "Broadway South")
         c = test_conn.cursor()
@@ -243,8 +243,8 @@ def test_set_fan_speed_endpoint(client, start_speed, target_speed, expected_call
 
     # Verify that the database got updated only when speed changes
     if expected_calls > 0:
-        # Note that we are using the TEST_DB_NAME put in the environment.
-        with sqlite3.connect(os.environ['TEST_DB_NAME']) as test_conn_verify:
+        # Note that we are using the TEST_DB_PATH put in the environment.
+        with sqlite3.connect(os.environ['TEST_DB_PATH']) as test_conn_verify:
             test_conn_verify.row_factory = sqlite3.Row
             cursor = test_conn_verify.cursor()
             cursor.execute("SELECT ipaddr, device_id, new_value, agent FROM changelog order by changelog_id DESC limit 1")

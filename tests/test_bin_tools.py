@@ -18,22 +18,13 @@ class TestBinTools:
     """Test suite for bin/ tools"""
 
     @pytest.fixture
-    def temp_db(self):
+    def temp_db_path(self):
         """Create a temporary database for testing"""
-        with tempfile.NamedTemporaryFile(suffix='.db', delete=False) as tf:
-            db_path = tf.name
+        with tempfile.NamedTemporaryFile(suffix='.db', delete=True) as tf:
+            os.environ['TEST_DB_PATH'] = tf.name
+            conn = db.get_db_connection(schema_file = SCHEMA_FILE_PATH, testing=True) # create the databsae
+            yield tf.name
 
-        # Set up the database schema
-        conn = sqlite3.connect(db_path)
-        conn.row_factory = sqlite3.Row
-        conn.execute("PRAGMA foreign_keys = ON;")
-        db.setup_database(conn, SCHEMA_FILE_PATH)
-        conn.close()
-
-        yield db_path
-
-        # Cleanup
-        os.unlink(db_path)
 
     @pytest.fixture
     def bin_dir(self):
@@ -56,11 +47,11 @@ class TestBinTools:
         assert "--report" in result.stdout
         assert "--aqi" in result.stdout
 
-    def test_runner_database_access(self, bin_dir, temp_db):
+    def test_runner_database_access(self, bin_dir, temp_db_path):
         """Test that runner.py can access the database"""
         # Set up environment for database access
         env = os.environ.copy()
-        env['TEST_DB_NAME'] = temp_db
+        env['TEST_DB_PATH'] = temp_db_path
 
         # Test with --report to verify database access
         result = subprocess.run(
@@ -81,10 +72,10 @@ class TestBinTools:
             # Should show some output (either data or "No data found")
             assert len(result.stdout) > 0
 
-    def test_runner_aqi_update(self, bin_dir, temp_db):
+    def test_runner_aqi_update(self, bin_dir, temp_db_path):
         """Test that runner.py can update AQI in database"""
         env = os.environ.copy()
-        env['TEST_DB_NAME'] = temp_db
+        env['TEST_DB_PATH'] = temp_db_path
 
         result = subprocess.run(
             [sys.executable, str(bin_dir / "runner.py"), "--aqi"],
@@ -205,10 +196,10 @@ print('scheduler.py imports successfully')
         assert result.returncode == 0, f"scheduler.py import failed: {result.stderr}"
         assert "scheduler.py imports successfully" in result.stdout
 
-    def test_runner_with_test_database(self, bin_dir, temp_db):
+    def test_runner_with_test_database(self, bin_dir, temp_db_path):
         """Test runner.py with a test database that has some data"""
         # Add some test data to the database
-        conn = sqlite3.connect(temp_db)
+        conn = sqlite3.connect(temp_db_path)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA foreign_keys = ON;")
 
@@ -228,7 +219,7 @@ print('scheduler.py imports successfully')
 
         # Test runner with this database
         env = os.environ.copy()
-        env['TEST_DB_NAME'] = temp_db
+        env['TEST_DB_PATH'] = temp_db_path
 
         result = subprocess.run(
             [sys.executable, str(bin_dir / "runner.py"), "--report"],
@@ -247,10 +238,10 @@ print('scheduler.py imports successfully')
             # Should show the test data
             assert "Test Device" in result.stdout or "No data found" in result.stdout
 
-    def test_runner_daily_cleanup(self, bin_dir, temp_db):
+    def test_runner_daily_cleanup(self, bin_dir, temp_db_path):
         """Test runner.py daily cleanup functionality"""
         env = os.environ.copy()
-        env['TEST_DB_NAME'] = temp_db
+        env['TEST_DB_PATH'] = temp_db_path
 
         result = subprocess.run(
             [sys.executable, str(bin_dir / "runner.py"), "--daily"],
@@ -264,10 +255,10 @@ print('scheduler.py imports successfully')
         # Should complete without error
         assert result.returncode == 0, f"runner.py --daily failed: {result.stderr}"
 
-    def test_runner_rules_test(self, bin_dir, temp_db):
+    def test_runner_rules_test(self, bin_dir, temp_db_path):
         """Test runner.py rules test functionality"""
         env = os.environ.copy()
-        env['TEST_DB_NAME'] = temp_db
+        env['TEST_DB_PATH'] = temp_db_path
 
         result = subprocess.run(
             [sys.executable, str(bin_dir / "runner.py"), "--rules", "test"],
@@ -315,9 +306,10 @@ print('scheduler.py imports successfully')
         )
         assert result.returncode == 0, "scheduler.py failed in GitHub Actions simulation"
 
-    def test_runner_with_csv_import(self, bin_dir, temp_db):
+    def test_runner_with_csv_import(self, bin_dir, temp_db_path):
         """Test runner.py CSV import functionality"""
         # Create a simple test CSV file with a device name that exists in the sample data
+        assert isinstance(temp_db_path,str)
         csv_content = "time,Broadway North\n2025-01-01T12:00:00,25.0\n"
 
         with tempfile.NamedTemporaryFile(mode='w', suffix='.csv', delete=False) as csv_file:
@@ -326,7 +318,7 @@ print('scheduler.py imports successfully')
 
         try:
             env = os.environ.copy()
-            env['TEST_DB_NAME'] = temp_db
+            env['TEST_DB_PATH'] = temp_db_path
 
             # Use a valid date for csv-after to avoid the year 0 error
             result = subprocess.run(

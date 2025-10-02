@@ -17,11 +17,8 @@ os.environ['AE200_SIMULATOR'] = '1'
 
 logger = logging.getLogger(__name__)
 
-skip_on_github = pytest.mark.skipif(
-    os.getenv("GITHUB_ACTIONS") == "true",
-    reason="Disabled in GitHub Actions"
-)
-
+skip_on_github = pytest.mark.skipif( os.getenv("GITHUB_ACTIONS") == "true",
+                                     reason="Disabled in GitHub Actions" )
 
 def insert_temporal_test_data(conn: sqlite3.Connection, device_name: str = "Test Device"):
     """
@@ -33,6 +30,7 @@ def insert_temporal_test_data(conn: sqlite3.Connection, device_name: str = "Test
 
     Returns the device_id and a dict with the expected record counts for different time ranges.
     """
+    logger.info("insert_temporal_test_data")
     current_time = int(time.time())
 
     # Create device
@@ -82,7 +80,7 @@ def client():
 
     # Clean up the environment variables after the test
     os.environ.pop("IS_TESTING", None)
-    os.environ.pop("TEST_DB_NAME", None)
+    os.environ.pop("TEST_DB_PATH", None)
 
 
 @pytest.fixture
@@ -103,11 +101,11 @@ def test_db_name():
     tf_name = create_test_database_with_schema()
 
     # Set environment variable for the test
-    os.environ['TEST_DB_NAME'] = tf_name
+    os.environ['TEST_DB_PATH'] = tf_name
     yield tf_name
 
     # Clean up
-    os.environ.pop("TEST_DB_NAME", None)
+    os.environ.pop("TEST_DB_PATH", None)
     os.unlink(tf_name)
 
 

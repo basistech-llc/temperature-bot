@@ -3,9 +3,10 @@ test for db.py
 """
 
 import logging
-import sqlite3
 import json
 import tempfile
+import os
+
 import pytest
 
 from app import db
@@ -18,11 +19,8 @@ logger = logging.getLogger(__name__)
 def db_conn():
     """Clean database connection to a database that is created for the purpose"""
     with tempfile.NamedTemporaryFile(suffix=".db") as tf:
-        conn = sqlite3.connect(tf.name)
-        conn.row_factory = sqlite3.Row      # returns rows as dicts
-        conn.execute("PRAGMA foreign_keys = ON;") # Ensure foreign keys are enabled
-        db.setup_database(conn, SCHEMA_FILE_PATH)
-        yield conn
+        os.environ['TEST_DB_PATH'] = tf.name
+        yield db.get_db_connection(schema_file = SCHEMA_FILE_PATH, testing=True)
 
 def test_temperature_insert(db_conn):
     db.insert_devlog_entry(db_conn, device_name="devtest1", temp=20, logtime=100)

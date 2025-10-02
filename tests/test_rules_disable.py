@@ -17,15 +17,12 @@ from helpers.database_helpers import DatabaseTestHelper
 
 from app.main import app
 
-
 logger = logging.getLogger(__name__)
-
 
 # Disable websockets debug
 @pytest.fixture(autouse=True)
 def reduce_websockets_logging():
     logging.getLogger("websockets.client").setLevel(logging.INFO)
-
 
 @skip_on_github
 def test_rules_disable_functionality(client: Any) -> None:  # noqa: F811 # pylint: disable=unused-argument
@@ -34,10 +31,10 @@ def test_rules_disable_functionality(client: Any) -> None:  # noqa: F811 # pylin
     """
 
     # Create test database using new helpers
-    test_db_name = os.environ['TEST_DB_NAME']
+    test_db_name = os.environ['TEST_DB_PATH']
 
     # Create database connection and set up test data using new helpers
-    db_helper = DatabaseTestHelper(test_db_name)
+    db_helper = DatabaseTestHelper()
     with db_helper.get_connection() as conn:
         insert_temporal_test_data(conn)
 

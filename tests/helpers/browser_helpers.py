@@ -6,7 +6,7 @@ import time
 import sqlite3
 from playwright.sync_api import Page, expect
 import playwright.sync_api
-from app import db, rules_engine
+from app import db
 from tests.helpers.test_utils import verify_changelog_entry, verify_devlog_entry
 
 logger = logging.getLogger(__name__)
@@ -150,7 +150,7 @@ class RulesTestHelper:
         self.page.wait_for_selector('h2:has-text("Rules enabled")', timeout=10000)
 
     def verify_disable_rules_until(self, expected_minutes: int) -> None:
-        """Verify that rules are disabled for at least the expected number of minutes"""
+        """Verify that rules all rules are disabled for at least the expected number of minutes"""
 
         # Wait for page to refresh and check for disabled rules text
         try:
@@ -164,25 +164,26 @@ class RulesTestHelper:
             raise AssertionError("Expected text 'Rules disabled until' not found. Page dumped to debug_dump.html") from e
 
         # Check the database to verify rules are actually disabled
+        disabled_until = time.time() + expected_minutes*60
         with sqlite3.connect(self.test_db_name) as conn:
             conn.row_factory = sqlite3.Row
-            disabled_until = rules_engine.disable_rules_until(conn)
-            logger.info("disabled_until=%s", disabled_until)
-            assert disabled_until != 0
+            drr = db.disable_rules_report(conn)
+            logger.info("drr=%s", drr)
 
-            current_time = time.time()
-            min_expected_time = current_time + (expected_minutes * 60)
-
-            logger.info("Current time: %s", current_time)
-            logger.info("Disabled until: %s", disabled_until)
-            logger.info("Min expected time: %s", min_expected_time)
-
-            assert disabled_until >= min_expected_time, f"Rules should be disabled until at least {min_expected_time}, but got {disabled_until}"
+            # Assert that every device has a disabled rule
+            for (k,v) in drr.items():
+                logger.info("k=%s v=%s",k,v)
+                assert k['disabled_until'] > disabled_until
 
     def check_database_rules_enabled(self) -> None:
         """Check that the database shows rules are enabled"""
 
         with sqlite3.connect(self.test_db_name) as conn:
             conn.row_factory = sqlite3.Row
-            disabled_until = rules_engine.disable_rules_until(conn)
-            assert disabled_until == 0, "Rules should be enabled (disabled_until=0), but got {disabled_until}"
+            drr = db.disable_rules_report(conn)
+            logger.info("drr=%s", drr)
+
+            # Assert that every device has a disabled rule
+            for (k,v) in drr.items():
+                logger.info("k=%s v=%s",k,v)
+                assert k['disabled_until'] == 0

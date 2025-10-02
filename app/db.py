@@ -12,9 +12,12 @@ import json
 import math
 import os
 
+from typing import Optional
+
+from flask import request
 from pydantic import BaseModel
 
-from app.paths import DB_PATH
+from app.paths import db_path
 
 logger = logging.getLogger(__name__)
 
@@ -31,57 +34,48 @@ class DriveControl(BaseModel):
     device_id: int
     drive: int
 
-def _connect_db(db_name):
+def _connect_db(db_name,testing=False):
     """Establishes a connection to the SQLite database."""
     conn = sqlite3.connect(db_name)
     conn.row_factory = sqlite3.Row      # returns rows as dicts
     conn.execute("PRAGMA foreign_keys=ON;")
     # Use DELETE journal mode for testing to avoid WAL locking issues
-    if 'TEST_DB_NAME' in os.environ:
+    if testing:
         conn.execute("PRAGMA journal_mode=DELETE;")
     else:
         conn.execute("PRAGMA journal_mode=WAL;")
     conn.execute("PRAGMA synchronous=NORMAL;")
     return conn
 
-def get_db_connection():
+def get_db_connection(schema_file=None, testing=False):
     """
     Returns a new SQLite connection for each request.
     The connection should be closed by the caller when done.
     """
     try:
         # Use test database if in testing environment
-        if 'TEST_DB_NAME' in os.environ:
-            db_path = os.environ['TEST_DB_NAME']
-        else:
-            db_path = str(DB_PATH)
-        logger.debug("db_path=%s",db_path)
-        conn = _connect_db(db_path)
+
+        pth = db_path()
+        if (schema_file is None) and (not pth.exists()):
+            raise FileNotFoundError(pth)
+        conn = _connect_db(str(pth),testing=testing)
+        if schema_file is not None:
+            try:
+                cursor = conn.cursor()
+                with open(schema_file, 'r') as f:
+                    schema_sql = f.read()
+                cursor.executescript(schema_sql) # Executes all SQL statements in the file
+                conn.commit()
+                logger.info("Created %s with schema %s", pth, schema_file)
+                return conn
+            except sqlite3.Error as e:
+                conn.rollback()
+                logger.error("Database error during schema setup: %s", e)
+                raise # Re-raise the exception
+        logger.info("Opened %s",pth)
         return conn
     except sqlite3.Error as e:
         logger.exception("Database connection error: %s", e)
-        raise
-
-def setup_database(conn, schema_file):
-    """
-    Creates the necessary tables if they don't exist by reading SQL from a file.
-    """
-    cursor = conn.cursor()
-
-    try:
-        with open(schema_file, 'r') as f:
-            schema_sql = f.read()
-        cursor.executescript(schema_sql) # Executes all SQL statements in the file
-        conn.commit()
-        DEVICE_MAP.clear()
-        logger.info("Database schema from '%s' set up successfully.", schema_file)
-    except sqlite3.Error as e:
-        conn.rollback()
-        logger.error("Database error during schema setup: %s", e)
-        raise # Re-raise the exception
-    except Exception as e:
-        conn.rollback()
-        logger.exception("An unexpected error occurred during schema setup: %s", e)
         raise
 
 def get_or_create_device_id(conn, device_name, use_cache=True):
@@ -137,11 +131,19 @@ def fetch_all_devlog_with_devices(conn):
     """)
     return cursor.fetchall()
 
-def fetch_all_devices(conn):
-    """Fetches all device names and their IDs."""
-    cursor = conn.cursor()
-    cursor.execute("SELECT id, name FROM devices;")
-    return cursor.fetchall()
+#def fetch_all_devices(conn):
+#    """Fetches all device names and their IDs."""
+#    cursor = conn.cursor()
+#    cursor.execute("SELECT id, device_name FROM devices;")
+#    return cursor.fetchall()
+
+def get_devices_dict(conn):
+    """Add all of the devices in the devices table to the global environment"""
+    c = conn.cursor()
+    c.execute("SELECT * from devices order by device_name")
+    ret = {dev['device_name'].replace(' ','_').upper() : dev['device_id'] for dev in c.fetchall()}
+    logging.debug("ret=%s",ret)
+    return ret
 
 def fetch_last_status(conn):
     """Fetches the last status for each device"""
@@ -304,3 +306,45 @@ def get_last_aqi(conn):
     aqi = c.fetchone()[0]
     logger.debug("last_aqi=%s",aqi)
     return aqi
+
+
+################################################################
+## Rules Disabling.
+## Rules can be disabled per-device until a particular time
+################################################################
+
+def disable_rules_report(conn, device_id:Optional[int]=None):
+    """Rules are enabled by default. This returns a dictionary of all devices and when the rules are disabled until.
+    :param device_id: just for this device
+    :return: a dictionary where key=device_id and value={:device_id, :device_name, :disabled_until}
+    """
+    c = conn.cursor()
+    if device_id is not None:
+        c.execute("SELECT device_id,device_name,disabled_until from devices where device_id=?",(device_id,))
+    else:
+        c.execute("SELECT device_id,device_name,disabled_until from devices")
+    return {dev['device_id']:dev for dev in c.fetchall()}
+
+def disable_rules(conn, device_id:int, seconds:int):
+    """Enter a database engtry to disable the rules until a specific time.
+    device_id=0 means all devices.
+    """
+    logging.debug("disable_rules device_id=%s seconds=%s",device_id, seconds)
+    if seconds==0:
+        msg = json.dumps({'comment':'enable rules', 'seconds':seconds, 'device_id':device_id})
+        disabled_until = 0
+    else:
+        disabled_until = int(time.time)+seconds
+        asc_when = time.asctime(disabled_until)
+        msg = json.dumps({'comment':f'disable rules until {asc_when}',
+                          'device_id':device_id,
+                          'seconds':seconds})
+    logging.debug("disable_rules(seconds=%s,msg=%s,device_id=%s)",seconds,msg,device_id)
+    c = conn.cursor()
+    c.execute("INSERT INTO changelog (logtime, ipaddr, device_id, new_value) VALUES (?,?,?,?)",
+              (time.time(), request.remote_addr, device_id, msg))
+    if device_id==0:
+        c.execute("UPDATE devices set disabled_until=?",(disabled_until,))
+    else:
+        c.execute("UPDATE devices set disabled_until=? WHERE device_id=?",(disabled_until, device_id))
+    conn.commit()

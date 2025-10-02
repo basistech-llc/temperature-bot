@@ -4,7 +4,9 @@ Web route handlers
 import logging
 import datetime
 import time
+
 from flask import render_template, request
+from .. import db
 from ..services.device_service import DeviceService
 from .common import LogService, with_db_connection, parse_device_ids, rules_engine, __version__
 
@@ -54,15 +56,11 @@ def create_web_routes(app):
                     rule_table.append(f"<td class='rule-result'>{new_results.replace('\n', '<br>')}</td>")
                 rule_table.append("</tr>")
 
-        disable_rules_until = rules_engine.disable_rules_until(conn)
-        disable_rules_until_asc = time.asctime(time.localtime(disable_rules_until))
         return render_template(
             "rules.html",
-            devices=rules_engine.get_devices_dict(conn),
+            devices=db.get_devices_dict(conn),
             rules=rules_engine.get_rules(),
             rules_results="\n".join(rule_table),
-            disable_rules_until=disable_rules_until,
-            disable_rules_until_asc=disable_rules_until_asc,
             times=rules_engine.get_time_dict(),
         )
 

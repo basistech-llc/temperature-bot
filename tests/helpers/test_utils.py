@@ -18,11 +18,8 @@ def create_test_database_with_schema():
 
     logging.info("Created temporary database file for test: %s", db_path)
 
-    # Temporarily set an environment variable to tell lifespan we are testing
     os.environ['IS_TESTING'] = 'True'
-    # IMPORTANT: Also set TEST_DB_NAME environment variable for db.py's get_db_connection
-    # to ensure it connects to this temporary file.
-    os.environ['TEST_DB_NAME'] = db_path
+    os.environ['TEST_DB_PATH'] = db_path
 
     # Set up the database schema in the temporary file
     conn = sqlite3.connect(db_path)
@@ -88,7 +85,7 @@ def setup_test_database(conn):
 
         cursor.executescript(schema_sql)
         conn.commit()
-        cursor.execute("INSERT INTO aqi VALUES (?,?)", (int(time.time()), 45))  # insert AQI of 45
+        cursor.execute("INSERT INTO aqi (logtime,aqi) VALUES (?,?)", (int(time.time()), 45))  # insert AQI of 45
         logging.debug("*** sending schema")
         logging.info("Test database schema set up successfully from %s.", SCHEMA_FILE_PATH)
     except sqlite3.Error as e:

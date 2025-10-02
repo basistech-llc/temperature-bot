@@ -17,7 +17,7 @@ import requests
 sys.path.append(dirname(dirname(abspath(__file__))))
 
 from app.paths import ETC_DIR
-from app.rules_engine import rules_results,run_rules,disable_rules_until
+from app.rules_engine import rules_results,run_rules
 import app.airquality as airquality
 import app.ae200 as ae200
 import app.db as db
@@ -263,13 +263,9 @@ def main():
             run_rules(conn)
     else:
         clock.lock_script()
-
         update_from_ae200(conn)
         update_from_hubitat(conn)
-        if disable_rules_until(conn) < time.time():
-            run_rules(conn)
-        else:
-            logger.info("rules disabled")
+        run_rules(conn, int(time.time()))
 
 
 if __name__=="__main__":

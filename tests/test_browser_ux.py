@@ -20,7 +20,6 @@ from app import db
 from app import ae200
 from app.main import app
 
-
 logger = logging.getLogger(__name__)
 
 TEST_TEMP=32
@@ -51,32 +50,32 @@ def test_browser_fan_speed_controls(
     """
 
     # Set up test database with Broadway South device
-    test_db_name = os.environ['TEST_DB_NAME']
+    test_db_name = os.environ['TEST_DB_PATH']
     BROADWAY_SOUTH = 10
 
     # Use new database helper
-    db_helper = DatabaseTestHelper(test_db_name)
-    with db_helper.get_connection() as test_conn:
-        device_id = TestDataFactory.create_broadway_south_device(test_conn, BROADWAY_SOUTH)
+    with DatabaseTestHelper() as db_helper:
+        with db_helper.get_connection() as test_conn:
+            device_id = TestDataFactory.create_broadway_south_device(test_conn, BROADWAY_SOUTH)
 
-        # Add initial devlog entry for Broadway South so it appears in status API
-        current_time = int(time.time())
-        initial_status = DeviceTestData.get_initial_status()
-        db.insert_devlog_entry(
-            test_conn,
-            device_id=device_id,
-            temp=24.0,
-            statusdict=initial_status,
-            logtime=current_time,
-            force=True
-        )
-        # Add a second device without speed control
-        TestDataFactory.create_device_with_status(
-            test_conn,
-            "No Speed Device",
-            DeviceTestData.get_no_speed_status(),
-            current_time
-        )
+            # Add initial devlog entry for Broadway South so it appears in status API
+            current_time = int(time.time())
+            initial_status = DeviceTestData.get_initial_status()
+            db.insert_devlog_entry(
+                test_conn,
+                device_id=device_id,
+                temp=24.0,
+                statusdict=initial_status,
+                logtime=current_time,
+                force=True
+            )
+            # Add a second device without speed control
+            TestDataFactory.create_device_with_status(
+                test_conn,
+                "No Speed Device",
+                DeviceTestData.get_no_speed_status(),
+                current_time
+            )
 
     # Set up weather mocks
     MockHelper.setup_weather_mocks(mock_get_airquality, mock_get_weather_data, 45, TEST_TEMP)
@@ -221,24 +220,24 @@ def test_browser_page_loads_correctly(
     """Test that the browser page loads correctly with all elements"""
 
     # Set up test database using new helpers
-    test_db_name = os.environ['TEST_DB_NAME']
+    test_db_name = os.environ['TEST_DB_PATH']
     BROADWAY_SOUTH = 10
 
-    db_helper = DatabaseTestHelper(test_db_name)
-    with db_helper.get_connection() as test_conn:
-        device_id = TestDataFactory.create_broadway_south_device(test_conn, BROADWAY_SOUTH)
+    with DatabaseTestHelper() as db_helper:
+        with db_helper.get_connection() as test_conn:
+            device_id = TestDataFactory.create_broadway_south_device(test_conn, BROADWAY_SOUTH)
 
-        # Add initial devlog entry for Broadway South so it appears in status API
-        current_time = int(time.time())
-        initial_status = DeviceTestData.get_initial_status()
-        db.insert_devlog_entry(
-            test_conn,
-            device_id=device_id,
-            temp=24.0,
-            statusdict=initial_status,
-            logtime=current_time,
-            force=True
-        )
+            # Add initial devlog entry for Broadway South so it appears in status API
+            current_time = int(time.time())
+            initial_status = DeviceTestData.get_initial_status()
+            db.insert_devlog_entry(
+                test_conn,
+                device_id=device_id,
+                temp=24.0,
+                statusdict=initial_status,
+                logtime=current_time,
+                force=True
+            )
 
     # Set up weather mocks
     MockHelper.setup_weather_mocks(mock_get_airquality, mock_get_weather_data, 45, TEST_TEMP)
@@ -328,9 +327,9 @@ def test_browser_temperature_display(
     """
 
     # Set up test database with temporal data using new helpers
-    test_db_name = os.environ['TEST_DB_NAME']
+    test_db_name = os.environ['TEST_DB_PATH']
 
-    db_helper = DatabaseTestHelper(test_db_name)
+    db_helper = DatabaseTestHelper()
     with db_helper.get_connection() as test_conn:
         # Create test device with temporal data
         from tests.conftest import insert_temporal_test_data  # pylint: disable=import-outside-toplevel

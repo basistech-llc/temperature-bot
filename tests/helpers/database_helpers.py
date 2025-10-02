@@ -4,24 +4,25 @@ Database test helpers and utilities.
 import sqlite3
 import logging
 from typing import Optional
+
+from app import db
+
 from .test_utils import verify_changelog_entry, verify_devlog_entry
 
 logger = logging.getLogger(__name__)
 
-
 class DatabaseTestHelper:
     """Helper class for database testing operations."""
 
-    def __init__(self, test_db_name: str):
-        self.test_db_name = test_db_name
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        return self
 
     def get_connection(self) -> sqlite3.Connection:
         """Get a database connection."""
-        conn = sqlite3.connect(self.test_db_name)
-        conn.row_factory = sqlite3.Row
-        return conn
-
-
+        return db.get_db_connection()
 
     def verify_changelog_entry(self, device_id: int, expected_value: str, expected_agent: str = "web"):
         """Verify the most recent changelog entry for a device."""

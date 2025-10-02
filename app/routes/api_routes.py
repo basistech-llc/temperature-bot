@@ -5,7 +5,7 @@ import logging
 from flask import Blueprint, request, jsonify
 from flask_pydantic import validate
 
-from ..db import SpeedControl, DriveControl
+from .. import db
 from ..services.device_service import DeviceService
 from ..services.weather_service import WeatherService
 from .common import LogService, with_db_connection, parse_device_ids, rules_engine, __version__
@@ -29,7 +29,7 @@ def get_version_json():
 @api_v1.route("/set_fan_speed", methods=["POST"])
 @validate()
 @with_db_connection
-def set_fan_speed(conn, body: SpeedControl):
+def set_fan_speed(conn, body: db.SpeedControl):
     """Sets the speed, records the speed in the changelog, and then updates the database, so status is always up-to-date"""
     logger.debug("/set_fan_speed: body=[%s]", body)
     ret = rules_engine.set_body_fan_speed(conn, body, request.remote_addr, "web")
@@ -40,7 +40,7 @@ def set_fan_speed(conn, body: SpeedControl):
 @api_v1.route("/set_drive", methods=["POST"])
 @validate()
 @with_db_connection
-def set_drive(conn, body: DriveControl):
+def set_drive(conn, body: db.DriveControl):
     """Sets the speed, records the speed in the changelog, and then updates the database, so status is always up-to-date"""
     logger.debug("/set_drive: body=[%s]", body)
     ret = rules_engine.set_body_drive(conn, body, request.remote_addr, "web")
@@ -93,11 +93,15 @@ def get_logs(conn):
 @api_v1.route("/disable-rules")
 @with_db_connection
 def disable_rules(conn):
-    """Disable rules for a specified number of seconds"""
+    """Disable rules for a specified number of seconds.
+    :param seconds: - number of seconds to disable rules for
+    :param device_id: - just disable for this device
+    """
     seconds = request.args.get("seconds", type=int)
-    logging.debug("/disable-rules seconds=%s", seconds)
+    device_id = request.args.get("device_id", 0, type=int)
+    logging.debug("/disable-rules seconds=%s device_id=%s", seconds, device_id)
     if seconds is None:
         return jsonify({"error": "seconds parameter is required"}), 400
 
-    rules_engine.disable_rules(conn, seconds)
+    db.disable_rules(conn, device_id=device_id, seconds=seconds)
     return jsonify({"status": "success", "seconds": seconds})
