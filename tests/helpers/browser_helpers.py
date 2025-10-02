@@ -5,7 +5,6 @@ import logging
 import time
 import sqlite3
 from playwright.sync_api import Page, expect
-import playwright.sync_api
 from app import db
 from tests.helpers.test_utils import verify_changelog_entry, verify_devlog_entry
 

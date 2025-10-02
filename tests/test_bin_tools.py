@@ -22,7 +22,7 @@ class TestBinTools:
         """Create a temporary database for testing"""
         with tempfile.NamedTemporaryFile(suffix='.db', delete=True) as tf:
             os.environ['TEST_DB_PATH'] = tf.name
-            conn = db.get_db_connection(schema_file = SCHEMA_FILE_PATH, testing=True) # create the databsae
+            _ = db.get_db_connection(schema_file = SCHEMA_FILE_PATH, testing=True) # create the databsae
             yield tf.name
 
 

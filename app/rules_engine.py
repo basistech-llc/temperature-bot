@@ -99,7 +99,7 @@ def rules_results(conn, when=None, aqi=50):
     global_vars = {**db.get_devices_dict(conn), **get_time_dict(when)}
     global_vars['AQI'] = aqi
     local_vars = {'set_drive': set_drive_verbose, 'set_fan_speed': set_fan_speed_verbose}
-    exec(get_rules(), global_vars, local_vars)   # pylint: disable=exec-used
+    exec(get_python_rules(), global_vars, local_vars)   # pylint: disable=exec-used
     return "\n".join(results)
 
 def run_rules(conn, when):
@@ -127,4 +127,4 @@ def run_rules(conn, when):
     v1 = {**db.get_devices_dict(conn), **get_time_dict(when)}
     v1['AQI'] = db.get_last_aqi(conn)
     v2 = {'set_drive': set_drive, 'set_fan_speed':set_fan_speed }
-    exec(get_rules(), v1, v2)   # pylint: disable=exec-used
+    exec(get_python_rules(), v1, v2)   # pylint: disable=exec-used

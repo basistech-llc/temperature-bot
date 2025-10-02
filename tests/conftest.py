@@ -8,9 +8,11 @@ import logging
 import time
 import pytest
 
+from app import db
+from app.paths import SCHEMA_FILE_PATH
 from app.main import app as flask_app
 
-from tests.helpers.test_utils import create_test_database_with_schema,cleanup_test_database_with_schema
+from tests.helpers.test_utils import create_test_database_with_schema
 
 # Set AE200_SIMULATOR environment variable for all tests
 os.environ['AE200_SIMULATOR'] = '1'
@@ -68,30 +70,14 @@ def insert_temporal_test_data(conn: sqlite3.Connection, device_name: str = "Test
 
 
 @pytest.fixture
-def client_with_db():
-    """Provides a Flask test client with overridden database connection using a temporary file DB."""
-    # Create a temporary directory for the database file
-    create_test_database_with_schema()
-
-    # Override the database connection function
-    flask_app.config['TESTING'] = True
-    with flask_app.test_client() as test_client:
-        yield test_client
-
-    # Clean up the environment variables after the test
-    cleanup_test_database_with_schema()
-
-
-@pytest.fixture
 def test_db_connection():
     """Provides a test database connection."""
     with tempfile.NamedTemporaryFile(suffix='.db') as tf:
-        conn = sqlite3.connect(tf.name)
-        conn.row_factory = sqlite3.Row
-        conn.execute("PRAGMA foreign_keys = ON;")
-        setup_test_database(conn)
-        yield conn
-        conn.close()
+        os.environ['TEST_DB_PATH'] = tf.name
+        os.environ['IS_TESTING'] = 'TRUE'
+        yield db.get_db_connection(SCHEMA_FILE_PATH, testing=True)
+        os.environ.pop("TEST_DB_PATH")
+        os.environ.pop("IS_TESTING", None)
 
 @pytest.fixture
 def test_db_name():
@@ -105,6 +91,16 @@ def test_db_name():
     # Clean up
     os.environ.pop("TEST_DB_PATH", None)
     os.unlink(tf_name)
+
+
+@pytest.fixture
+def client_with_db(test_db_connection):
+    """Provides a Flask test client with overridden database connection using a temporary file DB."""
+    # Override the database connection function
+    _ = test_db_connection      # make sure it is created, but ignore it here
+    flask_app.config['TESTING'] = True
+    with flask_app.test_client() as test_client:
+        yield test_client
 
 
 @pytest.fixture(autouse=True)
