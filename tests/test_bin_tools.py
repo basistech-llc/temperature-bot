@@ -22,9 +22,9 @@ class TestBinTools:
         """Create a temporary database for testing"""
         with tempfile.NamedTemporaryFile(suffix='.db', delete=True) as tf:
             os.environ['TEST_DB_PATH'] = tf.name
-            _ = db.get_db_connection(schema_file = SCHEMA_FILE_PATH, testing=True) # create the databsae
+            conn = db.get_db_connection(schema_file = SCHEMA_FILE_PATH, testing=True) # create the databsae
             yield tf.name
-
+            conn.close()
 
     @pytest.fixture
     def bin_dir(self):

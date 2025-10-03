@@ -75,7 +75,11 @@ def test_db_connection():
     with tempfile.NamedTemporaryFile(suffix='.db') as tf:
         os.environ['TEST_DB_PATH'] = tf.name
         os.environ['IS_TESTING'] = 'TRUE'
-        yield db.get_db_connection(SCHEMA_FILE_PATH, testing=True)
+        conn = db.get_db_connection(schema_file=SCHEMA_FILE_PATH, testing=True)
+        try:
+            yield conn
+        finally:
+            conn.close()
         os.environ.pop("TEST_DB_PATH")
         os.environ.pop("IS_TESTING", None)
 

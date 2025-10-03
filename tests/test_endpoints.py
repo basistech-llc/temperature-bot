@@ -17,7 +17,7 @@ from helpers.mock_helpers import MockHelper
 from app import ae200
 from app import db
 from app.constants import __version__
-from app.services.device_service import DeviceService
+from app.db import DeviceService
 
 logger = logging.getLogger(__name__)
 
@@ -56,34 +56,33 @@ def test_status_endpoint_with_schema_validation(client_with_db):  # noqa: F811
     test_db_path = os.environ.get('TEST_DB_PATH')
     assert test_db_path, "TEST_DB_PATH environment variable should be set"
 
-    with sqlite3.connect(test_db_path) as conn:
-        conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
+    conn = sqlite3.connect(test_db_path)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
 
-        # Get the schema for the devices table
-        cursor.execute("PRAGMA table_info(devices)")
-        columns = [row['name'] for row in cursor.fetchall()]
+    # Get the schema for the devices table
+    cursor.execute("PRAGMA table_info(devices)")
+    columns = [row['name'] for row in cursor.fetchall()]
 
-        # Verify all expected columns exist
-        expected_columns = ['device_id', 'device_name', 'ae200_device_id', 'disabled_until', 'notes']
-        for expected_col in expected_columns:
-            assert expected_col in columns, f"Missing required column '{expected_col}' in devices table. Found columns: {columns}"
+    # Verify all expected columns exist
+    expected_columns = ['device_id', 'device_name', 'ae200_device_id', 'disabled_until', 'notes']
+    for expected_col in expected_columns:
+        assert expected_col in columns, f"Missing required column '{expected_col}' in devices table. Found columns: {columns}"
 
     # Add a test device with all columns to ensure the query works
-    with sqlite3.connect(test_db_path) as conn:
-        conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
-        cursor.execute("""
-            INSERT INTO devices (device_name, ae200_device_id, disabled_until, notes)
-            VALUES (?, ?, ?, ?)
-        """, ("Test Device", 1, None, "Test notes"))
+    cursor = conn.cursor()
+    cursor.execute("""
+        INSERT INTO devices (device_name, ae200_device_id, disabled_until, notes)
+        VALUES (?, ?, ?, ?)
+    """, ("Test Device", 1, None, "Test notes"))
 
-        # Add a status entry
-        cursor.execute("""
-            INSERT INTO devlog (device_id, logtime, duration, temp10x, status_json)
-            VALUES (?, ?, ?, ?, ?)
-        """, (cursor.lastrowid, int(time.time()), 60, 240, '{"Drive": "ON", "FanSpeed": "LOW"}'))
-        conn.commit()
+    # Add a status entry
+    cursor.execute("""
+        INSERT INTO devlog (device_id, logtime, duration, temp10x, status_json)
+        VALUES (?, ?, ?, ?, ?)
+    """, (cursor.lastrowid, int(time.time()), 60, 240, '{"Drive": "ON", "FanSpeed": "LOW"}'))
+    conn.commit()
+    conn.close()
 
     # Now test the endpoint - this should work without schema errors
     response = client_with_db.get("/api/v1/status")
@@ -111,41 +110,42 @@ def test_status_endpoint_schema_mismatch_detection():
         db_path = tf.name
 
     try:
-        with sqlite3.connect(db_path) as conn:
-            conn.row_factory = sqlite3.Row
-            cursor = conn.cursor()
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
 
-            # Create devices table WITHOUT the notes column (simulating old schema)
-            cursor.execute("""
-                CREATE TABLE devices (
-                    device_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    device_name TEXT UNIQUE NOT NULL,
-                    ae200_device_id INTEGER,
-                    disabled_until INTEGER
-                )
-            """)
+        # Create devices table WITHOUT the notes column (simulating old schema)
+        cursor.execute("""
+            CREATE TABLE devices (
+                device_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                device_name TEXT UNIQUE NOT NULL,
+                ae200_device_id INTEGER,
+                disabled_until INTEGER
+            )
+        """)
 
-            # Create devlog table
-            cursor.execute("""
-                CREATE TABLE devlog (
-                    log_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    device_id INTEGER NOT NULL,
-                    logtime INTEGER NOT NULL,
-                    duration INTEGER NOT NULL DEFAULT 1,
-                    temp10x INTEGER,
-                    status_json TEXT,
-                    FOREIGN KEY (device_id) REFERENCES devices (device_id)
-                )
-            """)
+        # Create devlog table
+        cursor.execute("""
+            CREATE TABLE devlog (
+                log_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                device_id INTEGER NOT NULL,
+                logtime INTEGER NOT NULL,
+                duration INTEGER NOT NULL DEFAULT 1,
+                temp10x INTEGER,
+                status_json TEXT,
+                FOREIGN KEY (device_id) REFERENCES devices (device_id)
+            )
+        """)
 
-            # Add test data
-            cursor.execute("INSERT INTO devices (device_name, ae200_device_id) VALUES (?, ?)", ("Test Device", 1))
-            device_id = cursor.lastrowid
-            cursor.execute("""
-                INSERT INTO devlog (device_id, logtime, duration, temp10x, status_json)
-                VALUES (?, ?, ?, ?, ?)
-            """, (device_id, int(time.time()), 60, 240, '{"Drive": "ON", "FanSpeed": "LOW"}'))
-            conn.commit()
+        # Add test data
+        cursor.execute("INSERT INTO devices (device_name, ae200_device_id) VALUES (?, ?)", ("Test Device", 1))
+        device_id = cursor.lastrowid
+        cursor.execute("""
+            INSERT INTO devlog (device_id, logtime, duration, temp10x, status_json)
+            VALUES (?, ?, ?, ?, ?)
+        """, (device_id, int(time.time()), 60, 240, '{"Drive": "ON", "FanSpeed": "LOW"}'))
+        conn.commit()
+        conn.close()
 
         # Set up environment to use this database
         original_db_path = os.environ.get('DB_PATH')
@@ -158,12 +158,13 @@ def test_status_endpoint_schema_mismatch_detection():
             # This should fail with the same error we saw in production
             device_service = DeviceService()
 
-            with sqlite3.connect(db_path) as conn:
-                conn.row_factory = sqlite3.Row
+            conn = sqlite3.connect(db_path)
+            conn.row_factory = sqlite3.Row
 
-                # This should raise sqlite3.OperationalError: no such column: b.notes
-                with pytest.raises(sqlite3.OperationalError, match="no such column: b.notes"):
-                    device_service.get_device_status(conn)
+            # This should raise sqlite3.OperationalError: no such column: b.notes
+            with pytest.raises(sqlite3.OperationalError, match="no such column: b.notes"):
+                device_service.get_device_status(conn)
+            conn.close()
 
         finally:
             # Restore environment
@@ -183,7 +184,7 @@ def test_status_endpoint_schema_mismatch_detection():
 
 
 @skip_on_github
-@patch("app.weather.get_weather_data")
+@patch("app.weather_getter.get_weather_data")
 @patch("app.airquality.get_aqi")
 def test_weather_endpoint(mock_get_airquality, mock_get_weather_data, client_with_db):  # noqa: F811
     # Use new mock helper
@@ -216,12 +217,13 @@ def test_set_fan_speed_endpoint(client_with_db, start_speed, target_speed, expec
     ae200.set_fan_speed(BROADWAY_SOUTH, start_speed)
 
     # get device_id
-    with sqlite3.connect(os.environ['TEST_DB_PATH']) as test_conn:
-        test_conn.row_factory = sqlite3.Row
-        device_id = db.get_or_create_device_id(test_conn, "Broadway South")
-        c = test_conn.cursor()
-        c.execute("UPDATE devices set ae200_device_id=? where device_id=?",(BROADWAY_SOUTH,device_id))
-        test_conn.commit()
+    test_conn = sqlite3.connect(os.environ['TEST_DB_PATH'])
+    test_conn.row_factory = sqlite3.Row
+    device_id = db.get_or_create_device_id(test_conn, "Broadway South")
+    c = test_conn.cursor()
+    c.execute("UPDATE devices set ae200_device_id=? where device_id=?",(BROADWAY_SOUTH,device_id))
+    test_conn.commit()
+    test_conn.close()
 
     # Send the /set_fan_speed
     response = client_with_db.post(
@@ -244,23 +246,24 @@ def test_set_fan_speed_endpoint(client_with_db, start_speed, target_speed, expec
     # Verify that the database got updated only when speed changes
     if expected_calls > 0:
         # Note that we are using the TEST_DB_PATH put in the environment.
-        with sqlite3.connect(os.environ['TEST_DB_PATH']) as test_conn_verify:
-            test_conn_verify.row_factory = sqlite3.Row
-            cursor = test_conn_verify.cursor()
-            cursor.execute("SELECT ipaddr, device_id, new_value, agent FROM changelog order by changelog_id DESC limit 1")
-            changelog_entry = cursor.fetchone()
-            assert changelog_entry is not None
-            logging.debug("changelog_entry=%s",dict(changelog_entry))
-            assert changelog_entry['ipaddr'] == '127.0.0.1'  # Flask test client IP
-            assert changelog_entry['device_id'] == device_id
-            assert changelog_entry['new_value'] == str(target_speed)
-            assert changelog_entry['agent'] == 'web'
+        test_conn_verify = sqlite3.connect(os.environ['TEST_DB_PATH'])
+        test_conn_verify.row_factory = sqlite3.Row
+        cursor = test_conn_verify.cursor()
+        cursor.execute("SELECT ipaddr, device_id, new_value, agent FROM changelog order by changelog_id DESC limit 1")
+        changelog_entry = cursor.fetchone()
+        assert changelog_entry is not None
+        logging.debug("changelog_entry=%s",dict(changelog_entry))
+        assert changelog_entry['ipaddr'] == '127.0.0.1'  # Flask test client IP
+        assert changelog_entry['device_id'] == device_id
+        assert changelog_entry['new_value'] == str(target_speed)
+        assert changelog_entry['agent'] == 'web'
 
-            cursor.execute("SELECT * from devices where device_name=?", ("Broadway South",))
-            row = cursor.fetchone()
-            logging.debug("row=%s", dict(row))
-            device_id = row['device_id']
-            cursor.execute("SELECT * from devlog where device_id=? order by logtime desc", (device_id,))
-            row = cursor.fetchone()
-            extracted_status = ae200.extract_drive_and_fan_speed(json.loads(row['status_json']))
-            assert extracted_status['fan_speed'] == target_speed
+        cursor.execute("SELECT * from devices where device_name=?", ("Broadway South",))
+        row = cursor.fetchone()
+        logging.debug("row=%s", dict(row))
+        device_id = row['device_id']
+        cursor.execute("SELECT * from devlog where device_id=? order by logtime desc", (device_id,))
+        row = cursor.fetchone()
+        extracted_status = ae200.extract_drive_and_fan_speed(json.loads(row['status_json']))
+        assert extracted_status['fan_speed'] == target_speed
+        test_conn_verify.close()

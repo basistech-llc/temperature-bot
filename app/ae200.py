@@ -26,6 +26,8 @@ from websockets.extensions import permessage_deflate
 
 from app.util import get_config
 
+DEFAULT_ADDRESS = 'invalid'
+
 logger = logging.getLogger(__name__)
 
 # Fan mapping speeds. Note that there is no 'OFF'
@@ -147,6 +149,8 @@ class AE200Functions:
         self._temp_list = []
         if address is None:
             address = get_config()['ae200']['host']
+        if address is None:
+            address = DEFAULT_ADDRESS
         self.address = address
 
     async def getDevicesAsync(self):

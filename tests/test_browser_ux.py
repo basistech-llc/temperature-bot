@@ -17,6 +17,7 @@ from helpers.database_helpers import DatabaseTestHelper
 from helpers.mock_helpers import MockHelper
 from helpers.data_factories import DeviceTestData, TestDataFactory
 from app import db
+from app import weather_getter
 from app import ae200
 from app.main import app
 
@@ -35,7 +36,7 @@ TEST_AQI = False
 
 # pylint: disable=too-many-arguments, disable=too-many-positional-arguments, disable=too-many-statements
 @skip_on_github
-@patch("app.weather.get_weather_data")
+@patch("app.weather_getter.get_weather_data")
 @patch("app.airquality.get_aqi")
 def test_browser_fan_speed_controls(
         mock_get_airquality,
@@ -210,7 +211,7 @@ def test_browser_fan_speed_controls(
 
 # pylint: disable=unused-argument
 @skip_on_github
-@patch("app.weather.get_weather_data")
+@patch("app.weather_getter.get_weather_data")
 @patch("app.airquality.get_aqi")
 def test_browser_page_loads_correctly(
     mock_get_airquality,
@@ -312,7 +313,7 @@ def test_browser_page_loads_correctly(
 
 
 @skip_on_github
-@patch("app.weather.get_weather_data")
+@patch("app.weather_getter.get_weather_data")
 @patch("app.airquality.get_aqi")
 def test_browser_temperature_display( mock_get_airquality, mock_get_weather_data, client_with_db):  # noqa: F811
     """

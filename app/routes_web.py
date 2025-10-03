@@ -6,9 +6,11 @@ import datetime
 import time
 
 from flask import render_template, request
-from .. import db
-from ..services.device_service import DeviceService
-from .common import LogService, with_db_connection, parse_device_ids, rules_engine, __version__
+from . import db
+from .db import DeviceService, with_db_connection,LogService
+from .constants import __version__
+from .utils.request_utils import parse_device_ids
+from . import rules_engine
 
 logger = logging.getLogger(__name__)
 

@@ -11,8 +11,7 @@ from app.util import get_config
 from app.paths import TIMEOUT_SECONDS
 logger = logging.getLogger(__name__)
 
-
-class WeatherService:
+class WeatherGetterService:
     """Create a connection for a specific location"""
     def __init__(self, latitude=None, longitude=None):
         if latitude is None:
@@ -21,24 +20,15 @@ class WeatherService:
             longitude = get_config()['location']['longitude']
         self.latitude = latitude
         self.longitude = longitude
-        self.weather_points = None
-        self.session = None
-
-    def ensure_points_loaded(self):
-        if self.weather_points is None:
-            if self.session is None:
-                self.session = requests.Session()
-                self.session.timeout = TIMEOUT_SECONDS
-
-            weather_points_url = f'https://api.weather.gov/points/{self.latitude},{self.longitude}'
-            response = self.session.get(weather_points_url)
-            response.raise_for_status()
-            self.weather_points = response.json()
+        self.session = requests.Session()
+        self.session.timeout = TIMEOUT_SECONDS
+        weather_points_url = f'https://api.weather.gov/points/{self.latitude},{self.longitude}'
+        response = self.session.get(weather_points_url)
+        response.raise_for_status()
+        self.weather_points = response.json()
 
     def get_current_conditions(self):
         """Get current weather conditions from nearest station"""
-        self.ensure_points_loaded()
-
         observation_stations_url = self.weather_points['properties']['observationStations']
         response = self.session.get(observation_stations_url)
         logger.debug("get %s",observation_stations_url)
@@ -71,8 +61,6 @@ class WeatherService:
 
     def get_forecast(self):
         """Get hourly forecast data"""
-        self.ensure_points_loaded()
-
         forecast_hourly_url = self.weather_points['properties']['forecastHourly']
         response = self.session.get(forecast_hourly_url)
         response.raise_for_status()
@@ -116,7 +104,7 @@ class WeatherService:
 def get_weather_data(latitude=None, longitude=None):
     """Get both current weather and forecast data"""
     try:
-        service = WeatherService(latitude=latitude, longitude=longitude)
+        service = WeatherGetterService(latitude=latitude, longitude=longitude)
         try:
             return service.get_all_weather_data()
         finally:

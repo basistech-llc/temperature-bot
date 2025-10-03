@@ -44,7 +44,7 @@ class BrowserTestHelper:
     def get_broadway_south_device_id(self) -> int:
         """Get the device ID for Broadway South from the database"""
 
-        with sqlite3.connect(self.test_db_name) as conn:
+        with db.DB(self.test_db_name) as conn:
             conn.row_factory = sqlite3.Row
             device_id = db.get_or_create_device_id(conn, "Broadway South")
             return device_id
@@ -69,8 +69,7 @@ class BrowserTestHelper:
 
         device_id = self.get_broadway_south_device_id()
 
-        with sqlite3.connect(self.test_db_name) as conn:
-            conn.row_factory = sqlite3.Row
+        with db.DB(self.test_db_name) as conn:
             verify_changelog_entry(conn, device_id, str(expected_fan_speed), 'web')
             verify_devlog_entry(conn, device_id, expected_fan_speed)
 
@@ -161,8 +160,7 @@ class RulesTestHelper:
 
         # Check the database to verify rules are actually disabled
         disabled_until_atleast = int(time.time()) + expected_seconds
-        with sqlite3.connect(self.test_db_name) as conn:
-            conn.row_factory = sqlite3.Row
+        with db.DB(self.test_db_name) as conn:
             drr = db.disable_rules_report(conn)
             logger.info("drr=%s", drr)
 
@@ -175,8 +173,7 @@ class RulesTestHelper:
     def check_database_rules_enabled(self) -> None:
         """Check that the database shows rules are enabled"""
 
-        with sqlite3.connect(self.test_db_name) as conn:
-            conn.row_factory = sqlite3.Row
+        with db.DB(self.test_db_name) as conn:
             drr = db.disable_rules_report(conn)
             logger.info("drr=%s", drr)
 

@@ -2,11 +2,10 @@
 Test temporal quantifiers for logs and device_log endpoints
 """
 import time
-import sqlite3
 import os
 import pytest
 from conftest import insert_temporal_test_data, client_with_db  # noqa: F401 # pylint: disable=unused-import
-
+from app import db
 
 def test_logs_endpoint_with_start(client_with_db): # noqa: F811
     """Test /api/v1/logs with start parameter"""
@@ -42,8 +41,7 @@ def test_logs_endpoint_with_start_and_end(client_with_db): # noqa: F811
 def test_device_log_endpoint_with_start(client_with_db): # noqa: F811
     """Test /device_log/{device_id} with start parameter"""
     # Create a test device
-    with sqlite3.connect(os.environ['TEST_DB_PATH']) as test_conn:
-        test_conn.row_factory = sqlite3.Row
+    with db.DB(os.environ['TEST_DB_PATH']) as test_conn:
         cursor = test_conn.cursor()
         cursor.execute("INSERT INTO devices (device_name) VALUES (?)", ("Test Device",))
         device_id = cursor.lastrowid
@@ -59,8 +57,7 @@ def test_device_log_endpoint_with_end(client_with_db): # noqa: F811
     """Test /device_log/{device_id} with end parameter"""
 
     # Create a test device
-    with sqlite3.connect(os.environ['TEST_DB_PATH']) as test_conn:
-        test_conn.row_factory = sqlite3.Row
+    with db.DB(os.environ['TEST_DB_PATH']) as test_conn:
         cursor = test_conn.cursor()
         cursor.execute("INSERT INTO devices (device_name) VALUES (?)", ("Test Device 2",))
         device_id = cursor.lastrowid
@@ -75,8 +72,7 @@ def test_device_log_endpoint_with_end(client_with_db): # noqa: F811
 def test_device_log_endpoint_with_start_and_end(client_with_db): # noqa: F811
     """Test /device_log/{device_id} with both start and end parameters"""
     # Create a test device
-    with sqlite3.connect(os.environ['TEST_DB_PATH']) as test_conn:
-        test_conn.row_factory = sqlite3.Row
+    with db.DB(os.environ['TEST_DB_PATH']) as test_conn:
         cursor = test_conn.cursor()
         cursor.execute("INSERT INTO devices (device_name) VALUES (?)", ("Test Device 3",))
         device_id = cursor.lastrowid
@@ -92,8 +88,7 @@ def test_device_log_endpoint_with_start_and_end(client_with_db): # noqa: F811
 @pytest.fixture
 def device_in_db():
     # Create test device with temporal data
-    with sqlite3.connect(os.environ['TEST_DB_PATH']) as test_conn:
-        test_conn.row_factory = sqlite3.Row
+    with db.DB(os.environ['TEST_DB_PATH']) as test_conn:
         device_id, expected_counts = insert_temporal_test_data(test_conn, "Fixture Device") # pylint: disable=unused-variable
         test_conn.commit()
     yield device_id

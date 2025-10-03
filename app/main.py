@@ -9,8 +9,8 @@ from flask import Flask, send_from_directory, jsonify
 from werkzeug.exceptions import HTTPException
 from werkzeug.middleware.proxy_fix import ProxyFix
 
-from .routes.api_routes import api_v1
-from .routes.web_routes import create_web_routes
+from .routes_api import api_v1
+from .routes_web import create_web_routes
 
 DEV = "/home/simsong" in abspath(__file__)
 DEFAULT_LOG_LEVEL = "DEBUG"

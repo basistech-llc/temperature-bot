@@ -11,15 +11,23 @@ import logging
 import json
 import math
 import os
+from functools import wraps
+from pathlib import Path
 
-from typing import Optional
+from typing import Optional,Dict,List,Any
 
 from flask import request
 from pydantic import BaseModel
 
-from app.paths import db_path
+from . import ae200
+from . import airquality
+from . import weather_getter
+from .paths import db_path
+from .utils.time_utils import github_style_duration
+from .utils.query_utils import temporal_quantification
 
 logger = logging.getLogger(__name__)
+
 
 DEVICE_MAP: dict[str, int] = {}
 MAX_DURATION=3600                 # don't extend more than an hour
@@ -47,7 +55,7 @@ def _connect_db(db_name,testing=False):
     conn.execute("PRAGMA synchronous=NORMAL;")
     return conn
 
-def get_db_connection(schema_file=None, testing=False):
+def get_db_connection(*,db_path_name=None,schema_file=None, testing=False):
     """
     Returns a new SQLite connection for each request.
     The connection should be closed by the caller when done.
@@ -55,7 +63,10 @@ def get_db_connection(schema_file=None, testing=False):
     try:
         # Use test database if in testing environment
 
-        pth = db_path()
+        if db_path_name is not None:
+            pth = Path(db_path_name)
+        else:
+            pth = db_path()
         if (schema_file is None) and (not pth.exists()):
             raise FileNotFoundError(pth)
         conn = _connect_db(str(pth),testing=testing)
@@ -167,8 +178,6 @@ def fetch_last_status_fixed(conn):
         return devdict
 
     return [fix_status_json(dd) for dd in fetch_last_status(conn)]
-
-
 
 
 def get_recent_devlogs(conn, device_name: str, seconds: int):
@@ -351,3 +360,192 @@ def disable_rules(conn, device_id:int, seconds:int):
     else:
         c.execute("UPDATE devices set disabled_until=? WHERE device_id=?",(disabled_until, device_id))
     conn.commit()
+
+
+class DB:
+    """Simple cover to provide a contexst manager"""
+    def __init__(self,db_path_name=None):
+        self.conn = get_db_connection(db_path_name=db_path_name)
+
+    def __enter__(self):
+        return self.conn
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.conn.close()
+
+
+def with_db_connection(f):
+    """Decorator to handle database connections properly"""
+
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        conn = get_db_connection()
+        try:
+            return f(conn, *args, **kwargs)
+        finally:
+            conn.close()
+
+    return decorated_function
+
+
+class LogService:
+    """Service for log-related operations"""
+
+    def __init__(self):
+        self.logger = logger
+
+    def get_changelog(self, conn, draw: int = 1, start_row: int = 0, length: int = 100) -> Dict[str, Any]:
+        """Get changelog data with pagination"""
+        cmd = """SELECT c.logtime, c.ipaddr, d.device_name as unit, c.new_value, c.agent, c.comment FROM changelog c
+                   LEFT JOIN devices d ON c.device_id = d.device_id WHERE 1=1"""
+        args: List[Any] = []
+
+        (cmd, args) = temporal_quantification(cmd, args)
+
+        cmd += " ORDER BY logtime DESC LIMIT ? OFFSET ?"
+        args.extend([length, start_row])
+        self.logger.debug("cmd=%s args=%s", cmd, args)
+
+        c = conn.cursor()
+        c.execute(cmd, args)
+        rows = [
+            dict(row) for row in c.fetchall()
+        ]  # Convert Row objects to dicts for JSON serialization
+        for row in rows:
+            try:
+                row["age"] = github_style_duration(row["logtime"])
+            except TypeError as e:
+                logging.error("e=%s data=%s", e, row)
+
+        return {
+            "draw": draw,
+            "recordsTotal": len(rows),
+            "recordsFiltered": len(rows),  # Adjust if implementing search
+            "data": rows,
+        }
+
+    def get_device_log(self, conn, device_id: int) -> Dict[str, Any]:
+        """Get device log data"""
+
+        c = conn.cursor()
+        c.execute("""SELECT * from devices where device_id=?""", (device_id,))
+        device = dict(c.fetchone())
+
+        cmd = """SELECT *,datetime(logtime,'unixepoch','localtime') as start,
+                             datetime(logtime+duration,'unixepoch','localtime') as end
+                             from devlog where device_id=? """
+        args = [device_id]
+        (cmd, args) = temporal_quantification(cmd, args)
+
+        cmd += " ORDER BY logtime DESC "
+
+        c.execute(cmd, args)
+        devlog = c.fetchall()
+
+        cmd = "SELECT * from changelog where device_id=?"
+        args = [device_id]
+        (cmd, args) = temporal_quantification(cmd, args)
+
+        cmd += " ORDER BY logtime DESC "
+
+        c.execute(cmd, args)
+        changelog = c.fetchall()
+
+        return {
+            "device": device,
+            "devlog": devlog,
+            "changelog": changelog
+        }
+
+class DeviceService:
+    """Service for device-related operations"""
+
+    def __init__(self):
+        self.logger = logger
+
+    def get_device_status(self, conn) -> List[Dict[str, Any]]:
+        """Get device status with annotations"""
+        device_data = fetch_last_status_fixed(conn)
+
+        # Extract and convert the top-level drive, speed, and other items
+        for data in device_data:
+            if "status" in data:
+                data.update(ae200.extract_drive_and_fan_speed(data["status"]))
+            if "logtime" in data:
+                data["age"] = github_style_duration(
+                    data["logtime"] + data.get("duration", 1)
+                )
+
+        return device_data
+
+    def get_temperature_series(self, conn, device_ids: List[int] = None) -> List[Dict[str, Any]]:
+        """Get temperature series data for devices"""
+
+        c = conn.cursor()
+        series = []
+
+        if device_ids:
+            # Get specific devices
+            for device_id in device_ids:
+                c.execute("SELECT * from devices where device_id=?", (device_id,))
+                device = c.fetchone()
+                if device:
+                    cmd = """
+                        SELECT logtime,temp10x from devlog
+                        where device_id=? and logtime is not null and temp10x is not null
+                    """
+                    args = [device_id]
+                    (cmd, args) = temporal_quantification(cmd, args)
+                    cmd += " order by logtime"
+
+                    c.execute(cmd, args)
+                    rows = c.fetchall()
+                    data = [[row["logtime"], row["temp10x"] / 10] for row in rows]
+                    if data:
+                        series.append({"name": device["device_name"], "data": data})
+        else:
+            # Get all devices
+            c.execute("SELECT * from devices")
+            devices = c.fetchall()
+            for dev in devices:
+                cmd = """
+                    SELECT logtime,temp10x from devlog
+                    where device_id=? and logtime is not null and temp10x is not null
+                """
+                args = [dev["device_id"]]
+                (cmd, args) = temporal_quantification(cmd, args)
+                cmd += " order by logtime"
+
+                c.execute(cmd, args)
+                rows = c.fetchall()
+                data = [[row["logtime"], row["temp10x"] / 10] for row in rows]
+                if data:
+                    series.append({"name": dev["device_name"], "data": data})
+
+        return series
+
+class WeatherService:
+    """Service for weather and AQI operations"""
+
+    def __init__(self):
+        self.logger = logger
+
+    def get_db_aqi(self, conn) -> dict:
+        """
+        Get AQI from database.
+
+        :param conn: database connection
+        :return: AQI data dict with value, color, name
+        """
+        # Check for recent AQI data in database
+        c = conn.cursor()
+        c.execute("SELECT aqi FROM aqi order by logtime DESC limit 1")
+        row = c.fetchone()
+        aqi = row[0] if row is not None else 0
+        return airquality.aqi_decode(aqi)
+
+    def get_weather_data(self, conn) -> dict:
+        """Get combined weather and AQI data"""
+        aqi_data = self.get_db_aqi(conn)
+        weather_data = weather_getter.get_weather_data()
+        return {"aqi": aqi_data, "weather": weather_data}
