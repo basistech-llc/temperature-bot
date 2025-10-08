@@ -36,13 +36,50 @@ fetch-slg:
 tags:
 	etags */*.py
 
+## lint
+.PHONY: eslint pylint lint
+PYLINT_THRESHOLD := 9.5
+PYLINT_OPTS :=--output-format=parseable --rcfile .pylintrc --fail-under=$(PYLINT_THRESHOLD) --verbose
+
+## test
+
+pylint: .venv/pyvenv.cfg
+	.venv/bin/djlint $(DJLINT_FLAGS) $(TEMPLATE_DIR)/*.html
+	$(PYTHON) -m ruff check --fix .
+	$(PYTHON) -m pylint $(PYLINT_OPTS) app tests *.py
+
+eslint:
+	(cd app/static; make eslint)
+
+lint:
+	make pylint
+	make eslint
+
+check: $(REQ)
+	make lint
+	echo do not make check-types
+
+pytest: $(REQ)
+	AE200_SIMULATOR=1 $(PYTHON) -m pytest . -v --cov=. --cov-report=xml --cov-report=html --log-cli-level=DEBUG --log-file-level=DEBUG
+	@echo covreage report in htmlcov/
+
+check-types: $(REQ)
+	$(PYTHON) -m mypy app
+
+# Create the virtual environment and install both host requirements
+# and the lambda requirements for testing
+.venv/pyvenv.cfg:
+	@echo install venv for the development environment
+	echo $$PATH
+	poetry install
+
+
 ################################################################
 ## Every minutes
 every-minute: $(REQ)
 	$(PYTHON) -m bin.runner
 daily: $(REQ)
 	$(PYTHON) -m bin.runner --daily
-
 
 install-ubuntu:
 	sudo apt install python3-pip pipx
@@ -62,23 +99,3 @@ install-macos:
 	ruff --version
 	poetry lock && poetry install
 	echo disabled - npm install browser-sync -g
-
-
-################################################################
-.PHONY: eslint pylint lint
-eslint:
-	(cd app/static; make eslint)
-pylint:
-	$(PYTHON) -m ruff check --fix .
-	$(PYTHON) -m pylint $(PYLINT_OPTS) app tests *.py
-
-lint:
-	make pylint
-	make eslint
-
-# Create the virtual environment and install both host requirements
-# and the lambda requirements for testing
-.venv/pyvenv.cfg:
-	@echo install venv for the development environment
-	echo $$PATH
-	poetry install
