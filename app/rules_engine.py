@@ -1,5 +1,9 @@
 """
-Run the rules engine
+Run the rules engine.
+
+The RULES_ENGINE is a special device which, if disabled, disables all rules.
+Each individual rule can also be disabled.
+
 """
 import json
 from os.path import join
@@ -7,7 +11,6 @@ import time
 import logging
 
 from flask import request
-
 
 from .paths import ROOT_DIR
 from . import db
@@ -20,14 +23,6 @@ RULES_DEVICE_NAME = 'rules_engine'
 
 def rules_id(conn):
     return  db.get_or_create_device_id(conn, RULES_DEVICE_NAME)
-
-def get_devices_dict(conn):
-    """Add all of the devices in the devices table to the global environment"""
-    c = conn.cursor()
-    c.execute("SELECT * from devices order by device_name")
-    ret = {dev['device_name'].replace(' ','_').upper() : dev['device_id'] for dev in c.fetchall()}
-    logging.debug("ret=%s",ret)
-    return ret
 
 def get_time_dict(when=None):
     if when is None:
@@ -45,36 +40,17 @@ def get_time_dict(when=None):
             'AM':tm.tm_hour<12,
             'PM':tm.tm_hour>=12 }
 
-def rules_disabled_until(conn):
-    """Rules are enabled by default. They are disabled if the last changelog entry for the rules device specifies a disable time in the new_value text"""
-    c = conn.cursor()
-    c.execute("SELECT * from changelog where device_id=? order by changelog_id DESC LIMIT 1",(rules_id(conn),))
-    row = c.fetchone()
-    if row is None:
-        logging.debug("rules_disabled_until row is None")
-        return 0
-    until_time = json.loads(row['new_value']).get('seconds',0) + row['logtime']
-    logging.debug("rules_disabled_until row=%s until_time=%s device_id=%s",dict(row),until_time,rules_id(conn))
-    if until_time < time.time():
-        return 0
-    return until_time
+def all_rules_disabled_until(conn):
+    until = db.device_rules_disabled_until(conn, rules_id(conn))
+    logging.info("all rules disabled until %s",until)
+    return until
 
-
-def disable_rules(conn,seconds:int):
-    """Enter a database engtry to disable the rules until a specific time."""
-    if seconds==0:
-        msg = json.dumps({'comment':'enable rules', 'seconds':seconds})
-    else:
-        asc_when = time.asctime(time.localtime(time.time()+seconds))
-        msg = json.dumps({'comment':f'disable rules until {asc_when}',
-                          'seconds':seconds})
-    logging.debug("disable_rules(seconds=%s,msg=%s,device_id=%s)",seconds,msg,rules_id(conn))
-    c = conn.cursor()
-    c.execute("INSERT INTO changelog (logtime, ipaddr, device_id, new_value) VALUES (?,?,?,?)",
-              (time.time(), request.remote_addr, rules_id(conn), msg))
-    conn.commit()
-    logging.debug("rules_disabled_until=%s",rules_disabled_until(conn))
-
+def disable_all_rules(conn, seconds:int):
+    """Enter a database engtry to disable the rules for a period of seconds.
+    :param seconds: how long to disable rules for
+    """
+    logging.info("disable_all_rules(%s)",seconds)
+    db.disable_rules_for_device(conn, rules_id(conn), seconds)
 
 def get_rules():
     with open( join(ROOT_DIR,'bin','rules.py'), 'r') as f:
@@ -140,7 +116,7 @@ def rules_results(conn, when=None, aqi=50):
     def set_fan_speed_verbose(device_id, value):
         results.append(f"Device {device_id} speed set to {value}")
 
-    global_vars = {**get_devices_dict(conn), **get_time_dict(when)}
+    global_vars = {**db.devices_to_device_id(conn), **get_time_dict(when)}
     global_vars['AQI'] = aqi
     local_vars = {'set_drive': set_drive_verbose, 'set_fan_speed': set_fan_speed_verbose}
     exec(get_rules(), global_vars, local_vars)   # pylint: disable=exec-used
@@ -148,17 +124,40 @@ def rules_results(conn, when=None, aqi=50):
 
 def run_rules(conn, when=None):
     """Run the rules now and returns the results.
-    Note: runs rules even if they are disabled. That has to be decided elsewhere.
+    Does not execute command if all rules are disabled or if the rules for the sepcific device are disabled
     """
     logger.debug("when=%s",when)
 
+    all_devices = db.fetch_all_device_dicts(conn)
+    disabled_until_dict = {dev['device_id']:dev['disabled_until'] for dev in all_devices}
+    def is_disabled(device_id):
+        try:
+            return time.time() > disabled_until_dict.get(device_id,0)
+        except (ValueError,TypeError,KeyError):
+            return False
+
+    if is_disabled( rules_id( conn ) ):
+        logger.info("all rules disabled")
+
     def set_drive(device_id, drive):
+        if is_disabled(device_id):
+            logger.info("device_id drive set disabled",(device_id,))
+            return
         set_body_drive(conn, DriveControl(device_id=device_id, drive=drive), 'n/a', 'rule')
 
     def set_fan_speed(device_id, fan_speed):
+        if is_disabled(device_id):
+            logger.info("device_id fan set disabled",(device_id,))
+            return
         set_body_fan_speed(conn, SpeedControl(device_id=device_id, fan_speed=fan_speed), 'n/a', 'rule')
 
-    v1 = {**get_devices_dict(conn), **get_time_dict(when)}
+    v1 = {**db.devices_to_device_id(conn), **get_time_dict(when)}
     v1['AQI'] = db.get_last_aqi(conn)
     v2 = {'set_drive': set_drive, 'set_fan_speed':set_fan_speed }
     exec(get_rules(), v1, v2)   # pylint: disable=exec-used
+
+    # finally, if the time has passed for any rule, set to 0
+    now = int(time.time())
+    for dev in all_devices:
+        if 0 < dev['disabled_until'] < now:
+            db.disable_rules_for_device(conn, dev['device_id'], 0, agent='rules runner', comment='disabled timer expired')

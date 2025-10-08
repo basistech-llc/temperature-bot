@@ -84,6 +84,9 @@ def setup_database(conn, schema_file):
         logger.exception("An unexpected error occurred during schema setup: %s", e)
         raise
 
+################################################################
+## Device management
+
 def get_or_create_device_id(conn, device_name, use_cache=True):
     """
     Retrieves the ID for a given device name. If the device name does not exist
@@ -120,28 +123,25 @@ def get_or_create_device_id(conn, device_name, use_cache=True):
         conn.rollback() # Rollback any partial transaction
         raise # Re-raise the exception
 
-def fetch_all_devlog_with_devices(conn):
-    """
-    Fetches all devlog entries, joining with devices to display the device string.
-    """
-    cursor = conn.cursor()
-    cursor.execute("""
-        SELECT
-            t.id, t.logtime, s.name AS device_name, t.temp10x, s.notes
-        FROM
-            devlog t
-        JOIN
-            devices s ON t.device_id = s.device_id
-        ORDER BY
-            t.logtime DESC;
-    """)
-    return cursor.fetchall()
-
 def fetch_all_devices(conn):
     """Fetches all device names and their IDs."""
     cursor = conn.cursor()
     cursor.execute("SELECT id, name FROM devices;")
     return cursor.fetchall()
+
+def fetch_all_device_dicts(conn):
+    """Fetches all device names and their IDs."""
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM devices;")
+    return cursor.fetchall()
+
+def devices_to_device_id(conn):
+    """Return a dictionary of device_name:device_id"""
+    c = conn.cursor()
+    c.execute("SELECT * from devices order by device_name")
+    ret = {dev['device_name'].replace(' ','_').upper() : dev['device_id'] for dev in c.fetchall()}
+    logging.debug("ret=%s",ret)
+    return ret
 
 def fetch_last_status(conn):
     """Fetches the last status for each device"""
@@ -167,6 +167,25 @@ def fetch_last_status_fixed(conn):
     return [fix_status_json(dd) for dd in fetch_last_status(conn)]
 
 
+################################################################
+## devlog - log of what happened
+
+def fetch_all_devlog_with_devices(conn):
+    """
+    Fetches all devlog entries, joining with devices to display the device string.
+    """
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT
+            t.id, t.logtime, s.name AS device_name, t.temp10x, s.notes
+        FROM
+            devlog t
+        JOIN
+            devices s ON t.device_id = s.device_id
+        ORDER BY
+            t.logtime DESC;
+    """)
+    return cursor.fetchall()
 
 
 def get_recent_devlogs(conn, device_name: str, seconds: int):
@@ -221,8 +240,8 @@ def insert_devlog_entry(conn, *,
                   If False, then only create a new entry if the temp or statusdict have changed.
     Inserts an entry into the devlog table, handling the device_id lookup/creation and automatic extension.
     """
-    logger.debug("conn=%s device_id=%s device_name=%s temp=%s statusdict=%s logtime=%s force=%s commit=%s",
-                  conn,device_id, device_name,temp,statusdict,logtime,force,commit)
+    logger.debug("device_id=%s device_name=%s temp=%s logtime=%s force=%s commit=%s",
+                  device_id, device_name,temp,logtime,force,commit)
     temp10x     = int(math.floor(float(temp)*10+0.5)) if temp else None
     status_json = json.dumps(statusdict, default=str, sort_keys=True) if statusdict else None
     c = conn.cursor()
@@ -240,7 +259,7 @@ def insert_devlog_entry(conn, *,
         if r and r['logtime']==logtime:
             # duplicate entry. Replace if duration is 1
             if r['duration']==1:
-                logger.debug("replace %s with temp10x=%s status=%s",dict(r),temp10x,status_json)
+                logger.debug("replace with temp10x=%s status=%s",temp10x,status_json)
                 c.execute("UPDATE devlog set temp10x=?,status_json=? where log_id=?",(temp10x, status_json,r['log_id']))
             else:
                 logger.debug("ignore temp10x=%s status=%s because row=%s",temp10x,status_json,dict(r))
@@ -291,12 +310,49 @@ def update_devlog_map(conn, device_name:str, ae200_device_id:int):
     conn.commit()
     return device_id
 
+################################################################
+## Rules
+def device_rules_disabled_until(conn, device_id:int) -> int|None:
+    """
+    :param conn: - database connection
+    :param device_id: - device_id
+    :return: time_t that rules are disabled until, or None if they are no longer disabled
+    """
+    c = conn.cursor()
+    c.execute("SELECT disabled_until from devices where device_id=?",(device_id,))
+    row = fetchone()
+    return row[1] if row is not None else None
+
+def disable_rules_for_device(conn, device_id:int, seconds:int, ipaddr=None, agent=None, comment=None):
+    if seconds==0:
+        until = 0
+    else:
+        until = int(time.time()) + seconds
+    c = conn.cursor()
+    c.execute("SELECT disabled_until from devices where device_id=?",(device_id,))
+    was = c.fetchone()
+    current_value = was[0] if was else None
+    c.execute("UPDATE devices set disabled_until=? where device_id=?",(until,device_id))
+    c.execute(
+        """
+        INSERT INTO changelog (logtime, ipaddr, device_id, current_values, new_value, agent, comment)
+        VALUES (?,?,?,?,?,?,?,?)
+        """,(int(time.time()), ipaddr, device_id, current_value, until, agent, comment))
+    conn.commit()
+
+
+
+################################################################
+## AE200
 def get_ae200_unit(conn, device_id:int):
     c = conn.cursor()
     c.execute("select ae200_device_id from devices where device_id=?",(device_id,))
     ret = c.fetchone()['ae200_device_id']
     logger.debug("device_id=%s ae200_unit=%d",device_id,ret)
     return ret
+
+################################################################
+## AQI
 
 def get_last_aqi(conn):
     c = conn.cursor()
