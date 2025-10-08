@@ -218,7 +218,7 @@ def test_set_fan_speed_endpoint(client, start_speed, target_speed, expected_call
     # get device_id
     with sqlite3.connect(os.environ['TEST_DB_NAME']) as test_conn:
         test_conn.row_factory = sqlite3.Row
-        device_id = db.get_or_create_device_id(test_conn, "Broadway South")
+        device_id = db.get_or_create_device_id(test_conn, "Broadway Test")
         c = test_conn.cursor()
         c.execute("UPDATE devices set ae200_device_id=? where device_id=?",(BROADWAY_SOUTH,device_id))
         test_conn.commit()
@@ -256,7 +256,7 @@ def test_set_fan_speed_endpoint(client, start_speed, target_speed, expected_call
             assert changelog_entry['new_value'] == str(target_speed)
             assert changelog_entry['agent'] == 'web'
 
-            cursor.execute("SELECT * from devices where device_name=?", ("Broadway South",))
+            cursor.execute("SELECT * from devices where device_name=?", ("Broadway Test",))
             row = cursor.fetchone()
             logging.debug("row=%s", dict(row))
             device_id = row['device_id']

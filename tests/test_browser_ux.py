@@ -45,12 +45,12 @@ def test_browser_fan_speed_controls(
 ):
     """
     End-to-end test that:
-    1. Clicks fan speed 0 for Broadway South and verifies database and UI updates
-    2. Clicks fan speed 4 for Broadway South and verifies database and UI updates
-    3. Clicks fan speed 1 for Broadway South and verifies database and UI updates
+    1. Clicks fan speed 0 for Broadway Test and verifies database and UI updates
+    2. Clicks fan speed 4 for Broadway Test and verifies database and UI updates
+    3. Clicks fan speed 1 for Broadway Test and verifies database and UI updates
     """
 
-    # Set up test database with Broadway South device
+    # Set up test database with Broadway Test device
     test_db_name = os.environ['TEST_DB_NAME']
     BROADWAY_SOUTH = 10
 
@@ -59,7 +59,7 @@ def test_browser_fan_speed_controls(
     with db_helper.get_connection() as test_conn:
         device_id = TestDataFactory.create_broadway_south_device(test_conn, BROADWAY_SOUTH)
 
-        # Add initial devlog entry for Broadway South so it appears in status API
+        # Add initial devlog entry for Broadway Test so it appears in status API
         current_time = int(time.time())
         initial_status = DeviceTestData.get_initial_status()
         db.insert_devlog_entry(
@@ -107,7 +107,7 @@ def test_browser_fan_speed_controls(
             # Wait for the grid to load
             helper.wait_for_grid_to_load()
 
-            # Verify that Broadway South has speed radio buttons
+            # Verify that Broadway Test has speed radio buttons
             for speed in [1, 2, 3, 4]:
                 radio = page.locator(f'#radio-{helper.get_broadway_south_device_id()}-{speed}')
                 expect(radio).to_be_visible()
@@ -228,7 +228,7 @@ def test_browser_page_loads_correctly(
     with db_helper.get_connection() as test_conn:
         device_id = TestDataFactory.create_broadway_south_device(test_conn, BROADWAY_SOUTH)
 
-        # Add initial devlog entry for Broadway South so it appears in status API
+        # Add initial devlog entry for Broadway Test so it appears in status API
         current_time = int(time.time())
         initial_status = DeviceTestData.get_initial_status()
         db.insert_devlog_entry(
@@ -271,11 +271,11 @@ def test_browser_page_loads_correctly(
             # Wait for the grid to load
             page.wait_for_selector('table.pure-table', timeout=10000)
 
-            # Verify Broadway South row exists
-            broadway_row = page.locator('tr:has-text("Broadway South")')
+            # Verify Broadway Test row exists
+            broadway_row = page.locator('tr:has-text("Broadway Test")')
             expect(broadway_row).to_be_visible()
 
-            # Verify fan speed radio buttons exist for Broadway South
+            # Verify fan speed radio buttons exist for Broadway Test
             helper = BrowserTestHelper(page, test_db_name)
             device_id = helper.get_broadway_south_device_id()
 

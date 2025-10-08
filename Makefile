@@ -34,7 +34,7 @@ tags:
 ################################################################
 
 ## Static Analysis
-.PHONY: eslint pylint lint
+.PHONY: eslint lint pylint test pytest
 PYLINT_THRESHOLD := 9.5
 PYLINT_OPTS :=--output-format=parseable --rcfile .pylintrc --fail-under=$(PYLINT_THRESHOLD) --verbose
 
@@ -55,10 +55,11 @@ check: $(REQ)
 check-types: $(REQ)
 	$(PYTHON) -m mypy app
 
-## Tests
+## Dynamic Analysis
 pytest: $(REQ)
 	AE200_SIMULATOR=1 $(PYTHON) -m pytest . -v --cov=. --cov-report=xml --cov-report=html --log-cli-level=DEBUG --log-file-level=DEBUG
 	@echo covreage report in htmlcov/
+test: pytest
 
 ################################################################
 ## Every minutes

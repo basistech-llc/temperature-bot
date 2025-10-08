@@ -27,13 +27,13 @@ class BrowserTestHelper:
         self.page.wait_for_selector('tr:has(td)', timeout=10000)
 
     def find_broadway_south_row(self):
-        """Find the Broadway South row in the table"""
-        # Look for a row containing "Broadway South"
-        return self.page.locator('tr:has-text("Broadway South")')
+        """Find the Broadway Test row in the table"""
+        # Look for a row containing "Broadway Test"
+        return self.page.locator('tr:has-text("Broadway Test")')
 
     def get_fan_speed_radio(self, speed: int):
-        """Get the radio button for a specific fan speed for Broadway South"""
-        # Find the Broadway South row and get the radio button for the specified speed
+        """Get the radio button for a specific fan speed for Broadway Test"""
+        # Find the Broadway Test row and get the radio button for the specified speed
         row = self.find_broadway_south_row()
         logger.debug("row=%s", row)
         assert row is not None
@@ -43,15 +43,15 @@ class BrowserTestHelper:
         return self.page.locator(f'#radio-{device_id}-{speed}')
 
     def get_broadway_south_device_id(self) -> int:
-        """Get the device ID for Broadway South from the database"""
+        """Get the device ID for Broadway Test from the database"""
 
         with sqlite3.connect(self.test_db_name) as conn:
             conn.row_factory = sqlite3.Row
-            device_id = db.get_or_create_device_id(conn, "Broadway South")
+            device_id = db.get_or_create_device_id(conn, "Broadway Test")
             return device_id
 
     def click_fan_speed(self, speed: int):
-        """Click on a fan speed radio button for Broadway South"""
+        """Click on a fan speed radio button for Broadway Test"""
         radio = self.get_fan_speed_radio(speed)
         radio.click()
 
