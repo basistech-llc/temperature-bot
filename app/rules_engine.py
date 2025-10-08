@@ -5,12 +5,10 @@ The RULES_ENGINE is a special device which, if disabled, disables all rules.
 Each individual rule can also be disabled.
 
 """
-import json
 from os.path import join
 import time
 import logging
 
-from flask import request
 
 from .paths import ROOT_DIR
 from . import db
@@ -141,13 +139,13 @@ def run_rules(conn, when=None):
 
     def set_drive(device_id, drive):
         if is_disabled(device_id):
-            logger.info("device_id drive set disabled",(device_id,))
+            logger.info("device_id=%s drive set disabled",(device_id,))
             return
         set_body_drive(conn, DriveControl(device_id=device_id, drive=drive), 'n/a', 'rule')
 
     def set_fan_speed(device_id, fan_speed):
         if is_disabled(device_id):
-            logger.info("device_id fan set disabled",(device_id,))
+            logger.info("device_id=%s fan set disabled",(device_id,))
             return
         set_body_fan_speed(conn, SpeedControl(device_id=device_id, fan_speed=fan_speed), 'n/a', 'rule')
 

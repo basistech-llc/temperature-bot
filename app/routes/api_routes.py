@@ -99,5 +99,5 @@ def disable_rules(conn):
     if seconds is None:
         return jsonify({"error": "seconds parameter is required"}), 400
 
-    rules_engine.disable_rules(conn, seconds)
+    rules_engine.disable_all_rules(conn, seconds)
     return jsonify({"status": "success", "seconds": seconds})

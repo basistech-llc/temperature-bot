@@ -22,12 +22,11 @@
   </div>
 </div>
 
-
 <div class="pure-g" >
   <h2> Device Log</h2>
   <div class="pure-u-1">
     <table>
-      <tr><th>Device ID</td><th>Time Range</th><th>Temp</th></tr>
+      <tr><th>Device ID</th><th>Time Range</th><th>Temp</th></tr>
       {% for row in devlog %}
         {% if row.temp10x %}
         <tr><td>{{row.device_id}}</td><td> {{row.start}} - {{row.end}} ({{row.duration}} s)</td> <td>{{row.temp10x / 10}}ºC</td></tr>
@@ -43,7 +42,7 @@
   <h2> Change Log</h2>
   <div class="pure-u-1">
     <table>
-      <tr><th>Device ID</td><th>Log Time</th><th>IP Addr</th><th><Current Value</th><th>New Value</th><th>Agent</th><th>Comment</th></tr>
+      <tr><th>Device ID</th><th>Log Time</th><th>IP Addr</th><th><Current Value</th><th>New Value</th><th>Agent</th><th>Comment</th></tr>
       {% for row in changelog %}
 	<tr><td>{{row.device_id}}</td><td> {{row.logtime}}</td> <td>{{row.ipaddr}}</td>
 	    <td>{{row.current_values}}</td><td>{{row.new_value}}</td><td>{{row.agent}}</td><td>{{row.comment}}</td>
@@ -53,6 +52,4 @@
   </div>
 </div>
 
-
-
-  {% endblock %}
+{% endblock %}

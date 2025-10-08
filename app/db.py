@@ -320,7 +320,7 @@ def device_rules_disabled_until(conn, device_id:int) -> int|None:
     """
     c = conn.cursor()
     c.execute("SELECT disabled_until from devices where device_id=?",(device_id,))
-    row = fetchone()
+    row = c.fetchone()
     return row[1] if row is not None else None
 
 def disable_rules_for_device(conn, device_id:int, seconds:int, ipaddr=None, agent=None, comment=None):

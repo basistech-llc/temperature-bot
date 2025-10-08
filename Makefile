@@ -1,7 +1,8 @@
-DBFILE = '/var/db/temperature-bot.db'
-DEV_DB = 'var/db/temperature-bot.db'
+DBFILE := /var/db/temperature-bot.db
+DEV_DB := var/db/temperature-bot.db
 REQ := .venv/pyvenv.cfg
 PYTHON := .venv/bin/python
+TEMPLATE_DIR := app/templates
 
 .PHONY: etc/schema.sql
 etc/schema.sql:
@@ -38,13 +39,14 @@ PYLINT_THRESHOLD := 9.5
 PYLINT_OPTS :=--output-format=parseable --rcfile .pylintrc --fail-under=$(PYLINT_THRESHOLD) --verbose
 
 pylint: .venv/pyvenv.cfg
-	.venv/bin/djlint $(DJLINT_FLAGS) $(TEMPLATE_DIR)/*.html
+	.venv/bin/djlint $(DJLINT_FLAGS) $(TEMPLATE_DIR)/*.html | etc/djlint-reformat.bash
 	$(PYTHON) -m ruff check --fix .
 	$(PYTHON) -m pylint $(PYLINT_OPTS) app tests *.py
 
 eslint:
 	(cd app/static; make eslint)
 
+lint: check
 check: $(REQ)
 	make pylint
 	make eslint

@@ -166,7 +166,7 @@ class RulesTestHelper:
         # Check the database to verify rules are actually disabled
         with sqlite3.connect(self.test_db_name) as conn:
             conn.row_factory = sqlite3.Row
-            disabled_until = rules_engine.rules_disabled_until(conn)
+            disabled_until = rules_engine.all_rules_disabled_until(conn)
             logger.info("disabled_until=%s", disabled_until)
             assert disabled_until != 0
 
@@ -184,5 +184,5 @@ class RulesTestHelper:
 
         with sqlite3.connect(self.test_db_name) as conn:
             conn.row_factory = sqlite3.Row
-            disabled_until = rules_engine.rules_disabled_until(conn)
+            disabled_until = rules_engine.all_rules_disabled_until(conn)
             assert disabled_until == 0, "Rules should be enabled (disabled_until=0), but got {disabled_until}"
