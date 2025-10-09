@@ -18,3 +18,4 @@ token.json
 temperature-bot-config.yaml
 *.db-shm
 *.db-wal
+**/.coverage*

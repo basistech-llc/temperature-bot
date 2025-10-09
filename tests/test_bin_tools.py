@@ -21,10 +21,10 @@ class TestBinTools:
     These all use the same database, which only gets filled once
     """
 
-    @pytest.fixture(scope='session')
-    def temp_db(self,test_database_with_conn_with_test_data):
+    @pytest.fixture
+    def temp_db(self,test_database_conn_with_test_data):
         """return the database path"""
-        yield db_path(test_database_with_conn_with_test_data)
+        yield db_path(test_database_conn_with_test_data)
 
     @pytest.fixture
     def bin_dir(self):
@@ -126,8 +126,7 @@ class TestBinTools:
             capture_output=True,
             text=True,
             timeout=30,
-            check=False
-        )
+            check=False )
 
         assert result.returncode == 0, f"scheduler.py --verbose failed: {result.stderr}"
 

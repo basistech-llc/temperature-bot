@@ -24,6 +24,24 @@ skip_on_github = pytest.mark.skipif(
     os.getenv("GITHUB_ACTIONS") == "true",
     reason="Disabled in GitHub Actions" )
 
+def db_path(conn):
+    """Given a database connection, return the filename of the sqlite3 database"""
+    # Execute the PRAGMA command
+    cursor = conn.cursor()
+    cursor.execute('PRAGMA database_list')
+
+    # Fetch the result (it's a list of tuples)
+    # Example tuple: (0, 'main', '/full/path/to/my_database.db')
+    database_list = cursor.fetchall()
+
+    # Isolate the filename for the 'main' database
+    for entry in database_list:
+        # entry[1] is the name ('main'), entry[2] is the filename/path
+        if entry[1] == 'main':
+            return entry[2]
+    raise FileNotFoundError("Did not find database name")
+
+
 ################################################################
 ## Create and access test databsae
 
@@ -32,14 +50,14 @@ skip_on_github = pytest.mark.skipif(
 def empty_database_conn():
     """Create a temporary test database with schema and return the file path."""
     with  tempfile.NamedTemporaryFile(suffix='.db') as tf:
-        db_path = tf.name
-        logging.info("Created temporary database file for test: %s", db_path)
+        path = tf.name
+        logging.info("Created temporary database file for test: %s", path)
 
         # Temporarily set an environment variable to tell lifespan we are testing
         os.environ['IS_TESTING'] = 'True'
-        os.environ['TEST_DB_NAME'] = db_path
+        os.environ['TEST_DB_NAME'] = path
 
-        conn = sqlite3.connect(db_path)
+        conn = sqlite3.connect(path)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA foreign_keys = ON;")
         yield conn
@@ -93,7 +111,7 @@ def test_database_conn_with_test_data(test_database_conn):
     now = int(time.time())
     cursor = test_database_conn.cursor()
     cursor.execute("INSERT INTO aqi (logtime,aqi) VALUES (?,?)", (now, DEFAULT_AQI_VALUE))
-    cursor.commit()
+    test_database_conn.commit()
 
     # Create device
     cursor.execute("INSERT INTO devices (device_name) VALUES (?)", (TEST_DEVICE_NAME,))
@@ -111,35 +129,18 @@ def test_database_conn_with_test_data(test_database_conn):
 
     return (test_database_conn, device_id, EXPECTED_COUNTS)
 
-
 @pytest.fixture
-def flask_test_client(test_database_with_conn_with_test_data):
+def flask_test_client(test_database_conn_with_test_data):
     """Provides a Flask test client with overridden database connection using a temporary file DB.
     Use this for all tests that do not require a browser
     """
     # Override the database connection function
+    logger.debug("flask_test_client; test_database_conn_with_test_data=%s",test_database_conn_with_test_data)
     flask_app.config['TESTING'] = True
     with flask_app.test_client() as test_client:
-        yield (test_database_with_conn_with_test_data[0],test_client)
+        yield test_client
 
 @pytest.fixture(scope='session', autouse=True)
 def reduce_websockets_logging():
     """Reduce websockets debug logging for tests."""
     logging.getLogger("websockets.client").setLevel(logging.INFO)
-
-
-def db_path(conn):
-    """Given a database connection, return the filename of the sqlite3 database"""
-    # Execute the PRAGMA command
-    cursor = conn.execute('PRAGMA database_list')
-
-    # Fetch the result (it's a list of tuples)
-    # Example tuple: (0, 'main', '/full/path/to/my_database.db')
-    database_list = cursor.fetchall()
-
-    # Isolate the filename for the 'main' database
-    for entry in database_list:
-        # entry[1] is the name ('main'), entry[2] is the filename/path
-        if entry[1] == 'main':
-            return entry[2]
-    raise FileNotFoundError("Did not find database name")

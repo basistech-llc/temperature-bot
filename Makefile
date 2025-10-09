@@ -4,6 +4,15 @@ REQ := .venv/pyvenv.cfg
 PYTHON := .venv/bin/python
 TEMPLATE_DIR := app/templates
 
+################################################################
+# Create the virtual environment and install both host requirements
+# and the lambda requirements for testing
+.venv/pyvenv.cfg:
+	@echo install venv for the development environment
+	echo $$PATH
+	poetry install
+
+################################################################
 .PHONY: etc/schema.sql
 etc/schema.sql:
 	echo ".schema"| sqlite3 $(DEV_DB) | grep -v 'Run Time: real' | grep -v 'CREATE TABLE sqlite_sequence' > etc/schema.sql
@@ -24,13 +33,6 @@ fetch-slg:
 tags:
 	etags */*.py
 
-################################################################
-# Create the virtual environment and install both host requirements
-# and the lambda requirements for testing
-.venv/pyvenv.cfg:
-	@echo install venv for the development environment
-	echo $$PATH
-	poetry install
 ################################################################
 
 ## Static Analysis
@@ -57,6 +59,7 @@ check-types: $(REQ)
 
 ## Dynamic Analysis
 pytest: $(REQ)
+	make pylint
 	AE200_SIMULATOR=1 $(PYTHON) -m pytest . -v --cov=. --cov-report=xml --cov-report=html --log-cli-level=DEBUG --log-file-level=DEBUG
 	@echo covreage report in htmlcov/
 test: pytest
