@@ -13,6 +13,12 @@ logger = logging.getLogger(__name__)
 
 def test_temperature_insert(test_database_conn_with_test_data):
     conn = test_database_conn_with_test_data[0]
+
+    # Clear out the devlog
+    c = conn.cursor()
+    c.execute("delete from devlog")
+    conn.commit()
+
     db.insert_devlog_entry(conn, device_name="devtest1", temp=20, logtime=100)
     db.insert_devlog_entry(conn, device_name="devtest1", temp=20, logtime=101) # extends first measurement by 1 second to 2 seconds
     db.insert_devlog_entry(conn, device_name="devtest1", temp=20, logtime=112) # extends first measurement by another 11 seconds to 13 seconds

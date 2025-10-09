@@ -22,13 +22,13 @@ make-dev-db:
 	sqlite3 $(DEV_DB) < etc/schema.sql
 	ls -l $(DEV_DB)
 
-local-dev: $(REQ)
-	FLASK_DEBUG=True $(PYTHON) run_local.py
-
-fetch-slg:
+fetch-dev-db:
 	rsync --verbose --delete --archive slg1.basistech.net:/var/db var/
 	echo 'select "devices",count(*) from devices;select "devlog",count(*) from devlog;select "changelog",count(*) from changelog; select "aqi",count(*) from aqi;' | sqlite3 var/db/temperature-bot.db
 	echo '.schema' | sqlite3 var/db/temperature-bot.db
+
+local-dev: $(REQ)
+	FLASK_DEBUG=True $(PYTHON) run_local.py
 
 tags:
 	etags */*.py

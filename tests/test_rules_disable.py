@@ -35,42 +35,31 @@ def test_rules_disable_functionality(test_database_conn_with_test_data) -> None:
 
     # Give the app time to start
     time.sleep(3)
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page()
+        helper = RulesTestHelper(page, os.environ['TEST_DB_NAME'])
 
-    try:
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            page = browser.new_page()
+        # Navigate to the rules page with run_rules=0 to skip rules execution
+        page.goto("http://127.0.0.1:5100/rules?run_rules=0")
+        helper.wait_for_rules_page_to_load()
 
-            helper = RulesTestHelper(page, os.environ['TEST_DB_NAME'])
+        # Test 1: Click "enable rules" button and verify database entry
+        logger.info("Testing enable rules button...")
+        helper.click_enable_rules_button()
 
-            # Navigate to the rules page with run_rules=0 to skip rules execution
-            page.goto("http://127.0.0.1:5100/rules?run_rules=0")
-            helper.wait_for_rules_page_to_load()
+        # Wait for page refresh and verify rules are enabled
+        helper.verify_rules_enabled()
 
-            # Test 1: Click "enable rules" button and verify database entry
-            logger.info("Testing enable rules button...")
-            helper.click_enable_rules_button()
+        # Check database shows rules are enabled
+        helper.check_database_rules_enabled()
 
-            # Wait for page refresh and verify rules are enabled
-            helper.verify_rules_enabled()
+        # Test 2: Click "disable for 1 hour" button and verify database entry
+        logger.info("Testing disable rules for 1 hour...")
+        helper.click_disable_rules_button(3600)  # 1 hour = 3600 seconds
 
-            # Check database shows rules are enabled
-            helper.check_database_rules_enabled()
-
-            # Test 2: Click "disable for 1 hour" button and verify database entry
-            logger.info("Testing disable rules for 1 hour...")
-            helper.click_disable_rules_button(3600)  # 1 hour = 3600 seconds
-
-            # Wait for page refresh and verify rules are disabled
-            # Should be disabled for at least 50 minutes
-            #time.sleep(1)       # this shouldn't be needed.
-            helper.verify_rules_disabled_until( 50 )
-
-            browser.close()
-
-    except Exception as e:
-        logger.error("Browser page error: %s",e)
-        raise
-    finally:
-        # Clean up
-        pass
+        # Wait for page refresh and verify rules are disabled
+        # Should be disabled for at least 50 minutes
+        time.sleep(0.5)
+        helper.verify_rules_disabled_until( 50 )
+        browser.close()

@@ -43,6 +43,14 @@ def db_path(conn):
 
 
 ################################################################
+## Reduce logging
+
+@pytest.fixture(scope='session', autouse=True)
+def reduce_websockets_logging():
+    """Reduce websockets debug logging for tests."""
+    logging.getLogger("websockets.client").setLevel(logging.INFO)
+
+################################################################
 ## Create and access test databsae
 
 
@@ -139,8 +147,3 @@ def flask_test_client(test_database_conn_with_test_data):
     flask_app.config['TESTING'] = True
     with flask_app.test_client() as test_client:
         yield test_client
-
-@pytest.fixture(scope='session', autouse=True)
-def reduce_websockets_logging():
-    """Reduce websockets debug logging for tests."""
-    logging.getLogger("websockets.client").setLevel(logging.INFO)

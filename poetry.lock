@@ -1703,6 +1703,21 @@ pytest = ">=8.3.3"
 testing = ["covdefaults (>=2.3)", "coverage (>=7.6.1)", "pytest-mock (>=3.14)"]
 
 [[package]]
+name = "pytest-faulthandler"
+version = "2.0.1"
+description = "py.test plugin that activates the fault handler module for tests (dummy package)"
+optional = false
+python-versions = "*"
+groups = ["dev"]
+files = [
+    {file = "pytest-faulthandler-2.0.1.tar.gz", hash = "sha256:ed72bbce87ac344da81eb7d882196a457d4a1026a3da4a57154dacd85cd71ae5"},
+    {file = "pytest_faulthandler-2.0.1-py2.py3-none-any.whl", hash = "sha256:236430ba962fd1c910d670922be55fe5b25ea9bc3fc6561a0cafbb8759e7504d"},
+]
+
+[package.dependencies]
+pytest = ">=5.0"
+
+[[package]]
 name = "python-dotenv"
 version = "1.1.1"
 description = "Read key-value pairs from a .env file and set them as environment variables"
@@ -2403,4 +2418,4 @@ dev = ["coverage", "djlint", "livereload", "mypy", "mypy", "playwright", "pylint
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.12,<4.0.0"
-content-hash = "7db0d6908e98fb58a4735e804478b26b27f69b987c4b91320a96f9679f625373"
+content-hash = "58ba6b9d31204a350337ede52fb888e71e3db8325b5191c391fe54c5d66f9d1a"

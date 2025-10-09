@@ -40,12 +40,13 @@ def test_logs_endpoint_with_start_and_end(flask_test_client): # noqa: F811
 def test_device_log_endpoint_with_start(flask_test_client): # noqa: F811
     """Test /device_log/{device_id} with start parameter"""
     # Create a test device
-    with sqlite3.connect(os.environ['TEST_DB_NAME']) as test_conn:
-        test_conn.row_factory = sqlite3.Row
-        cursor = test_conn.cursor()
-        cursor.execute("INSERT INTO devices (device_name) VALUES (?)", ("Test Device",))
-        device_id = cursor.lastrowid
-        test_conn.commit()
+    test_conn = sqlite3.connect(os.environ['TEST_DB_NAME'])
+    test_conn.row_factory = sqlite3.Row
+    cursor = test_conn.cursor()
+    cursor.execute("INSERT INTO devices (device_name) VALUES (?)", ("Test Device",))
+    device_id = cursor.lastrowid
+    test_conn.commit()
+    test_conn.close()
 
     start_time = int(time.time()) - 86400  # 24 hours ago
     response = flask_test_client.get(f"/device_log/{device_id}?start={start_time}")
@@ -57,12 +58,13 @@ def test_device_log_endpoint_with_end(flask_test_client): # noqa: F811
     """Test /device_log/{device_id} with end parameter"""
 
     # Create a test device
-    with sqlite3.connect(os.environ['TEST_DB_NAME']) as test_conn:
-        test_conn.row_factory = sqlite3.Row
-        cursor = test_conn.cursor()
-        cursor.execute("INSERT INTO devices (device_name) VALUES (?)", ("Test Device 2",))
-        device_id = cursor.lastrowid
-        test_conn.commit()
+    test_conn = sqlite3.connect(os.environ['TEST_DB_NAME'])
+    test_conn.row_factory = sqlite3.Row
+    cursor = test_conn.cursor()
+    cursor.execute("INSERT INTO devices (device_name) VALUES (?)", ("Test Device 2",))
+    device_id = cursor.lastrowid
+    test_conn.commit()
+    test_conn.close()
 
     end_time = int(time.time())
     response = flask_test_client.get(f"/device_log/{device_id}?end={end_time}")
@@ -73,12 +75,13 @@ def test_device_log_endpoint_with_end(flask_test_client): # noqa: F811
 def test_device_log_endpoint_with_start_and_end(flask_test_client): # noqa: F811
     """Test /device_log/{device_id} with both start and end parameters"""
     # Create a test device
-    with sqlite3.connect(os.environ['TEST_DB_NAME']) as test_conn:
-        test_conn.row_factory = sqlite3.Row
-        cursor = test_conn.cursor()
-        cursor.execute("INSERT INTO devices (device_name) VALUES (?)", ("Test Device 3",))
-        device_id = cursor.lastrowid
-        test_conn.commit()
+    test_conn = sqlite3.connect(os.environ['TEST_DB_NAME'])
+    test_conn.row_factory = sqlite3.Row
+    cursor = test_conn.cursor()
+    cursor.execute("INSERT INTO devices (device_name) VALUES (?)", ("Test Device 3",))
+    device_id = cursor.lastrowid
+    test_conn.commit()
+    test_conn.close()
 
     start_time = int(time.time()) - 86400  # 24 hours ago
     end_time = int(time.time())
@@ -105,9 +108,9 @@ def test_temporal_links_in_template(flask_test_client):  # noqa: F811
     assert f"/device_log/{device_id}\" target=\"_blank\">all" in content
 
 
-def test_temperature_api_with_device_id(flask_test_client, device_in_db): # noqa: F811
+def test_temperature_api_with_device_id(flask_test_client, test_database_conn_with_test_data): # noqa: F811
     """Test /api/v1/temperature with device_id parameter"""
-    device_id = device_in_db
+    device_id = test_database_conn_with_test_data[1]
     response = flask_test_client.get(f"/api/v1/temperature?device_id={device_id}")
     assert response.status_code == 200
     data = response.json
@@ -115,9 +118,9 @@ def test_temperature_api_with_device_id(flask_test_client, device_in_db): # noqa
     # Should return data for the specific device
 
 
-def test_temperature_api_with_start_and_end(flask_test_client, device_in_db): # noqa: F811
+def test_temperature_api_with_start_and_end(flask_test_client, test_database_conn_with_test_data): # noqa: F811
     """Test /api/v1/temperature with start and end parameters"""
-    device_id = device_in_db
+    device_id = test_database_conn_with_test_data[1]
     start_time = int(time.time()) - 86400  # 24 hours ago
     end_time = int(time.time())
     response = flask_test_client.get(f"/api/v1/temperature?device_id={device_id}&start={start_time}&end={end_time}")
@@ -126,9 +129,9 @@ def test_temperature_api_with_start_and_end(flask_test_client, device_in_db): # 
     assert "series" in data
 
 
-def test_chart_page_with_device_id(flask_test_client, device_in_db): # noqa: F811
+def test_chart_page_with_device_id(flask_test_client, test_database_conn_with_test_data): # noqa: F811
     """Test /chart page with device_id parameter"""
-    device_id = device_in_db
+    device_id = test_database_conn_with_test_data[1]
     response = flask_test_client.get(f"/chart?device_id={device_id}")
     assert response.status_code == 200
     content = response.data.decode('utf-8')
