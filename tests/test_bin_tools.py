@@ -24,7 +24,8 @@ class TestBinTools:
     @pytest.fixture
     def temp_db(self,test_database_conn_with_test_data):
         """return the database path"""
-        yield db_path(test_database_conn_with_test_data)
+        test_database_conn = test_database_conn_with_test_data[0]
+        yield db_path(test_database_conn)
 
     @pytest.fixture
     def bin_dir(self):
