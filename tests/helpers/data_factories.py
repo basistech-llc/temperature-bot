@@ -8,7 +8,6 @@ from app import db
 
 class TestDataFactory:
     """Factory for creating consistent test data."""
-
     @staticmethod
     def create_broadway_south_device(conn, ae200_device_id: int = 10) -> int:
         """Create Broadway Test device for testing."""
@@ -20,7 +19,8 @@ class TestDataFactory:
 
     @staticmethod
     def create_device_with_status(conn, device_name: str,
-                                status_dict: Dict[str, Any], logtime: Optional[int] = None) -> int:
+                                  status_dict: Dict[str, Any],
+                                  logtime: Optional[int] = None) -> int:
         """Create a device with initial status data."""
         if logtime is None:
             logtime = int(time.time())

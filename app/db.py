@@ -14,7 +14,8 @@ import os
 
 from pydantic import BaseModel
 
-from app.paths import DB_PATH
+from .paths import DB_PATH
+from .constants import TEST_DB_NAME
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +38,7 @@ def _connect_db(db_name):
     conn.row_factory = sqlite3.Row      # returns rows as dicts
     conn.execute("PRAGMA foreign_keys=ON;")
     # Use DELETE journal mode for testing to avoid WAL locking issues
-    if 'TEST_DB_NAME' in os.environ:
+    if TEST_DB_NAME in os.environ:
         conn.execute("PRAGMA journal_mode=DELETE;")
     else:
         conn.execute("PRAGMA journal_mode=WAL;")

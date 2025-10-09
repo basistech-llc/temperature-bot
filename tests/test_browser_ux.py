@@ -8,28 +8,19 @@ import logging
 import threading
 from unittest.mock import patch
 
-import pytest
 from playwright.sync_api import sync_playwright, expect
 
-from conftest import client, skip_on_github  # noqa: F401  # pylint: disable=unused-import
+from conftest import test_database_conn_with_test_data, skip_on_github  # noqa: F401,F811  # pylint: disable=unused-import
 from helpers.browser_helpers import BrowserTestHelper, TemperatureTestHelper
-from helpers.database_helpers import DatabaseTestHelper
 from helpers.mock_helpers import MockHelper
 from helpers.data_factories import DeviceTestData, TestDataFactory
 from app import db
 from app import ae200
 from app.main import app
 
-
 logger = logging.getLogger(__name__)
 
 TEST_TEMP=32
-
-# Disable websockets debug
-@pytest.fixture(autouse=True)
-def reduce_websockets_logging():
-    logging.getLogger("websockets.client").setLevel(logging.INFO)
-
 
 # Set this flag to True to enable AQI testing, False to disable
 TEST_AQI = False
@@ -39,10 +30,9 @@ TEST_AQI = False
 @patch("app.weather.get_weather_data")
 @patch("app.airquality.get_aqi")
 def test_browser_fan_speed_controls(
-    mock_get_airquality,
-    mock_get_weather_data,
-    client     # noqa: F811 # pylint: disable=unused-argument
-):
+        mock_get_airquality,
+        mock_get_weather_data,
+        test_database_conn_with_test_data ): # noqa: F811
     """
     End-to-end test that:
     1. Clicks fan speed 0 for Broadway Test and verifies database and UI updates
@@ -51,32 +41,30 @@ def test_browser_fan_speed_controls(
     """
 
     # Set up test database with Broadway Test device
-    test_db_name = os.environ['TEST_DB_NAME']
     BROADWAY_SOUTH = 10
 
     # Use new database helper
-    db_helper = DatabaseTestHelper(test_db_name)
-    with db_helper.get_connection() as test_conn:
-        device_id = TestDataFactory.create_broadway_south_device(test_conn, BROADWAY_SOUTH)
+    test_conn = test_database_conn_with_test_data[0]
+    device_id = TestDataFactory.create_broadway_south_device(test_conn, BROADWAY_SOUTH)
 
-        # Add initial devlog entry for Broadway Test so it appears in status API
-        current_time = int(time.time())
-        initial_status = DeviceTestData.get_initial_status()
-        db.insert_devlog_entry(
-            test_conn,
-            device_id=device_id,
-            temp=24.0,
-            statusdict=initial_status,
-            logtime=current_time,
-            force=True
-        )
-        # Add a second device without speed control
-        TestDataFactory.create_device_with_status(
-            test_conn,
-            "No Speed Device",
-            DeviceTestData.get_no_speed_status(),
-            current_time
-        )
+    # Add initial devlog entry for Broadway Test so it appears in status API
+    current_time = int(time.time())
+    initial_status = DeviceTestData.get_initial_status()
+    db.insert_devlog_entry(
+        test_conn,
+        device_id=device_id,
+        temp=24.0,
+        statusdict=initial_status,
+        logtime=current_time,
+        force=True
+    )
+    # Add a second device without speed control
+    TestDataFactory.create_device_with_status(
+        test_conn,
+        "No Speed Device",
+        DeviceTestData.get_no_speed_status(),
+        current_time
+    )
 
     # Set up weather mocks
     MockHelper.setup_weather_mocks(mock_get_airquality, mock_get_weather_data, 45, TEST_TEMP)
@@ -102,7 +90,7 @@ def test_browser_fan_speed_controls(
             page.goto('http://127.0.0.1:5001/')
 
             # Create helper for browser operations
-            helper = BrowserTestHelper(page, test_db_name)
+            helper = BrowserTestHelper(page, os.environ['TEST_DB_NAME'])
 
             # Wait for the grid to load
             helper.wait_for_grid_to_load()
@@ -208,7 +196,6 @@ def test_browser_fan_speed_controls(
         # Clean up - the server thread will be terminated when the process ends
         pass
 
-
 # pylint: disable=unused-argument
 @skip_on_github
 @patch("app.weather.get_weather_data")
@@ -216,29 +203,27 @@ def test_browser_fan_speed_controls(
 def test_browser_page_loads_correctly(
     mock_get_airquality,
     mock_get_weather_data,
-    client  # noqa: F811
-):
+    test_database_conn_with_test_data):  # noqa: F811
+
     """Test that the browser page loads correctly with all elements"""
 
     # Set up test database using new helpers
-    test_db_name = os.environ['TEST_DB_NAME']
     BROADWAY_SOUTH = 10
 
-    db_helper = DatabaseTestHelper(test_db_name)
-    with db_helper.get_connection() as test_conn:
-        device_id = TestDataFactory.create_broadway_south_device(test_conn, BROADWAY_SOUTH)
+    test_conn = test_database_conn_with_test_data[0]
+    device_id = TestDataFactory.create_broadway_south_device(test_conn, BROADWAY_SOUTH)
 
-        # Add initial devlog entry for Broadway Test so it appears in status API
-        current_time = int(time.time())
-        initial_status = DeviceTestData.get_initial_status()
-        db.insert_devlog_entry(
-            test_conn,
-            device_id=device_id,
-            temp=24.0,
-            statusdict=initial_status,
-            logtime=current_time,
-            force=True
-        )
+    # Add initial devlog entry for Broadway Test so it appears in status API
+    current_time = int(time.time())
+    initial_status = DeviceTestData.get_initial_status()
+    db.insert_devlog_entry(
+        test_conn,
+        device_id=device_id,
+        temp=24.0,
+        statusdict=initial_status,
+        logtime=current_time,
+        force=True
+    )
 
     # Set up weather mocks
     MockHelper.setup_weather_mocks(mock_get_airquality, mock_get_weather_data, 45, TEST_TEMP)
@@ -276,7 +261,7 @@ def test_browser_page_loads_correctly(
             expect(broadway_row).to_be_visible()
 
             # Verify fan speed radio buttons exist for Broadway Test
-            helper = BrowserTestHelper(page, test_db_name)
+            helper = BrowserTestHelper(page, os.environ['TEST_DB_NAME'])
             device_id = helper.get_broadway_south_device_id()
 
             for speed in [1, 2, 3, 4]:
@@ -318,8 +303,7 @@ def test_browser_page_loads_correctly(
 def test_browser_temperature_display(
     mock_get_airquality,
     mock_get_weather_data,
-    client  # noqa: F811
-):
+    test_database_conn_with_test_data):  # noqa: F811
     """
     Comprehensive test for temperature display functionality:
     1. Tests that temporal buttons (day, week, month) work correctly
@@ -327,14 +311,8 @@ def test_browser_temperature_display(
     3. Tests with temporal test data (1 hour, 26 hours, 200 hours, 2000 hours ago)
     """
 
-    # Set up test database with temporal data using new helpers
-    test_db_name = os.environ['TEST_DB_NAME']
-
-    db_helper = DatabaseTestHelper(test_db_name)
-    with db_helper.get_connection() as test_conn:
-        # Create test device with temporal data
-        from tests.conftest import insert_temporal_test_data  # pylint: disable=import-outside-toplevel
-        device_id, expected_counts = insert_temporal_test_data(test_conn, "Temporal Test Device")
+    device_id       = test_database_conn_with_test_data[1]
+    expected_counts = test_database_conn_with_test_data[2]
 
     # Mock weather and AQI data using new mock helper
     MockHelper.setup_weather_mocks(mock_get_airquality, mock_get_weather_data, 45, TEST_TEMP)
@@ -359,7 +337,7 @@ def test_browser_temperature_display(
             page.goto(f'http://127.0.0.1:5003/chart?device_id={device_id}')
 
             # Wait for the chart to load
-            helper = TemperatureTestHelper(page, test_db_name)
+            helper = TemperatureTestHelper(page, os.environ['TEST_DB_NAME'])
             helper.wait_for_chart_to_load()
 
             # Test initial load (should show all records)
@@ -410,16 +388,16 @@ def test_browser_temperature_display(
 
 
 @skip_on_github
-def test_chart_page_no_dom_errors():
+def test_chart_page_no_dom_errors(test_database_conn_with_test_data): # noqa: F811
     """
     This test requires the Flask server to be running at http://localhost:8000.
     It checks for DOM errors (like NotFoundError) in the chart page JavaScript.
     """
     # Start the Flask app in a separate thread
 
+    logger.info("running with test database and test client %s",test_database_conn_with_test_data)
     def run_app():
         app.run(host='127.0.0.1', port=5004, debug=False, use_reloader=False)
-
 
     server_thread = threading.Thread(target=run_app, daemon=True)
     server_thread.start()

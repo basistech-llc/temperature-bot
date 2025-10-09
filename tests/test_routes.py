@@ -3,8 +3,8 @@
 Simple test to check if Flask routes are working
 """
 # pylint: disable=unused-import
-from conftest import client  # noqa: F401
+from conftest import flask_test_client  # noqa: F401
 
-def test_status_endpoint(client): # noqa: F811
-    response = client.get("/api/v1/status")
+def test_status_endpoint(flask_test_client): # noqa: F811
+    response = flask_test_client.get("/api/v1/status")
     assert response.status_code == 200

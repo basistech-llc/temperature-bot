@@ -1,6 +1,7 @@
 """
 Database test helpers and utilities.
 """
+import os
 import sqlite3
 import logging
 from typing import Optional
@@ -12,16 +13,11 @@ logger = logging.getLogger(__name__)
 class DatabaseTestHelper:
     """Helper class for database testing operations."""
 
-    def __init__(self, test_db_name: str):
-        self.test_db_name = test_db_name
-
     def get_connection(self) -> sqlite3.Connection:
         """Get a database connection."""
-        conn = sqlite3.connect(self.test_db_name)
+        conn = sqlite3.connect( os.environ['TEST_DB_NAME'] )
         conn.row_factory = sqlite3.Row
         return conn
-
-
 
     def verify_changelog_entry(self, device_id: int, expected_value: str, expected_agent: str = "web"):
         """Verify the most recent changelog entry for a device."""

@@ -3,14 +3,11 @@ test aqi endpoint
 """
 import logging
 from unittest.mock import patch
-import os
-import pytest
+from conftest import skip_on_github
 
 from app import airquality
 
 logger = logging.getLogger(__name__)
-
-skip_on_github = pytest.mark.skipif(os.getenv("GITHUB_ACTIONS") == "true", reason="Disabled in GitHub Actions")
 
 @skip_on_github
 @patch("app.airquality.get_aqi")

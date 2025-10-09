@@ -2,11 +2,10 @@
 test_chart_functionality.py
 """
 import json
-from conftest import client  # noqa: F401 # pylint: disable=unused-import
 
-def test_status_api_endpoint_for_devices(client):  # noqa: F811 # pylint: disable=unused-argument
+def test_status_api_endpoint_for_devices(flask_test_client):  # noqa: F811 # pylint: disable=unused-argument
     """Test that the /api/v1/status endpoint returns all devices"""
-    response = client.get('/api/v1/status')
+    response = flask_test_client.get('/api/v1/status')
     assert response.status_code == 200
 
     data = json.loads(response.data)
@@ -20,9 +19,9 @@ def test_status_api_endpoint_for_devices(client):  # noqa: F811 # pylint: disabl
         assert isinstance(device['device_id'], int)
         assert isinstance(device['device_name'], str)
 
-def test_chart_page_with_device_dropdown(client):  # noqa: F811 # pylint: disable=unused-argument
+def test_chart_page_with_device_dropdown(flask_test_client):  # noqa: F811 # pylint: disable=unused-argument
     """Test that the chart page loads with device dropdown"""
-    response = client.get('/chart')
+    response = flask_test_client.get('/chart')
     assert response.status_code == 200
 
     # Check that the dropdown HTML is present
@@ -31,9 +30,9 @@ def test_chart_page_with_device_dropdown(client):  # noqa: F811 # pylint: disabl
     assert 'addDeviceSelect' in content
     assert 'Select a device...' in content
 
-def test_chart_page_with_specific_devices(client): # noqa: F811 # pylint: disable=unused-argument
+def test_chart_page_with_specific_devices(flask_test_client): # noqa: F811 # pylint: disable=unused-argument
     """Test that the chart page loads with specific devices"""
-    response = client.get('/chart?device_ids=1,2')
+    response = flask_test_client.get('/chart?device_ids=1,2')
     assert response.status_code == 200
 
     content = response.data.decode('utf-8')
@@ -41,9 +40,9 @@ def test_chart_page_with_specific_devices(client): # noqa: F811 # pylint: disabl
     # Should contain the device IDs in the JavaScript
     assert '[1, 2]' in content or '1,2' in content
 
-def test_temperature_api_with_multiple_devices(client): # noqa: F811 # pylint: disable=unused-argument
+def test_temperature_api_with_multiple_devices(flask_test_client): # noqa: F811 # pylint: disable=unused-argument
     """Test that the temperature API works with multiple device IDs"""
-    response = client.get('/api/v1/temperature?device_ids=1,2')
+    response = flask_test_client.get('/api/v1/temperature?device_ids=1,2')
     assert response.status_code == 200
 
     data = json.loads(response.data)

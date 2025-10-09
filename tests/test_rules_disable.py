@@ -6,40 +6,24 @@ import os
 import time
 import logging
 import threading
-from typing import Any
 
-import pytest
 from playwright.sync_api import sync_playwright
 
-from conftest import client, skip_on_github, insert_temporal_test_data  # noqa: F401  # pylint: disable=unused-import
+from conftest import skip_on_github  # noqa: F401  # pylint: disable=unused-import
 from helpers.browser_helpers import RulesTestHelper
-from helpers.database_helpers import DatabaseTestHelper
 
 from app.main import app
 
 
 logger = logging.getLogger(__name__)
 
-
-# Disable websockets debug
-@pytest.fixture(autouse=True)
-def reduce_websockets_logging():
-    logging.getLogger("websockets.client").setLevel(logging.INFO)
-
-
 @skip_on_github
-def test_rules_disable_functionality(client: Any) -> None:  # noqa: F811 # pylint: disable=unused-argument
+def test_rules_disable_functionality(test_database_conn_with_test_data) -> None:   # noqa: F811 # pylint: disable=unused-argument
     """
     Test the complete rules disable/enable functionality through the browser interface.
     """
 
-    # Create test database using new helpers
-    test_db_name = os.environ['TEST_DB_NAME']
-
     # Create database connection and set up test data using new helpers
-    db_helper = DatabaseTestHelper(test_db_name)
-    with db_helper.get_connection() as conn:
-        insert_temporal_test_data(conn)
 
     def run_app():
         """Run the Flask app in a separate thread"""
@@ -57,7 +41,7 @@ def test_rules_disable_functionality(client: Any) -> None:  # noqa: F811 # pylin
             browser = p.chromium.launch(headless=True)
             page = browser.new_page()
 
-            helper = RulesTestHelper(page, test_db_name)
+            helper = RulesTestHelper(page, os.environ['TEST_DB_NAME'])
 
             # Navigate to the rules page with run_rules=0 to skip rules execution
             page.goto("http://127.0.0.1:5100/rules?run_rules=0")

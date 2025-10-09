@@ -101,6 +101,28 @@ module = [
 ]
 ignore_missing_imports = true
 
+[tool.pyright]
+pythonVersion = "3.12"
+venvPath = "./"
+venv = ".venv"
+include = ["."]
+exclude = [
+  "**/build",
+  "**/.aws-sam",
+  "**/.mypy_cache",
+  "**/.pytest_cache",
+  "**/__pycache__",
+  "**/conftest.py"
+]
+typeCheckingMode = "basic"
+reportMissingTypeStubs = "warning"
+
+[[tool.pyright.executionEnvironments]]
+root = "."
+
+
+
+
 [tool.pytest.ini_options]
 norecursedirs = ["lib/ctools"]
 env = [

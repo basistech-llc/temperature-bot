@@ -20,7 +20,6 @@ device_service = DeviceService()
 weather_service = WeatherService()
 log_service = LogService()
 
-
 @api_v1.route("/version")
 def get_version_json():
     return jsonify({"version": __version__})
