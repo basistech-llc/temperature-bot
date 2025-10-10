@@ -75,7 +75,7 @@ jobs:
 
       - name: Lint
         run: |
-          make lint
+          make pylint
 
       - name: Test with coverage
         run: |

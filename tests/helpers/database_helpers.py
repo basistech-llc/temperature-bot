@@ -5,8 +5,8 @@ import os
 import sqlite3
 import logging
 from typing import Optional
-from .test_utils import verify_changelog_entry, verify_devlog_entry
 import pytest
+from .test_utils import verify_changelog_entry, verify_devlog_entry
 
 logger = logging.getLogger(__name__)
 
