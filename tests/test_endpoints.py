@@ -16,7 +16,7 @@ from helpers.mock_helpers import MockHelper
 
 from app import ae200
 from app import db
-from app.constants import __version__
+from app.constants import __version__,DB_PATH,TEST_DB_NAME
 from app.services.device_service import DeviceService
 
 logger = logging.getLogger(__name__)
@@ -141,12 +141,12 @@ def test_status_endpoint_schema_mismatch_detection():
         conn.close()
 
         # Set up environment to use this database
-        original_db_path = os.environ.get('DB_PATH')
-        original_test_db_name = os.environ.get('TEST_DB_NAME')
+        original_db_path = os.environ.get(DB_PATH)
+        original_test_db_name = os.environ.get(TEST_DB_NAME)
 
         try:
-            os.environ['DB_PATH'] = db_path
-            os.environ['TEST_DB_NAME'] = db_path
+            os.environ[DB_PATH] = db_path
+            os.environ[TEST_DB_NAME] = db_path
 
             # This should fail with the same error we saw in production
             device_service = DeviceService()
@@ -162,14 +162,14 @@ def test_status_endpoint_schema_mismatch_detection():
         finally:
             # Restore environment
             if original_db_path is not None:
-                os.environ['DB_PATH'] = original_db_path
-            elif 'DB_PATH' in os.environ:
-                del os.environ['DB_PATH']
+                os.environ[DB_PATH] = original_db_path
+            elif DB_PATH in os.environ:
+                del os.environ[DB_PATH]
 
             if original_test_db_name is not None:
-                os.environ['TEST_DB_NAME'] = original_test_db_name
+                os.environ[TEST_DB_NAME] = original_test_db_name
             elif 'TEST_DB_NAME' in os.environ:
-                del os.environ['TEST_DB_NAME']
+                del os.environ[TEST_DB_NAME]
 
     finally:
         # Clean up temporary file

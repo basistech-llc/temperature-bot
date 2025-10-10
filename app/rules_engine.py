@@ -38,10 +38,10 @@ def get_time_dict(when=None):
             'AM':tm.tm_hour<12,
             'PM':tm.tm_hour>=12 }
 
-def all_rules_disabled_until(conn):
+def all_rules_disabled_until(conn) -> int:
     until = db.device_rules_disabled_until(conn, rules_id(conn))
     logging.info("all rules disabled until %s",until)
-    return until
+    return until if until else 0
 
 def disable_all_rules(conn, seconds:int):
     """Enter a database engtry to disable the rules for a period of seconds.
@@ -53,6 +53,13 @@ def disable_all_rules(conn, seconds:int):
 def get_rules():
     with open( join(ROOT_DIR,'bin','rules.py'), 'r') as f:
         return f.read()
+
+def prune_rules(conn):
+    now = int(time.time())
+    c = conn.cursor()
+    c.execute("update devices set disabled_until=0 where disabled_until>0 and disabled_until<?",
+              (now,))
+    conn.commit()
 
 def set_body_fan_speed(conn, body: SpeedControl, ipaddr, agent):
     """

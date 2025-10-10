@@ -36,8 +36,7 @@ fetch-dev-db:
 	echo '.schema' | sqlite3 var/db/temperature-bot.db
 
 local-dev: $(REQ)
-	FLASK_DEBUG=True $(PYTHON) run_local.py
-
+	FLASK_DEBUG=True DB_PATH=$(DEV_DB) $(PYTHON) run_local.py
 tags:
 	etags */*.py
 
@@ -99,7 +98,7 @@ install-ubuntu:
 
 install-macos:
 	@echo Use pipx for the latest poetry
-	python3 -m pip install -U pip pipx
+	which pipx >/dev/null || python3 -m pip install -U pip pipx
 	make install-either
 
 install-browser-sync:

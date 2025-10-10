@@ -24,6 +24,7 @@ from app import db
 from app import hubitat
 from app import rules_engine
 
+
 import lib.ctools.lock as clock
 import lib.ctools.clogging as clogging
 
@@ -236,7 +237,7 @@ def setup_parser():
     parser.add_argument("--report", help="report on the database", action='store_true')
     parser.add_argument("--syslog", help="log to syslog", action='store_true')
     parser.add_argument("--daily", help='Run the daily cleanup', action='store_true')
-    parser.add_argument("--rules", choices=["test", "commit"], help='Just run the rules engine')
+    parser.add_argument("--rules", choices=["test", "run", "prune"], help='Just run the rules engine')
     parser.add_argument("--aqi", help='Save AQI to database', action='store_true')
     clogging.add_argument(parser)
     return parser
@@ -258,17 +259,22 @@ def main():
     elif args.daily:
         daily_cleanup(conn, datetime.datetime.now())
     elif args.rules:
-        if args.rules=='test':
-            print(rules_results(conn))
-        else:
-            run_rules(conn)
+        match (args.rules):
+            case ("test"):
+                print(rules_results(conn))
+            case ("prune"):
+                rules_engine.prune_rules(conn)
+            case ("run"):
+                rules_engine.run_rules(conn)
+            case (opt):
+                raise RuntimeError(f"Unknown rules option: {opt}")
     else:
         # Run everything
         clock.lock_script()
         update_from_ae200(conn)
         update_from_hubitat(conn)
         rules_engine.prune_rules(conn)
-        if all_rules_disabled_until(conn) >= time.time():
+        if rules_engine.all_rules_disabled_until(conn) >= time.time():
             logger.info("all rules disabled")
         else:
             run_rules(conn)

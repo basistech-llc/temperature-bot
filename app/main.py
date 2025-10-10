@@ -18,16 +18,18 @@ LOGGING_CONFIG = "%(asctime)s  %(filename)s:%(lineno)d %(levelname)s: %(message)
 LOG_LEVEL = os.getenv("LOG_LEVEL", DEFAULT_LOG_LEVEL).upper()
 LOG_LEVEL = "DEBUG"
 
-
 def fix_boto_log_level():
     """Do not run boto loggers at debug level"""
     for name in logging.root.manager.loggerDict:  # pylint: disable=no-member
         if name.startswith("boto"):
             logging.getLogger(name).setLevel(logging.INFO)
 
-
 def create_app():
     """Create and configure the Flask application"""
+
+
+
+
     # https://flask.palletsprojects.com/en/stable/config/
     app = Flask(__name__)
     app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1)
@@ -56,7 +58,6 @@ def create_app():
         return jsonify({"error": e.description}), e.code
 
     return app
-
 
 # Create the app instance
 app = create_app()

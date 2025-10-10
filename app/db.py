@@ -11,11 +11,11 @@ import logging
 import json
 import math
 import os
+import sys
 
 from pydantic import BaseModel
 
-from .paths import DB_PATH
-from .constants import TEST_DB_NAME
+from .constants import DB_PATH,TEST_DB_NAME
 
 logger = logging.getLogger(__name__)
 
@@ -32,9 +32,10 @@ class DriveControl(BaseModel):
     device_id: int
     drive: int
 
-def _connect_db(db_name):
+def _connect_db(db_path):
     """Establishes a connection to the SQLite database."""
-    conn = sqlite3.connect(db_name)
+    logger.debug("_connect_db(%s)",db_path)
+    conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row      # returns rows as dicts
     conn.execute("PRAGMA foreign_keys=ON;")
     # Use DELETE journal mode for testing to avoid WAL locking issues
@@ -53,12 +54,17 @@ def get_db_connection():
     try:
         # Use test database if in testing environment
         if 'TEST_DB_NAME' in os.environ:
-            db_path = os.environ['TEST_DB_NAME']
+            db_path = os.environ[TEST_DB_NAME]
         else:
-            db_path = str(DB_PATH)
-        logger.debug("db_path=%s",db_path)
+            db_path = os.environ[DB_PATH]
         conn = _connect_db(db_path)
         return conn
+    except KeyError as e:
+        logger.exception("KeyError: %s",e)
+        print("*****************************")
+        print("*** Please define DB_PATH *** ",file=sys.stderr)
+        print("*****************************")
+        raise
     except sqlite3.Error as e:
         logger.exception("Database connection error: %s", e)
         raise
