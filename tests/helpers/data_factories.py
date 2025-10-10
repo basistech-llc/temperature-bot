@@ -8,11 +8,10 @@ from app import db
 
 class TestDataFactory:
     """Factory for creating consistent test data."""
-
     @staticmethod
     def create_broadway_south_device(conn, ae200_device_id: int = 10) -> int:
-        """Create Broadway South device for testing."""
-        device_id = db.get_or_create_device_id(conn, "Broadway South")
+        """Create Broadway Test device for testing."""
+        device_id = db.get_or_create_device_id(conn, "Broadway Test")
         c = conn.cursor()
         c.execute("UPDATE devices set ae200_device_id=? where device_id=?", (ae200_device_id, device_id))
         conn.commit()
@@ -20,7 +19,8 @@ class TestDataFactory:
 
     @staticmethod
     def create_device_with_status(conn, device_name: str,
-                                status_dict: Dict[str, Any], logtime: Optional[int] = None) -> int:
+                                  status_dict: Dict[str, Any],
+                                  logtime: Optional[int] = None) -> int:
         """Create a device with initial status data."""
         if logtime is None:
             logtime = int(time.time())
@@ -51,7 +51,7 @@ class TestDataFactory:
 
     @staticmethod
     def create_broadway_south_initial_status() -> Dict[str, Any]:
-        """Create initial status data for Broadway South device."""
+        """Create initial status data for Broadway Test device."""
         return {
             "Drive": "ON",
             "FanSpeed": "LOW",
@@ -86,7 +86,7 @@ class DeviceTestData:
 
     @staticmethod
     def get_initial_status() -> Dict[str, Any]:
-        """Get initial status for Broadway South."""
+        """Get initial status for Broadway Test."""
         return {
             "Drive": "ON",
             "FanSpeed": "LOW",

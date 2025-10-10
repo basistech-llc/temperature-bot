@@ -20,7 +20,6 @@ device_service = DeviceService()
 weather_service = WeatherService()
 log_service = LogService()
 
-
 @api_v1.route("/version")
 def get_version_json():
     return jsonify({"version": __version__})
@@ -99,5 +98,5 @@ def disable_rules(conn):
     if seconds is None:
         return jsonify({"error": "seconds parameter is required"}), 400
 
-    rules_engine.disable_rules(conn, seconds)
+    rules_engine.disable_all_rules(conn, seconds)
     return jsonify({"status": "success", "seconds": seconds})

@@ -12,13 +12,11 @@
   <div class="pure-u-2-1">
     <h2>Device Variables</h2>
     <table>
-      {% for key, value in devices.items() %}
-      {% if key != "AQI" %}
-      <tr><th>{{ key }} </th><td> {{value}}</td></tr>
-      {% endif %}
+      <tr><th> Device ID</th><td> Device Name</td></tr>
+      {% for item in devices %}
+      <tr><th>{{ item.device_id }} </th><td> {{ item.device_name }}</td></tr>
       {% endfor %}
-      </table>
-    </ul>
+    </table>
   </div>
   <div class="pure-u-2-1 left-gutter">
     <h2>Time Variables (right now)</h2>
@@ -28,7 +26,7 @@
       {% endfor %}
     </table>
   </div>
-</div>
+</div>d
 
 <div class="pure-g" >
   <div class="pure-u-1">

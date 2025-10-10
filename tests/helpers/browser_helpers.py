@@ -11,7 +11,6 @@ from tests.helpers.test_utils import verify_changelog_entry, verify_devlog_entry
 
 logger = logging.getLogger(__name__)
 
-
 class BrowserTestHelper:
     """Helper class for browser testing operations"""
 
@@ -27,13 +26,13 @@ class BrowserTestHelper:
         self.page.wait_for_selector('tr:has(td)', timeout=10000)
 
     def find_broadway_south_row(self):
-        """Find the Broadway South row in the table"""
-        # Look for a row containing "Broadway South"
-        return self.page.locator('tr:has-text("Broadway South")')
+        """Find the Broadway Test row in the table"""
+        # Look for a row containing "Broadway Test"
+        return self.page.locator('tr:has-text("Broadway Test")')
 
     def get_fan_speed_radio(self, speed: int):
-        """Get the radio button for a specific fan speed for Broadway South"""
-        # Find the Broadway South row and get the radio button for the specified speed
+        """Get the radio button for a specific fan speed for Broadway Test"""
+        # Find the Broadway Test row and get the radio button for the specified speed
         row = self.find_broadway_south_row()
         logger.debug("row=%s", row)
         assert row is not None
@@ -43,15 +42,16 @@ class BrowserTestHelper:
         return self.page.locator(f'#radio-{device_id}-{speed}')
 
     def get_broadway_south_device_id(self) -> int:
-        """Get the device ID for Broadway South from the database"""
+        """Get the device ID for Broadway Test from the database"""
 
-        with sqlite3.connect(self.test_db_name) as conn:
-            conn.row_factory = sqlite3.Row
-            device_id = db.get_or_create_device_id(conn, "Broadway South")
-            return device_id
+        conn = sqlite3.connect(self.test_db_name)
+        conn.row_factory = sqlite3.Row
+        device_id = db.get_or_create_device_id(conn, "Broadway Test")
+        conn.close()
+        return device_id
 
     def click_fan_speed(self, speed: int):
-        """Click on a fan speed radio button for Broadway South"""
+        """Click on a fan speed radio button for Broadway Test"""
         radio = self.get_fan_speed_radio(speed)
         radio.click()
 
@@ -70,10 +70,11 @@ class BrowserTestHelper:
 
         device_id = self.get_broadway_south_device_id()
 
-        with sqlite3.connect(self.test_db_name) as conn:
-            conn.row_factory = sqlite3.Row
-            verify_changelog_entry(conn, device_id, str(expected_fan_speed), 'web')
-            verify_devlog_entry(conn, device_id, expected_fan_speed)
+        conn = sqlite3.connect(self.test_db_name)
+        conn.row_factory = sqlite3.Row
+        verify_changelog_entry(conn, device_id, str(expected_fan_speed), 'web')
+        verify_devlog_entry(conn, device_id, expected_fan_speed)
+        conn.close()
 
 
 class TemperatureTestHelper:
@@ -164,25 +165,27 @@ class RulesTestHelper:
             raise AssertionError("Expected text 'Rules disabled until' not found. Page dumped to debug_dump.html") from e
 
         # Check the database to verify rules are actually disabled
-        with sqlite3.connect(self.test_db_name) as conn:
-            conn.row_factory = sqlite3.Row
-            disabled_until = rules_engine.rules_disabled_until(conn)
-            logger.info("disabled_until=%s", disabled_until)
-            assert disabled_until != 0
+        conn = sqlite3.connect(self.test_db_name)
+        conn.row_factory = sqlite3.Row
+        disabled_until = rules_engine.all_rules_disabled_until(conn)
+        logger.info("disabled_until=%s", disabled_until)
+        assert disabled_until != 0
 
-            current_time = time.time()
-            min_expected_time = current_time + (expected_minutes * 60)
+        current_time = time.time()
+        min_expected_time = current_time + (expected_minutes * 60)
 
-            logger.info("Current time: %s", current_time)
-            logger.info("Disabled until: %s", disabled_until)
-            logger.info("Min expected time: %s", min_expected_time)
+        logger.info("Current time: %s", current_time)
+        logger.info("Disabled until: %s", disabled_until)
+        logger.info("Min expected time: %s", min_expected_time)
 
-            assert disabled_until >= min_expected_time, f"Rules should be disabled until at least {min_expected_time}, but got {disabled_until}"
+        assert disabled_until >= min_expected_time, f"Rules should be disabled until at least {min_expected_time}, but got {disabled_until}"
+        conn.close()
 
     def check_database_rules_enabled(self) -> None:
         """Check that the database shows rules are enabled"""
 
-        with sqlite3.connect(self.test_db_name) as conn:
-            conn.row_factory = sqlite3.Row
-            disabled_until = rules_engine.rules_disabled_until(conn)
-            assert disabled_until == 0, "Rules should be enabled (disabled_until=0), but got {disabled_until}"
+        conn = sqlite3.connect(self.test_db_name)
+        conn.row_factory = sqlite3.Row
+        disabled_until = rules_engine.all_rules_disabled_until(conn)
+        assert disabled_until == 0, "Rules should be enabled (disabled_until=0), but got {disabled_until}"
+        conn.close()

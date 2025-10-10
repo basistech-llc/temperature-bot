@@ -16,16 +16,48 @@ jobs:
       AE200_SIMULATOR: 1
       AQICN_TOKEN: ${{ secrets.AQICN_TOKEN }}
       AIRNOW_API_KEY: ${{ secrets.AIRNOW_API_KEY }}
+      POETRY_VERSION: '2.1.3'
+      RUFF_VERSION: '0.13.2'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           submodules: true
 
-      - name: Set up Python ${{ matrix.python-version }}
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
+          cache: 'pip'
+          cache-dependency-path: |
+            poetry.lock
+
+      # Cache the project venv (created by Poetry in-project)
+      - name: Cache .venv
+        uses: actions/cache@v4
+        with:
+          path: .venv
+          key: venv-${{ runner.os }}-${{ matrix.python-version }}-${{ hashFiles('poetry.lock') }}
+          restore-keys: |
+            venv-${{ runner.os }}-${{ matrix.python-version }}-
+
+      # (Optional) cache ruff’s cache
+      - name: Cache ruff cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ruff
+          key: ruff-${{ runner.os }}-${{ hashFiles('.ruff*', 'pyproject.toml') }}
+          restore-keys: |
+            ruff-${{ runner.os }}-
+
+      # Use a repo-local Playwright cache to make cross-OS paths easy
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: .playwright
+          key: pw-${{ runner.os }}-${{ hashFiles('poetry.lock') }}
+          restore-keys: |
+            pw-${{ runner.os }}-
 
       - name: Update GITHUB_PATH and install Python dependencies for local development
         run: |
@@ -41,21 +73,13 @@ jobs:
         run: |
           make install-macos
 
-      - name: Install Playwright browsers
+      - name: Lint
         run: |
-          .venv/bin/playwright install
+          make pylint
 
-      - name: Lint with pylint
+      - name: Test with coverage
         run: |
-          make check
-
-      - name: JavaScript and HTML eslint
-        run: |
-          make eslint
-
-      - name: Run pytest with coverage
-        run: |
-          make pytest
+          make test
 
       - name: Upload coverage test to codecov.io
         if: runner.os == 'Linux'

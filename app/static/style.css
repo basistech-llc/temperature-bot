@@ -204,6 +204,18 @@ table.rules-table th  {
 
 /* optional: make tables respect the column width instead of expanding it */
 
+/**************** Chart */
+.adder label {
+    font-weight: bold;
+    display: block;
+    margin-bottom: 5px;
+}
+
+.adder select {
+    padding: 0.3em;
+    min-width: 200px;
+}
+
 /* *************** Rules */
 .rule-result {
     padding: 5px;

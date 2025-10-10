@@ -1,21 +1,26 @@
-DBFILE = '/var/db/temperature-bot.db'
-DEV_DB = 'var/db/temperature-bot.db'
+DBFILE := /var/db/temperature-bot.db
+DEV_DB := var/db/temperature-bot.db
 REQ := .venv/pyvenv.cfg
 PYTHON := .venv/bin/python
+TEMPLATE_DIR := app/templates
 
-pytest: $(REQ)
-	AE200_SIMULATOR=1 $(PYTHON) -m pytest . -v --cov=. --cov-report=xml --cov-report=html --log-cli-level=DEBUG --log-file-level=DEBUG
-	@echo covreage report in htmlcov/
+# Centralize the Playwright cache path so CI can cache it
+export PLAYWRIGHT_BROWSERS_PATH := .playwright
 
-PYLINT_THRESHOLD := 9.5
-PYLINT_OPTS :=--output-format=parseable --rcfile .pylintrc --fail-under=$(PYLINT_THRESHOLD) --verbose
-check: $(REQ)
-	make lint
-	echo $(PYTHON) -m mypy app tests
+# Pin tool versions (helps avoid “invisible” cache invalidations)
+POETRY_VERSION ?= 2.1.3
+RUFF_VERSION   ?= 0.13.2
 
-check-types: $(REQ)
-	$(PYTHON) -m mypy app
 
+################################################################
+# Create the virtual environment and install both host requirements
+# and the lambda requirements for testing
+.venv/pyvenv.cfg:
+	@echo install venv for the development environment
+	echo $$PATH
+	poetry install
+
+################################################################
 .PHONY: etc/schema.sql
 etc/schema.sql:
 	echo ".schema"| sqlite3 $(DEV_DB) | grep -v 'Run Time: real' | grep -v 'CREATE TABLE sqlite_sequence' > etc/schema.sql
@@ -25,54 +30,51 @@ make-dev-db:
 	sqlite3 $(DEV_DB) < etc/schema.sql
 	ls -l $(DEV_DB)
 
-local-dev: $(REQ)
-	FLASK_DEBUG=True $(PYTHON) run_local.py
-
-fetch-slg:
+fetch-dev-db:
 	rsync --verbose --delete --archive slg1.basistech.net:/var/db var/
 	echo 'select "devices",count(*) from devices;select "devlog",count(*) from devlog;select "changelog",count(*) from changelog; select "aqi",count(*) from aqi;' | sqlite3 var/db/temperature-bot.db
 	echo '.schema' | sqlite3 var/db/temperature-bot.db
 
+local-dev: $(REQ)
+	FLASK_DEBUG=True $(PYTHON) run_local.py
+
 tags:
 	etags */*.py
 
-## lint
-.PHONY: eslint pylint lint
+################################################################
+
+## Static Analysis
+.PHONY: eslint lint pylint test pytest
 PYLINT_THRESHOLD := 9.5
 PYLINT_OPTS :=--output-format=parseable --rcfile .pylintrc --fail-under=$(PYLINT_THRESHOLD) --verbose
 
-## test
-
 pylint: .venv/pyvenv.cfg
-	.venv/bin/djlint $(DJLINT_FLAGS) $(TEMPLATE_DIR)/*.html
-	$(PYTHON) -m ruff check --fix .
+	$(PYTHON) -m ruff check --fix app
 	$(PYTHON) -m pylint $(PYLINT_OPTS) app tests *.py
+
+djlint:
+	set -o pipefail
+	poetry run djlint $(DJLINT_FLAGS) $(TEMPLATE_DIR)/*.html | etc/djlint-reformat.bash
 
 eslint:
 	(cd app/static; make eslint)
 
-lint:
-	make pylint
-	make eslint
-
+lint: check
 check: $(REQ)
-	make lint
-	echo do not make check-types
-
-pytest: $(REQ)
-	AE200_SIMULATOR=1 $(PYTHON) -m pytest . -v --cov=. --cov-report=xml --cov-report=html --log-cli-level=DEBUG --log-file-level=DEBUG
-	@echo covreage report in htmlcov/
+	make pylint
+	make djlint
+	make eslint
+	echo make check-types
 
 check-types: $(REQ)
 	$(PYTHON) -m mypy app
 
-# Create the virtual environment and install both host requirements
-# and the lambda requirements for testing
-.venv/pyvenv.cfg:
-	@echo install venv for the development environment
-	echo $$PATH
-	poetry install
-
+## Dynamic Analysis
+pytest: $(REQ)
+	make pylint
+	AE200_SIMULATOR=1 $(PYTHON) -m pytest . -v --cov=. --cov-report=xml --cov-report=html --log-cli-level=DEBUG --log-file-level=DEBUG
+	@echo covreage report in htmlcov/
+test: pytest
 
 ################################################################
 ## Every minutes
@@ -81,21 +83,24 @@ every-minute: $(REQ)
 daily: $(REQ)
 	$(PYTHON) -m bin.runner --daily
 
-install-ubuntu:
-	sudo apt install python3-pip pipx
+install-either:
 	pipx ensurepath
-	pipx install poetry ruff
+	pipx install poetry==$(POETRY_VERSION)
+	pipx install ruff==$(RUFF_VERSION)
 	poetry config virtualenvs.in-project true
 	ruff --version
-	poetry lock && poetry install
-	echo disabled - npm install browser-sync -g
+	poetry lock
+	poetry install --with dev
+	PLAYWRIGHT_BROWSERS_PATH=.playwright poetry run playwright install --with-deps # This will be fast if CI restored .playwright
+
+install-ubuntu:
+	sudo apt install python3-pip pipx
+	make install-either
 
 install-macos:
 	@echo Use pipx for the latest poetry
-	pip install pipx
-	pipx ensurepath
-	pipx install poetry ruff
-	poetry config virtualenvs.in-project true
-	ruff --version
-	poetry lock && poetry install
-	echo disabled - npm install browser-sync -g
+	python3 -m pip install -U pip pipx
+	make install-either
+
+install-browser-sync:
+	npm install browser-sync -g

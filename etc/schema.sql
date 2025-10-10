@@ -17,9 +17,9 @@ CREATE INDEX idx_templog_device_id ON devlog (device_id);
 CREATE TABLE changelog (
                     changelog_id INTEGER PRIMARY KEY AUTOINCREMENT,
                     logtime INTEGER NOT NULL,
-                    ipaddr TEXT NOT NULL,
                     device_id INTEGER NOT NULL,
                     unit INTEGER,
+                    ipaddr TEXT,
                     current_values TEXT,
                     new_value TEXT,
                     agent TEXT,

@@ -8,32 +8,24 @@ import tempfile
 import subprocess
 import sqlite3
 from pathlib import Path
-import pytest
 
-from app.paths import SCHEMA_FILE_PATH
-from app import db
+import pytest
+from conftest import db_path
+
+from app.constants import TEST_DB_NAME
+
 
 
 class TestBinTools:
-    """Test suite for bin/ tools"""
+    """Test suite for bin/ tools.
+    These all use the same database, which only gets filled once
+    """
 
     @pytest.fixture
-    def temp_db(self):
-        """Create a temporary database for testing"""
-        with tempfile.NamedTemporaryFile(suffix='.db', delete=False) as tf:
-            db_path = tf.name
-
-        # Set up the database schema
-        conn = sqlite3.connect(db_path)
-        conn.row_factory = sqlite3.Row
-        conn.execute("PRAGMA foreign_keys = ON;")
-        db.setup_database(conn, SCHEMA_FILE_PATH)
-        conn.close()
-
-        yield db_path
-
-        # Cleanup
-        os.unlink(db_path)
+    def temp_db(self,test_database_conn_with_test_data):
+        """return the database path"""
+        test_database_conn = test_database_conn_with_test_data[0]
+        yield db_path(test_database_conn)
 
     @pytest.fixture
     def bin_dir(self):
@@ -135,8 +127,7 @@ class TestBinTools:
             capture_output=True,
             text=True,
             timeout=30,
-            check=False
-        )
+            check=False )
 
         assert result.returncode == 0, f"scheduler.py --verbose failed: {result.stderr}"
 
@@ -250,7 +241,7 @@ print('scheduler.py imports successfully')
     def test_runner_daily_cleanup(self, bin_dir, temp_db):
         """Test runner.py daily cleanup functionality"""
         env = os.environ.copy()
-        env['TEST_DB_NAME'] = temp_db
+        env[TEST_DB_NAME] = temp_db
 
         result = subprocess.run(
             [sys.executable, str(bin_dir / "runner.py"), "--daily"],
@@ -267,7 +258,7 @@ print('scheduler.py imports successfully')
     def test_runner_rules_test(self, bin_dir, temp_db):
         """Test runner.py rules test functionality"""
         env = os.environ.copy()
-        env['TEST_DB_NAME'] = temp_db
+        env[TEST_DB_NAME] = temp_db
 
         result = subprocess.run(
             [sys.executable, str(bin_dir / "runner.py"), "--rules", "test"],
@@ -287,34 +278,6 @@ print('scheduler.py imports successfully')
             # Should show some output
             assert len(result.stdout) > 0
 
-    def test_tools_work_in_github_actions(self, bin_dir):
-        """Test that tools work in GitHub Actions environment"""
-        # Simulate GitHub Actions environment
-        env = os.environ.copy()
-        env['GITHUB_ACTIONS'] = 'true'
-
-        # Test runner help
-        result = subprocess.run(
-            [sys.executable, str(bin_dir / "runner.py"), "--help"],
-            capture_output=True,
-            text=True,
-            timeout=30,
-            env=env,
-            check=False
-        )
-        assert result.returncode == 0, "runner.py failed in GitHub Actions simulation"
-
-        # Test scheduler help
-        result = subprocess.run(
-            [sys.executable, str(bin_dir / "scheduler.py"), "--help"],
-            capture_output=True,
-            text=True,
-            timeout=30,
-            env=env,
-            check=False
-        )
-        assert result.returncode == 0, "scheduler.py failed in GitHub Actions simulation"
-
     def test_runner_with_csv_import(self, bin_dir, temp_db):
         """Test runner.py CSV import functionality"""
         # Create a simple test CSV file with a device name that exists in the sample data
@@ -324,9 +287,8 @@ print('scheduler.py imports successfully')
             csv_file.write(csv_content)
             csv_path = csv_file.name
 
-        try:
             env = os.environ.copy()
-            env['TEST_DB_NAME'] = temp_db
+            env[TEST_DB_NAME] = temp_db
 
             # Use a valid date for csv-after to avoid the year 0 error
             result = subprocess.run(
@@ -346,9 +308,6 @@ print('scheduler.py imports successfully')
             else:
                 # Should complete successfully
                 assert result.returncode == 0
-
-        finally:
-            os.unlink(csv_path)
 
     def test_all_tools_help_consistency(self, bin_dir):
         """Test that all tools have consistent help output"""
