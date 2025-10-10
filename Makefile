@@ -49,9 +49,12 @@ PYLINT_THRESHOLD := 9.5
 PYLINT_OPTS :=--output-format=parseable --rcfile .pylintrc --fail-under=$(PYLINT_THRESHOLD) --verbose
 
 pylint: .venv/pyvenv.cfg
-	.venv/bin/djlint $(DJLINT_FLAGS) $(TEMPLATE_DIR)/*.html | etc/djlint-reformat.bash
 	$(PYTHON) -m ruff check --fix .
 	$(PYTHON) -m pylint $(PYLINT_OPTS) app tests *.py
+
+djlint:
+	set -o pipefail
+	poetry run djlint $(DJLINT_FLAGS) $(TEMPLATE_DIR)/*.html | etc/djlint-reformat.bash
 
 eslint:
 	(cd app/static; make eslint)
@@ -59,6 +62,7 @@ eslint:
 lint: check
 check: $(REQ)
 	make pylint
+	make djlint
 	make eslint
 	echo make check-types
 
