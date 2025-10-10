@@ -17,7 +17,6 @@ from app.main import app
 
 logger = logging.getLogger(__name__)
 
-@skip_on_github
 def test_rules_disable_functionality(test_database_conn_with_test_data) -> None:   # noqa: F811 # pylint: disable=unused-argument
     """
     Test the complete rules disable/enable functionality through the browser interface.
