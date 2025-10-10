@@ -8,8 +8,8 @@ TEMPLATE_DIR := app/templates
 export PLAYWRIGHT_BROWSERS_PATH := .playwright
 
 # Pin tool versions (helps avoid “invisible” cache invalidations)
-POETRY_VERSION ?= 1.8.3
-RUFF_VERSION   ?= 0.6.9
+POETRY_VERSION ?= 2.1.3
+RUFF_VERSION   ?= 0.13.2
 
 
 ################################################################
@@ -87,7 +87,7 @@ install-either:
 	ruff --version
 	poetry lock
 	poetry install --with dev  # Ensure dev deps (playwright) are installed
-	poetry run playwright install --with-deps # This will be fast if CI restored .playwright
+	PLAYWRIGHT_BROWSERS_PATH=.playwright poetry run playwright install --with-deps # This will be fast if CI restored .playwright
 
 install-ubuntu:
 	sudo apt install python3-pip pipx

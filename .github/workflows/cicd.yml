@@ -16,6 +16,8 @@ jobs:
       AE200_SIMULATOR: 1
       AQICN_TOKEN: ${{ secrets.AQICN_TOKEN }}
       AIRNOW_API_KEY: ${{ secrets.AIRNOW_API_KEY }}
+      POETRY_VERSION: '2.1.3'
+      RUFF_VERSION: '0.13.2'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -57,36 +59,17 @@ jobs:
           restore-keys: |
             pw-${{ runner.os }}-
 
-      # Install Poetry and tools
-      - name: Install Poetry & tools
-        run: |
-          pipx install poetry==1.8.3
-          pipx install ruff==0.6.9
-          poetry config virtualenvs.in-project true
-
-      # Install deps (include dev so playwright is present)
-      - name: Install dependencies
-        run: |
-          poetry install --with dev
-
-      # Install browsers (fast no-op if cache restored)
-      - name: Install Playwright browsers
-        env:
-          PLAYWRIGHT_BROWSERS_PATH: .playwright
-        run: |
-          poetry run playwright install --with-deps
-
       - name: Update GITHUB_PATH and install Python dependencies for local development
         run: |
           echo "$HOME/.local/bin" >> $GITHUB_PATH
 
       - name: "Configure ubuntu"
-        if: runner.os == 'Linux-HOLD'
+        if: runner.os == 'Linux'
         run: |
           make install-ubuntu
 
       - name: "Configure macOS"
-        if: runner.os == 'macOS-HOLD'
+        if: runner.os == 'macOS'
         run: |
           make install-macos
 
