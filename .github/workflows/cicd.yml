@@ -41,21 +41,22 @@ jobs:
         run: |
           make install-macos
 
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('poetry.lock') }}
+
       - name: Install Playwright browsers
-        run: |
-          .venv/bin/playwright install
+        run: poetry run plaaywright install --with-deps
 
-      - name: Lint with pylint
+      - name: Lint
         run: |
-          make check
+          make lint
 
-      - name: JavaScript and HTML eslint
+      - name: Test with coverage
         run: |
-          make eslint
-
-      - name: Run pytest with coverage
-        run: |
-          make pytest
+          make test
 
       - name: Upload coverage test to codecov.io
         if: runner.os == 'Linux'

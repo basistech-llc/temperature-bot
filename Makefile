@@ -77,8 +77,8 @@ install-ubuntu:
 	pipx install poetry ruff
 	poetry config virtualenvs.in-project true
 	ruff --version
-	poetry lock && poetry install
-	echo disabled - npm install browser-sync -g
+	poetry lock
+	poetry install
 
 install-macos:
 	@echo Use pipx for the latest poetry
@@ -87,5 +87,9 @@ install-macos:
 	pipx install poetry ruff
 	poetry config virtualenvs.in-project true
 	ruff --version
-	poetry lock && poetry install
-	echo disabled - npm install browser-sync -g
+	poetry lock
+	poetry install
+
+
+install-browser-sync:
+	npm install browser-sync -g
