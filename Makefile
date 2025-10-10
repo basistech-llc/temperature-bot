@@ -4,6 +4,14 @@ REQ := .venv/pyvenv.cfg
 PYTHON := .venv/bin/python
 TEMPLATE_DIR := app/templates
 
+# Centralize the Playwright cache path so CI can cache it
+export PLAYWRIGHT_BROWSERS_PATH := .playwright
+
+# Pin tool versions (helps avoid “invisible” cache invalidations)
+POETRY_VERSION ?= 1.8.3
+RUFF_VERSION   ?= 0.6.9
+
+
 ################################################################
 # Create the virtual environment and install both host requirements
 # and the lambda requirements for testing
@@ -71,25 +79,24 @@ every-minute: $(REQ)
 daily: $(REQ)
 	$(PYTHON) -m bin.runner --daily
 
-install-ubuntu:
-	sudo apt install python3-pip pipx
+install-either:
 	pipx ensurepath
-	pipx install poetry ruff
+	pipx install poetry==$(POETRY_VERSION)
+	pipx install ruff==$(RUFF_VERSION)
 	poetry config virtualenvs.in-project true
 	ruff --version
 	poetry lock
-	poetry install
+	poetry install --with dev  # Ensure dev deps (playwright) are installed
+	poetry run playwright install --with-deps # This will be fast if CI restored .playwright
+
+install-ubuntu:
+	sudo apt install python3-pip pipx
+	make install-either
 
 install-macos:
 	@echo Use pipx for the latest poetry
-	pip install pipx
-	pipx ensurepath
-	pipx install poetry ruff
-	poetry config virtualenvs.in-project true
-	ruff --version
-	poetry lock
-	poetry install
-
+	python3 -m pip install -U pip pipx
+	make install-either
 
 install-browser-sync:
 	npm install browser-sync -g

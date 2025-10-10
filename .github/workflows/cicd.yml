@@ -22,33 +22,73 @@ jobs:
         with:
           submodules: true
 
-      - name: Set up Python ${{ matrix.python-version }}
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
+          cache: 'pip'
+          cache-dependency-path: |
+            poetry.lock
+
+      # Cache the project venv (created by Poetry in-project)
+      - name: Cache .venv
+        uses: actions/cache@v4
+        with:
+          path: .venv
+          key: venv-${{ runner.os }}-${{ matrix.python-version }}-${{ hashFiles('poetry.lock') }}
+          restore-keys: |
+            venv-${{ runner.os }}-${{ matrix.python-version }}-
+
+      # (Optional) cache ruff’s cache
+      - name: Cache ruff cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ruff
+          key: ruff-${{ runner.os }}-${{ hashFiles('.ruff*', 'pyproject.toml') }}
+          restore-keys: |
+            ruff-${{ runner.os }}-
+
+      # Use a repo-local Playwright cache to make cross-OS paths easy
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: .playwright
+          key: pw-${{ runner.os }}-${{ hashFiles('poetry.lock') }}
+          restore-keys: |
+            pw-${{ runner.os }}-
+
+      # Install Poetry and tools
+      - name: Install Poetry & tools
+        run: |
+          pipx install poetry==1.8.3
+          pipx install ruff==0.6.9
+          poetry config virtualenvs.in-project true
+
+      # Install deps (include dev so playwright is present)
+      - name: Install dependencies
+        run: |
+          poetry install --with dev
+
+      # Install browsers (fast no-op if cache restored)
+      - name: Install Playwright browsers
+        env:
+          PLAYWRIGHT_BROWSERS_PATH: .playwright
+        run: |
+          poetry run playwright install --with-deps
 
       - name: Update GITHUB_PATH and install Python dependencies for local development
         run: |
           echo "$HOME/.local/bin" >> $GITHUB_PATH
 
       - name: "Configure ubuntu"
-        if: runner.os == 'Linux'
+        if: runner.os == 'Linux-HOLD'
         run: |
           make install-ubuntu
 
       - name: "Configure macOS"
-        if: runner.os == 'macOS'
+        if: runner.os == 'macOS-HOLD'
         run: |
           make install-macos
-
-      - name: Cache Playwright browsers
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('poetry.lock') }}
-
-      - name: Install Playwright browsers
-        run: poetry run plaaywright install --with-deps
 
       - name: Lint
         run: |
