@@ -49,7 +49,7 @@ PYLINT_THRESHOLD := 9.5
 PYLINT_OPTS :=--output-format=parseable --rcfile .pylintrc --fail-under=$(PYLINT_THRESHOLD) --verbose
 
 pylint: .venv/pyvenv.cfg
-	$(PYTHON) -m ruff check --fix .
+	$(PYTHON) -m ruff check --fix app
 	$(PYTHON) -m pylint $(PYLINT_OPTS) app tests *.py
 
 djlint:
