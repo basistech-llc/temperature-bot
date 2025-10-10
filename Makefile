@@ -86,7 +86,7 @@ install-either:
 	poetry config virtualenvs.in-project true
 	ruff --version
 	poetry lock
-	poetry install --with dev  # Ensure dev deps (playwright) are installed
+	poetry install --with dev
 	PLAYWRIGHT_BROWSERS_PATH=.playwright poetry run playwright install --with-deps # This will be fast if CI restored .playwright
 
 install-ubuntu:

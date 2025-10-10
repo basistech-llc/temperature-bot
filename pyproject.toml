@@ -42,29 +42,23 @@ readme = "README.md"
 requires = ["poetry-core>=2.0.0, <3.0.0"]
 build-backend = "poetry.core.masonry.api"
 
-[project.optional-dependencies]
-dev = [
-    "coverage",
-    "djlint",
-    "livereload",
-    "mypy",
-    "mypy",
-    "playwright",
-    "pylint",
-    "pyright",
-    "pytest",
-    "pytest",
-    "pytest-cov",
-    "ruff",
-    "ruff-lsp",
-]
-
 [tool.poetry]
 package-mode = false
 
 [tool.poetry.group.dev.dependencies]
+coverage = "*"
+djlint = "*"
+livereload = "*"
+mypy = "*"
+playwright = "*"
+pylint = "*"
+pyright = "*"
+pytest = "*"
 pytest-env = "^1.1.5"
+pytest-cov = "*"
 pytest-faulthandler = "^2.0.1"
+ruff = "*"
+ruff-lsp = "*"
 
 [tool.ruff]
 exclude = ["lib/"]
