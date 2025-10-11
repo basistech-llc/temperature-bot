@@ -36,7 +36,7 @@ fetch-dev-db:
 	echo '.schema' | sqlite3 var/db/temperature-bot.db
 
 local-dev: $(REQ)
-	FLASK_DEBUG=True DB_PATH=$(DEV_DB) $(PYTHON) run_local.py
+	FLASK_DEBUG=True DB_PATH=$(DEV_DB) AE200_SIMULATOR=1 $(PYTHON) run_local.py
 tags:
 	etags */*.py
 

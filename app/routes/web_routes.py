@@ -15,7 +15,6 @@ logger = logging.getLogger(__name__)
 device_service = DeviceService()
 log_service = LogService()
 
-
 def create_web_routes(app):
     """Create web routes and register them with the app"""
 

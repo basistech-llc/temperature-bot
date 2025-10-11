@@ -274,7 +274,12 @@ def set_fan_speed(ae200_device, speed):
 def get_device_info(device):
     logger.info("get_device_info(%s)",device)
     if AE200_SIMULATOR:
-        return simulated_devices[str(device)]
+        try:
+            return simulated_devices[str(device)]
+        except KeyError:
+            print("************************************************************************")
+            print(f"Simulated device requested: {device} options: {simulated_devices.keys()}")
+            raise
 
     d = AE200Functions()
     return d.getDeviceInfo(device)

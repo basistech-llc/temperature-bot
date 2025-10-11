@@ -208,6 +208,7 @@ BROADWAY_SOUTH=10
 def test_set_fan_speed_endpoint(flask_test_client, start_speed, target_speed, expected_calls): # noqa: F811
     # Set up simulator with initial speed
     ae200.set_fan_speed(BROADWAY_SOUTH, start_speed)
+    now = int(time.time())      #
 
     # get device_id
     conn = sqlite3.connect(os.environ['TEST_DB_NAME'])
@@ -217,7 +218,6 @@ def test_set_fan_speed_endpoint(flask_test_client, start_speed, target_speed, ex
     c.execute("UPDATE devices set ae200_device_id=? where device_id=?",(BROADWAY_SOUTH,device_id))
     conn.commit()
     conn.close()
-
 
     # Send the /set_fan_speed
     response = flask_test_client.post(
@@ -243,21 +243,25 @@ def test_set_fan_speed_endpoint(flask_test_client, start_speed, target_speed, ex
         test_conn_verify = sqlite3.connect(os.environ['TEST_DB_NAME'])
         test_conn_verify.row_factory = sqlite3.Row
         cursor = test_conn_verify.cursor()
-        cursor.execute("SELECT ipaddr, device_id, new_value, agent FROM changelog order by changelog_id DESC limit 1")
-        changelog_entry = cursor.fetchone()
-        assert changelog_entry is not None
-        logging.debug("changelog_entry=%s",dict(changelog_entry))
-        assert changelog_entry['ipaddr'] == '127.0.0.1'  # Flask test client IP
-        assert changelog_entry['device_id'] == device_id
-        assert changelog_entry['new_value'] == str(target_speed)
-        assert changelog_entry['agent'] == 'web'
 
         cursor.execute("SELECT * from devices where device_name=?", ("Broadway Test",))
-        row = cursor.fetchone()
-        logging.debug("row=%s", dict(row))
-        device_id = row['device_id']
+        devrow = cursor.fetchone()
+        logging.debug("row=%s", dict(devrow))
+        assert devrow['disabled_until'] >= now+60         # make sure that rules are disabled for at least 60 seconds...
+        device_id = devrow['device_id']
         cursor.execute("SELECT * from devlog where device_id=? order by logtime desc", (device_id,))
-        row = cursor.fetchone()
-        extracted_status = ae200.extract_drive_and_fan_speed(json.loads(row['status_json']))
+        devlogrow = cursor.fetchone()
+        extracted_status = ae200.extract_drive_and_fan_speed(json.loads(devlogrow['status_json']))
         assert extracted_status['fan_speed'] == target_speed
+
+        cursor.execute("SELECT ipaddr, device_id, new_value, agent FROM changelog order by changelog_id DESC limit 2")
+        changelog_entries = cursor.fetchall()
+
+        assert len(changelog_entries)==2 # should have two entries
+        for cl in changelog_entries:
+            logging.debug("changelog_entry=%s",dict(cl))
+            assert cl['ipaddr'] == '127.0.0.1'  # Flask test client IP
+            assert cl['device_id'] == device_id
+            assert cl['agent'].startswith('Werkzeug') or cl['agent'] == 'web'
+
         test_conn_verify.close()
