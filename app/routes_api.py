@@ -53,11 +53,13 @@ def set_drive(conn, body: DriveControl):
     """Sets the speed, records the speed in the changelog, and then updates the database, so status is always up-to-date"""
     logger.debug("/set_drive: body=[%s]", body)
     ret = rules_engine.set_body_drive(conn, body, request.remote_addr, "web")
+    device_id = ret['device_id']
     db.disable_rules_for_device(conn,
-                                device_id = ret['device_id'],
+                                device_id = device_id,
                                 seconds = constants.RULES_DISABLE_SECONDS,
                                 ipaddr = request.remote_addr,
-                                agent = request.headers.get('User-Agent'))
+                                agent = request.headers.get('User-Agent'),
+                                comment = f'rules for disabled for {constants.RULES_DISABLE_SECONDS/60} minutes')
     return jsonify({"status": "ok", **ret})
 
 @api_v1.route("/status")

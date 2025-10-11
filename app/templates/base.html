@@ -1,5 +1,6 @@
 <!DOCTYPE html><!-- -*- mode: html -*- -->
 <html lang="en">
+{% set only = request.args.get('only') %}
 <head>
   <meta charset="utf-8">
   <meta name="keywords" content="temperature"/>
@@ -9,7 +10,8 @@
   <!-- use Pure.css - https://purecss.io/ -->
   <link rel="stylesheet"
         href="https://cdn.jsdelivr.net/npm/purecss@3.0.0/build/pure-min.css"
-        integrity="sha384-X38yfunGUhNzHpBaEBsWLO+A0HDYOQi8ufWDkZ0k9e0eXz/tH3II7uKZ9msv++Ls" crossorigin="anonymous"/>
+        integrity="sha384-X38yfunGUhNzHpBaEBsWLO+A0HDYOQi8ufWDkZ0k9e0eXz/tH3II7uKZ9msv++Ls"
+        crossorigin="anonymous"/>
   <link rel="stylesheet" href="/static/style.css">
   <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
   <script src="https://code.jquery.com/jquery-3.3.1.slim.min.js"
@@ -25,16 +27,15 @@
   <header>
   {% if develop %}
   <div class="top-banner">
-    <p>🚧 This is the develop site. Please use <a href='https://air.basistech.net/'> https://air.basistech.net/</a>.</p>
+    <p>🚧 This is the develop site. Please use <a href='https://air.basistech.net/'>
+        https://air.basistech.net/</a>.</p>
   </div>
   {% endif %}
 
+  {% if not only %}
   <div class="pure-menu pure-menu-horizontal">
     <a href="." class="pure-menu-heading pure-menu-link">Temperature Bot</a>
     <ul class="pure-menu-list">
-      <li class="pure-menu-item">
-        <a href="/buttons" class="pure-menu-link">Buttons</a>
-      </li>
       <li class="pure-menu-item">
         <a href="/chart" class="pure-menu-link">Chart</a>
       </li>
@@ -55,10 +56,12 @@
       </li>
     </ul>
   </div>
+  {% endif %}
   </header>
 
   {% block body %}
   {% endblock %}
+  {% if not only %}
   <footer class="pure-u-1 footer">
     <p>
       © 2025 BasisTech LLC.
@@ -76,5 +79,6 @@
       <a href="mailto:simsong@basistech.com">Contact</a>
     </p>
   </footer>
+  {% endif %}
 </body>
 </html>

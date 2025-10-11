@@ -63,12 +63,13 @@ def create_web_routes(app):
         rules_disabled_until_asc = time.asctime(time.localtime(rules_disabled_until))
         return render_template(
             "rules.html",
-            devices=db.fetch_all_device_dicts(conn),
-            rules=rules_engine.get_rules(),
-            rules_results="\n".join(rule_table),
-            rules_disabled_until=rules_disabled_until,
-            rules_disabled_until_asc=rules_disabled_until_asc,
-            times=rules_engine.get_time_dict(),
+            devices = db.devices_to_device_id(conn),
+            times = rules_engine.get_time_dict(),
+            air   = rules_engine.get_air_dict(conn),
+            rules                    = rules_engine.get_rules(),
+            rules_results            = "\n".join(rule_table),
+            rules_disabled_until     = rules_disabled_until,
+            rules_disabled_until_asc = rules_disabled_until_asc,
         )
 
     @app.route("/logs")
@@ -99,6 +100,11 @@ def create_web_routes(app):
     def privacy():
         """Privacy page"""
         return render_template("privacy.html")
+
+    @app.route("/terms")
+    def terms():
+        """Terms page"""
+        return render_template("terms.html")
 
     @app.route("/buttons")
     def buttons():

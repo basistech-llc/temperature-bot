@@ -26,7 +26,8 @@ def get_time_dict(when=None):
     if when is None:
         when = time.time()
     tm = time.localtime(when)
-    return {'YEAR':tm.tm_year, 'MONTH':tm.tm_mon, 'MDAY':tm.tm_mday, 'HOUR':tm.tm_hour, 'MIN':tm.tm_min, 'SEC':tm.tm_sec,
+    return {'YEAR':tm.tm_year, 'MONTH':tm.tm_mon, 'MDAY':tm.tm_mday,
+            'HOUR':tm.tm_hour, 'MIN':tm.tm_min, 'SEC':tm.tm_sec,
             'WDAY':tm.tm_wday, 'YDAY':tm.tm_yday, 'DST':tm.tm_isdst,
             'MONDAY':tm.tm_wday==0,
             'TUESDAY':tm.tm_wday==1,
@@ -37,6 +38,15 @@ def get_time_dict(when=None):
             'SUNDAY':tm.tm_wday==6,
             'AM':tm.tm_hour<12,
             'PM':tm.tm_hour>=12 }
+
+def get_air_dict(conn):
+    c = conn.cursor()
+    c.execute("SELECT * FROM aqi ORDER BY logtime DESC LIMIT 1")
+    row = c.fetchall()
+    if not row:
+        return {'AQI':0,'CO':0,'H':0,'NO2':0,'O3':0,'P':0,'PM10':0,'PM25':0,'SO2':0,'T':0,'W':0}
+    return {k.upper():v for (k,v) in dict(row[0]).items() if k!='logtime'}
+
 
 def all_rules_disabled_until(conn) -> int:
     until = db.device_rules_disabled_until(conn, rules_id(conn))
@@ -165,4 +175,6 @@ def run_rules(conn, when=None):
     now = int(time.time())
     for dev in all_devices:
         if 0 < dev['disabled_until'] < now:
-            db.disable_rules_for_device(conn, dev['device_id'], 0, agent='rules runner', comment='disabled timer expired')
+            db.disable_rules_for_device(conn, dev['device_id'], 0,
+                                        agent='rules runner',
+                                        comment='disabled timer expired')

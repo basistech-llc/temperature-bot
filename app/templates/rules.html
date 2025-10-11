@@ -12,9 +12,9 @@
   <div class="pure-u-2-1">
     <h2>Device Variables</h2>
     <table>
-      <tr><th> Device ID</th><td> Device Name</td></tr>
-      {% for item in devices %}
-      <tr><th>{{ item.device_id }} </th><td> {{ item.device_name }}</td></tr>
+      <tr><th> Device Variable Name</th></tr>
+      {% for key,value in devices.items() %}
+      <tr><th class="variable-name">{{ key }} </th></tr>
       {% endfor %}
     </table>
   </div>
@@ -22,11 +22,17 @@
     <h2>Time Variables (right now)</h2>
     <table>
       {% for key, value in times.items() %}
-      <tr><th>{{ key }} </th><td> {{value}}</td></tr>
+      <tr><th class="variable-name">{{ key }} </th><td class="variable-value"> {{value}}</td></tr>
+      {% endfor %}
+    </table>
+    <h2>Air Quality Variables (right now)</h2>
+    <table>
+      {% for key, value in air.items() %}
+      <tr><th class="variable-name">{{ key }} </th><td class="variable-value"> {{value}}</td></tr>
       {% endfor %}
     </table>
   </div>
-</div>d
+</div>
 
 <div class="pure-g" >
   <div class="pure-u-1">
@@ -44,7 +50,7 @@
     {% else %}
     <h2> Rules disabled until {{ rules_disabled_until_asc }}</h2>
     {% endif %}
-    <h2>Disable rules for</h2>
+    <h2>Disable all rules for</h2>
     <div class="temporal-buttons suspend-rules-buttons">
       <button x-seconds="3600">1 hour</button>
       <button x-seconds="14400">4 hours</button>
