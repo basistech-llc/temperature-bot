@@ -5,9 +5,14 @@ import logging
 import datetime
 import time
 from flask import render_template, request
-from .. import db
-from ..services.device_service import DeviceService
-from .common import LogService, with_db_connection, parse_device_ids, rules_engine, __version__
+
+from .constants import __version__
+from . import db
+from . import rules_engine
+from .services.device_service import DeviceService
+from .services.log_service import LogService
+from .utils.request_utils import parse_device_ids
+from .utils.db_utils import with_db_connection
 
 logger = logging.getLogger(__name__)
 

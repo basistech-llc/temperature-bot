@@ -9,8 +9,8 @@ from flask import Flask, send_from_directory, jsonify
 from werkzeug.exceptions import HTTPException
 from werkzeug.middleware.proxy_fix import ProxyFix
 
-from .routes.api_routes import api_v1
-from .routes.web_routes import create_web_routes
+from . import routes_api
+from . import routes_web
 
 DEV = "/home/simsong" in abspath(__file__)
 DEFAULT_LOG_LEVEL = "DEBUG"
@@ -42,10 +42,10 @@ def create_app():
     fix_boto_log_level()
 
     # Register blueprints
-    app.register_blueprint(api_v1, url_prefix="/api/v1")
+    app.register_blueprint(routes_api.api_v1, url_prefix="/api/v1")
 
     # Register web routes
-    create_web_routes(app)
+    routes_web.create_web_routes(app)
 
     # Serve static files
     @app.route("/static/<path:filename>")
