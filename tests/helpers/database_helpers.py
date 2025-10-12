@@ -14,9 +14,10 @@ logger = logging.getLogger(__name__)
 @pytest.fixture
 def dbc():
     """simple database connection fixture for this database_helpers..."""
-    with sqlite3.connect( os.environ['TEST_DB_NAME'] ) as conn:
-        conn.row_factory = sqlite3.Row
-        yield conn
+    conn = sqlite3.connect( os.environ['TEST_DB_NAME'] )
+    conn.row_factory = sqlite3.Row
+    yield conn
+    conn.close()
 
 class DatabaseTestHelper:
     """Helper class for database testing operations."""
