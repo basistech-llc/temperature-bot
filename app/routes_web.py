@@ -9,16 +9,10 @@ from flask import render_template, request
 from .constants import __version__
 from . import db
 from . import rules_engine
-from .services.device_service import DeviceService
-from .services.log_service import LogService
 from .utils.request_utils import parse_device_ids
 from .utils.db_utils import with_db_connection
 
 logger = logging.getLogger(__name__)
-
-# Initialize services
-device_service = DeviceService()
-log_service = LogService()
 
 def create_web_routes(app):
     """Create web routes and register them with the app"""
@@ -28,7 +22,7 @@ def create_web_routes(app):
     def read_index(conn):
         """Main index page"""
         # Get device data for the template
-        device_data = device_service.get_device_status(conn)
+        device_data = db.get_device_status(conn)
 
         # Add current timestamp for temporal links
         now = int(time.time())
@@ -81,7 +75,7 @@ def create_web_routes(app):
     @with_db_connection
     def device_log(conn, device_id):
         """Device log page"""
-        log_data = log_service.get_device_log(conn, int(device_id))
+        log_data = db.get_device_log(conn, int(device_id))
         return render_template(
             "device_log.html",
             device=log_data["device"],

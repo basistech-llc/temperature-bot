@@ -1,60 +1,43 @@
-// chart.js - Temperature chart functionality
+// chart_support.js - AQI and Temperature chart functionality
 
-let chart;
-let rawData = []; // original data from API
+let chart;                      // temperature chart
+let rawData = [];               // original data from API
 let currentStart = null;
 let currentEnd = null;
 let currentDeviceIds = null; // for device support (single or multiple)
 let allDevices = []; // all available devices for dropdown
+const TEMP_ENDPOINT = '/api/v1/temperature';
+const AQ_ENDPOINT = '/api/v1/air_quality';
 
-// Initialize chart when DOM is loaded
-document.addEventListener('DOMContentLoaded', function() {
-    chart = echarts.init(document.getElementById('main'));
 
-    // Get device_ids from template variable (will be set by chart.html)
-    if (typeof window.currentDeviceIds !== 'undefined') {
-        currentDeviceIds = window.currentDeviceIds;
-    }
+// Air Quality chart setup
+// =======================
+let aqChart;
+let aqRaw = {
+    pm25: [], // each: [ts_seconds, value]
+    pm10: [],
+    o3:   [],
+    no2:  [],
+    co:   [],
+    aqi:  []
+};
 
-    // Initial load
-    loadData(currentDeviceIds, currentStart, currentEnd);
-
-    // Load all devices for dropdown
-    loadAllDevices();
-
-    // Set up event listeners
-    setupEventListeners();
-});
-
-// Format time intelligently based on time scale
-function formatTime(ts) {
-    const date = new Date(ts);
-    const now = new Date();
-
-    // Check if we're in day view (last 24 hours)
-    const isDayView = currentStart && currentEnd && (currentEnd - currentStart) <= 24 * 60 * 60;
-
-    if (isDayView) {
-        // For day view, show only time (HH:mm) since all data is same day
-        return new Intl.DateTimeFormat(undefined, {
-            hour: '2-digit',
-            minute: '2-digit'
-        }).format(date);
-    } else {
-        // For longer periods, show day and time
-        return new Intl.DateTimeFormat(undefined, {
-            weekday: 'short',
-            month: 'short',
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit'
-        }).format(date);
+// Air Quality Units
+function unitFor(name) {
+    switch (name) {
+    case 'PM2.5':
+    case 'PM10': return ' µg/m³';
+    case 'O₃':
+    case 'NO₂':  return ' ppb';
+    case 'CO':   return ' ppm';
+    default:     return '';
     }
 }
 
+
 // Load data from API with optional parameters
 function loadData(deviceIds = null, start = null, end = null) {
-    let url = '/api/v1/temperature';
+    let url = TEMP_ENDPOINT;
     const params = new URLSearchParams();
 
     // Support single device or multiple devices
@@ -100,6 +83,54 @@ function loadData(deviceIds = null, start = null, end = null) {
         });
 }
 
+
+
+// Temperature chart
+document.addEventListener('DOMContentLoaded', function() {
+    chart = echarts.init(document.getElementById('main'));
+    aqChart = echarts.init(document.getElementById('airquality'));
+
+    // Get device_ids from template variable (will be set by chart.html by jinja2)
+    if (typeof window.currentDeviceIds !== 'undefined') {
+        currentDeviceIds = window.currentDeviceIds;
+    }
+
+    // Initial load
+    loadData(currentDeviceIds, currentStart, currentEnd);
+
+    // Load all devices for dropdown
+    loadAllDevices();
+
+    // Set up event listeners
+    setupEventListeners();
+});
+
+// Format time intelligently based on time scale
+function formatTime(ts) {
+    const date = new Date(ts);
+    const now = new Date();
+
+    // Check if we're in day view (last 24 hours)
+    const isDayView = currentStart && currentEnd && (currentEnd - currentStart) <= 24 * 60 * 60;
+
+    if (isDayView) {
+        // For day view, show only time (HH:mm) since all data is same day
+        return new Intl.DateTimeFormat(undefined, {
+            hour: '2-digit',
+            minute: '2-digit'
+        }).format(date);
+    } else {
+        // For longer periods, show day and time
+        return new Intl.DateTimeFormat(undefined, {
+            weekday: 'short',
+            month: 'short',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+        }).format(date);
+    }
+}
+
 // Update record count display
 function updateRecordCount() {
     let totalRecords = 0;
@@ -112,7 +143,6 @@ function updateRecordCount() {
     if (!recordCountElement) {
         recordCountElement = document.createElement('div');
         recordCountElement.id = 'record-count';
-        recordCountElement.style.cssText = 'margin: 10px 0; padding: 5px; background: #f0f0f0; border-radius: 3px; font-family: monospace;';
 
         // Find the controls element
         const controlsElement = document.getElementById('controls');
@@ -123,6 +153,33 @@ function updateRecordCount() {
     }
     recordCountElement.textContent = `Records loaded: ${totalRecords}`;
 }
+
+
+function loadAirQuality(deviceIds = null, start = null, end = null) {
+    let url = AQ_ENDPOINT;
+    const params = new URLSearchParams();
+
+    if (deviceIds && deviceIds.length > 0) params.append('device_ids', deviceIds.join(','));
+    if (start) params.append('start', start);
+    if (end)   params.append('end',   end);
+
+    if (params.toString()) url += '?' + params.toString();
+
+    return fetch(url)
+        .then(r => r.json())
+        .then(json => {
+            // Expected shape (example):
+            // { pm25: [[ts,val],...], pm10: [...], o3: [...], no2: [...], co: [...], aqi: [...] }
+            aqRaw = json;
+            updateAQChart();
+        })
+        .catch(err => {
+            console.error('Error loading air quality:', err);
+            // Keep previous data if fetch fails
+            updateAQChart();
+        });
+}
+
 
 function updateChart() {
     const checkboxes = document.querySelectorAll('#checkboxes input[type=checkbox]');
@@ -188,7 +245,7 @@ function updateChart() {
     // --- End vertical lines ---
 
     const option = {
-                title: {
+        title: {
             text: (() => {
                 let baseTitle = currentDeviceIds && currentDeviceIds.length > 1 ?
                     `Temperature Time Series - Multiple Devices` :
@@ -275,6 +332,79 @@ function updateChart() {
     chart.setOption(option, true);
 }
 
+// ==========================
+// Render the Air Quality chart
+// ==========================
+function updateAQChart() {
+    if (!aqChart) return;
+
+    // Convert seconds->ms for ECharts time axis
+    const toMs = arr => (arr || []).map(([ts, v]) => [ts * 1000, v]);
+
+    const series = [
+        { name: 'PM2.5', data: toMs(aqRaw.pm25), unit: 'µg/m³', yAxisIndex: 0 },
+        { name: 'PM10',  data: toMs(aqRaw.pm10), unit: 'µg/m³', yAxisIndex: 1 },
+        { name: 'O₃',    data: toMs(aqRaw.o3),   unit: 'ppb',   yAxisIndex: 2 },
+        { name: 'NO₂',   data: toMs(aqRaw.no2),  unit: 'ppb',   yAxisIndex: 3 },
+        { name: 'CO',    data: toMs(aqRaw.co),   unit: 'ppm',   yAxisIndex: 4 },
+        { name: 'AQI',   data: toMs(aqRaw.aqi),  unit: '',      yAxisIndex: 5 },
+    ].map(s => ({
+        name: s.name,
+        type: 'line',
+        showSymbol: false,
+        encode: { x: 0, y: 1 },
+        yAxisIndex: s.yAxisIndex,
+        data: s.data
+    }));
+
+    const yAxes = [
+        { type: 'value', name: 'PM2.5 (µg/m³)', axisLabel: { formatter: v => `${v}` } },
+        { type: 'value', name: 'PM10 (µg/m³)',  axisLabel: { formatter: v => `${v}` }, gridIndex: 0, position: 'right' },
+        { type: 'value', name: 'O₃ (ppb)',      axisLabel: { formatter: v => `${v}` }, gridIndex: 0, position: 'left'  },
+        { type: 'value', name: 'NO₂ (ppb)',     axisLabel: { formatter: v => `${v}` }, gridIndex: 0, position: 'right' },
+        { type: 'value', name: 'CO (ppm)',      axisLabel: { formatter: v => `${v}` }, gridIndex: 0, position: 'left'  },
+        { type: 'value', name: 'AQI',           axisLabel: { formatter: v => `${v}` }, gridIndex: 0, position: 'right' }
+    ];
+
+    // Make alternate axes not draw overlapping grid lines
+    yAxes.forEach((ax, i) => {
+        ax.splitLine = { show: i === 0 }; // keep one set
+    });
+
+    const option = {
+        title: { text: 'Air Quality (multi-axis)', top: 0 },
+        tooltip: {
+            trigger: 'axis',
+            formatter: params => {
+                if (!params || !params.length) return '';
+                const ts = params[0].value[0];
+                const d = new Date(ts);
+                const time = new Intl.DateTimeFormat(undefined, {
+                    weekday: 'short', month: 'short', day: 'numeric',
+                    hour: '2-digit', minute: '2-digit'
+                }).format(d);
+                return params.reduce((out, p) => {
+                    return out + `${p.marker} ${p.seriesName}: ${p.value[1]}${unitFor(p.seriesName)}<br>`;
+                }, `${time}<br>`);
+            }
+        },
+        legend: { top: 40 },
+        grid:   { top: 120, left: 80, right: 80, bottom: 80 },
+        xAxis:  { type: 'time', axisLabel: { rotate: 45 } },
+        yAxis:  yAxes,
+        series: series,
+        axisPointer: { // helps link with temp chart
+            link: [{ xAxisIndex: 'all' }],
+            snap: true
+        }
+    };
+
+    aqChart.setOption(option, true);
+
+    // Keep charts linked (crosshair/zoom)
+    try { echarts.connect([chart, aqChart]); } catch(_) {}
+}
+
 // Load all available devices for the dropdown
 function loadAllDevices() {
     fetch('/api/v1/status')
@@ -330,6 +460,44 @@ function addDeviceToChart(deviceId) {
     }
 }
 
+
+// ----------------------------------
+// Reuse the same date range for both
+// ----------------------------------
+function setPickersFromRange() {
+    if (currentStart && currentEnd) {
+        const sd = new Date(currentStart * 1000);
+        const ed = new Date(currentEnd   * 1000);
+        const pad = n => String(n).padStart(2, '0');
+        const toISODate = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+        document.getElementById('startDate').value = toISODate(sd);
+        document.getElementById('endDate').value   = toISODate(ed);
+    }
+}
+
+function pickersToRangeAndReload() {
+    const sd = document.getElementById('startDate').value; // yyyy-mm-dd
+    const ed = document.getElementById('endDate').value;
+
+    if (sd) {
+        const s = new Date(sd + 'T00:00:00');
+        currentStart = Math.floor(s.getTime() / 1000);
+    }
+    if (ed) {
+        const e = new Date(ed + 'T23:59:59');
+        currentEnd = Math.floor(e.getTime() / 1000);
+    }
+
+    // Reload both charts’ data with the shared range
+    Promise.all([
+        loadData(currentDeviceIds, currentStart, currentEnd),
+        loadAirQuality(currentDeviceIds, currentStart, currentEnd)
+    ]).then(() => {
+        // When both updated, keep crosshair synced
+        try { echarts.connect([chart, aqChart]); } catch(_) {}
+    });
+}
+
 // Set up event listeners
 function setupEventListeners() {
     // Device dropdown handler
@@ -347,6 +515,7 @@ function setupEventListeners() {
         const dayAgo = now - 24 * 60 * 60;
         currentStart = dayAgo;
         currentEnd = now;
+        setPickersFromRange();
         loadData(currentDeviceIds, currentStart, currentEnd);
     });
 
@@ -355,6 +524,7 @@ function setupEventListeners() {
         const weekAgo = now - 7 * 24 * 60 * 60;
         currentStart = weekAgo;
         currentEnd = now;
+        setPickersFromRange();
         loadData(currentDeviceIds, currentStart, currentEnd);
     });
 
@@ -363,10 +533,18 @@ function setupEventListeners() {
         const monthAgo = now - 30 * 24 * 60 * 60;
         currentStart = monthAgo;
         currentEnd = now;
+        setPickersFromRange();
         loadData(currentDeviceIds, currentStart, currentEnd);
     });
 
-    // CSV Export
+    // Date pickers
+    document.getElementById('startDate').addEventListener('change', pickersToRangeAndReload);
+    document.getElementById('endDate').addEventListener('change', pickersToRangeAndReload);
+
+    /****************************************************************
+     *** CSV Export
+     ****************************************************************/
+    // CSV Export start
     document.getElementById('downloadCsv').addEventListener('click', () => {
         const checkboxes = document.querySelectorAll('#checkboxes input[type=checkbox]');
         const visibleSeries = [];
@@ -417,4 +595,27 @@ function setupEventListeners() {
         link.click();
         document.body.removeChild(link);
     });
+
+    /****************************************************************
+     *** END OF CSV EXPORT
+     ****************************************************************/
 }
+
+// ===============================
+// Default: last 7 days on load
+// ===============================
+// After your initial loadData() call completes, also load AQ, then fill pickers:
+document.addEventListener('DOMContentLoaded', function() {
+    // If you want default to last 7 days immediately:
+    const now = Math.floor(Date.now() / 1000);
+    currentStart = now - 7 * 24 * 60 * 60;
+    currentEnd   = now;
+
+    Promise.all([
+        loadData(currentDeviceIds, currentStart, currentEnd),
+        loadAirQuality(currentDeviceIds, currentStart, currentEnd)
+    ]).then(() => {
+        setPickersFromRange();
+        try { echarts.connect([chart, aqChart]); } catch(_) {}
+    });
+});
