@@ -14,8 +14,6 @@ from conftest import db_path
 
 from app.constants import TEST_DB_NAME
 
-
-
 class TestBinTools:
     """Test suite for bin/ tools.
     These all use the same database, which only gets filled once

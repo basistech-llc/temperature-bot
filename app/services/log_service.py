@@ -4,7 +4,7 @@ Log-related business logic
 import logging
 from typing import List, Dict, Any
 from ..utils.query_utils import temporal_quantification
-from ..utils.time_utils import github_style_duration
+from ..util import github_style_duration
 
 logger = logging.getLogger(__name__)
 

@@ -4,7 +4,7 @@ Device-related business logic
 import logging
 from typing import List, Dict, Any
 from .. import ae200, db
-from ..utils.time_utils import github_style_duration
+from ..util import github_style_duration
 from ..utils.query_utils import temporal_quantification
 
 logger = logging.getLogger(__name__)

@@ -95,7 +95,7 @@ td span.notes-disabled {
     padding-right: 5px;
 }
 
-/* rules */
+/* rules page */
 table.rules-table {
     border: 1px solid #ccc;
     border-collapse: collapse;
@@ -120,11 +120,17 @@ table.rules-table th  {
     border-bottom: 1px solid blue;
 }
 
-
 .suspend-rules-buttons {
     width: 200px;
 }
 
+.variable-name {
+    text-align: left;
+}
+
+.variable-value {
+    text-align: right;
+}
 
 /* Debug styles for the fan-status-container */
 #fan-status-container {
@@ -201,6 +207,22 @@ table.rules-table th  {
     white-space: nowrap;
     vertical-align: top;
 }
+
+/****************************************************************
+ ** Buttons
+ **/
+.erv-buttons {
+  text-align: center;
+}
+.square {
+  width: 90%;
+  max-width: 200px;
+  aspect-ratio: 1 / 1;
+  margin: 0.5em;
+  font-size: 0.9em;
+}
+
+
 
 /* optional: make tables respect the column width instead of expanding it */
 

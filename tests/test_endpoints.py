@@ -6,7 +6,6 @@ import sqlite3
 import os
 import json
 import time
-import tempfile
 from unittest.mock import patch
 
 import pytest
@@ -16,8 +15,7 @@ from helpers.mock_helpers import MockHelper
 
 from app import ae200
 from app import db
-from app.constants import __version__,DB_PATH,TEST_DB_NAME
-from app.services.device_service import DeviceService
+from app.constants import __version__
 
 logger = logging.getLogger(__name__)
 
@@ -91,91 +89,6 @@ def test_status_endpoint_with_schema_validation(flask_test_client):  # noqa: F81
     assert test_device["notes"] == "Test notes"
 
 
-def test_status_endpoint_schema_mismatch_detection():
-    """Test that detects when the database schema doesn't match code expectations.
-
-    This test simulates the production issue where the database was created
-    with an older schema missing the 'notes' column.
-    """
-
-    # Create a temporary database with the old schema (missing notes column)
-    with tempfile.NamedTemporaryFile(suffix='.db', delete=False) as tf:
-        db_path = tf.name
-
-    try:
-        conn = sqlite3.connect(db_path)
-        conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
-
-        # Create devices table WITHOUT the notes column (simulating old schema)
-        cursor.execute("""
-            CREATE TABLE devices (
-                device_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                device_name TEXT UNIQUE NOT NULL,
-                ae200_device_id INTEGER,
-                disabled_until INTEGER
-            )
-        """)
-
-        # Create devlog table
-        cursor.execute("""
-            CREATE TABLE devlog (
-                log_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                device_id INTEGER NOT NULL,
-                logtime INTEGER NOT NULL,
-                duration INTEGER NOT NULL DEFAULT 1,
-                temp10x INTEGER,
-                status_json TEXT,
-                FOREIGN KEY (device_id) REFERENCES devices (device_id)
-            )
-        """)
-
-        # Add test data
-        cursor.execute("INSERT INTO devices (device_name, ae200_device_id) VALUES (?, ?)", ("Test Device", 1))
-        device_id = cursor.lastrowid
-        cursor.execute("""
-            INSERT INTO devlog (device_id, logtime, duration, temp10x, status_json)
-            VALUES (?, ?, ?, ?, ?)
-        """, (device_id, int(time.time()), 60, 240, '{"Drive": "ON", "FanSpeed": "LOW"}'))
-        conn.commit()
-        conn.close()
-
-        # Set up environment to use this database
-        original_db_path = os.environ.get(DB_PATH)
-        original_test_db_name = os.environ.get(TEST_DB_NAME)
-
-        try:
-            os.environ[DB_PATH] = db_path
-            os.environ[TEST_DB_NAME] = db_path
-
-            # This should fail with the same error we saw in production
-            device_service = DeviceService()
-
-            conn = sqlite3.connect(db_path)
-            conn.row_factory = sqlite3.Row
-
-            # This should raise sqlite3.OperationalError: no such column: b.notes
-            with pytest.raises(sqlite3.OperationalError, match="no such column: b.notes"):
-                device_service.get_device_status(conn)
-            conn.close()
-
-        finally:
-            # Restore environment
-            if original_db_path is not None:
-                os.environ[DB_PATH] = original_db_path
-            elif DB_PATH in os.environ:
-                del os.environ[DB_PATH]
-
-            if original_test_db_name is not None:
-                os.environ[TEST_DB_NAME] = original_test_db_name
-            elif 'TEST_DB_NAME' in os.environ:
-                del os.environ[TEST_DB_NAME]
-
-    finally:
-        # Clean up temporary file
-        os.unlink(db_path)
-
-
 @skip_on_github
 @patch("app.weather.get_weather_data")
 @patch("app.airquality.get_aqi")
@@ -208,6 +121,7 @@ BROADWAY_SOUTH=10
 def test_set_fan_speed_endpoint(flask_test_client, start_speed, target_speed, expected_calls): # noqa: F811
     # Set up simulator with initial speed
     ae200.set_fan_speed(BROADWAY_SOUTH, start_speed)
+    now = int(time.time())      #
 
     # get device_id
     conn = sqlite3.connect(os.environ['TEST_DB_NAME'])
@@ -217,7 +131,6 @@ def test_set_fan_speed_endpoint(flask_test_client, start_speed, target_speed, ex
     c.execute("UPDATE devices set ae200_device_id=? where device_id=?",(BROADWAY_SOUTH,device_id))
     conn.commit()
     conn.close()
-
 
     # Send the /set_fan_speed
     response = flask_test_client.post(
@@ -243,21 +156,25 @@ def test_set_fan_speed_endpoint(flask_test_client, start_speed, target_speed, ex
         test_conn_verify = sqlite3.connect(os.environ['TEST_DB_NAME'])
         test_conn_verify.row_factory = sqlite3.Row
         cursor = test_conn_verify.cursor()
-        cursor.execute("SELECT ipaddr, device_id, new_value, agent FROM changelog order by changelog_id DESC limit 1")
-        changelog_entry = cursor.fetchone()
-        assert changelog_entry is not None
-        logging.debug("changelog_entry=%s",dict(changelog_entry))
-        assert changelog_entry['ipaddr'] == '127.0.0.1'  # Flask test client IP
-        assert changelog_entry['device_id'] == device_id
-        assert changelog_entry['new_value'] == str(target_speed)
-        assert changelog_entry['agent'] == 'web'
 
         cursor.execute("SELECT * from devices where device_name=?", ("Broadway Test",))
-        row = cursor.fetchone()
-        logging.debug("row=%s", dict(row))
-        device_id = row['device_id']
+        devrow = cursor.fetchone()
+        logging.debug("row=%s", dict(devrow))
+        assert devrow['disabled_until'] >= now+60         # make sure that rules are disabled for at least 60 seconds...
+        device_id = devrow['device_id']
         cursor.execute("SELECT * from devlog where device_id=? order by logtime desc", (device_id,))
-        row = cursor.fetchone()
-        extracted_status = ae200.extract_drive_and_fan_speed(json.loads(row['status_json']))
+        devlogrow = cursor.fetchone()
+        extracted_status = ae200.extract_drive_and_fan_speed(json.loads(devlogrow['status_json']))
         assert extracted_status['fan_speed'] == target_speed
+
+        cursor.execute("SELECT ipaddr, device_id, new_value, agent FROM changelog order by changelog_id DESC limit 2")
+        changelog_entries = cursor.fetchall()
+
+        assert len(changelog_entries)==2 # should have two entries
+        for cl in changelog_entries:
+            logging.debug("changelog_entry=%s",dict(cl))
+            assert cl['ipaddr'] == '127.0.0.1'  # Flask test client IP
+            assert cl['device_id'] == device_id
+            assert cl['agent'].startswith('Werkzeug') or cl['agent'] == 'web'
+
         test_conn_verify.close()

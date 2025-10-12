@@ -331,16 +331,23 @@ def device_rules_disabled_until(conn, device_id:int) -> int|None:
     return row[0] if row is not None else None
 
 def disable_rules_for_device(conn, device_id:int, seconds:int, ipaddr=None, agent=None, comment=None):
+    """Disable the rules for this device for a given number of seconds."""
+    now = int(time.time())
     if seconds==0:
         until = 0
     else:
-        until = int(time.time()) + seconds
+        until = now + seconds
     c = conn.cursor()
+
+    # Get the old value
     c.execute("SELECT disabled_until from devices where device_id=?",(device_id,))
     was = c.fetchone()
     current_value = was[0] if was else None
-    now = int(time.time())
+
+    # Update the disabled until and then the changelog
     c.execute("UPDATE devices set disabled_until=? where device_id=?",(until,device_id))
+
+    # Write the log entry
     c.execute(
         """
         INSERT INTO changelog (logtime, ipaddr, device_id, current_values, new_value, agent, comment)

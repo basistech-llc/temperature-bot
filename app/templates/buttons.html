@@ -3,16 +3,45 @@
 {% block body %}
 
 <div class="pure-g"><!-- the start of the pure row -->
-  <div id="main"></div>
-  <div id="controls">
-    <div class="erv-buttons">
-      <button id="kitchen-max">Kitchen ERV MAX</button>
-      <button id="kitchen-1">Kitchen ERV 1</button>
-      <button id="restrooms-max">Restrooms ERV MAX</button>
-      <button id="restrooms-1">Restrooms ERV 1</button>
+  <div id="main" class="pure-u-1"></div>
+  <div id="controls" class="pure-u-1">
+    <div class="erv-buttons pure-g">
+
+      {% if not only or only=='kitchen' %}
+      <div class="pure-u-1-2">
+        <button id="kitchen-1" class="pure-button square">Kitchen ERV 1</button>
+      </div>
+      <div class="pure-u-1-2">
+        <button id="kitchen-max" class="pure-button square">Kitchen ERV MAX</button>
+      </div>
+      {% endif %}
+
+      {% if not only or only=='restrooms' %}
+      <div class="pure-u-1-2">
+        <button id="restrooms-1" class="pure-button square">Restrooms ERV 1</button>
+      </div>
+      <div class="pure-u-1-2">
+        <button id="restrooms-max" class="pure-button square">Restrooms ERV MAX</button>
+      </div>
+      {% endif %}
     </div>
   </div>
 </div>
+
+
+<div class="pure-g"><!-- the start of the pure row -->
+  <div id="status-div"></div>
+</div>
+
+{% if not only %}
+<h3>Button Pages</h3>
+<div class="pure-g">
+<ul>
+  <li><a href="?only=kitchen">Kitchen</a></li>
+  <li><a href="?only=restrooms">Restrooms</a></li>
+</ul>
+</div>
+{% endif %}
 
 <script src="/static/buttons.js"></script>
 

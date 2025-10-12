@@ -5,10 +5,17 @@ import logging
 from flask import Blueprint, request, jsonify
 from flask_pydantic import validate
 
-from ..db import SpeedControl, DriveControl
-from ..services.device_service import DeviceService
-from ..services.weather_service import WeatherService
-from .common import LogService, with_db_connection, parse_device_ids, rules_engine, __version__
+from .constants import __version__
+from . import constants
+from . import db
+from . import rules_engine
+from .services.device_service import DeviceService
+from .services.log_service import LogService
+from .services.weather_service import WeatherService
+from .utils.request_utils import parse_device_ids
+from .utils.db_utils import with_db_connection
+
+from .db import SpeedControl, DriveControl
 
 logger = logging.getLogger(__name__)
 
@@ -24,17 +31,20 @@ log_service = LogService()
 def get_version_json():
     return jsonify({"version": __version__})
 
-
 @api_v1.route("/set_fan_speed", methods=["POST"])
 @validate()
 @with_db_connection
 def set_fan_speed(conn, body: SpeedControl):
-    """Sets the speed, records the speed in the changelog, and then updates the database, so status is always up-to-date"""
+    """Sets the speed, records the speed in the changelog,
+    and then updates the database, so status is always up-to-date"""
     logger.debug("/set_fan_speed: body=[%s]", body)
     ret = rules_engine.set_body_fan_speed(conn, body, request.remote_addr, "web")
-    logging.debug("ret=%s", ret)
+    db.disable_rules_for_device(conn,
+                                device_id = ret['device_id'],
+                                seconds = constants.RULES_DISABLE_SECONDS,
+                                ipaddr = request.remote_addr,
+                                agent = request.headers.get('User-Agent'))
     return jsonify({"status": "ok", **ret})
-
 
 @api_v1.route("/set_drive", methods=["POST"])
 @validate()
@@ -43,9 +53,14 @@ def set_drive(conn, body: DriveControl):
     """Sets the speed, records the speed in the changelog, and then updates the database, so status is always up-to-date"""
     logger.debug("/set_drive: body=[%s]", body)
     ret = rules_engine.set_body_drive(conn, body, request.remote_addr, "web")
-    logging.debug("ret=%s", ret)
+    device_id = ret['device_id']
+    db.disable_rules_for_device(conn,
+                                device_id = device_id,
+                                seconds = constants.RULES_DISABLE_SECONDS,
+                                ipaddr = request.remote_addr,
+                                agent = request.headers.get('User-Agent'),
+                                comment = f'rules for disabled for {constants.RULES_DISABLE_SECONDS/60} minutes')
     return jsonify({"status": "ok", **ret})
-
 
 @api_v1.route("/status")
 @with_db_connection
@@ -55,14 +70,12 @@ def get_status(conn):
     device_data = device_service.get_device_status(conn)
     return jsonify({"devices": device_data})
 
-
 @api_v1.route("/weather")
 @with_db_connection
 def get_weather(conn):
     """Get weather and AQI data"""
     weather_data = weather_service.get_weather_data(conn)
     return jsonify(weather_data)
-
 
 @api_v1.route("/temperature")
 @with_db_connection
@@ -75,7 +88,6 @@ def get_temperature_series(conn):
     series = device_service.get_temperature_series(conn, device_ids)
     return jsonify({"series": series})
 
-
 @api_v1.route("/logs")
 @with_db_connection
 def get_logs(conn):
@@ -87,7 +99,6 @@ def get_logs(conn):
 
     result = log_service.get_changelog(conn, draw, start_row, length)
     return jsonify(result)
-
 
 @api_v1.route("/disable-rules")
 @with_db_connection
