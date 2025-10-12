@@ -6,7 +6,6 @@ import sqlite3
 import os
 import json
 import time
-import tempfile
 from unittest.mock import patch
 
 import pytest
@@ -16,8 +15,7 @@ from helpers.mock_helpers import MockHelper
 
 from app import ae200
 from app import db
-from app.constants import __version__,DB_PATH,TEST_DB_NAME
-from app.services.device_service import DeviceService
+from app.constants import __version__
 
 logger = logging.getLogger(__name__)
 
