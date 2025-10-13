@@ -62,14 +62,10 @@ def update_from_hubitat(conn):
 
 def update_aqi(conn):
     data  = airquality.get_aqi_aqicn_full()
-    print(json.dumps(data,indent=4))
     values = {k:data['iaqi'][k]['v'] for k in ['co','h','no2','o3','p','pm10','pm25','so2','t','w']}
     values['aqi'] = data['aqi']
     values['logtime'] = int(time.time())
-    print("values:",values)
-    cur = conn.cursor()
-    cur.execute("INSERT INTO aqi (logtime,aqi,co,h,no2,o3,p,pm10,pm25,so2,t,w) values (:logtime,:aqi,:co,:h,:no2,:o3,:p,:pm10,:pm25,:so2,:t,:w)",values)
-    conn.commit()
+    db.insert_into_aqi(conn,data)
 
 def combine_temp_measurements(conn, start_time, end_time, seconds):
     """

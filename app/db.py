@@ -442,7 +442,7 @@ def get_temperature_series(conn, device_ids: List[int] | None  = None) -> List[D
                 series.append({"name": dev["device_name"], "data": data})
     return series
 
-def get_aq_series(conn):
+def get_aqi_series(conn):
     c = conn.cursor()
     cmd = """ SELECT * from aqi """
     (cmd, args) = temporal_quantification(cmd, [])
@@ -529,6 +529,10 @@ def get_device_log(conn, device_id: int) -> Dict[str, Any]:
         "changelog": changelog
     }
 
+def insert_into_aqi(conn, values):
+    cur = conn.cursor()
+    cur.execute("INSERT INTO aqi (logtime,aqi,co,h,no2,o3,p,pm10,pm25,so2,t,w) values (:logtime,:aqi,:co,:h,:no2,:o3,:p,:pm10,:pm25,:so2,:t,:w)",values)
+    conn.commit()
 
 
 def get_db_aqi(conn) -> dict:
