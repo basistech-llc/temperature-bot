@@ -1,53 +1,35 @@
 {% extends 'base.html' %}
 {% block title %} Temperature Time Series {% endblock %}
 {% block head %}
-<script src="https://cdn.jsdelivr.net/npm/echarts@5"></script>
+{% if dist %}
+   <script src="https://cdn.jsdelivr.net/npm/echarts@5"></script>
+{% else %}
+   <script src="/static/echarts@5"></script>
+{% endif %}
+<script src="/static/chart_support.js"></script>
 
 {% endblock %}
 {% block body %}
 
-<div class="pure-g"><!-- the start of the pure row -->
-  <div id="chart-controls">
-    <div id="chart-checkboxes"></div>
-    <button id="downloadCsv">Download CSV</button>
+<div class="pure-g">
+  <div id="controls">
+    <div id="checkboxes"></div>
     <div id="rangeControls" class="temporal-buttons">
       <button id="dayBtn">day</button>
       <button id="weekBtn">week</button>
       <button id="monthBtn">month</button>
-    </div>
+      <button id="allBtn">all</button>
+      <label>Start <input type="date" id="startDate"></label>
+      <label>End <input type="date" id="endDate"></label>
+   </div>
   </div>
 </div>
 
-<!-- New air-quality chart -->
-<div id="chart-airquality" style="width:100%; height: 500px; margin-top:16px;"></div>
-<!-- Existing temperature chart -->
-<div id="main"></div>
+<!-- air-quality chart -->
+<div class="pure-g"><div id="aqi-chart" style="height:220px; width:100%; margin-top:16px;"></div></div>
+<!-- Temperature chart -->
+<div class="pure-g"><div id="temp-chart" style="height:620px; width:100%; margin-top:16px;"></div></div>
+<div class="pure-g"><span id='record-count'</span></div>
+<div class="pure-g"><button id="downloadCsv">Download CSV</button></div>
 
-
-
-
-<!-- Add device dropdown in top right corner -->
-
-{% set dropdown = request.args.get('dropdown') %}
-{% if True or dropdown %}
-
-<div id="addDeviceContainer" class="adder">
-  <label for="addDeviceSelect" >Add device:</label>
-  <select id="addDeviceSelect" >
-    <option value="">Select a device...</option>
-  </select>
-</div>
-{% endif %}
-
-
-<!-- Two charts: Temperature (existing) + new Air Quality -->
-<canvas id="tempChart" height="140"></canvas>
-<canvas id="aqChart" height="180" style="margin-top:16px;"></canvas>
-
-
-<script>
- // Set device_ids for the chart.js script
- window.currentDeviceIds = {% if device_ids %}{{ device_ids | tojson }}{% else %}null{% endif %};
-</script>
-<script src="/static/chart_support.js"></script>
 {% endblock %}

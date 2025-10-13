@@ -79,7 +79,7 @@ def get_temperature(conn):
     series = db.get_temperature_series(conn, device_ids)
     return jsonify({"series": series})
 
-@api_v1.route("/aqi")
+@api_v1.route("/air_quality")
 @with_db_connection
 def get_ai(conn):
     """Return aqi series data"""

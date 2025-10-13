@@ -444,7 +444,7 @@ def get_temperature_series(conn, device_ids: List[int] | None  = None) -> List[D
 
 def get_aqi_series(conn):
     c = conn.cursor()
-    cmd = """ SELECT * from aqi """
+    cmd = """ SELECT * from aqi where 1 """
     (cmd, args) = temporal_quantification(cmd, [])
     cmd += " ORDER BY logtime "
     c.execute(cmd, args)

@@ -1,6 +1,7 @@
 <!DOCTYPE html><!-- -*- mode: html -*- -->
 <html lang="en">
 {% set only = request.args.get('only') %}
+{% set dist=0 %}
 <head>
   <meta charset="utf-8">
   <meta name="keywords" content="temperature"/>
@@ -8,16 +9,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title> {% block title %} {{title}} {% endblock %}</title>
   <!-- use Pure.css - https://purecss.io/ -->
-  <link rel="stylesheet"
-        href="https://cdn.jsdelivr.net/npm/purecss@3.0.0/build/pure-min.css"
-        integrity="sha384-X38yfunGUhNzHpBaEBsWLO+A0HDYOQi8ufWDkZ0k9e0eXz/tH3II7uKZ9msv++Ls"
-        crossorigin="anonymous"/>
+  {% if dist %}
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/purecss@3.0.0/build/pure-min.css" integrity="sha384-X38yfunGUhNzHpBaEBsWLO+A0HDYOQi8ufWDkZ0k9e0eXz/tH3II7uKZ9msv++Ls" crossorigin="anonymous"/>
+  {% else %}
+  <link rel="stylesheet" href="/static/pure-min.css" integrity="sha384-X38yfunGUhNzHpBaEBsWLO+A0HDYOQi8ufWDkZ0k9e0eXz/tH3II7uKZ9msv++Ls" crossorigin="anonymous"/>
+  {% endif %}
   <link rel="stylesheet" href="/static/style.css">
   <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
-  <script src="https://code.jquery.com/jquery-3.3.1.slim.min.js"
-          integrity="sha384-q8i/X+965DzO0rT7abK41JStQIAqVgRVzpbzo5smXKp4YfRvH+8abtTE1Pi6jizo"
-          crossorigin="anonymous">
-  </script>
+<!--   <script src="https://code.jquery.com/jquery-3.3.1.slim.min.js" integrity="sha384-q8i/X+965DzO0rT7abK41JStQIAqVgRVzpbzo5smXKp4YfRvH+8abtTE1Pi6jizo" crossorigin="anonymous"></script> -->
 
   {% block head %}
   {% endblock %}
