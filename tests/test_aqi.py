@@ -20,9 +20,8 @@ def test_aqi_rest(flask_test_client, test_database_conn_with_test_data): # noqa:
     r = flask_test_client.get("/api/v1/air_quality")
     data = r.json
     logger.debug("data=%s",data)
-    for d in data['series']:
-        if d['name']=='co':
-            for (k,v) in d['data']:
-                if k==now and v==10:
-                    return
+    for (k,v) in data['no2']:
+        logger.debug("k=%s v=%s",k,v)
+        if k==now and v==30:
+            return
     raise RuntimeError(f"No row matching {qdata} in {data}")

@@ -174,7 +174,12 @@ def run_rules(conn, when=None):
     # finally, if the time has passed for any rule, set to 0
     now = int(time.time())
     for dev in all_devices:
-        if 0 < dev['disabled_until'] < now:
+        try:
+            is_disabled = 0 < dev['disabled_until'] < now
+        except (TypeError,KeyError):
+            is_disabled = False
+
+        if not is_disabled:
             db.disable_rules_for_device(conn, dev['device_id'], 0,
                                         agent='rules runner',
                                         comment='disabled timer expired')
