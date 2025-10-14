@@ -6,10 +6,12 @@ import os
 import time
 import logging
 import threading
+import datetime
 from unittest.mock import patch
+from pathlib import Path
 
 import pytest
-from playwright.sync_api import sync_playwright, expect
+from playwright.sync_api import sync_playwright, expect, TimeoutError as PWTimeoutError
 
 from conftest import test_database_conn_with_test_data, skip_on_github  # noqa: F401,F811  # pylint: disable=unused-import
 from helpers.browser_helpers import BrowserTestHelper, TemperatureTestHelper
@@ -82,6 +84,7 @@ def test_browser_fan_speed_controls(
     # Give the server time to start
     time.sleep(3)
 
+    logger.debug("PLAYWRIGHT_BROWSERS_PATH=%s",os.environ['PLAYWRIGHT_BROWSERS_PATH'])
     try:
         with sync_playwright() as p:
             # Launch browser
@@ -190,10 +193,23 @@ def test_browser_fan_speed_controls(
             assert device_info['FanSpeed'] == "MID2"
 
             browser.close()
+    except PWTimeoutError:
+        ts = datetime.now().strftime("%Y%m%d-%H%M%S")
+        fname_html = Path(f"debug_page_{ts}.html")
+        fname_png = Path(f"debug_page_{ts}.png")
+
+        fname_html.write_text(page.content(), encoding="utf-8")
+        page.screenshot(path=str(fname_png), full_page=True)
+
+        print(f"❌ Selector '#main' not found on {page.url}")
+        print(f"   HTML dump: {fname_html.resolve()}")
+        print(f"   Screenshot: {fname_png.resolve()}")
+        raise
 
     except Exception as e:
         logger.error("Browser test failed: %s",e)
         raise
+
     finally:
         # Clean up - the server thread will be terminated when the process ends
         pass

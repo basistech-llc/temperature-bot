@@ -6,17 +6,19 @@ import tempfile
 import sqlite3
 import logging
 import time
+from pathlib import Path
+
 import pytest
 
 from app.main import app as flask_app
 from app.paths import SCHEMA_FILE_PATH
 
-
 DEFAULT_AQI_VALUE = 45
 TEST_DEVICE_NAME = 'Broadway Test'
 
-# Set AE200_SIMULATOR environment variable for all tests
+# Set environment variables for all tests
 os.environ['AE200_SIMULATOR'] = '1'
+os.environ['PLAYWRIGHT_BROWSERS_PATH'] = str(Path(__file__).resolve().parents[0].parents[0] / ".playwright")
 
 logger = logging.getLogger(__name__)
 
