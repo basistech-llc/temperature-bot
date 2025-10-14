@@ -7,12 +7,15 @@ import sys
 import tempfile
 import subprocess
 import sqlite3
+import logging
 from pathlib import Path
 
 import pytest
 from conftest import db_path
 
 from app.constants import TEST_DB_NAME
+
+logger = logging.getLogger(__name__)
 
 class TestBinTools:
     """Test suite for bin/ tools.
@@ -37,8 +40,7 @@ class TestBinTools:
             capture_output=True,
             text=True,
             timeout=30,
-            check=False
-        )
+            check=False )
 
         assert result.returncode == 0, f"runner.py --help failed: {result.stderr}"
         assert "BasisTech LLC Runner" in result.stdout
@@ -59,13 +61,13 @@ class TestBinTools:
             text=True,
             timeout=30,
             env=env,
-            check=False
-        )
+            check=False )
 
         # Should not crash, even if no data (may fail due to Hubitat config, but that's OK)
         # The important thing is that it can access the database
         if result.returncode != 0:
             # If it fails due to Hubitat config, that's acceptable for this test
+            logger.debug("result.stderr=%s",result.stderr)
             assert "appId" in result.stderr or "hubitat" in result.stderr.lower()
         else:
             # Should show some output (either data or "No data found")
@@ -95,8 +97,7 @@ class TestBinTools:
             capture_output=True,
             text=True,
             timeout=30,
-            check=False
-        )
+            check=False )
 
         assert result.returncode == 0, f"scheduler.py --help failed: {result.stderr}"
         assert "BasisTech LLC Rules Scheduler" in result.stdout
@@ -110,8 +111,7 @@ class TestBinTools:
             capture_output=True,
             text=True,
             timeout=30,
-            check=False
-        )
+            check=False )
 
         assert result.returncode == 0, f"scheduler.py --dry-run failed: {result.stderr}"
         assert "=dry run=" in result.stdout

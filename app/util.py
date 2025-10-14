@@ -7,6 +7,7 @@ import os
 import functools
 import logging
 import yaml  # type: ignore
+
 from app.paths import CONFIG_YAML_PATH
 
 logger = logging.getLogger(__name__)
@@ -36,7 +37,6 @@ def get_secret(category,name):
     except KeyError as e:
         logger.error("no secret [%s][%s] in %s",category,name,CONFIG_YAML_PATH)
         raise RuntimeError("no secret") from e
-
 
 def github_style_duration(past_time, now=None):
     """Convert time difference to GitHub-style duration string"""

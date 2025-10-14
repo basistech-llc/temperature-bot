@@ -8,6 +8,7 @@ import logging
 import threading
 from unittest.mock import patch
 
+import pytest
 from playwright.sync_api import sync_playwright, expect
 
 from conftest import test_database_conn_with_test_data, skip_on_github  # noqa: F401,F811  # pylint: disable=unused-import
@@ -26,6 +27,7 @@ TEST_TEMP=32
 TEST_AQI = False
 
 # pylint: disable=too-many-arguments, disable=too-many-positional-arguments, disable=too-many-statements
+@pytest.mark.skipif(os.getenv("SKIP_BROWSER_TEST"),reason='SKIP_BROWSER_TEST is set')
 @skip_on_github
 @patch("app.weather.get_weather_data")
 @patch("app.airquality.get_aqi")
@@ -197,6 +199,7 @@ def test_browser_fan_speed_controls(
         pass
 
 # pylint: disable=unused-argument
+@pytest.mark.skipif(os.getenv("SKIP_BROWSER_TEST"),reason='SKIP_BROWSER_TEST is set')
 @skip_on_github
 @patch("app.weather.get_weather_data")
 @patch("app.airquality.get_aqi")
@@ -297,6 +300,7 @@ def test_browser_page_loads_correctly(
         pass
 
 
+@pytest.mark.skipif(os.getenv("SKIP_BROWSER_TEST"),reason='SKIP_BROWSER_TEST is set')
 @skip_on_github
 @patch("app.weather.get_weather_data")
 @patch("app.airquality.get_aqi")
@@ -387,6 +391,7 @@ def test_browser_temperature_display(
         pass
 
 
+@pytest.mark.skipif(os.getenv("SKIP_BROWSER_TEST"),reason='SKIP_BROWSER_TEST is set')
 @skip_on_github
 def test_chart_page_no_dom_errors(test_database_conn_with_test_data): # noqa: F811
     """

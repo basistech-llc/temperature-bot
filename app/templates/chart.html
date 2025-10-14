@@ -1,67 +1,39 @@
 {% extends 'base.html' %}
 {% block title %} Temperature Time Series {% endblock %}
 {% block head %}
-  <script src="https://cdn.jsdelivr.net/npm/echarts@5"></script>
-  <style>
-    #main { width: 100%; height: 800px; }
-    #controls { margin-top: 1em; font-family: sans-serif; }
-    #checkboxes label { margin-right: 1em; }
-    .temporal-buttons {
-      margin-top: 1em;
-      display: flex;
-      gap: 0.5em;
-    }
-    .temporal-buttons button {
-      margin-right: 0.5em;
-      width: auto;
-      min-width: 60px;
-      padding: 0.3em 0.8em;
-    }
-    #downloadCsv {
-      width: auto;
-      padding: 0.3em 0.8em;
-      margin-bottom: 1em;
-    }
-    #addDeviceContainer {
-      position: fixed;
-      top: 50px;
-      right: 20px;
-      z-index: 1000;
-      background: white;
-      padding: 10px;
-      border: 1px solid #ccc;
-      border-radius: 5px;
-      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-    }
-  </style>
+{% if dist %}
+   <script src="https://cdn.jsdelivr.net/npm/echarts@5"></script>
+{% else %}
+   <script src="/static/echarts@5"></script>
+{% endif %}
+<script src="/static/chart_support.js"></script>
+
 {% endblock %}
 {% block body %}
 
-<div class="pure-g"><!-- the start of the pure row -->
-  <div id="main"></div>
+<div class="pure-g">
   <div id="controls">
     <div id="checkboxes"></div>
-    <button id="downloadCsv">Download CSV</button>
-    <div class="temporal-buttons">
+    <div id="rangeControls" class="temporal-buttons">
       <button id="dayBtn">day</button>
       <button id="weekBtn">week</button>
       <button id="monthBtn">month</button>
-    </div>
+      <button id="allBtn">all</button>
+      <label>Start <input type="date" id="startDate"></label>
+      <label>End <input type="date" id="endDate"></label>
+   </div>
   </div>
 </div>
 
-<!-- Add device dropdown in top right corner -->
-<div id="addDeviceContainer" class="adder">
-  <label for="addDeviceSelect" >Add device:</label>
-  <select id="addDeviceSelect" >
-    <option value="">Select a device...</option>
-  </select>
-</div>
-
-  <script>
-    // Set device_ids for the chart.js script
-    window.currentDeviceIds = {% if device_ids %}{{ device_ids | tojson }}{% else %}null{% endif %};
-  </script>
-  <script src="/static/chart_support.js"></script>
+<!-- air-quality chart -->
+<style>
+ #aqi-chart { height:420px; width:100%; margin-top:16px;   }
+ #temp-chart { height:620px; width:100%; margin-top:16px;}
+</style>
+<div class="pure-g"><div id="aqi-chart" ></div></div>
+<!-- Temperature chart -->
+<div class="pure-g"><div id="temp-chart"></div></div>
+<div class="pure-g"><span id="record-count"></span></div>
+<div class="pure-g"><button id="downloadCsv">Download CSV</button></div>
 
 {% endblock %}

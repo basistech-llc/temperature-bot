@@ -1,30 +1,51 @@
-// chart.js - Temperature chart functionality
+// chart_support.js - AQI and Temperature chart functionality
 
-let chart;
-let rawData = []; // original data from API
-let currentStart = null;
-let currentEnd = null;
-let currentDeviceIds = null; // for device support (single or multiple)
+let tempChart = null;               // temperature chart
+let tempData = [];            // original data from API
+let aqiChart = null;
+let aqiData = [];
+let currentStart = null;        // time_t
+let currentEnd = null;          // time_t
+let currentDeviceIds = []; // current devices to load. [] means load them all
 let allDevices = []; // all available devices for dropdown
+const TEMP_ENDPOINT = '/api/v1/temperature';
+const AQI_ENDPOINT = '/api/v1/air_quality';
 
-// Initialize chart when DOM is loaded
-document.addEventListener('DOMContentLoaded', function() {
-    chart = echarts.init(document.getElementById('main'));
-
-    // Get device_ids from template variable (will be set by chart.html)
-    if (typeof window.currentDeviceIds !== 'undefined') {
-        currentDeviceIds = window.currentDeviceIds;
+/****************************************************************
+ *** Date selection
+ ****************************************************************/
+function setPickersFromRange() {
+    if (currentStart && currentEnd) {
+        const sd = new Date(currentStart * 1000);
+        const ed = new Date(currentEnd   * 1000);
+        const pad = n => String(n).padStart(2, '0');
+        const toISODate = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+        document.getElementById('startDate').value = toISODate(sd);
+        document.getElementById('endDate').value   = toISODate(ed);
     }
+    reloadData();
+}
 
-    // Initial load
-    loadData(currentDeviceIds, currentStart, currentEnd);
+function pickersChanged() {
+    const sd = document.getElementById('startDate').value; // yyyy-mm-dd
+    const ed = document.getElementById('endDate').value;
 
-    // Load all devices for dropdown
-    loadAllDevices();
+    if (sd) {
+        const s = new Date(sd + 'T00:00:00');
+        currentStart = Math.floor(s.getTime() / 1000);
+    }
+    if (ed) {
+        const e = new Date(ed + 'T23:59:59');
+        currentEnd = Math.floor(e.getTime() / 1000);
+    }
+    reloadData();
+}
 
-    // Set up event listeners
-    setupEventListeners();
-});
+function setTimePrevDays(days) {
+    currentEnd = Math.floor(Date.now() / 1000);
+    currentStart = currentEnd - days * 24 * 60 * 60;
+    setPickersFromRange();
+}
 
 // Format time intelligently based on time scale
 function formatTime(ts) {
@@ -52,33 +73,56 @@ function formatTime(ts) {
     }
 }
 
+// Update record count display
+function updateTempRecordCount() {
+    let totalRecords = 0;
+    tempData.forEach(series => { totalRecords += series.data.length; }); // count records in each series
+    let recordCountElement = document.getElementById('record-count');
+    if (recordCountElement) {
+        recordCountElement.textContent = `Total temperature datapoints: ${totalRecords}`;
+    } else {
+        console.error("no element record-count");
+    }
+}
+
+
+/****************************************************************/
+
 // Load data from API with optional parameters
-function loadData(deviceIds = null, start = null, end = null) {
-    let url = '/api/v1/temperature';
+function loadTempData() {
+    let url = TEMP_ENDPOINT;
     const params = new URLSearchParams();
 
     // Support single device or multiple devices
-    if (deviceIds && deviceIds.length > 0) {
-        params.append('device_ids', deviceIds.join(','));
+    if (currentDeviceIds.length > 0) {
+        params.append('device_ids', currentDeviceIds.join(','));
     }
-    if (start) params.append('start', start);
-    if (end) params.append('end', end);
+    params.append('start', currentStart);
+    params.append('end', currentEnd);
+    url += '?' + params.toString();
 
-    if (params.toString()) {
-        url += '?' + params.toString();
-    }
-
+    console.log("Fetch ",url);
     fetch(url)
         .then(response => response.json())
         .then(json => {
-            rawData = json.series;
-            const checkboxContainer = document.getElementById('checkboxes');
-            checkboxContainer.innerHTML = '';
+            tempData = json.series;
+            console.log("tempData=",tempData);
 
-            // Only show checkboxes if not filtering by device
-            if (!deviceIds) {
-                rawData.forEach((series, index) => {
+            // Expected shape (example):
+            // [{name: "Sensor 1", data:[[ts,val],[ts2,val2],[ts3,val3]...]},
+            // {name: "Sensor 2", data:[[ts,val],[ts2,val2],[ts3,val3]...]},... ]
+
+            // Draw checkboxes if not filtering by device.
+            // This causes all devices to be shown
+            if (currentDeviceIds.length==0) {
+                const checkboxContainer = document.getElementById('checkboxes');
+                checkboxContainer.innerHTML = '';
+                tempData.forEach((series, index) => {
                     const id = `checkbox-${index}`;
+                    const wrapper = document.createElement('span');
+                    wrapper.style.whiteSpace = 'nowrap';   // keep label on one line with its checkbox
+                    wrapper.style.marginRight = '1em';     // small gap before next checkbox group
+
                     const checkbox = document.createElement('input');
                     checkbox.type = 'checkbox';
                     checkbox.id = id;
@@ -88,69 +132,37 @@ function loadData(deviceIds = null, start = null, end = null) {
                     label.htmlFor = id;
                     label.innerText = series.name;
 
-                    checkbox.addEventListener('change', updateChart);
-                    checkboxContainer.appendChild(checkbox);
-                    checkboxContainer.appendChild(label);
+                    console.log("creating checkbox for series ",series.name);
+
+                    checkbox.addEventListener('change', updateTempChart);
+                    wrapper.appendChild(checkbox);
+                    wrapper.appendChild(label);
+                    checkboxContainer.appendChild(wrapper);
                 });
             }
-
             // Update record count display
-            updateRecordCount();
-            updateChart();
+            updateTempRecordCount();
+            updateTempChart();
         });
 }
 
-// Update record count display
-function updateRecordCount() {
-    let totalRecords = 0;
-    rawData.forEach(series => {
-        totalRecords += series.data.length;
-    });
-
-    // Create or update record count element
-    let recordCountElement = document.getElementById('record-count');
-    if (!recordCountElement) {
-        recordCountElement = document.createElement('div');
-        recordCountElement.id = 'record-count';
-        recordCountElement.style.cssText = 'margin: 10px 0; padding: 5px; background: #f0f0f0; border-radius: 3px; font-family: monospace;';
-
-        // Find the controls element
-        const controlsElement = document.getElementById('controls');
-        if (controlsElement) {
-            // Insert at the beginning of controls, before the flex container
-            controlsElement.insertBefore(recordCountElement, controlsElement.firstChild);
-        }
-    }
-    recordCountElement.textContent = `Records loaded: ${totalRecords}`;
-}
-
-function updateChart() {
+function updateTempChart() {
+    // Called when a checkbox changes or data changes
+    console.log("updateTempChart");
     const checkboxes = document.querySelectorAll('#checkboxes input[type=checkbox]');
     const series = [];
 
-    // If filtering by device, show all data
-    if (currentDeviceIds) {
-        rawData.forEach(s => {
+    // Show only checked series
+    checkboxes.forEach((cb, i) => {
+        if (cb.checked) {
             series.push({
-                name: s.name,
+                name: tempData[i].name,
                 type: 'line',
                 showSymbol: false,
-                data: s.data.map(([ts, val]) => [ts * 1000, val]) // convert to ms
+                data: tempData[i].data.map(([ts, val]) => [ts * 1000, val]) // convert to ms
             });
-        });
-    } else {
-        // Show only checked series
-        checkboxes.forEach((cb, i) => {
-            if (cb.checked) {
-                series.push({
-                    name: rawData[i].name,
-                    type: 'line',
-                    showSymbol: false,
-                    data: rawData[i].data.map(([ts, val]) => [ts * 1000, val]) // convert to ms
-                });
-            }
-        });
-    }
+        }
+    });
 
     // --- Add vertical dotted lines for day breaks ---
     // Find min and max timestamps across all series
@@ -162,6 +174,8 @@ function updateChart() {
             if (ts > maxTs) maxTs = ts;
         });
     });
+
+    console.log("minTs=",minTs,"maxTs=",maxTs);
 
     // Generate day boundaries between min and max
     const markLines = [];
@@ -188,7 +202,7 @@ function updateChart() {
     // --- End vertical lines ---
 
     const option = {
-                title: {
+        title: {
             text: (() => {
                 let baseTitle = currentDeviceIds && currentDeviceIds.length > 1 ?
                     `Temperature Time Series - Multiple Devices` :
@@ -228,26 +242,13 @@ function updateChart() {
             top: 40,
             selectedMode: series.length <= 1 ? false : true
         },
-        grid: {
-            top: 200,
-            left: 100,
-            right: 100,
-            bottom: 100
-        },
-        xAxis: {
-            type: 'time',
-            name: 'Time',
-            axisLabel: {
-                rotate: 45,
-                formatter: function (value) {
-                    return formatTime(value);
-                }
-            }
-        },
-        yAxis: {
-            type: 'value',
-            name: 'Temperature (°C)'
-        },
+        grid: { top: 200, left: 100, right: 100, bottom: 100 },
+        xAxis: { type: 'time', name: 'Time',
+                 axisLabel: {
+                     rotate: 45,
+                     formatter: function (value) { return formatTime(value); } }
+               },
+        yAxis: { type: 'value', name: 'Temperature (°C)' },
         series: series
     };
 
@@ -271,112 +272,165 @@ function updateChart() {
             }
         });
     }
-
-    chart.setOption(option, true);
+    tempChart.setOption(option, { notMerge: true});
 }
 
-// Load all available devices for the dropdown
-function loadAllDevices() {
-    fetch('/api/v1/status')
-        .then(response => response.json())
-        .then(data => {
-            allDevices = data.devices || [];
-            updateDeviceDropdown();
+
+/****************************************************************/
+// Air Quality chart setup
+// =======================
+
+// Air Quality Display and Units
+AQI_UNITS =
+    {'PM2.5':'PM2.5 µg/m³',
+     'PM10': 'PM10 µg/m³',
+     'O3': 'O₃ ppb',
+     'NO2': 'NO₂ ppb',
+     'CO':  'CO ppm'};
+
+
+function loadAirQualityData() {
+    let url = AQI_ENDPOINT;
+    const params = new URLSearchParams();
+    params.append('start', currentStart);
+    params.append('end', currentEnd);
+    url += '?' + params.toString();
+
+    return fetch(url)
+        .then(r => r.json())
+        .then(json => {
+            // Expected shape (example):
+            // { pm25: [[ts,val],...], pm10: [...], o3: [...], no2: [...], co: [...], aqi: [...] }
+            aqiData = json;
+            updateAQChart();
         })
-        .catch(error => {
-            console.error('Error loading devices:', error);
+        .catch(err => {
+            console.error('Error loading air quality:', err);
+            // Keep previous data if fetch fails
+            updateAQChart();
         });
 }
 
-// Update the device dropdown with available devices
-function updateDeviceDropdown() {
-    const select = document.getElementById('addDeviceSelect');
-    if (!select) return;
+function unitFor(name) {
+  switch (name) {
+    case 'PM2.5':
+    case 'PM10': return ' µg/m³';
+    case 'O₃':
+    case 'NO₂':  return ' ppb';
+    case 'CO':   return ' ppm';
+    default:     return '';
+  }
+}
 
-    // Clear existing options except the first one
-    select.innerHTML = '<option value="">Select a device...</option>';
+// ==========================
+// Render the Air Quality chart
+// ==========================
+function updateAQChart() {
+    if (!aqiChart) return;
 
-    // Get currently displayed device IDs
-    const currentIds = currentDeviceIds || [];
+    // Convert seconds->ms for ECharts time axis
+    const toMs = arr => (arr || []).map(([ts, v]) => [ts * 1000, v]);
 
-    // Filter out devices that are already displayed
-    const availableDevices = allDevices.filter(device => !currentIds.includes(device.device_id));
+    const series = [
+        { name: 'PM2.5', data: toMs(aqiData.pm25), unit: 'µg/m³', yAxisIndex: 0 },
+        { name: 'PM10',  data: toMs(aqiData.pm10), unit: 'µg/m³', yAxisIndex: 1 },
+        { name: 'O₃',    data: toMs(aqiData.o3),   unit: 'ppb',   yAxisIndex: 2 },
+        { name: 'NO₂',   data: toMs(aqiData.no2),  unit: 'ppb',   yAxisIndex: 3 },
+        { name: 'CO',    data: toMs(aqiData.co),   unit: 'ppm',   yAxisIndex: 4 },
+        { name: 'AQI',   data: toMs(aqiData.aqi),  unit: '',      yAxisIndex: 5 },
+    ].map(s => ({
+        name: s.name,
+        type: 'line',
+        showSymbol: false,
+        encode: { x: 0, y: 1 },
+        yAxisIndex: s.yAxisIndex,
+        data: s.data
+    }));
 
-    // Sort by device name
-    availableDevices.sort((a, b) => a.device_name.localeCompare(b.device_name));
+    const yAxes = [
+        { type: 'value', name: 'PM2.5 (µg/m³)', axisLabel: { formatter: v => `${v}` }, position: 'left', offset:0 },
+        { type: 'value', name: 'PM10 (µg/m³)',  axisLabel: { formatter: v => `${v}` }, position: 'left', offset: 75 },
+        { type: 'value', name: 'O₃ (ppb)',      axisLabel: { formatter: v => `${v}` }, position: 'left', offset:150  },
+        { type: 'value', name: 'NO₂ (ppb)',     axisLabel: { formatter: v => `${v}` }, position: 'right', offset:0 },
+        { type: 'value', name: 'CO (ppm)',      axisLabel: { formatter: v => `${v}` }, position: 'right', offset:75},
+        { type: 'value', name: 'AQI',           axisLabel: { formatter: v => `${v}` }, position: 'right', offset:150 }
+    ];
 
-    // Add options for available devices
-    availableDevices.forEach(device => {
-        const option = document.createElement('option');
-        option.value = device.device_id;
-        option.textContent = `${device.device_name} (${device.device_id})`;
-        select.appendChild(option);
+    // Make alternate axes not draw overlapping grid lines
+    yAxes.forEach((ax, i) => {
+        ax.splitLine = { show: i === 0 }; // keep one set
     });
+
+    const option = {
+        title: { text: 'Air Quality (multi-axis)', top: 0 },
+        tooltip: {
+            trigger: 'axis',
+            formatter: params => {
+                if (!params || !params.length) return '';
+                const ts = params[0].value[0];
+                const d = new Date(ts);
+                const time = new Intl.DateTimeFormat(undefined, {
+                    weekday: 'short', month: 'short', day: 'numeric',
+                    hour: '2-digit', minute: '2-digit'
+                }).format(d);
+                return params.reduce((out, p) => {
+                    return out + `${p.marker} ${p.seriesName}: ${p.value[1]}${unitFor(p.seriesName)}<br>`;
+                }, `${time}<br>`);
+            }
+        },
+        legend: { top: 40 },
+        grid:   { top: 120, left: 80, right: 80, bottom: 80 },
+        xAxis:  { type: 'time', axisLabel: { rotate: 45 } },
+        yAxis:  yAxes,
+        series: series,
+        axisPointer: { // helps link with temp chart
+            link: [{ xAxisIndex: 'all' }],
+            snap: true
+        }
+    };
+
+    aqiChart.setOption(option, { notMerge: false });
+
+    // Keep charts linked (crosshair/zoom)
+    // try { echarts.connect([tempChart, aqiChart]); } catch(_) {}
 }
 
-// Add a device to the current chart
-function addDeviceToChart(deviceId) {
-    // Initialize currentDeviceIds if it's null
-    if (!currentDeviceIds) {
-        currentDeviceIds = [];
-    }
-    // Add the device if it's not already included
-    if (!currentDeviceIds.includes(deviceId)) {
-        currentDeviceIds.push(deviceId);
-        // Reload data with the new device
-        loadData(currentDeviceIds, currentStart, currentEnd);
-        // Update the dropdown to reflect the change
-        updateDeviceDropdown();
-    }
-}
+
+/****************************************************************/
 
 // Set up event listeners
 function setupEventListeners() {
-    // Device dropdown handler
-    document.getElementById('addDeviceSelect').addEventListener('change', function() {
-        const selectedDeviceId = parseInt(this.value);
-        if (selectedDeviceId) {
-            addDeviceToChart(selectedDeviceId);
-            this.value = ''; // Reset selection
-        }
-    });
-
     // Temporal button handlers
     document.getElementById('dayBtn').addEventListener('click', () => {
-        const now = Math.floor(Date.now() / 1000);
-        const dayAgo = now - 24 * 60 * 60;
-        currentStart = dayAgo;
-        currentEnd = now;
-        loadData(currentDeviceIds, currentStart, currentEnd);
+        setTimePrevDays(1);
     });
 
     document.getElementById('weekBtn').addEventListener('click', () => {
-        const now = Math.floor(Date.now() / 1000);
-        const weekAgo = now - 7 * 24 * 60 * 60;
-        currentStart = weekAgo;
-        currentEnd = now;
-        loadData(currentDeviceIds, currentStart, currentEnd);
+        setTimePrevDays(7);
     });
 
     document.getElementById('monthBtn').addEventListener('click', () => {
-        const now = Math.floor(Date.now() / 1000);
-        const monthAgo = now - 30 * 24 * 60 * 60;
-        currentStart = monthAgo;
-        currentEnd = now;
-        loadData(currentDeviceIds, currentStart, currentEnd);
+        setTimePrevDays(31);
     });
 
-    // CSV Export
+    // Date pickers
+    document.getElementById('startDate').addEventListener('change', pickersChanged);
+    document.getElementById('endDate').addEventListener('change', pickersChanged);
+
+    /****************************************************************
+     *** CSV Export
+     ****************************************************************/
+    // CSV Export start
     document.getElementById('downloadCsv').addEventListener('click', () => {
         const checkboxes = document.querySelectorAll('#checkboxes input[type=checkbox]');
         const visibleSeries = [];
 
         if (currentDeviceIds) {
-            visibleSeries.push(...rawData);
+            visibleSeries.push(...tempData);
         } else {
             checkboxes.forEach((cb, i) => {
                 if (cb.checked) {
-                    visibleSeries.push(rawData[i]);
+                    visibleSeries.push(tempData[i]);
                 }
             });
         }
@@ -417,4 +471,41 @@ function setupEventListeners() {
         link.click();
         document.body.removeChild(link);
     });
+
+    /****************************************************************
+     *** END OF CSV EXPORT
+     ****************************************************************/
 }
+
+function reloadData() {
+    // Reload both charts’ data with the shared range
+    console.log("reloadData");
+    Promise.all([
+        loadTempData(),
+        loadAirQualityData()
+    ]).then(() => {
+        // When both updated, keep crosshair synced
+        // try { echarts.connect([tempChart  aqiChart ]); } catch(_) {}
+    });
+}
+
+
+
+// ===============================
+// Default: last 7 days on load
+// ===============================
+// After your initial loadData() call completes, also load AQ, then fill pickers:
+document.addEventListener('DOMContentLoaded', function() {
+    setTimePrevDays(7);// Initialize to 1 week of date
+    aqiChart  = echarts.init(document.getElementById('aqi-chart')); // aqi chart
+    tempChart = echarts.init(document.getElementById('temp-chart')); // // Temperature chart
+
+    console.log("aqiChart=",aqiChart,"tempChart=",tempChart);
+
+    reloadData();
+    // Load both charts then set
+    loadTempData();
+
+    // Set up event listeners
+    setupEventListeners();
+});
