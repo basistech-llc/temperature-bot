@@ -244,7 +244,8 @@ const refreshGridRows = () => {
 		}
 
 		// Update last refresh time
-                $('#last-refresh').html( "Last Refresh: " + asctime(new Date()) );
+                const lr = document.getElementById('last-refresh');
+                lr.innerHtml = "Last Refresh: " + asctime(new Date());
 
                 // Update the refresh time
                 lastRefreshTime = now;

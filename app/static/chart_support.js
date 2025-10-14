@@ -9,7 +9,7 @@ let currentEnd = null;          // time_t
 let currentDeviceIds = []; // current devices to load. [] means load them all
 let allDevices = []; // all available devices for dropdown
 const TEMP_ENDPOINT = '/api/v1/temperature';
-const AIQ_ENDPOINT = '/api/v1/air_quality';
+const AQI_ENDPOINT = '/api/v1/air_quality';
 
 /****************************************************************
  *** Date selection
@@ -277,6 +277,126 @@ function updateTempChart() {
 
 
 /****************************************************************/
+// Air Quality chart setup
+// =======================
+
+// Air Quality Display and Units
+AQI_UNITS =
+    {'PM2.5':'PM2.5 µg/m³',
+     'PM10': 'PM10 µg/m³',
+     'O3': 'O₃ ppb',
+     'NO2': 'NO₂ ppb',
+     'CO':  'CO ppm'};
+
+
+function loadAirQualityData() {
+    let url = AQI_ENDPOINT;
+    const params = new URLSearchParams();
+    params.append('start', currentStart);
+    params.append('end', currentEnd);
+    url += '?' + params.toString();
+
+    return fetch(url)
+        .then(r => r.json())
+        .then(json => {
+            // Expected shape (example):
+            // { pm25: [[ts,val],...], pm10: [...], o3: [...], no2: [...], co: [...], aqi: [...] }
+            aqiData = json;
+            updateAQChart();
+        })
+        .catch(err => {
+            console.error('Error loading air quality:', err);
+            // Keep previous data if fetch fails
+            updateAQChart();
+        });
+}
+
+function unitFor(name) {
+  switch (name) {
+    case 'PM2.5':
+    case 'PM10': return ' µg/m³';
+    case 'O₃':
+    case 'NO₂':  return ' ppb';
+    case 'CO':   return ' ppm';
+    default:     return '';
+  }
+}
+
+// ==========================
+// Render the Air Quality chart
+// ==========================
+function updateAQChart() {
+    if (!aqiChart) return;
+
+    // Convert seconds->ms for ECharts time axis
+    const toMs = arr => (arr || []).map(([ts, v]) => [ts * 1000, v]);
+
+    const series = [
+        { name: 'PM2.5', data: toMs(aqiData.pm25), unit: 'µg/m³', yAxisIndex: 0 },
+        { name: 'PM10',  data: toMs(aqiData.pm10), unit: 'µg/m³', yAxisIndex: 1 },
+        { name: 'O₃',    data: toMs(aqiData.o3),   unit: 'ppb',   yAxisIndex: 2 },
+        { name: 'NO₂',   data: toMs(aqiData.no2),  unit: 'ppb',   yAxisIndex: 3 },
+        { name: 'CO',    data: toMs(aqiData.co),   unit: 'ppm',   yAxisIndex: 4 },
+        { name: 'AQI',   data: toMs(aqiData.aqi),  unit: '',      yAxisIndex: 5 },
+    ].map(s => ({
+        name: s.name,
+        type: 'line',
+        showSymbol: false,
+        encode: { x: 0, y: 1 },
+        yAxisIndex: s.yAxisIndex,
+        data: s.data
+    }));
+
+    const yAxes = [
+        { type: 'value', name: 'PM2.5 (µg/m³)', axisLabel: { formatter: v => `${v}` }, position: 'left', offset:0 },
+        { type: 'value', name: 'PM10 (µg/m³)',  axisLabel: { formatter: v => `${v}` }, position: 'left', offset: 75 },
+        { type: 'value', name: 'O₃ (ppb)',      axisLabel: { formatter: v => `${v}` }, position: 'left', offset:150  },
+        { type: 'value', name: 'NO₂ (ppb)',     axisLabel: { formatter: v => `${v}` }, position: 'right', offset:0 },
+        { type: 'value', name: 'CO (ppm)',      axisLabel: { formatter: v => `${v}` }, position: 'right', offset:75},
+        { type: 'value', name: 'AQI',           axisLabel: { formatter: v => `${v}` }, position: 'right', offset:150 }
+    ];
+
+    // Make alternate axes not draw overlapping grid lines
+    yAxes.forEach((ax, i) => {
+        ax.splitLine = { show: i === 0 }; // keep one set
+    });
+
+    const option = {
+        title: { text: 'Air Quality (multi-axis)', top: 0 },
+        tooltip: {
+            trigger: 'axis',
+            formatter: params => {
+                if (!params || !params.length) return '';
+                const ts = params[0].value[0];
+                const d = new Date(ts);
+                const time = new Intl.DateTimeFormat(undefined, {
+                    weekday: 'short', month: 'short', day: 'numeric',
+                    hour: '2-digit', minute: '2-digit'
+                }).format(d);
+                return params.reduce((out, p) => {
+                    return out + `${p.marker} ${p.seriesName}: ${p.value[1]}${unitFor(p.seriesName)}<br>`;
+                }, `${time}<br>`);
+            }
+        },
+        legend: { top: 40 },
+        grid:   { top: 120, left: 80, right: 80, bottom: 80 },
+        xAxis:  { type: 'time', axisLabel: { rotate: 45 } },
+        yAxis:  yAxes,
+        series: series,
+        axisPointer: { // helps link with temp chart
+            link: [{ xAxisIndex: 'all' }],
+            snap: true
+        }
+    };
+
+    aqiChart.setOption(option, { notMerge: false });
+
+    // Keep charts linked (crosshair/zoom)
+    // try { echarts.connect([tempChart, aqiChart]); } catch(_) {}
+}
+
+
+/****************************************************************/
 
 // Set up event listeners
 function setupEventListeners() {
@@ -362,10 +482,10 @@ function reloadData() {
     console.log("reloadData");
     Promise.all([
         loadTempData(),
-        // loadAirQualityData()
+        loadAirQualityData()
     ]).then(() => {
         // When both updated, keep crosshair synced
-        // try { echarts.connect([tempChart  aqChart ]); } catch(_) {}
+        // try { echarts.connect([tempChart  aqiChart ]); } catch(_) {}
     });
 }
 
@@ -377,10 +497,10 @@ function reloadData() {
 // After your initial loadData() call completes, also load AQ, then fill pickers:
 document.addEventListener('DOMContentLoaded', function() {
     setTimePrevDays(7);// Initialize to 1 week of date
-    console.log("calling echarts.init");
+    aqiChart  = echarts.init(document.getElementById('aqi-chart')); // aqi chart
     tempChart = echarts.init(document.getElementById('temp-chart')); // // Temperature chart
-    console.log("back. tempChart=",tempChart);
-    //aqChart   = echarts.init(document.getElementById('airquality'));
+
+    console.log("aqiChart=",aqiChart,"tempChart=",tempChart);
 
     reloadData();
     // Load both charts then set

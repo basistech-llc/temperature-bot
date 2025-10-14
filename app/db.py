@@ -39,9 +39,9 @@ class DriveControl(BaseModel):
     device_id: int
     drive: int
 
-def _connect_db(db_path):
+def connect_db(db_path):
     """Establishes a connection to the SQLite database."""
-    logger.debug("_connect_db(%s)",db_path)
+    logger.debug("connect_db(%s)",db_path)
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row      # returns rows as dicts
     conn.execute("PRAGMA foreign_keys=ON;")
@@ -64,7 +64,7 @@ def get_db_connection():
             db_path = os.environ[TEST_DB_NAME]
         else:
             db_path = os.environ[DB_PATH]
-        conn = _connect_db(db_path)
+        conn = connect_db(db_path)
         return conn
     except KeyError as e:
         logger.exception("KeyError: %s",e)
@@ -392,6 +392,8 @@ def temporal_quantification(cmd, args):
     return (cmd, args)
 
 
+################################################################
+## AQI
 def get_last_aqi(conn):
     c = conn.cursor()
     c.execute("select aqi from aqi order by logtime DESC limit 1")
@@ -399,35 +401,33 @@ def get_last_aqi(conn):
     logger.debug("last_aqi=%s",aqi)
     return aqi
 
+def get_aqi_series(conn):
+    c = conn.cursor()
+    cmd = """ SELECT * from aqi where 1 """
+    (cmd, args) = temporal_quantification(cmd, [])
+    cmd += " ORDER BY logtime "
+    c.execute(cmd, args)
+    rows = c.fetchall()
+    if not rows:
+        return []
+    keys = [k for k in rows[0].keys() if k!='logtime']
+    return {key:  [ [row['logtime'],row[key]] for row in rows] for key in keys}
 
 def get_temperature_series(conn, device_ids: List[int] | None  = None) -> List[Dict[str, Any]]:
-    """Get temperature series data for devices"""
+    """Get temperature series data for devices.
+    :param device_ids: a list of integer device IDs or None. An empty list or None gets all devices
+    :return: a list of dicts each in the form {name:"name", data:[[time1,val1], [time2,val2], ...]}
+    """
     c = conn.cursor()
-    series = []
-    if device_ids:
-        # Get specific devices
-        for device_id in device_ids:
-            c.execute("SELECT * from devices where device_id=?", (device_id,))
-            device = c.fetchone()
-            if device:
-                cmd = """
-                SELECT logtime,temp10x FROM devlog
-                WHERE device_id=? AND logtime IS NOT NULL AND temp10x IS NOT NULL
-                """
-                args = [device_id]
-                (cmd, args) = temporal_quantification(cmd, args)
-                cmd += " order by logtime"
+    # Get all devices
+    c.execute("SELECT * from devices")
+    devices = c.fetchall()
+    if not device_ids:
+        device_ids = [dev['device_id'] for dev in devices]
 
-                c.execute(cmd, args)
-                rows = c.fetchall()
-                data = [[row["logtime"], row["temp10x"] / 10] for row in rows]
-                if data:
-                    series.append({"name": device["device_name"], "data": data})
-    else:
-        # Get all devices
-        c.execute("SELECT * from devices")
-        devices = c.fetchall()
-        for dev in devices:
+    series = []
+    for dev in devices:
+        if dev['device_id'] in device_ids:
             cmd = """
             SELECT logtime,temp10x from devlog
             WHERE device_id=? AND logtime IS NOT NULL AND temp10x IS NOT NULL
@@ -441,14 +441,6 @@ def get_temperature_series(conn, device_ids: List[int] | None  = None) -> List[D
             if data:
                 series.append({"name": dev["device_name"], "data": data})
     return series
-
-def get_aqi_series(conn):
-    c = conn.cursor()
-    cmd = """ SELECT * from aqi where 1 """
-    (cmd, args) = temporal_quantification(cmd, [])
-    cmd += " ORDER BY logtime "
-    c.execute(cmd, args)
-    return c.fetchall()
 
 def get_device_status(conn) -> List[Dict[str, Any]]:
     """Get device status with annotations"""

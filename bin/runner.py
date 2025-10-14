@@ -65,7 +65,7 @@ def update_aqi(conn):
     values = {k:data['iaqi'][k]['v'] for k in ['co','h','no2','o3','p','pm10','pm25','so2','t','w']}
     values['aqi'] = data['aqi']
     values['logtime'] = int(time.time())
-    db.insert_into_aqi(conn,data)
+    db.insert_into_aqi(conn, values)
 
 def combine_temp_measurements(conn, start_time, end_time, seconds):
     """

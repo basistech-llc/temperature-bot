@@ -4,9 +4,6 @@ test aqi endpoint
 import logging
 import time
 
-from unittest.mock import patch
-from conftest import skip_on_github
-
 from app import airquality
 from app import db
 
@@ -20,10 +17,12 @@ def test_aqi_rest(flask_test_client, test_database_conn_with_test_data): # noqa:
     now = int(time.time())+10
     qdata = {'logtime':now, 'aqi':1, 'o3':3, 'co':10, 'h':20, 'no2':30, 'p':40, 'pm10':50, 'pm25':60, 'so2':70, 't':80, 'w':90}
     db.insert_into_aqi(conn, qdata)
-    r = flask_test_client.get(f"/api/v1/aqi")
+    r = flask_test_client.get("/api/v1/air_quality")
     data = r.json
+    logger.debug("data=%s",data)
     for d in data['series']:
-        if d['logtime']==now:
-            assert d==qdata
-            return
+        if d['name']=='co':
+            for (k,v) in d['data']:
+                if k==now and v==10:
+                    return
     raise RuntimeError(f"No row matching {qdata} in {data}")
