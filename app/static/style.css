@@ -283,3 +283,38 @@ table.rules-table th  {
     margin-top: 0px;
     line-height: 0px;
 }
+
+/* GitHub popup menu */
+.pure-menu-item {
+    position: relative;
+}
+
+.github-popup {
+    display: none;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    background-color: white;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    min-width: 150px;
+    z-index: 1000;
+    margin-top: 2px;
+}
+
+.github-popup a {
+    display: block;
+    padding: 10px 15px;
+    color: #333;
+    text-decoration: none;
+    border-bottom: 1px solid #eee;
+}
+
+.github-popup a:last-child {
+    border-bottom: none;
+}
+
+.github-popup a:hover {
+    background-color: #f0f0f0;
+}
