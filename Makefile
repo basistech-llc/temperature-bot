@@ -52,7 +52,6 @@ pylint: .venv/pyvenv.cfg
 	$(PYTHON) -m pylint $(PYLINT_OPTS) app tests *.py
 
 djlint:
-	set -o pipefail
 	poetry run djlint $(DJLINT_FLAGS) $(TEMPLATE_DIR)/*.html | etc/djlint-reformat.bash
 
 eslint:
