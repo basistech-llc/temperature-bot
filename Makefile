@@ -52,7 +52,6 @@ pylint: .venv/pyvenv.cfg
 	$(PYTHON) -m pylint $(PYLINT_OPTS) app tests *.py
 
 djlint:
-	set -o pipefail
 	poetry run djlint $(DJLINT_FLAGS) $(TEMPLATE_DIR)/*.html | etc/djlint-reformat.bash
 
 eslint:
@@ -71,7 +70,7 @@ check-types: $(REQ)
 ## Dynamic Analysis
 pytest: $(REQ)
 	make pylint
-	AE200_SIMULATOR=1 $(PYTHON) -m pytest . -v --cov=. --cov-report=xml --cov-report=html --log-cli-level=DEBUG --log-file-level=DEBUG
+	$(PYTHON) -m pytest . -v --cov=. --cov-report=xml --cov-report=html --log-cli-level=DEBUG --log-file-level=DEBUG
 	@echo covreage report in htmlcov/
 test: pytest
 
@@ -90,7 +89,7 @@ install-either:
 	ruff --version
 	poetry lock
 	poetry install --with dev
-	PLAYWRIGHT_BROWSERS_PATH=.playwright poetry run playwright install --with-deps # This will be fast if CI restored .playwright
+	poetry run playwright install --with-deps # This will be fast if CI restored .playwright
 
 install-ubuntu:
 	sudo apt install python3-pip pipx

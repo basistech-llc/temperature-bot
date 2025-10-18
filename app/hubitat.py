@@ -24,10 +24,14 @@ def extract_temperatures(hubdict: dict):
             if "TemperatureMeasurement" in dev['capabilities']]
 
 def get_all_devices():
-    host = get_config()['hubitat']['host']
-    appId = get_config()['hubitat']['appId']
+    try:
+        host = get_config()['hubitat']['host']
+        appId = get_config()['hubitat']['appId']
+    except KeyError as e:
+        raise RuntimeError("hubitat config needs host and appId") from e
     access_token = get_secret('hubitat','access_token')
     r = requests.get(HUBITAT_GET_ALL_DEVICES_FULL_DETAILS.format(host=host,appId=appId,access_token=access_token),timeout=TIMEOUT_SECONDS)
+    r.raise_for_status()
     data = r.json()
 
     # Sometimes hubitat changes name to 'offline' ... remove that

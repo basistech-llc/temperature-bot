@@ -29,6 +29,10 @@ def create_web_routes(app):
 
         return render_template("index.html", develop=False, devices=device_data, now=now)
 
+    @app.get("/health")
+    def health():
+        return {"status": "ok"}, 200
+
     @app.route("/rules")
     @with_db_connection
     def show_rules(conn):

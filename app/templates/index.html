@@ -14,8 +14,7 @@
 </div>
 
 <div class="pure-g" >
-  <!-- Left Column -->
-  <div class="pure-u-1 pure-u-md-1-2"><!-- take 1/2 the row on a medium screen -->
+  <div class="pure-u-1">
     <div id="main-grid" class="maxwidth">
       <form>
         <!-- one form, two tables. Table #1 = devices that have fans. Table #2 = devices that do not have fans -->
@@ -25,7 +24,7 @@
             {% else %}
             <h2> Temperature Panel </h2>
           {% endif %}
-            <table class="pure-table pure-table-bordered">
+            <table class="pure-table">
               <thead>
                 <tr>
                   <th class="column-unit" rowspan="2">Unit</th>
@@ -54,9 +53,6 @@
                     {{ device.device_name }}
                     <span id="device-{{ device.device_id }}-notes"></span>
                     <div class="temporal-links">
-                      <a href="/device_log/{{ device.device_id }}?start={{ (now -  86400) | int }}&end={{ now | int }}" target="_blank">day</a>
-                      <a href="/device_log/{{ device.device_id }}?start={{ (now - 604800) | int }}&end={{ now | int }}" target="_blank">week</a>
-                      <a href="/device_log/{{ device.device_id }}" target="_blank">all</a>
                       <a href="/chart?device_ids={{ device.device_id }}" target="_blank">graph</a>
                     </div>
                   </td>
@@ -99,9 +95,10 @@
       </form>
     </div> <!-- main-grid -->
   </div>
+</div>
 
-  <!-- Right Column -->
-  <div class="pure-u-1 pure-u-md-1-2" id="aqi-weather">
+<div class="pure-g">
+  <div class="pure-u-1" id="aqi-weather">
     <div id="aqi">
       <div id="aqi-status">AQI <span id="aqi-value"></span> <span id="aqi-name"></span></div>
     </div>
@@ -110,8 +107,6 @@
       <div id="last-update"></div>
       <div id="next-update"></div>
     </div>
-  </div>
-  <div class="pure-u-1">
     <div id="last-refresh"></div>
   </div>
 </div>

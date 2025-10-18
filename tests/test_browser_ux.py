@@ -6,10 +6,13 @@ import os
 import time
 import logging
 import threading
+import datetime
 from unittest.mock import patch
+from pathlib import Path
 
+import requests
 import pytest
-from playwright.sync_api import sync_playwright, expect
+from playwright.sync_api import sync_playwright, expect, TimeoutError as PWTimeoutError
 
 from conftest import test_database_conn_with_test_data, skip_on_github  # noqa: F401,F811  # pylint: disable=unused-import
 from helpers.browser_helpers import BrowserTestHelper, TemperatureTestHelper
@@ -26,8 +29,21 @@ TEST_TEMP=32
 # Set this flag to True to enable AQI testing, False to disable
 TEST_AQI = False
 
+def wait_for_server(url: str, timeout: float = 20.0) -> None:
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        try:
+            if requests.get(url, timeout=0.5).ok:
+                return
+        except Exception:
+            pass
+        time.sleep(0.1)
+    raise RuntimeError(f"Backend not healthy at {url} within {timeout}s")
+
+
 # pylint: disable=too-many-arguments, disable=too-many-positional-arguments, disable=too-many-statements
-@pytest.mark.skipif(os.getenv("SKIP_BROWSER_TEST"),reason='SKIP_BROWSER_TEST is set')
+SKIP_BROWSER_TEST = "SKIP_BROWSER_TEST" in os.environ
+@pytest.mark.skipif(SKIP_BROWSER_TEST,reason='SKIP_BROWSER_TEST is set')
 @skip_on_github
 @patch("app.weather.get_weather_data")
 @patch("app.airquality.get_aqi")
@@ -82,8 +98,8 @@ def test_browser_fan_speed_controls(
     # Give the server time to start
     time.sleep(3)
 
-    try:
-        with sync_playwright() as p:
+    with sync_playwright() as p:
+        try:
             # Launch browser
             browser = p.chromium.launch(headless=True)
             page = browser.new_page()
@@ -190,13 +206,9 @@ def test_browser_fan_speed_controls(
             assert device_info['FanSpeed'] == "MID2"
 
             browser.close()
-
-    except Exception as e:
-        logger.error("Browser test failed: %s",e)
-        raise
-    finally:
-        # Clean up - the server thread will be terminated when the process ends
-        pass
+        finally:
+            # Clean up - the server thread will be terminated when the process ends
+            pass
 
 # pylint: disable=unused-argument
 @pytest.mark.skipif(os.getenv("SKIP_BROWSER_TEST"),reason='SKIP_BROWSER_TEST is set')
@@ -219,14 +231,12 @@ def test_browser_page_loads_correctly(
     # Add initial devlog entry for Broadway Test so it appears in status API
     current_time = int(time.time())
     initial_status = DeviceTestData.get_initial_status()
-    db.insert_devlog_entry(
-        test_conn,
-        device_id=device_id,
-        temp=24.0,
-        statusdict=initial_status,
-        logtime=current_time,
-        force=True
-    )
+    db.insert_devlog_entry( test_conn,
+                            device_id=device_id,
+                            temp=24.0,
+                            statusdict=initial_status,
+                            logtime=current_time,
+                            force=True )
 
     # Set up weather mocks
     MockHelper.setup_weather_mocks(mock_get_airquality, mock_get_weather_data, 45, TEST_TEMP)
@@ -242,8 +252,8 @@ def test_browser_page_loads_correctly(
     # Give the server time to start
     time.sleep(3)
 
-    try:
-        with sync_playwright() as p:
+    with sync_playwright() as p:
+        try:
             browser = p.chromium.launch(headless=True)
             page = browser.new_page()
 
@@ -290,14 +300,9 @@ def test_browser_page_loads_correctly(
 
             # pylint: disable=duplicate-code
             browser.close()
-
-    # pylint: disable=duplicate-code
-    except Exception as e:
-        logger.error("Browser page error: %s",e)
-        raise
-    finally:
-        # Clean up
-        pass
+        finally:
+            # Clean up
+            pass
 
 
 @pytest.mark.skipif(os.getenv("SKIP_BROWSER_TEST"),reason='SKIP_BROWSER_TEST is set')
@@ -327,13 +332,12 @@ def test_browser_temperature_display(
 
     server_thread = threading.Thread(target=run_app, daemon=True)
     server_thread.start()
+    wait_for_server("http://127.0.0.1:5003/health", timeout=20)
 
     # Give the server time to start
     # pylint: disable=duplicate-code
-    time.sleep(3)
-
-    try:
-        with sync_playwright() as p:
+    with sync_playwright() as p:
+        try:
             browser = p.chromium.launch(headless=True)
             page = browser.new_page()
 
@@ -342,7 +346,9 @@ def test_browser_temperature_display(
 
             # Wait for the chart to load
             helper = TemperatureTestHelper(page, os.environ['TEST_DB_NAME'])
-            helper.wait_for_chart_to_load()
+            page.wait_for_load_state("networkidle", timeout=30_000)
+            page.wait_for_selector('#main', timeout=10000)
+            page.wait_for_selector('#record-count', timeout=10000)
 
             # Test initial load (should show all records)
             logger.info("Testing initial load")
@@ -382,13 +388,21 @@ def test_browser_temperature_display(
             expect(record_count_element).to_contain_text("Records loaded:")
 
             browser.close()
+        except PWTimeoutError as e:
+            logger.error("❌ Timeout error %s on %s",e,page.url)
+            ts = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+            fname_html = Path(f"debug_page_{ts}.html")
+            fname_png = Path(f"debug_page_{ts}.png")
 
-    except Exception as e:
-        logger.error("Temperature display test failed: %s", e)
-        raise
-    finally:
-        # Clean up
-        pass
+            fname_html.write_text(page.content(), encoding="utf-8")
+            logger.error("   HTML dump: %s",fname_html.resolve())
+
+            page.screenshot(path=str(fname_png), full_page=True)
+            logger.error("   Screenshot: %s",fname_png.resolve())
+            raise
+        finally:
+            # Clean up
+            pass
 
 
 @pytest.mark.skipif(os.getenv("SKIP_BROWSER_TEST"),reason='SKIP_BROWSER_TEST is set')

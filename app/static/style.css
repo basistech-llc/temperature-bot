@@ -1,6 +1,6 @@
 body {
   padding-top: 40px; /* Prevent content from hiding under the banner */
-  padding-left: 10px;
+  padding-left: 0;
   font-family: sans-serif;
 }
 
@@ -21,8 +21,9 @@ body {
 }
 
 .top-banner a {color:white; padding-left: 1em;}
+
 .left-gutter {
-    padding-left: 50px;
+     padding-left: 50px;
 }
 
 /* main grid */
@@ -35,6 +36,8 @@ body {
 
 .pure-g {
     overflow:hidden;
+    overflow-x: auto;     /* enable horizontal scroll */
+    overflow-y: visible;  /* keep vertical flow */
 }
 
 th {
@@ -191,11 +194,12 @@ table.rules-table th  {
     border-radius: 3px;
 }
 
+/****************************************************************/
+
 /* optional: avoid a hard fixed width on the header */
 .column-unit {
     white-space: normal;
-    min-width: 400px;
-    max-width: 5000px;
+    min-width: 300px;
     word-break: break-word;
 }
 
