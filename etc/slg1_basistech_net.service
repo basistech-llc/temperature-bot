@@ -8,9 +8,11 @@ User=simsong
 Group=simsong
 WorkingDirectory=/home/simsong/temperature-bot
 Environment="PATH=/home/simsong/temperature-bot/.venv/bin"
-ExecStart=/bin/bash -c 'gunicorn app.main:app --reload --bind 127.0.0.1:8003 --workers $((2 * $(/usr/bin/nproc) + 1))'
+Environment="DB_PATH=/var/db/temperature-bot.db"
+Environment="LOG_LEVEL=DEBUG"
+ExecStart=/bin/bash -c 'LOG_LEVEL=DEBUG gunicorn app.main:app --log-level debug --reload --bind 127.0.0.1:8003 --workers $((2 * $(/usr/bin/nproc) + 1)) --access-logfile /home/simsong/access.log --error-logfile /home/simsong/error.log'
 Restart=always
-RestartSec=2
+RestartSec=1
 
 
 [Install]
