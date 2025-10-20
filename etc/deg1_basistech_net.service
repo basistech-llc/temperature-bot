@@ -1,0 +1,17 @@
+### /etc/systemd/system/deg1_basistech_network.service ###
+[Unit]
+Description=Gunicorn instance to serve the Flask application
+After=network.target
+
+[Service]
+User=deg
+Group=deg
+WorkingDirectory=/home/deg/temperature-bot
+Environment="PATH=/home/deg/temperature-bot/.venv/bin"
+ExecStart=/bin/bash -c 'gunicorn app.main:app --reload --bind 127.0.0.1:8004 --workers $((2 * $(/usr/bin/nproc) + 1))'
+Restart=always
+RestartSec=2
+
+
+[Install]
+WantedBy=multi-user.target
