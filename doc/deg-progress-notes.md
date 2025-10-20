@@ -12,7 +12,8 @@
 # 20 Oct, 2025
 
 - Reviewed nginx config
--
+- Setup nginx and systemctl
+- Start testing deployment
 
 
 ## Config notes
@@ -20,6 +21,7 @@
 - air.basistech.net runs on port 8100
 - slg1.basistech.net runs on port 8003
 - deg1... will be on 8004
+
 
 ### nginx config
 
@@ -30,8 +32,15 @@
 - Test status: `sudo systemctl status nginx`
 
 ### deployments config
-- /etc/*_service has the service control files for each copy
-- Each need to be copied (and renamed slightly) into /etc/systemd/system
+- `git pull ...`, after setting up .ssh
+- `make install-ubuntu`
+- `<repo>/etc/*.service` has the service control files for each copy
+- Each needs to be copied manually into /etc/systemd/system
+- Start service with, e.g.,
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now deg1_basistech_net.service
+```
 
 
 ## Questions
@@ -43,6 +52,7 @@
 ## Todo
 
 - Move /etc/nginx config files to git in <repo>/etc
+- Write tooling to keep live nginx and systemctl files in sync with repo
 
 
 ## Currently stuck on
