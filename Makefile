@@ -71,7 +71,7 @@ check-types: $(REQ)
 ## Dynamic Analysis
 pytest: $(REQ)
 	make pylint
-	poetry run pytest . -v --cov=. --cov-report=xml --cov-report=html --log-cli-level=DEBUG --log-file-level=DEBUG
+	$(PYTHON) -m pytest . -v --cov=. --cov-report=xml --cov-report=html --log-cli-level=DEBUG --log-file-level=DEBUG
 	@echo covreage report in htmlcov/
 test: pytest
 
