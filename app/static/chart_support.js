@@ -164,7 +164,12 @@ function updateTempChart() {
         name: tempData[i].name,
         type: "line",
         showSymbol: false,
-        data: tempData[i].data.map(([ts, val]) => [ts * 1000, val]), // convert to ms
+        data: tempData[i].data.map(([ts, val]) => [
+          ts * 1000,
+          TemperatureUtils.getTemperatureUnitPreference()
+            ? TemperatureUtils.celsiusToFahrenheit(val)
+            : val,
+        ]), // convert to ms and temperature unit
       });
     }
   });
@@ -206,6 +211,47 @@ function updateTempChart() {
   }
   // --- End vertical lines ---
 
+  // Calculate smart Y-axis range based on data
+  let minTemp = Infinity;
+  let maxTemp = -Infinity;
+  series.forEach((s) => {
+    s.data.forEach(([ts, temp]) => {
+      if (temp < minTemp) minTemp = temp;
+      if (temp > maxTemp) maxTemp = temp;
+    });
+  });
+
+  // Add padding to the range (10% on each side, minimum 5 degrees)
+  const tempRange = maxTemp - minTemp;
+  const padding = Math.max(tempRange * 0.1, 5);
+  const rawMin = Math.max(0, minTemp - padding);
+  const rawMax = maxTemp + padding;
+
+  // Round to nice numbers appropriate for temperature ranges
+  function roundToNiceNumber(value, isMin) {
+    if (value <= 0) return 0;
+
+    // For temperature ranges, use smaller increments
+    // Round to nearest 5 degrees for values under 100, nearest 10 for values over 100
+    let increment;
+    if (value < 100) {
+      increment = 5;
+    } else {
+      increment = 10;
+    }
+
+    if (isMin) {
+      // Round down to nearest nice number
+      return Math.floor(value / increment) * increment;
+    } else {
+      // Round up to nearest nice number
+      return Math.ceil(value / increment) * increment;
+    }
+  }
+
+  const yAxisMin = roundToNiceNumber(rawMin, true);
+  const yAxisMax = roundToNiceNumber(rawMax, false);
+
   const option = {
     title: {
       text: (() => {
@@ -242,7 +288,9 @@ function updateTempChart() {
         const ts = params[0].value[0];
         let output = `${formatTime(ts)}<br>`;
         for (const p of params) {
-          output += `${p.marker} ${p.seriesName}: ${p.value[1]} °C<br>`;
+          const tempValue = p.value[1]; // This is already converted based on USE_FAHRENHEIT
+          const unit = TemperatureUtils.getTemperatureUnit();
+          output += `${p.marker} ${p.seriesName}: ${tempValue.toFixed(1)}${unit}<br>`;
         }
         return output;
       },
@@ -263,7 +311,13 @@ function updateTempChart() {
         },
       },
     },
-    yAxis: { type: "value", name: "Temperature (°C)" },
+    yAxis: {
+      type: "value",
+      name: `Temperature (${TemperatureUtils.getTemperatureUnit()})`,
+      min: yAxisMin,
+      max: yAxisMax,
+      interval: TemperatureUtils.getTemperatureUnitPreference() ? 10 : 5, // 10°F intervals for Fahrenheit, 5°C intervals for Celsius
+    },
     series: series,
   };
 

@@ -3,6 +3,25 @@
 {% block head %}
 <link href="https://unpkg.com/tabulator-tables@5.5.2/dist/css/tabulator.min.css" rel="stylesheet">
 <script src="https://unpkg.com/tabulator-tables@5.5.2/dist/js/tabulator.min.js"></script>
+<script>
+// Update temperature displays on page load
+document.addEventListener('DOMContentLoaded', function() {
+    const tempDisplays = document.querySelectorAll('.temp-display');
+    tempDisplays.forEach(function(element) {
+        const tempC = parseFloat(element.getAttribute('data-temp-c'));
+        if (!isNaN(tempC)) {
+            try {
+                // Use TemperatureUtils if available, otherwise use fallback
+                const utils = window.TemperatureUtils || window.TemperatureUtilsFallback;
+                element.textContent = utils.formatTemperature(tempC);
+            } catch (error) {
+                console.warn('Failed to format temperature:', error);
+                element.textContent = `${tempC.toFixed(1)}°C`;
+            }
+        }
+    });
+});
+</script>
 {% endblock %}
 
 {% block body %}
@@ -29,7 +48,7 @@
       <tr><th>Device ID</th><th>Time Range</th><th>Temp</th></tr>
       {% for row in devlog %}
         {% if row.temp10x %}
-        <tr><td>{{row.device_id}}</td><td> {{row.start}} - {{row.end}} ({{row.duration}} s)</td> <td>{{row.temp10x / 10}}ºC</td></tr>
+        <tr><td>{{row.device_id}}</td><td> {{row.start}} - {{row.end}} ({{row.duration}} s)</td> <td class="temp-display" data-temp-c="{{row.temp10x / 10}}">{{row.temp10x / 10}}ºC</td></tr>
         {% else %}
         <tr><td>{{row.device_id}}</td><td> {{row.start}} - {{row.end}} ({{row.duration}} s)</td> <td>missing</td></tr>
         {% endif %}

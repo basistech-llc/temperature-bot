@@ -17,6 +17,7 @@
   <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
 <!--   <script src="https://code.jquery.com/jquery-3.3.1.slim.min.js" integrity="sha384-q8i/X+965DzO0rT7abK41JStQIAqVgRVzpbzo5smXKp4YfRvH+8abtTE1Pi6jizo" crossorigin="anonymous"></script> -->
   <script src="/static/github_menu.js"></script>
+  <script src="/static/temperature_utils.js"></script>
 
   {% block head %}
   {% endblock %}
@@ -58,6 +59,18 @@
         <div id="github-popup" class="github-popup">
           <a href="https://github.com/basistech-llc/temperature-bot/" target="_blank">Repo</a>
           <a href="https://github.com/basistech-llc/temperature-bot/issues/new" target="_blank">Bug Report</a>
+        </div>
+      </li>
+      <li class="pure-menu-item">
+        <div class="temperature-toggle">
+          <span class="temp-unit-label">°C</span>
+          <div class="toggle-switch">
+            <input type="checkbox" id="temp-unit-toggle" class="toggle-input">
+            <label for="temp-unit-toggle" class="toggle-label">
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+          <span class="temp-unit-label">°F</span>
         </div>
       </li>
     </ul>

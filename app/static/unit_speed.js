@@ -36,9 +36,9 @@ function displayWeather(weatherInfo) {
   // Add weather content
   if (weatherInfo.current) {
     const current = weatherInfo.current;
-    const temp = current.temperature
-      ? `${Math.round(current.temperature)}°C (Boston Logan Airport)`
-      : "N/A";
+        const temp = current.temperature
+          ? `${TemperatureUtils.formatTemperature(current.temperature)} (Boston Logan Airport)`
+          : "N/A";
     html += `<div><strong>Current:</strong> ${temp} `;
     if (current.icon) {
       html += ` <img src="${current.icon}" alt="weather icon" class="weather-icon">`;
@@ -50,8 +50,12 @@ function displayWeather(weatherInfo) {
   // Forecast
   if (weatherInfo.forecast && weatherInfo.forecast.length > 0) {
     html += `<div><strong>Forecast for CALA:</strong></div>`;
-    weatherInfo.forecast.forEach((period) => {
-      html += `<div>${period.time} ${period.temperature}°F `;
+        weatherInfo.forecast.forEach((period) => {
+          // Convert forecast temp from Fahrenheit to Celsius first, then apply unit preference
+          const tempF = parseFloat(period.temperature);
+          const tempC = TemperatureUtils.fahrenheitToCelsius(tempF);
+          const formattedTemp = TemperatureUtils.formatTemperature(tempC);
+          html += `<div>${period.time} ${formattedTemp} `;
       if (period.icon) {
         html += ` <img src="${period.icon}" alt="weather icon" class="weather-icon">`;
       }
@@ -247,7 +251,7 @@ const refreshGridRows = () => {
                 minimumFractionDigits: 1,
               });
               cell.innerHTML =
-                myformat.format(dev.temp10x / 10) +
+                TemperatureUtils.formatTemperature(dev.temp10x / 10) +
                 (dev.age ? ` <span class='age'>(${dev.age})</span> ` : "");
             }
             if (dev.drive) {
@@ -340,6 +344,9 @@ async function loadWeatherAndStartRefresh() {
     console.error("Error in loadWeatherAndStartRefresh():", e);
   }
 }
+
+// Make refreshGridRows available globally for temperature unit changes
+window.refreshGridRows = refreshGridRows;
 
 createLogTable();
 window.addEventListener("DOMContentLoaded", function () {
