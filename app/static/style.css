@@ -1,6 +1,7 @@
 body {
   padding-top: 40px; /* Prevent content from hiding under the banner */
-  padding-left: 0;
+  padding-left: 20px;
+  padding-right: 20px;
   font-family: sans-serif;
 }
 
@@ -148,8 +149,12 @@ table.rules-table th  {
     margin: 5px;
 }
 
-/* On small screens, remove the left margin */
+/* On small screens, use smaller margins */
 @media (max-width: 767px) {
+    body {
+        padding-left: 5px;
+        padding-right: 5px;
+    }
     #weather {
         margin-left: 0;
         margin-top: 50px;
