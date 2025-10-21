@@ -27,6 +27,7 @@ etc/schema.sql:
 
 make-dev-db:
 	/bin/rm -f $(DEV_DB)
+	mkdir -p $(dir $(DEV_DB))
 	sqlite3 $(DEV_DB) < etc/schema.sql
 	ls -l $(DEV_DB)
 
