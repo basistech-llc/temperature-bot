@@ -48,7 +48,7 @@ PYLINT_THRESHOLD := 9.5
 PYLINT_OPTS :=--output-format=parseable --rcfile .pylintrc --fail-under=$(PYLINT_THRESHOLD) --verbose
 
 pylint: .venv/pyvenv.cfg
-	$(PYTHON) -m ruff check --fix app | etc/ruff-reformat.bash
+	poetry run ruff check --fix app | etc/ruff-reformat.bash
 	$(PYTHON) -m pylint $(PYLINT_OPTS) app tests *.py
 
 djlint:
@@ -65,12 +65,12 @@ check: $(REQ)
 	echo make check-types
 
 check-types: $(REQ)
-	$(PYTHON) -m mypy app
+	poetry run mypy app
 
 ## Dynamic Analysis
 pytest: $(REQ)
 	make pylint
-	$(PYTHON) -m pytest . -v --cov=. --cov-report=xml --cov-report=html --log-cli-level=DEBUG --log-file-level=DEBUG
+	poetry run pytest . -v --cov=. --cov-report=xml --cov-report=html --log-cli-level=DEBUG --log-file-level=DEBUG
 	@echo covreage report in htmlcov/
 test: pytest
 
@@ -82,11 +82,9 @@ daily: $(REQ)
 	$(PYTHON) -m bin.runner --daily
 
 install-either:
-	pipx ensurepath
-	pipx install poetry==$(POETRY_VERSION)
-	pipx install ruff==$(RUFF_VERSION)
+	python3 -m pipx ensurepath
+	python3 -m pipx install poetry==$(POETRY_VERSION)
 	poetry config virtualenvs.in-project true
-	ruff --version
 	poetry lock
 	poetry install --with dev
 	poetry run playwright install --with-deps # This will be fast if CI restored .playwright

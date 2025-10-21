@@ -60,6 +60,13 @@ pytest-faulthandler = "^2.0.1"
 ruff = "*"
 ruff-lsp = "*"
 
+[tool.poetry.scripts]
+# Development tools available via poetry run <name>
+ruff = "ruff:main"
+djlint = "djlint.cli:main"
+mypy = "mypy:main"
+pytest = "pytest:main"
+
 [tool.ruff]
 exclude = ["lib/"]
 
