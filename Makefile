@@ -43,7 +43,7 @@ tags:
 ################################################################
 
 ## Static Analysis
-.PHONY: eslint lint pylint test pytest
+.PHONY: eslint lint pylint test pytest clean
 PYLINT_THRESHOLD := 9.5
 PYLINT_OPTS :=--output-format=parseable --rcfile .pylintrc --fail-under=$(PYLINT_THRESHOLD) --verbose
 
@@ -100,3 +100,25 @@ install-macos:
 
 install-browser-sync:
 	npm install browser-sync -g
+
+clean:
+	@echo "Cleaning up generated files and virtual environment..."
+	rm -rf .venv
+	rm -rf .playwright
+	rm -rf htmlcov
+	rm -f coverage.xml
+	rm -f .coverage
+	rm -rf .pytest_cache
+	rm -rf .mypy_cache
+	rm -rf __pycache__
+	find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
+	find . -name "*.pyc" -delete 2>/dev/null || true
+	find . -name "*.pyo" -delete 2>/dev/null || true
+	rm -f TAGS
+	rm -f debug_page_20*
+	@echo "Clean complete."
+
+cleanall: clean
+	@echo "Doing aggressive cleanup. This will delete the local database!"
+	@printf "Are you sure you want to delete $(DEV_DB)? [y/N] "
+	@read -r confirm && [ "$$confirm" = "y" ] || [ "$$confirm" = "Y" ] && rm -f $(DEV_DB) || echo "Cancelled."
