@@ -40,3 +40,18 @@ def test_temperature_api_with_multiple_devices(flask_test_client): # noqa: F811 
     data = json.loads(response.data)
     assert 'series' in data
     assert isinstance(data['series'], list)
+
+
+def test_status_api_devices_sorted_alphabetically(flask_test_client): # noqa: F811 # pylint: disable=unused-argument
+    """Test that devices in the /api/v1/status endpoint are sorted alphabetically"""
+    response = flask_test_client.get('/api/v1/status')
+    assert response.status_code == 200
+
+    data = json.loads(response.data)
+    assert 'devices' in data
+    device_names = [device['device_name'] for device in data['devices']]
+    
+    # Check that device names are sorted alphabetically
+    sorted_device_names = sorted(device_names)
+    assert device_names == sorted_device_names, \
+        f"Devices are not sorted alphabetically. Got: {device_names}, Expected: {sorted_device_names}"
