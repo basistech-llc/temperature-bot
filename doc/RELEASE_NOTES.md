@@ -3,6 +3,7 @@
 ## 2025-10-22 Update
 
 * Added `make deploy`
+* Added bulk select/unselect of sensor charts
 
 ## 2025-10-21 Update
 

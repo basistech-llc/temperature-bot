@@ -119,12 +119,22 @@ function loadTempData() {
       // This causes all devices to be shown
       if (currentDeviceIds.length == 0) {
         const checkboxContainer = document.getElementById("checkboxes");
-        checkboxContainer.innerHTML = "";
+
+        // Clear existing checkbox items
+        const existingItems =
+          checkboxContainer.querySelectorAll(".checkbox-item");
+        existingItems.forEach((item) => item.remove());
+
+        // Create checkbox items wrapper
+        const checkboxItemsWrapper = document.createElement("div");
+        checkboxItemsWrapper.style.display = "flex";
+        checkboxItemsWrapper.style.flexWrap = "wrap";
+        checkboxItemsWrapper.style.gap = "0.5em";
+
         tempData.forEach((series, index) => {
           const id = `checkbox-${index}`;
-          const wrapper = document.createElement("span");
-          wrapper.style.whiteSpace = "nowrap"; // keep label on one line with its checkbox
-          wrapper.style.marginRight = "1em"; // small gap before next checkbox group
+          const wrapper = document.createElement("div");
+          wrapper.className = "checkbox-item";
 
           const checkbox = document.createElement("input");
           checkbox.type = "checkbox";
@@ -140,8 +150,14 @@ function loadTempData() {
           checkbox.addEventListener("change", updateTempChart);
           wrapper.appendChild(checkbox);
           wrapper.appendChild(label);
-          checkboxContainer.appendChild(wrapper);
+          checkboxItemsWrapper.appendChild(wrapper);
         });
+
+        // Insert checkbox items at the beginning (buttons are at the end)
+        checkboxContainer.insertBefore(
+          checkboxItemsWrapper,
+          checkboxContainer.firstChild,
+        );
       }
       // Update record count display
       updateTempRecordCount();
@@ -595,6 +611,38 @@ function setupEventListeners() {
    ****************************************************************/
 }
 
+// ===============================
+// Checkbox Controls (Select All/Clear All)
+// ===============================
+function setupCheckboxControls() {
+  const selectAllBtn = document.getElementById("selectAllBtn");
+  const clearAllBtn = document.getElementById("clearAllBtn");
+
+  if (selectAllBtn) {
+    selectAllBtn.addEventListener("click", function () {
+      const checkboxes = document.querySelectorAll(
+        "#checkboxes input[type=checkbox]",
+      );
+      checkboxes.forEach((checkbox) => {
+        checkbox.checked = true;
+      });
+      updateTempChart();
+    });
+  }
+
+  if (clearAllBtn) {
+    clearAllBtn.addEventListener("click", function () {
+      const checkboxes = document.querySelectorAll(
+        "#checkboxes input[type=checkbox]",
+      );
+      checkboxes.forEach((checkbox) => {
+        checkbox.checked = false;
+      });
+      updateTempChart();
+    });
+  }
+}
+
 function reloadData() {
   // Reload both charts’ data with the shared range
   console.log("reloadData");
@@ -615,10 +663,11 @@ document.addEventListener("DOMContentLoaded", function () {
 
   console.log("aqiChart=", aqiChart, "tempChart=", tempChart);
 
+  // Set up event listeners
+  setupEventListeners();
+  setupCheckboxControls();
+
   reloadData();
   // Load both charts then set
   loadTempData();
-
-  // Set up event listeners
-  setupEventListeners();
 });
