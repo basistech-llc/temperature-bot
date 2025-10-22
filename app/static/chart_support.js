@@ -173,21 +173,22 @@ function updateTempChart() {
   );
   const series = [];
 
-  // Show only checked series
+  // Include all series but control visibility via legend selection
+  const legendSelected = {};
   checkboxes.forEach((cb, i) => {
-    if (cb.checked) {
-      series.push({
-        name: tempData[i].name,
-        type: "line",
-        showSymbol: false,
-        data: tempData[i].data.map(([ts, val]) => [
-          ts * 1000,
-          TemperatureUtils.getTemperatureUnitPreference()
-            ? TemperatureUtils.celsiusToFahrenheit(val)
-            : val,
-        ]), // convert to ms and temperature unit
-      });
-    }
+    const seriesName = tempData[i].name;
+    series.push({
+      name: seriesName,
+      type: "line",
+      showSymbol: false,
+      data: tempData[i].data.map(([ts, val]) => [
+        ts * 1000,
+        TemperatureUtils.getTemperatureUnitPreference()
+          ? TemperatureUtils.celsiusToFahrenheit(val)
+          : val,
+      ]), // convert to ms and temperature unit
+    });
+    legendSelected[seriesName] = cb.checked;
   });
 
   // --- Add vertical dotted lines for day breaks ---
@@ -315,6 +316,7 @@ function updateTempChart() {
       data: series.map((s) => s.name),
       top: 40,
       selectedMode: series.length <= 1 ? false : true,
+      selected: legendSelected,
     },
     grid: { top: 200, left: 100, right: 100, bottom: 100 },
     xAxis: {
@@ -358,6 +360,19 @@ function updateTempChart() {
     });
   }
   tempChart.setOption(option, { notMerge: true });
+
+  // Listen to legend selection changes and sync with checkboxes
+  tempChart.off("legendselectchanged"); // Remove old listener if exists
+  tempChart.on("legendselectchanged", function (params) {
+    const checkboxes = document.querySelectorAll(
+      "#checkboxes input[type=checkbox]",
+    );
+    checkboxes.forEach((cb, i) => {
+      if (tempData[i].name === params.name) {
+        cb.checked = params.selected[params.name];
+      }
+    });
+  });
 }
 
 /****************************************************************/
