@@ -34,21 +34,21 @@
 
   {% if not only %}
   <div class="pure-menu pure-menu-horizontal">
-    <a href="." class="pure-menu-heading pure-menu-link">Temperature Bot</a>
+    <a href="." class="pure-menu-heading pure-menu-link{% if current_page == 'home' %} pure-menu-selected{% endif %}">Temperature Bot</a>
     <ul class="pure-menu-list">
-      <li class="pure-menu-item">
+      <li class="pure-menu-item{% if current_page == 'chart' %} pure-menu-selected{% endif %}">
         <a href="/chart" class="pure-menu-link">Chart</a>
       </li>
-      <li class="pure-menu-item">
+      <li class="pure-menu-item{% if current_page == 'buttons' %} pure-menu-selected{% endif %}">
         <a href="/buttons" class="pure-menu-link">Buttons</a>
       </li>
-      <li class="pure-menu-item">
+      <li class="pure-menu-item{% if current_page == 'rules' %} pure-menu-selected{% endif %}">
         <a href="/rules" class="pure-menu-link">Rules</a>
       </li>
-      <li class="pure-menu-item">
+      <li class="pure-menu-item{% if current_page == 'privacy' %} pure-menu-selected{% endif %}">
         <a href="/privacy" class="pure-menu-link">Privacy</a>
       </li>
-      <li class="pure-menu-item">
+      <li class="pure-menu-item{% if current_page == 'terms' %} pure-menu-selected{% endif %}">
         <a href="/terms" class="pure-menu-link">Terms</a>
       </li>
       <li class="pure-menu-item">

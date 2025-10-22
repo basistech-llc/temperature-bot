@@ -5,6 +5,11 @@
 * Added `make deploy`
 * Added bulk select/unselect of sensor charts
 * Implement `all` button for charts
+* Show all sensors on charts page, disabling those that were not active
+* Highlight selected date range
+* Highlight selected menu item
+  * Known issue: Some of the items in the menu are not selections, so display wonky. Best answer
+    will probably be to move them into a hamburger menu.
 
 ## 2025-10-21 Update
 

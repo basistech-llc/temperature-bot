@@ -467,3 +467,20 @@ table.rules-table th  {
 .github-popup a:hover {
     background-color: #f0f0f0;
 }
+
+/* Active/Selected menu item styling */
+.pure-menu-selected {
+    background-color: #e6f3ff !important;
+    border-radius: 4px;
+}
+
+.pure-menu-selected .pure-menu-link {
+    color: #0078e7 !important;
+    font-weight: 600;
+}
+
+.pure-menu-heading.pure-menu-selected {
+    background-color: #e6f3ff !important;
+    border-radius: 4px;
+    color: #0078e7 !important;
+}

@@ -27,7 +27,7 @@ def create_web_routes(app):
         # Add current timestamp for temporal links
         now = int(time.time())
 
-        return render_template("index.html", develop=False, devices=device_data, now=now)
+        return render_template("index.html", develop=False, devices=device_data, now=now, current_page="home")
 
     @app.get("/health")
     def health():
@@ -68,12 +68,13 @@ def create_web_routes(app):
             rules_results            = "\n".join(rule_table),
             rules_disabled_until     = rules_disabled_until,
             rules_disabled_until_asc = rules_disabled_until_asc,
+            current_page="rules",
         )
 
     @app.route("/logs")
     def do_logs():
         """Logs page"""
-        return render_template("logs.html")
+        return render_template("logs.html", current_page="logs")
 
     @app.route("/device_log/<device_id>")
     @with_db_connection
@@ -84,7 +85,8 @@ def create_web_routes(app):
             "device_log.html",
             device=log_data["device"],
             devlog=log_data["devlog"],
-            changelog=log_data["changelog"]
+            changelog=log_data["changelog"],
+            current_page="logs"
         )
 
     @app.route("/chart")
@@ -92,22 +94,22 @@ def create_web_routes(app):
         """Chart page"""
         device_ids = parse_device_ids()
 
-        return render_template("chart.html", device_ids=device_ids)
+        return render_template("chart.html", device_ids=device_ids, current_page="chart")
 
     @app.route("/privacy")
     def privacy():
         """Privacy page"""
-        return render_template("privacy.html")
+        return render_template("privacy.html", current_page="privacy")
 
     @app.route("/terms")
     def terms():
         """Terms page"""
-        return render_template("terms.html")
+        return render_template("terms.html", current_page="terms")
 
     @app.route("/buttons")
     def buttons():
         """Buttons page"""
-        return render_template("buttons.html")
+        return render_template("buttons.html", current_page="buttons")
 
     @app.route("/version")
     def get_version():
