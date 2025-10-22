@@ -9,6 +9,7 @@ let currentEnd = null; // time_t
 let currentDeviceIds = []; // current devices to load. [] means load them all
 let allDevices = []; // all available devices for dropdown
 let allSensors = []; // dynamically loaded list of all available sensors
+let selectedTemporalButton = null; // currently selected temporal button
 const TEMP_ENDPOINT = "/api/v1/temperature";
 const AQI_ENDPOINT = "/api/v1/air_quality";
 const STATUS_ENDPOINT = "/api/v1/status";
@@ -34,6 +35,30 @@ async function loadAllSensors() {
     // Fallback to empty array if API fails
     allSensors = [];
     return allSensors;
+  }
+}
+
+/****************************************************************
+ *** Temporal button selection management
+ ****************************************************************/
+function clearTemporalButtonSelection() {
+  // Remove selected class from all temporal buttons
+  const temporalButtons = document.querySelectorAll(".temporal-buttons button");
+  temporalButtons.forEach((button) => {
+    button.classList.remove("selected");
+  });
+  selectedTemporalButton = null;
+}
+
+function setTemporalButtonSelection(buttonId) {
+  // Clear previous selection
+  clearTemporalButtonSelection();
+
+  // Set new selection
+  const button = document.getElementById(buttonId);
+  if (button) {
+    button.classList.add("selected");
+    selectedTemporalButton = buttonId;
   }
 }
 
@@ -65,6 +90,10 @@ function pickersChanged() {
     const e = new Date(ed + "T23:59:59");
     currentEnd = Math.floor(e.getTime() / 1000);
   }
+
+  // Clear temporal button selection when dates are manually changed
+  clearTemporalButtonSelection();
+
   reloadData();
 }
 
@@ -604,18 +633,22 @@ function updateAQChart() {
 function setupEventListeners() {
   // Temporal button handlers
   document.getElementById("dayBtn").addEventListener("click", () => {
+    setTemporalButtonSelection("dayBtn");
     setTimePrevDays(1);
   });
 
   document.getElementById("weekBtn").addEventListener("click", () => {
+    setTemporalButtonSelection("weekBtn");
     setTimePrevDays(7);
   });
 
   document.getElementById("monthBtn").addEventListener("click", () => {
+    setTemporalButtonSelection("monthBtn");
     setTimePrevDays(31);
   });
 
   document.getElementById("allBtn").addEventListener("click", () => {
+    setTemporalButtonSelection("allBtn");
     // Clear date range to show all available data
     currentStart = null;
     currentEnd = null;
@@ -749,6 +782,8 @@ document.addEventListener("DOMContentLoaded", async function () {
   await loadAllSensors();
 
   setTimePrevDays(7); // Initialize to 1 week of date
+  setTemporalButtonSelection("weekBtn"); // Set week button as selected by default to match initial 7-day range
+
   aqiChart = echarts.init(document.getElementById("aqi-chart")); // aqi chart
   tempChart = echarts.init(document.getElementById("temp-chart")); // // Temperature chart
 

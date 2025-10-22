@@ -380,6 +380,27 @@ table.rules-table th  {
     width: auto;
     min-width: 60px;
     padding: 0.3em 0.8em;
+    background: #f8f9fa;
+    border: 1px solid #dee2e6;
+    color: #495057;
+    transition: all 0.2s ease;
+}
+
+.temporal-buttons button:hover {
+    background: #e9ecef;
+    border-color: #adb5bd;
+}
+
+.temporal-buttons button.selected {
+    background: #007bff;
+    border-color: #007bff;
+    color: white;
+    font-weight: 500;
+}
+
+.temporal-buttons button.selected:hover {
+    background: #0056b3;
+    border-color: #0056b3;
 }
 #downloadCsv {
     width: auto;
