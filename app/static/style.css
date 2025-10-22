@@ -346,8 +346,11 @@ table.rules-table th  {
 }
 
 #checkboxes .checkbox-item:hover { background: #e9ecef; }
+#checkboxes .checkbox-item.disabled:hover { background: white; }
 #checkboxes input[type="checkbox"] { margin: 0; }
+#checkboxes input[type="checkbox"]:disabled { opacity: 0.5; cursor: not-allowed; }
 #checkboxes label { margin: 0; font-size: 0.9em; cursor: pointer; }
+#checkboxes label.disabled { color: #999; cursor: not-allowed; }
 
 #checkbox-controls {
     display: flex;

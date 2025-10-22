@@ -8,8 +8,34 @@ let currentStart = null; // time_t
 let currentEnd = null; // time_t
 let currentDeviceIds = []; // current devices to load. [] means load them all
 let allDevices = []; // all available devices for dropdown
+let allSensors = []; // dynamically loaded list of all available sensors
 const TEMP_ENDPOINT = "/api/v1/temperature";
 const AQI_ENDPOINT = "/api/v1/air_quality";
+const STATUS_ENDPOINT = "/api/v1/status";
+
+/****************************************************************
+ *** Sensor list loading
+ ****************************************************************/
+async function loadAllSensors() {
+  try {
+    const response = await fetch(STATUS_ENDPOINT);
+    const data = await response.json();
+
+    // Extract device names from the status data
+    allSensors = data.devices
+      .map((device) => device.device_name)
+      .filter((name) => name) // Remove any null/undefined names
+      .sort(); // Sort alphabetically for consistent display
+
+    console.log("Loaded sensors:", allSensors);
+    return allSensors;
+  } catch (error) {
+    console.error("Failed to load sensor list:", error);
+    // Fallback to empty array if API fails
+    allSensors = [];
+    return allSensors;
+  }
+}
 
 /****************************************************************
  *** Date selection
@@ -115,54 +141,76 @@ function loadTempData() {
       // [{name: "Sensor 1", data:[[ts,val],[ts2,val2],[ts3,val3]...]},
       // {name: "Sensor 2", data:[[ts,val],[ts2,val2],[ts3,val3]...]},... ]
 
-      // Draw checkboxes if not filtering by device.
-      // This causes all devices to be shown
+      // Create/update checkboxes for all sensors if not filtering by device
       if (currentDeviceIds.length == 0) {
-        const checkboxContainer = document.getElementById("checkboxes");
-
-        // Clear existing checkbox items
-        const existingItems =
-          checkboxContainer.querySelectorAll(".checkbox-item");
-        existingItems.forEach((item) => item.remove());
-
-        // Create checkbox items wrapper
-        const checkboxItemsWrapper = document.createElement("div");
-        checkboxItemsWrapper.style.display = "flex";
-        checkboxItemsWrapper.style.flexWrap = "wrap";
-        checkboxItemsWrapper.style.gap = "0.5em";
-
-        tempData.forEach((series, index) => {
-          const id = `checkbox-${index}`;
-          const wrapper = document.createElement("div");
-          wrapper.className = "checkbox-item";
-
-          const checkbox = document.createElement("input");
-          checkbox.type = "checkbox";
-          checkbox.id = id;
-          checkbox.checked = true;
-
-          const label = document.createElement("label");
-          label.htmlFor = id;
-          label.innerText = series.name;
-
-          console.log("creating checkbox for series ", series.name);
-
-          checkbox.addEventListener("change", updateTempChart);
-          wrapper.appendChild(checkbox);
-          wrapper.appendChild(label);
-          checkboxItemsWrapper.appendChild(wrapper);
-        });
-
-        // Insert checkbox items at the beginning (buttons are at the end)
-        checkboxContainer.insertBefore(
-          checkboxItemsWrapper,
-          checkboxContainer.firstChild,
-        );
+        createAllSensorCheckboxes();
       }
+
       // Update record count display
       updateTempRecordCount();
       updateTempChart();
     });
+}
+
+// Create checkboxes for all sensors, enabling/disabling based on data availability
+function createAllSensorCheckboxes() {
+  const checkboxContainer = document.getElementById("checkboxes");
+
+  // Clear existing checkbox items
+  const existingItems = checkboxContainer.querySelectorAll(".checkbox-item");
+  existingItems.forEach((item) => item.remove());
+
+  // Create checkbox items wrapper
+  const checkboxItemsWrapper = document.createElement("div");
+  checkboxItemsWrapper.style.display = "flex";
+  checkboxItemsWrapper.style.flexWrap = "wrap";
+  checkboxItemsWrapper.style.gap = "0.5em";
+
+  // Create a map of available sensor names for quick lookup
+  const availableSensors = new Set(tempData.map((series) => series.name));
+
+  allSensors.forEach((sensorName, index) => {
+    const id = `checkbox-${index}`;
+    const wrapper = document.createElement("div");
+    wrapper.className = "checkbox-item";
+
+    // Add disabled class if sensor has no data
+    const hasData = availableSensors.has(sensorName);
+    if (!hasData) {
+      wrapper.classList.add("disabled");
+    }
+
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.id = id;
+    checkbox.checked = hasData; // Only check sensors that have data
+    checkbox.disabled = !hasData; // Disable sensors without data
+
+    const label = document.createElement("label");
+    label.htmlFor = id;
+    label.innerText = sensorName;
+    if (!hasData) {
+      label.classList.add("disabled");
+    }
+
+    console.log(
+      "creating checkbox for sensor:",
+      sensorName,
+      "hasData:",
+      hasData,
+    );
+
+    checkbox.addEventListener("change", updateTempChart);
+    wrapper.appendChild(checkbox);
+    wrapper.appendChild(label);
+    checkboxItemsWrapper.appendChild(wrapper);
+  });
+
+  // Insert checkbox items at the beginning (buttons are at the end)
+  checkboxContainer.insertBefore(
+    checkboxItemsWrapper,
+    checkboxContainer.firstChild,
+  );
 }
 
 function updateTempChart() {
@@ -173,22 +221,30 @@ function updateTempChart() {
   );
   const series = [];
 
+  // Create a map of tempData by sensor name for quick lookup
+  const tempDataMap = new Map(tempData.map((series) => [series.name, series]));
+
   // Include all series but control visibility via legend selection
   const legendSelected = {};
   checkboxes.forEach((cb, i) => {
-    const seriesName = tempData[i].name;
-    series.push({
-      name: seriesName,
-      type: "line",
-      showSymbol: false,
-      data: tempData[i].data.map(([ts, val]) => [
-        ts * 1000,
-        TemperatureUtils.getTemperatureUnitPreference()
-          ? TemperatureUtils.celsiusToFahrenheit(val)
-          : val,
-      ]), // convert to ms and temperature unit
-    });
-    legendSelected[seriesName] = cb.checked;
+    const sensorName = allSensors[i];
+    const seriesData = tempDataMap.get(sensorName);
+
+    // Only include series that have data and are checked
+    if (seriesData && cb.checked) {
+      series.push({
+        name: sensorName,
+        type: "line",
+        showSymbol: false,
+        data: seriesData.data.map(([ts, val]) => [
+          ts * 1000,
+          TemperatureUtils.getTemperatureUnitPreference()
+            ? TemperatureUtils.celsiusToFahrenheit(val)
+            : val,
+        ]), // convert to ms and temperature unit
+      });
+    }
+    legendSelected[sensorName] = cb.checked;
   });
 
   // --- Add vertical dotted lines for day breaks ---
@@ -368,7 +424,8 @@ function updateTempChart() {
       "#checkboxes input[type=checkbox]",
     );
     checkboxes.forEach((cb, i) => {
-      if (tempData[i].name === params.name) {
+      const sensorName = allSensors[i];
+      if (sensorName === params.name) {
         cb.checked = params.selected[params.name];
       }
     });
@@ -586,9 +643,16 @@ function setupEventListeners() {
     if (currentDeviceIds) {
       visibleSeries.push(...tempData);
     } else {
+      // Create a map of tempData by sensor name for quick lookup
+      const tempDataMap = new Map(
+        tempData.map((series) => [series.name, series]),
+      );
+
       checkboxes.forEach((cb, i) => {
-        if (cb.checked) {
-          visibleSeries.push(tempData[i]);
+        const sensorName = allSensors[i];
+        const seriesData = tempDataMap.get(sensorName);
+        if (cb.checked && seriesData) {
+          visibleSeries.push(seriesData);
         }
       });
     }
@@ -680,7 +744,10 @@ function reloadData() {
 // Default: last 7 days on load
 // ===============================
 // After your initial loadData() call completes, also load AQ, then fill pickers:
-document.addEventListener("DOMContentLoaded", function () {
+document.addEventListener("DOMContentLoaded", async function () {
+  // Load sensor list first
+  await loadAllSensors();
+
   setTimePrevDays(7); // Initialize to 1 week of date
   aqiChart = echarts.init(document.getElementById("aqi-chart")); // aqi chart
   tempChart = echarts.init(document.getElementById("temp-chart")); // // Temperature chart
