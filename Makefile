@@ -123,3 +123,10 @@ cleanall: clean
 	@echo "Doing aggressive cleanup. This will delete the local database!"
 	@printf "Are you sure you want to delete $(DEV_DB)? [y/N] "
 	@read -r confirm && [ "$$confirm" = "y" ] || [ "$$confirm" = "Y" ] && rm -f $(DEV_DB) || echo "Cancelled."
+
+deploy:
+	@if [ "$$(hostname)" = "slg1" ]; then \
+		cd /home/air/temperature-bot && git pull; \
+	else \
+		echo "Deploy skipped: not running on slg1 (current hostname: $$(hostname))"; \
+	fi
