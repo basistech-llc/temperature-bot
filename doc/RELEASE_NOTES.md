@@ -4,6 +4,7 @@
 
 * Added `make deploy`
 * Added bulk select/unselect of sensor charts
+* Implement `all` button for charts
 
 ## 2025-10-21 Update
 

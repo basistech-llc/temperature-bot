@@ -558,6 +558,15 @@ function setupEventListeners() {
     setTimePrevDays(31);
   });
 
+  document.getElementById("allBtn").addEventListener("click", () => {
+    // Clear date range to show all available data
+    currentStart = null;
+    currentEnd = null;
+    document.getElementById("startDate").value = "";
+    document.getElementById("endDate").value = "";
+    reloadData();
+  });
+
   // Date pickers
   document
     .getElementById("startDate")
