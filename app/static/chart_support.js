@@ -26,7 +26,7 @@ async function loadAllSensors() {
     allSensors = data.devices
       .map((device) => device.device_name)
       .filter((name) => name) // Remove any null/undefined names
-      .sort(); // Sort alphabetically for consistent display
+      .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' })); // Sort alphabetically (case-insensitive)
 
     console.log("Loaded sensors:", allSensors);
     return allSensors;
