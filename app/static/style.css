@@ -361,14 +361,14 @@ table.rules-table th  {
 
 #checkbox-controls button {
     padding: 0.4em 0.5em; font-size: 0.85em; font-weight: 500;
-    background: #007bff; color: white; border: 2px solid #007bff; border-radius: 6px;
-    cursor: pointer; transition: all 0.2s ease; box-shadow: 0 2px 4px rgba(0, 123, 255, 0.2);
+    background: #6c757d; color: white; border: 2px solid #6c757d; border-radius: 6px;
+    cursor: pointer; transition: all 0.2s ease; box-shadow: 0 2px 4px rgba(108, 117, 125, 0.2);
     letter-spacing: 0.5px; white-space: nowrap;
     flex: none; width: auto;
 }
 
-#checkbox-controls button:hover { background: #0056b3; border-color: #0056b3; box-shadow: 0 4px 8px rgba(0, 123, 255, 0.3); transform: translateY(-1px); }
-#checkbox-controls button:active { background: #004085; border-color: #004085; box-shadow: 0 1px 2px rgba(0, 123, 255, 0.4); transform: translateY(0); }
+#checkbox-controls button:hover { background: #5a6268; border-color: #5a6268; box-shadow: 0 4px 8px rgba(108, 117, 125, 0.3); transform: translateY(-1px); }
+#checkbox-controls button:active { background: #495057; border-color: #495057; box-shadow: 0 1px 2px rgba(108, 117, 125, 0.4); transform: translateY(0); }
 #record-count {margin: 10px 0; padding: 5px; background: #f0f0f0; border-radius: 3px; font-family: monospace;}
 .temporal-buttons {
     margin-top: 1em;
