@@ -36,8 +36,18 @@ fetch-dev-db:
 	echo 'select "devices",count(*) from devices;select "devlog",count(*) from devlog;select "changelog",count(*) from changelog; select "aqi",count(*) from aqi;' | sqlite3 var/db/temperature-bot.db
 	echo '.schema' | sqlite3 var/db/temperature-bot.db
 
+# Run web backend locally, with simulated data. (needs popuplated db too)
 local-dev: $(REQ)
 	FLASK_DEBUG=True DB_PATH=$(DEV_DB) AE200_SIMULATOR=1 $(PYTHON) run_local.py
+
+# Run the web backend locally, querying the hardware (assumes VPN or running in CALA)
+live-dev-web: $(REQ)
+	FLASK_DEBUG=True DB_PATH=$(DEV_DB) $(PYTHON) run_local.py
+
+# Run the data collection runner locally, querying the hardware (assumes VPN or running in CALA)
+live-dev-runner: $(REQ)
+	LOG_LEVEL=DEBUG DB_PATH=$(DEV_DB) $(PYTHON) bin/runner.py
+
 tags:
 	etags */*.py
 
@@ -102,6 +112,7 @@ install-macos:
 install-browser-sync:
 	npm install browser-sync -g
 
+# Clean all the tmp and work product files.
 clean:
 	@echo "Cleaning up generated files and virtual environment..."
 	rm -rf .venv
@@ -119,11 +130,15 @@ clean:
 	rm -f debug_page_20*
 	@echo "Clean complete."
 
+# Clean very aggressively, including the local db
+# [TODO] Should this also clear the private data in temperature-bot-config.yaml?
 cleanall: clean
 	@echo "Doing aggressive cleanup. This will delete the local database!"
 	@printf "Are you sure you want to delete $(DEV_DB)? [y/N] "
 	@read -r confirm && [ "$$confirm" = "y" ] || [ "$$confirm" = "Y" ] && rm -f $(DEV_DB) || echo "Cancelled."
 
+## Installs the latest source code into the live system.
+## Run on the server (slg1.basistech.net).
 deploy:
 	@if [ "$$(hostname)" = "slg1" ]; then \
 		cd /home/air/temperature-bot && git pull; \
