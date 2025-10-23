@@ -36,6 +36,8 @@
 - `make local-dev`
 - `make test` (some tests currently fail)
 
+To run the runner locally, you'll need a filled-in temerature-bot-config.yaml
+
 ### deployments config
 
 - `git pull ...`, after setting up .ssh
