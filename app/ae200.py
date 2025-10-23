@@ -37,6 +37,7 @@ DRIVE_NAMES = {value: key for key, value in DRIVES.items()}
 
 AE200_SIMULATOR = os.getenv('AE200_SIMULATOR')
 SIMULATOR_DIR = Path(join(dirname(__file__),"test_data"))
+SIMULATOR_DIR = Path(join(dirname(__file__), "test_data"))
 
 getUnitsPayload = """<?xml version="1.0" encoding="UTF-8" ?>
 <Packet>
@@ -58,6 +59,7 @@ setRequestPayload = """<?xml version="1.0" encoding="UTF-8" ?>
 </Packet>
 """
 
+
 def getMnetDetails(deviceIds):
     mnets = "\n".join(
         [
@@ -74,6 +76,7 @@ def getMnetDetails(deviceIds):
 </Packet>
 """
 
+
 ################################################################
 ### support functions
 def cleanDeviceInfo(statusdict):
@@ -85,6 +88,7 @@ def int_to_drive(drive):
         return "ON"
     else:
         return "OFF"
+
 
 def extract_drive_and_fan_speed(data):
     """Return a dict with drive/speed/has_speed_control"""
@@ -98,15 +102,18 @@ def extract_drive_and_fan_speed(data):
         'has_speed_control': True
     }
 
+
 def get_device_fan_speed(device):
     """Returns the device fanspeed as a number"""
     info = get_device_info(device)
-    return FAN_SPEED_NAMES[info['FanSpeed']]
+    return FAN_SPEED_NAMES[info["FanSpeed"]]
+
 
 def get_device_drive(device):
     """Returns the device fanspeed as a number"""
     info = get_device_info(device)
-    return DRIVE_NAMES[info['Drive']]
+    return DRIVE_NAMES[info["Drive"]]
+
 
 class AsyncRunner:
     """Manages async operations for the application"""
@@ -135,18 +142,21 @@ class AsyncRunner:
             loop = self.get_loop()
             return loop.run_until_complete(coro)
 
+
 # Singleton instance
 runner = AsyncRunner()
+
 
 ################################################################
 ### controller class
 class AE200Functions:
     """ae200 implementation."""
+
     def __init__(self, address=None):
         self._json = None
         self._temp_list = []
         if address is None:
-            address = get_config()['ae200']['host']
+            address = get_config()["ae200"]["host"]
         self.address = address
 
     async def getDevicesAsync(self):
@@ -156,13 +166,16 @@ class AE200Functions:
             f"ws://{self.address}/b_xmlproc/",
             extensions=[permessage_deflate.ClientPerMessageDeflateFactory()],
             origin=f"http://{self.address}",
-            subprotocols=["b_xmlproc"] ) as websocket:
+            subprotocols=["b_xmlproc"],
+        ) as websocket:
             await websocket.send(getUnitsPayload)
             unitsResultStr = await websocket.recv()
             unitsResultXML = ET.fromstring(unitsResultStr)
 
             groupList = []
-            for r in unitsResultXML.findall( "./DatabaseManager/ControlGroup/MnetList/MnetRecord" ):
+            for r in unitsResultXML.findall(
+                "./DatabaseManager/ControlGroup/MnetList/MnetRecord"
+            ):
                 # print( ET.tostring(r) )
                 groupList.append({"id": r.get("Group"), "name": r.get("GroupNameWeb")})
             await websocket.close()
@@ -177,10 +190,12 @@ class AE200Functions:
         """
         if AE200_SIMULATOR:
             raise RuntimeError("AE200_SIMULATOR not compatiable with AE200Functions")
-        async with websockets.connect( f"ws://{self.address}/b_xmlproc/",
-                                       extensions=[permessage_deflate.ClientPerMessageDeflateFactory()],
-                                       origin=f"http://{self.address}",
-                                       subprotocols=["b_xmlproc"], ) as websocket:
+        async with websockets.connect(
+            f"ws://{self.address}/b_xmlproc/",
+            extensions=[permessage_deflate.ClientPerMessageDeflateFactory()],
+            origin=f"http://{self.address}",
+            subprotocols=["b_xmlproc"],
+        ) as websocket:
             getMnetDetailsPayload = getMnetDetails([deviceId])
             await websocket.send(getMnetDetailsPayload)
             mnetDetailsResultStr = await websocket.recv()
@@ -195,7 +210,7 @@ class AE200Functions:
         return runner.run_async_safely(self.getDeviceInfoAsync(deviceId, clean=clean))
 
     async def sendAsync(self, deviceId, attributes):
-        assert 'PYTEST' not in os.environ
+        assert "PYTEST" not in os.environ
         if AE200_SIMULATOR:
             raise RuntimeError("AE200_SIMULATOR not compatiable with AE200Functions")
         async with websockets.connect(
@@ -212,27 +227,32 @@ class AE200Functions:
     def send(self, deviceId, attributes):
         return runner.run_async_safely(self.sendAsync(deviceId, attributes))
 
+
 async def get_dev_status(unit_id):
     d = AE200Functions()
     return await d.getDeviceInfoAsync(unit_id)
+
 
 async def get_devices_async():
     d = AE200Functions()
     return await d.getDevicesAsync()
 
+
 async def set_fan_speed_async(device, speed):
-    logger.info("set_fan_speed_async(%s,%s)",device,speed)
+    logger.info("set_fan_speed_async(%s,%s)", device, speed)
     d = AE200Functions()
     await d.sendAsync(device, {"FanSpeed": FAN_SPEEDS[speed]})
 
+
 async def set_drive_async(device, drive_int):
     drive_str = int_to_drive(drive_int)
-    logger.error("set_drive_async(%s,%s,%s)",device,drive_int,drive_str)
+    logger.error("set_drive_async(%s,%s,%s)", device, drive_int, drive_str)
     d = AE200Functions()
     await d.sendAsync(device, {"Drive": drive_str})
 
+
 async def get_device_info_async(device):
-    logger.info("get_device_info_async(%s)",device)
+    logger.info("get_device_info_async(%s)", device)
     d = AE200Functions()
     return await d.getDeviceInfoAsync(device)
 
@@ -242,47 +262,58 @@ async def get_device_info_async(device):
 ################################################################
 
 simulated_devices = {}
-DEVICES='devices'
+DEVICES = "devices"
 if AE200_SIMULATOR:
     logger.debug("SIMULATOR ENABLED")
-    simulated_devices[DEVICES] = json.loads( (SIMULATOR_DIR / 'ae200_get_devices.json').read_bytes())
+    simulated_devices[DEVICES] = json.loads(
+        (SIMULATOR_DIR / "ae200_get_devices.json").read_bytes()
+    )
     for dev in simulated_devices[DEVICES]:
-        did = dev['id']
-        simulated_devices[did] = json.loads( (SIMULATOR_DIR / f'ae200_get_device_{did}.json').read_bytes())
+        did = dev["id"]
+        simulated_devices[did] = json.loads(
+            (SIMULATOR_DIR / f"ae200_get_device_{did}.json").read_bytes()
+        )
 
 
 def set_drive(ae200_device, drive_int):
     drive_str = int_to_drive(drive_int)
-    logger.info("set_fan_speed(%s,%s,%s)",ae200_device,drive_int,drive_str)
+    logger.info("set_fan_speed(%s,%s,%s)", ae200_device, drive_int, drive_str)
 
     if AE200_SIMULATOR:
-        simulated_devices[str(ae200_device)]['Drive'] = drive_str
+        simulated_devices[str(ae200_device)]["Drive"] = drive_str
         return
 
     d = AE200Functions()
     d.send(ae200_device, {"Drive": drive_str})
 
+
 def set_fan_speed(ae200_device, speed):
     fan_speed = FAN_SPEEDS[speed]
-    logger.info("set_fan_speed(%s,%s)=%s",ae200_device,speed,fan_speed)
+    logger.info("set_fan_speed(%s,%s)=%s", ae200_device, speed, fan_speed)
     if AE200_SIMULATOR:
-        simulated_devices[str(ae200_device)]['FanSpeed'] = fan_speed
+        simulated_devices[str(ae200_device)]["FanSpeed"] = fan_speed
         return
     d = AE200Functions()
     d.send(ae200_device, {"FanSpeed": fan_speed})
 
+
 def get_device_info(device):
-    logger.info("get_device_info(%s)",device)
+    logger.info("get_device_info(%s)", device)
     if AE200_SIMULATOR:
         try:
             return simulated_devices[str(device)]
         except KeyError:
-            print("************************************************************************")
-            print(f"Simulated device requested: {device} options: {simulated_devices.keys()}")
+            print(
+                "************************************************************************"
+            )
+            print(
+                f"Simulated device requested: {device} options: {simulated_devices.keys()}"
+            )
             raise
 
     d = AE200Functions()
     return d.getDeviceInfo(device)
+
 
 def get_devices():
     logger.info("get_devices()")
@@ -291,16 +322,22 @@ def get_devices():
     d = AE200Functions()
     return d.getDevices()
 
+
 ################################################################
 if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(
         description="Demo function",
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter )
-    parser.add_argument( "--host", help='address of the AE200 controller')
-    parser.add_argument( "--json", help='Full JSON dump of the device(s)', action="store_true")
-    parser.add_argument( "--level", help="Specify level 0-4. 0 is off", type=int, default=0 )
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    parser.add_argument("--host", help="address of the AE200 controller")
+    parser.add_argument(
+        "--json", help="Full JSON dump of the device(s)", action="store_true"
+    )
+    parser.add_argument(
+        "--level", help="Specify level 0-4. 0 is off", type=int, default=0
+    )
     args = parser.parse_args()
 
     d = AE200Functions(args.host)
@@ -311,7 +348,7 @@ if __name__ == "__main__":
 
     for dev in devs:
         did = dev["id"]
-        name = dev['name']
+        name = dev["name"]
         # print(did, json.dumps(d.getDeviceInfo(did), indent=4))
         data = get_device_info(did)
         print(did, name, "drive: ", data["Drive"], "fan speed: ", data["FanSpeed"])
@@ -320,4 +357,4 @@ if __name__ == "__main__":
         for dev in args.devices:
             did = int(dev)
             data = get_device_info(did)
-            print(json.dumps(data,indent=4,default=str))
+            print(json.dumps(data, indent=4, default=str))

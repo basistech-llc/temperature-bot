@@ -1,6 +1,7 @@
 """
 Runs every minute to get temperature and fan speeds
 """
+
 import sys
 import os.path
 import datetime
@@ -8,7 +9,7 @@ import json
 import csv
 import logging
 import time
-from os.path import dirname,abspath
+from os.path import dirname, abspath
 import tabulate  # type: ignore
 import requests
 
@@ -17,7 +18,7 @@ import requests
 sys.path.append(dirname(dirname(abspath(__file__))))
 
 from app.paths import ETC_DIR
-from app.rules_engine import rules_results,run_rules,all_rules_disabled_until
+from app.rules_engine import rules_results, run_rules, all_rules_disabled_until
 from app import airquality
 from app import ae200
 from app import db
@@ -30,42 +31,57 @@ import lib.ctools.clogging as clogging
 
 logger = logging.getLogger(__name__)
 
+
 def update_from_ae200(conn):
     if ae200.AE200_SIMULATOR:
         # Use simulator functions
         devs = ae200.get_devices()
         for dev in devs:
-            data = ae200.get_device_info(dev['id'])
-            data['id'] = dev['id']
-            temp = data.get("InletTemp",None)
-            device_id = db.update_devlog_map(conn, device_name=dev['name'], ae200_device_id=dev['id'])
-            db.insert_devlog_entry(conn, device_id=device_id, temp=temp, statusdict=data)
+            data = ae200.get_device_info(dev["id"])
+            data["id"] = dev["id"]
+            temp = data.get("InletTemp", None)
+            device_id = db.update_devlog_map(
+                conn, device_name=dev["name"], ae200_device_id=dev["id"]
+            )
+            db.insert_devlog_entry(
+                conn, device_id=device_id, temp=temp, statusdict=data
+            )
     else:
         # Use real AE200 device
         d = ae200.AE200Functions()
         devs = d.getDevices()
         for dev in devs:
-            data = d.getDeviceInfo(dev['id'])
-            data['id'] = dev['id']
-            temp = data.get("InletTemp",None)
-            device_id = db.update_devlog_map(conn, device_name=dev['name'], ae200_device_id=dev['id'])
-            db.insert_devlog_entry(conn, device_id=device_id, temp=temp, statusdict=data)
+            data = d.getDeviceInfo(dev["id"])
+            data["id"] = dev["id"]
+            temp = data.get("InletTemp", None)
+            device_id = db.update_devlog_map(
+                conn, device_name=dev["name"], ae200_device_id=dev["id"]
+            )
+            db.insert_devlog_entry(
+                conn, device_id=device_id, temp=temp, statusdict=data
+            )
+
 
 def update_from_hubitat(conn):
     try:
         temps = hubitat.extract_temperatures(hubitat.get_all_devices())
     except requests.exceptions.ConnectTimeout as e:
-        logger.error("update_from_hubitat: timeout %s",e)
+        logger.error("update_from_hubitat: timeout %s", e)
         return
     for item in temps:
-        db.insert_devlog_entry(conn, device_name=item['name'], temp=item['temperature'])
+        db.insert_devlog_entry(conn, device_name=item["name"], temp=item["temperature"])
+
 
 def update_aqi(conn):
-    data  = airquality.get_aqi_aqicn_full()
-    values = {k:data['iaqi'][k]['v'] for k in ['co','h','no2','o3','p','pm10','pm25','so2','t','w']}
-    values['aqi'] = data['aqi']
-    values['logtime'] = int(time.time())
+    data = airquality.get_aqi_aqicn_full()
+    values = {
+        k: data["iaqi"][k]["v"]
+        for k in ["co", "h", "no2", "o3", "p", "pm10", "pm25", "so2", "t", "w"]
+    }
+    values["aqi"] = data["aqi"]
+    values["logtime"] = int(time.time())
     db.insert_into_aqi(conn, values)
+
 
 def combine_temp_measurements(conn, start_time, end_time, seconds):
     """
@@ -82,34 +98,44 @@ def combine_temp_measurements(conn, start_time, end_time, seconds):
     :param end_time: unix time_t of end of time period.
     :param divisions: number of divisions to create
     """
-    logger.info("combine_temp_measurements(%s,%s,%s",start_time, end_time, seconds)
+    logger.info("combine_temp_measurements(%s,%s,%s", start_time, end_time, seconds)
     conn.isolation_level = None
     c = conn.cursor()
     while True:
-        c.execute("SELECT log_id,logtime,duration from devlog where logtime >= ? and logtime < ? and duration < ? LIMIT 1",
-                  (start_time, end_time, seconds))
+        c.execute(
+            "SELECT log_id,logtime,duration from devlog where logtime >= ? and logtime < ? and duration < ? LIMIT 1",
+            (start_time, end_time, seconds),
+        )
         r = c.fetchone()
         if not r:
             return
-        logger.debug("%s",dict(r))
-        slot = (r['logtime']-start_time) / seconds
+        logger.debug("%s", dict(r))
+        slot = (r["logtime"] - start_time) / seconds
         t0 = start_time + seconds * slot
-        t1 = start_time + seconds * (slot+1)
+        t1 = start_time + seconds * (slot + 1)
         c.execute("begin")
         try:
-            c.execute("""
+            c.execute(
+                """
             SELECT device_id, sum(duration * temp10x)/sum(duration) as avgtemp
-            FROM devlog WHERE logtime >= ? and logtime < ? GROUP BY device_id """, (t0,t1))
+            FROM devlog WHERE logtime >= ? and logtime < ? GROUP BY device_id """,
+                (t0, t1),
+            )
             rows = c.fetchall()
-            c.execute("DELETE FROM devlog WHERE logtime >= ? and logtime < ? """, (t0,t1))
+            c.execute(
+                "DELETE FROM devlog WHERE logtime >= ? and logtime < ? ", (t0, t1)
+            )
             for row in rows:
-                logger.debug("%s",dict(row))
-                c.execute("INSERT INTO devlog (device_id,logtime,duration,temp10x) VALUES (?,?,?,?)",
-                          (row['device_id'], t0, seconds, row['avgtemp']))
+                logger.debug("%s", dict(row))
+                c.execute(
+                    "INSERT INTO devlog (device_id,logtime,duration,temp10x) VALUES (?,?,?,?)",
+                    (row["device_id"], t0, seconds, row["avgtemp"]),
+                )
             c.execute("commit")
         except conn.Error:
             c.execute("rollback")
             raise
+
 
 def daily_cleanup(conn, when):
     """Every day:
@@ -124,16 +150,22 @@ def daily_cleanup(conn, when):
     # See if there are any in the previous week that need to be
     prev_week_start = (when - datetime.timedelta(weeks=2)).timestamp()
     prev_week_end = (when - datetime.timedelta(weeks=1)).timestamp()
-    c.execute("""select logtime,duration from devlog where logtime>=? and logtime <=? and duration<600 limit 1""",
-              (prev_week_start, prev_week_end))
+    c.execute(
+        """select logtime,duration from devlog where logtime>=? and logtime <=? and duration<600 limit 1""",
+        (prev_week_start, prev_week_end),
+    )
     row = c.fetchone()
     if row:
-        logger.info("Found an entry on %s with duration=%s",time.asctime(time.localtime(row['logtime'])), row['duration'])
-        combine_temp_measurements(conn, prev_week_start, prev_week_end, 5*60)
+        logger.info(
+            "Found an entry on %s with duration=%s",
+            time.asctime(time.localtime(row["logtime"])),
+            row["duration"],
+        )
+        combine_temp_measurements(conn, prev_week_start, prev_week_end, 5 * 60)
 
     # See if there are any in the previous month that need to be
     def prev_month(when):
-        pm_year  = when.year
+        pm_year = when.year
         pm_month = when.month - 1
         if pm_month <= 0:
             pm_month += 12
@@ -141,21 +173,27 @@ def daily_cleanup(conn, when):
         return datetime.datetime(year=pm_year, month=pm_month, day=1)
 
     prev_month_start = prev_month(prev_month(prev_month(when))).timestamp()
-    prev_month_end   = prev_month(prev_month(when)).timestamp()
-    c.execute("""select logtime,duration from devlog where logtime>=? and logtime <=? and duration<600 limit 1""",
-              (prev_month_start, prev_month_end))
+    prev_month_end = prev_month(prev_month(when)).timestamp()
+    c.execute(
+        """select logtime,duration from devlog where logtime>=? and logtime <=? and duration<600 limit 1""",
+        (prev_month_start, prev_month_end),
+    )
     row = c.fetchone()
     if row:
-        logger.info("Found an entry on %s with duration=%s",time.asctime(time.localtime(row['logtime'])), row['duration'])
-        combine_temp_measurements(conn, prev_month_start, prev_month_end, 20*60)
+        logger.info(
+            "Found an entry on %s with duration=%s",
+            time.asctime(time.localtime(row["logtime"])),
+            row["duration"],
+        )
+        combine_temp_measurements(conn, prev_month_start, prev_month_end, 20 * 60)
 
 
 def load_csv(conn, fname, after_str, unsafe=False):
     """Loads CSV with reduced durabilty."""
-    with open(os.path.join(ETC_DIR,'sample_hubitat.json')) as f:
+    with open(os.path.join(ETC_DIR, "sample_hubitat.json")) as f:
         hub = json.load(f)
-    labelmap = { h['label']:h['name'] for h in hub}
-    after = datetime.datetime.fromisoformat(after_str+" 23:59:59")
+    labelmap = {h["label"]: h["name"] for h in hub}
+    after = datetime.datetime.fromisoformat(after_str + " 23:59:59")
     with open(fname) as csvfile:
         total_lines = csvfile.read().count("\n")
         lines = 0
@@ -175,47 +213,57 @@ def load_csv(conn, fname, after_str, unsafe=False):
             count = 0
             for row in reader:
                 lines += 1
-                for label,val in row.items():
-                    if label.lower()=='time':
+                for label, val in row.items():
+                    if label.lower() == "time":
                         when = val
                         dt = datetime.datetime.fromisoformat(val)
                         if dt < after:
-                            break # abort for loop on row
+                            break  # abort for loop on row
                         if (prev_date is not None) and dt.date() != prev_date.date():
                             print("\n")
                             seconds = int(time.time() - t0)
-                            remaining = int((time.time()-start_time) / ( lines/total_lines))
-                            if seconds>0:
-                                print(f"{count} records in {lines}/{total_lines} lines processed in {seconds} seconds = {int(count/seconds)} records/second. Estimate seconds remaining={remaining}. Completion at {time.asctime(time.localtime(time.time()+remaining))}")
+                            remaining = int(
+                                (time.time() - start_time) / (lines / total_lines)
+                            )
+                            if seconds > 0:
+                                print(
+                                    f"{count} records in {lines}/{total_lines} lines processed in {seconds} seconds = {int(count / seconds)} records/second. Estimate seconds remaining={remaining}. Completion at {time.asctime(time.localtime(time.time() + remaining))}"
+                                )
                             daily_cleanup(conn, dt)
                             count = 0
                             t0 = time.time()
-                        print(f"\r{when}...  ",flush=True,end='')
+                        print(f"\r{when}...  ", flush=True, end="")
                         prev_date = dt
                     else:
-                        label = label.replace("OFFLINE - ","")
+                        label = label.replace("OFFLINE - ", "")
                         name = labelmap[label]
-                        db.insert_devlog_entry(conn, device_name=name, temp=val,
-                                               logtime=datetime.datetime.fromisoformat(when).timestamp(),
-                                               commit=False)
+                        db.insert_devlog_entry(
+                            conn,
+                            device_name=name,
+                            temp=val,
+                            logtime=datetime.datetime.fromisoformat(when).timestamp(),
+                            commit=False,
+                        )
                         count += 1
                 conn.commit()
         except KeyboardInterrupt:
             conn.rollback()
-            print("Keyboard interrupt. Last time: ",when)
+            print("Keyboard interrupt. Last time: ", when)
         finally:
             conn.execute("PRAGMA journal_mode=WAL;")
             conn.execute("PRAGMA synchronous=NORMAL;")
             conn.execute("PRAGMA wal_checkpoint(FULL)")
 
+
 def report(conn):
-    os.environ['TZ'] = 'America/New_York'  # ET corresponds to New York timezone
-    time.tzset()                           # Apply the timezone change
+    os.environ["TZ"] = "America/New_York"  # ET corresponds to New York timezone
+    time.tzset()  # Apply the timezone change
     c = conn.cursor()
-    for query in ["""Select count(*),DATE(logtime,'unixepoch','localtime') as d from devlog group by d order by d""",
-                  """Select count(*),strftime('%Y-%m-%d %H', logtime,'unixepoch', 'localtime') as d from devlog where logtime > strftime('%s','now','start of day','-1 day') group by d order by d""",
-                  """select datetime(d.logtime,'unixepoch','localtime') as w,device_name,d.duration,(d.temp10x+0.0)/10 as temp from devices left join devlog d on devices.device_id=d.device_id order by logtime desc limit 10"""
-                  ]:
+    for query in [
+        """Select count(*),DATE(logtime,'unixepoch','localtime') as d from devlog group by d order by d""",
+        """Select count(*),strftime('%Y-%m-%d %H', logtime,'unixepoch', 'localtime') as d from devlog where logtime > strftime('%s','now','start of day','-1 day') group by d order by d""",
+        """select datetime(d.logtime,'unixepoch','localtime') as w,device_name,d.duration,(d.temp10x+0.0)/10 as temp from devices left join devlog d on devices.device_id=d.device_id order by logtime desc limit 10""",
+    ]:
         c.execute(query)
         data = c.fetchall()
         if data:
@@ -223,27 +271,47 @@ def report(conn):
         else:
             print("No data found")
 
+
 def setup_parser():
     import argparse
-    parser = argparse.ArgumentParser(description='BasisTech LLC Runner.',
-                                     formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument("--csv", help='load csv file')
-    parser.add_argument("--unsafe", help="Run without synchronous mode. Fast, but dangerous", action='store_true')
-    parser.add_argument("--csv-after", help="Date after which to import CSV in YYYY-MM-DD format",default="0000-00-00")
-    parser.add_argument("--report", help="report on the database", action='store_true')
-    parser.add_argument("--syslog", help="log to syslog", action='store_true')
-    parser.add_argument("--daily", help='Run the daily cleanup', action='store_true')
-    parser.add_argument("--rules", choices=["test", "run", "prune"], help='Just run the rules engine')
-    parser.add_argument("--aqi", help='Save AQI to database', action='store_true')
+
+    parser = argparse.ArgumentParser(
+        description="BasisTech LLC Runner.",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    parser.add_argument("--csv", help="load csv file")
+    parser.add_argument(
+        "--unsafe",
+        help="Run without synchronous mode. Fast, but dangerous",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--csv-after",
+        help="Date after which to import CSV in YYYY-MM-DD format",
+        default="0000-00-00",
+    )
+    parser.add_argument("--report", help="report on the database", action="store_true")
+    parser.add_argument("--syslog", help="log to syslog", action="store_true")
+    parser.add_argument("--daily", help="Run the daily cleanup", action="store_true")
+    parser.add_argument(
+        "--rules", choices=["test", "run", "prune"], help="Just run the rules engine"
+    )
+    parser.add_argument("--aqi", help="Save AQI to database", action="store_true")
     clogging.add_argument(parser)
     return parser
 
+
 def main():
-    logger.info("%s %s",__file__," ".join(sys.argv))
+    logger.info("%s %s", __file__, " ".join(sys.argv))
     parser = setup_parser()
     args = parser.parse_args()
-    clogging.setup(args.loglevel, syslog=True, filename=args.logfilename,
-                   log_format=clogging.LOG_FORMAT, syslog_format=clogging.YEAR + " " + clogging.SYSLOG_FORMAT)
+    clogging.setup(
+        args.loglevel,
+        syslog=True,
+        filename=args.logfilename,
+        log_format=clogging.LOG_FORMAT,
+        syslog_format=clogging.YEAR + " " + clogging.SYSLOG_FORMAT,
+    )
     conn = db.get_db_connection()
     if args.report:
         report(conn)
@@ -255,14 +323,14 @@ def main():
     elif args.daily:
         daily_cleanup(conn, datetime.datetime.now())
     elif args.rules:
-        match (args.rules):
-            case ("test"):
+        match args.rules:
+            case "test":
                 print(rules_results(conn))
-            case ("prune"):
+            case "prune":
                 rules_engine.prune_rules(conn)
-            case ("run"):
+            case "run":
                 rules_engine.run_rules(conn)
-            case (opt):
+            case opt:
                 raise RuntimeError(f"Unknown rules option: {opt}")
     else:
         # Run everything
@@ -275,5 +343,6 @@ def main():
         else:
             run_rules(conn)
 
-if __name__=="__main__":
+
+if __name__ == "__main__":
     main()
