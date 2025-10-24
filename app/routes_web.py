@@ -95,11 +95,13 @@ def create_web_routes(app):
     def device_log(conn, device_id):
         """Device log page"""
         log_data = db.get_device_log(conn, int(device_id))
+        alerts = db.get_alerts_for_device(conn, int(device_id))
         return render_template(
             "device_log.html",
             device=log_data["device"],
             devlog=log_data["devlog"],
             changelog=log_data["changelog"],
+            alerts=alerts,
             current_page="logs",
         )
 
@@ -111,6 +113,13 @@ def create_web_routes(app):
         return render_template(
             "chart.html", device_ids=device_ids, current_page="chart"
         )
+
+    @app.route("/alerts")
+    @with_db_connection
+    def show_alerts(conn):
+        """Alerts page"""
+        device_ids = db.devices_to_device_id(conn)
+        return render_template("alerts.html", devices=device_ids, current_page="alerts")
 
     @app.route("/privacy")
     def privacy():

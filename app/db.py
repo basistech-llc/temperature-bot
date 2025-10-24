@@ -71,6 +71,12 @@ def get_db_connection():
         else:
             db_path = os.environ[DB_PATH]
         conn = connect_db(db_path)
+
+        # Apply schema changes automatically
+        from .paths import SCHEMA_FILE_PATH
+
+        setup_database(conn, SCHEMA_FILE_PATH)
+
         return conn
     except KeyError as e:
         logger.exception("KeyError: %s", e)
@@ -425,6 +431,205 @@ def update_devlog_map(conn, device_name: str, ae200_device_id: int):
     )
     conn.commit()
     return device_id
+
+
+################################################################
+## Alerts
+def insert_or_update_alert(conn, device_id, alert_type, alert_value, logtime=None):
+    """
+    Insert or update alert state transitions.
+
+    :param conn: database connection
+    :param device_id: device ID
+    :param alert_type: 'ErrorSign', 'FilterSign', 'CheckWater'
+    :param alert_value: 'ON' or 'OFF'
+    :param logtime: Unix timestamp (defaults to current time)
+    """
+    if logtime is None:
+        logtime = int(time.time())
+
+    c = conn.cursor()
+
+    # Check if there's an active alert (end_time=NULL) for this device+type
+    c.execute(
+        """
+        SELECT alert_id, alert_value FROM alerts
+        WHERE device_id=? AND alert_type=? AND end_time IS NULL
+    """,
+        (device_id, alert_type),
+    )
+    active_alert = c.fetchone()
+
+    if active_alert:
+        active_id, current_value = active_alert
+        if current_value == alert_value:
+            # No change, do nothing
+            return
+        else:
+            # Close the active alert
+            c.execute(
+                "UPDATE alerts SET end_time=? WHERE alert_id=?", (logtime, active_id)
+            )
+
+    # If value is 'ON', create new alert
+    if alert_value == "ON":
+        c.execute(
+            """
+            INSERT INTO alerts (device_id, alert_type, alert_value, start_time, end_time)
+            VALUES (?, ?, ?, ?, NULL)
+        """,
+            (device_id, alert_type, alert_value, logtime),
+        )
+
+    conn.commit()
+
+
+def get_active_alerts(conn, device_id=None):
+    """
+    Get all active alerts (end_time IS NULL).
+
+    :param conn: database connection
+    :param device_id: optional filter by device
+    :return: list of dicts with alert data
+    """
+    c = conn.cursor()
+
+    if device_id:
+        c.execute(
+            """
+            SELECT a.alert_id, d.device_name, a.alert_type, a.alert_value, a.start_time
+            FROM alerts a
+            JOIN devices d ON a.device_id = d.device_id
+            WHERE a.end_time IS NULL AND a.device_id = ?
+            ORDER BY a.start_time DESC
+        """,
+            (device_id,),
+        )
+    else:
+        c.execute("""
+            SELECT a.alert_id, d.device_name, a.alert_type, a.alert_value, a.start_time
+            FROM alerts a
+            JOIN devices d ON a.device_id = d.device_id
+            WHERE a.end_time IS NULL
+            ORDER BY a.start_time DESC
+        """)
+
+    alerts = []
+    for row in c.fetchall():
+        alert_id, device_name, alert_type, alert_value, start_time = row
+        age_seconds = int(time.time()) - start_time
+        alerts.append(
+            {
+                "alert_id": alert_id,
+                "device_name": device_name,
+                "alert_type": alert_type,
+                "alert_value": alert_value,
+                "start_time": start_time,
+                "age": age_seconds,
+            }
+        )
+
+    return alerts
+
+
+def get_alert_history(conn, device_id=None, limit=100):
+    """
+    Get alert history (all alerts including resolved).
+
+    :param conn: database connection
+    :param device_id: optional filter by device
+    :param limit: maximum number of alerts to return
+    :return: list of dicts with alert data
+    """
+    c = conn.cursor()
+
+    if device_id:
+        c.execute(
+            """
+            SELECT a.alert_id, d.device_name, a.alert_type, a.alert_value,
+                   a.start_time, a.end_time
+            FROM alerts a
+            JOIN devices d ON a.device_id = d.device_id
+            WHERE a.device_id = ?
+            ORDER BY a.start_time DESC
+            LIMIT ?
+        """,
+            (device_id, limit),
+        )
+    else:
+        c.execute(
+            """
+            SELECT a.alert_id, d.device_name, a.alert_type, a.alert_value,
+                   a.start_time, a.end_time
+            FROM alerts a
+            JOIN devices d ON a.device_id = d.device_id
+            ORDER BY a.start_time DESC
+            LIMIT ?
+        """,
+            (limit,),
+        )
+
+    alerts = []
+    for row in c.fetchall():
+        alert_id, device_name, alert_type, alert_value, start_time, end_time = row
+        duration = None
+        if end_time:
+            duration = end_time - start_time
+
+        alerts.append(
+            {
+                "alert_id": alert_id,
+                "device_name": device_name,
+                "alert_type": alert_type,
+                "alert_value": alert_value,
+                "start_time": start_time,
+                "end_time": end_time,
+                "duration": duration,
+            }
+        )
+
+    return alerts
+
+
+def get_alerts_for_device(conn, device_id):
+    """
+    Get all alerts (active and historical) for a specific device.
+
+    :param conn: database connection
+    :param device_id: device ID
+    :return: list of dicts with alert data
+    """
+    c = conn.cursor()
+
+    c.execute(
+        """
+        SELECT a.alert_id, a.alert_type, a.alert_value, a.start_time, a.end_time
+        FROM alerts a
+        WHERE a.device_id = ?
+        ORDER BY a.start_time DESC
+    """,
+        (device_id,),
+    )
+
+    alerts = []
+    for row in c.fetchall():
+        alert_id, alert_type, alert_value, start_time, end_time = row
+        duration = None
+        if end_time:
+            duration = end_time - start_time
+
+        alerts.append(
+            {
+                "alert_id": alert_id,
+                "alert_type": alert_type,
+                "alert_value": alert_value,
+                "start_time": start_time,
+                "end_time": end_time,
+                "duration": duration,
+            }
+        )
+
+    return alerts
 
 
 ################################################################

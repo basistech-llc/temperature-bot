@@ -71,4 +71,22 @@ document.addEventListener('DOMContentLoaded', function() {
   </div>
 </div>
 
+<div class="pure-g">
+  <h2>Alerts</h2>
+  <div class="pure-u-1">
+    <table>
+      <tr><th>Alert Type</th><th>Status</th><th>Started</th><th>Ended</th><th>Duration</th></tr>
+      {% for alert in alerts %}
+        <tr>
+          <td>{{ alert.alert_type }}</td>
+          <td style="color: {{ 'red' if alert.alert_value == 'ON' else 'green' }}; font-weight: bold;">{{ alert.alert_value }}</td>
+          <td>{{ alert.start_time }}</td>
+          <td>{{ alert.end_time if alert.end_time else 'Active' }}</td>
+          <td>{{ alert.duration if alert.duration else 'Active' }}</td>
+        </tr>
+      {% endfor %}
+    </table>
+  </div>
+</div>
+
 {% endblock %}

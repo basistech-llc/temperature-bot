@@ -122,3 +122,22 @@ def disable_rules(conn):
 
     rules_engine.disable_all_rules(conn, seconds)
     return jsonify({"status": "success", "seconds": seconds})
+
+
+@api_v1.route("/alerts/active")
+@with_db_connection
+def alerts_active(conn):
+    """Get all active alerts"""
+    device_id = request.args.get("device_id", type=int)
+    alerts = db.get_active_alerts(conn, device_id)
+    return jsonify(alerts)
+
+
+@api_v1.route("/alerts/history")
+@with_db_connection
+def alerts_history(conn):
+    """Get alert history"""
+    device_id = request.args.get("device_id", type=int)
+    limit = request.args.get("limit", type=int, default=100)
+    alerts = db.get_alert_history(conn, device_id, limit)
+    return jsonify(alerts)

@@ -38,28 +38,36 @@ def update_from_ae200(conn):
         devs = ae200.get_devices()
         for dev in devs:
             data = ae200.get_device_info(dev["id"])
-            data["id"] = dev["id"]
-            temp = data.get("InletTemp", None)
-            device_id = db.update_devlog_map(
-                conn, device_name=dev["name"], ae200_device_id=dev["id"]
-            )
-            db.insert_devlog_entry(
-                conn, device_id=device_id, temp=temp, statusdict=data
-            )
+            process_device_data(conn, dev, data)
     else:
         # Use real AE200 device
         d = ae200.AE200Functions()
         devs = d.getDevices()
         for dev in devs:
             data = d.getDeviceInfo(dev["id"])
-            data["id"] = dev["id"]
-            temp = data.get("InletTemp", None)
-            device_id = db.update_devlog_map(
-                conn, device_name=dev["name"], ae200_device_id=dev["id"]
+            process_device_alert_data(conn, dev, data)
+
+
+def process_device_alert_data(conn, dev, data):
+    """Process device data for both temperature logging and alert collection."""
+    # [TODO] Need to add synthetic alert data to simulator
+    data["id"] = dev["id"]
+    temp = data.get("InletTemp", None)
+    device_id = db.update_devlog_map(
+        conn, device_name=dev["name"], ae200_device_id=dev["id"]
+    )
+
+    # Extract alert fields
+    for alert_type in ["ErrorSign", "FilterSign", "CheckWater"]:
+        if alert_type in data:
+            db.insert_or_update_alert(
+                conn,
+                device_id=device_id,
+                alert_type=alert_type,
+                alert_value=data[alert_type],
             )
-            db.insert_devlog_entry(
-                conn, device_id=device_id, temp=temp, statusdict=data
-            )
+
+    db.insert_devlog_entry(conn, device_id=device_id, temp=temp, statusdict=data)
 
 
 def update_from_hubitat(conn):
