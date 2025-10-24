@@ -1,0 +1,197 @@
+{% extends 'base.html' %}
+{% block title %} AE200 Alerts {% endblock %}
+{% block head %}
+<link href="https://unpkg.com/tabulator-tables@5.5.2/dist/css/tabulator.min.css" rel="stylesheet">
+<script src="https://unpkg.com/tabulator-tables@5.5.2/dist/js/tabulator.min.js"></script>
+{% endblock %}
+
+{% block body %}
+<div class="pure-g"><!-- the start of the pure row -->
+  <div class="pure-u-1"><!-- across the entire row -->
+  <h1>AE200 Alerts</h1>
+  </div>
+</div>
+
+<div class="pure-g">
+  <div class="pure-u-1">
+    <div class="pure-menu pure-menu-horizontal">
+      <ul class="pure-menu-list">
+        <li class="pure-menu-item">
+          <a href="#" id="active-tab" class="pure-menu-link tab-link active">Active Alerts</a>
+        </li>
+        <li class="pure-menu-item">
+          <a href="#" id="history-tab" class="pure-menu-link tab-link">Alert History</a>
+        </li>
+      </ul>
+    </div>
+
+    <div class="pure-form">
+      <label for="device-filter">Filter by device:</label>
+      <select id="device-filter" class="pure-input-1-4">
+        <option value="">All devices</option>
+        {% for device_id, device_name in devices.items() %}
+        <option value="{{ device_id }}">{{ device_name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+  </div>
+</div>
+
+<div class="pure-g">
+  <div class="pure-u-1">
+    <div id="active-alerts-table"></div>
+    <div id="history-alerts-table" style="display: none;"></div>
+  </div>
+</div>
+
+<script>
+// Tab switching
+document.getElementById('active-tab').addEventListener('click', function(e) {
+  e.preventDefault();
+  showTab('active');
+});
+
+document.getElementById('history-tab').addEventListener('click', function(e) {
+  e.preventDefault();
+  showTab('history');
+});
+
+function showTab(tabName) {
+  // Update tab styling
+  document.querySelectorAll('.tab-link').forEach(link => {
+    link.classList.remove('active');
+  });
+  document.getElementById(tabName + '-tab').classList.add('active');
+
+  // Show/hide tables
+  document.getElementById('active-alerts-table').style.display = tabName === 'active' ? 'block' : 'none';
+  document.getElementById('history-alerts-table').style.display = tabName === 'history' ? 'block' : 'none';
+
+  // Refresh data
+  if (tabName === 'active') {
+    activeTable.setData();
+  } else {
+    historyTable.setData();
+  }
+}
+
+// Device filter
+document.getElementById('device-filter').addEventListener('change', function() {
+  const deviceId = this.value;
+  activeTable.setData('/api/v1/alerts/active' + (deviceId ? '?device_id=' + deviceId : ''));
+  historyTable.setData('/api/v1/alerts/history' + (deviceId ? '?device_id=' + deviceId : ''));
+});
+
+// Format time duration
+function formatDuration(seconds) {
+  if (seconds === null) return 'Active';
+
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+
+  if (hours > 0) {
+    return hours + 'h ' + minutes + 'm';
+  } else {
+    return minutes + 'm';
+  }
+}
+
+// Format timestamp
+function formatTimestamp(timestamp) {
+  return new Date(timestamp * 1000).toLocaleString();
+}
+
+// Active alerts table
+const activeTable = new Tabulator("#active-alerts-table", {
+  ajaxURL: "/api/v1/alerts/active",
+  ajaxResponse: function(url, params, response) {
+    return response;
+  },
+  layout: "fitColumns",
+  pagination: "local",
+  paginationSize: 50,
+  columns: [
+    {title: "Device", field: "device_name", width: 150},
+    {title: "Alert Type", field: "alert_type", width: 120},
+    {title: "Status", field: "alert_value", width: 80,
+     formatter: function(cell) {
+       const value = cell.getValue();
+       const color = value === 'ON' ? '#ff4444' : '#44ff44';
+       return '<span style="color: ' + color + '; font-weight: bold;">' + value + '</span>';
+     }
+    },
+    {title: "Started", field: "start_time", width: 150,
+     formatter: function(cell) {
+       return formatTimestamp(cell.getValue());
+     }
+    },
+    {title: "Age", field: "age", width: 100,
+     formatter: function(cell) {
+       return formatDuration(cell.getValue());
+     }
+    }
+  ]
+});
+
+// History alerts table
+const historyTable = new Tabulator("#history-alerts-table", {
+  ajaxURL: "/api/v1/alerts/history",
+  ajaxResponse: function(url, params, response) {
+    return response;
+  },
+  layout: "fitColumns",
+  pagination: "local",
+  paginationSize: 50,
+  columns: [
+    {title: "Device", field: "device_name", width: 150},
+    {title: "Alert Type", field: "alert_type", width: 120},
+    {title: "Status", field: "alert_value", width: 80,
+     formatter: function(cell) {
+       const value = cell.getValue();
+       const color = value === 'ON' ? '#ff4444' : '#44ff44';
+       return '<span style="color: ' + color + '; font-weight: bold;">' + value + '</span>';
+     }
+    },
+    {title: "Started", field: "start_time", width: 150,
+     formatter: function(cell) {
+       return formatTimestamp(cell.getValue());
+     }
+    },
+    {title: "Ended", field: "end_time", width: 150,
+     formatter: function(cell) {
+       const value = cell.getValue();
+       return value ? formatTimestamp(value) : 'Active';
+     }
+    },
+    {title: "Duration", field: "duration", width: 100,
+     formatter: function(cell) {
+       return formatDuration(cell.getValue());
+     }
+    }
+  ]
+});
+
+// Auto-refresh every 30 seconds
+setInterval(function() {
+  if (document.getElementById('active-alerts-table').style.display !== 'none') {
+    activeTable.setData();
+  }
+}, 30000);
+</script>
+
+<style>
+.tab-link.active {
+  background-color: #0078e7;
+  color: white;
+}
+
+.pure-form {
+  margin: 10px 0;
+}
+
+.pure-form label {
+  margin-right: 10px;
+}
+</style>
+
+{% endblock %}
