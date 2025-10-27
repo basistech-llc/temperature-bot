@@ -40,7 +40,7 @@
 <div class="pure-g">
   <div class="pure-u-1">
     <div id="active-alerts-table"></div>
-    <div id="history-alerts-table" style="display: none;"></div>
+    <div id="history-alerts-table" class="tab-hidden"></div>
   </div>
 </div>
 
@@ -63,9 +63,16 @@ function showTab(tabName) {
   });
   document.getElementById(tabName + '-tab').classList.add('active');
 
-  // Show/hide tables
-  document.getElementById('active-alerts-table').style.display = tabName === 'active' ? 'block' : 'none';
-  document.getElementById('history-alerts-table').style.display = tabName === 'history' ? 'block' : 'none';
+  const activeDiv = document.getElementById('active-alerts-table');
+  const historyDiv = document.getElementById('history-alerts-table');
+
+  if (tabName === 'active') {
+    activeDiv.classList.remove('tab-hidden');
+    historyDiv.classList.add('tab-hidden');
+  } else {
+    activeDiv.classList.add('tab-hidden');
+    historyDiv.classList.remove('tab-hidden');
+  }
 
   // Refresh data
   if (tabName === 'active') {
@@ -219,7 +226,7 @@ const historyTable = new Tabulator("#history-alerts-table", {
 
 // Auto-refresh every 30 seconds
 setInterval(function() {
-  if (document.getElementById('active-alerts-table').style.display !== 'none') {
+  if (!document.getElementById('active-alerts-table').classList.contains('tab-hidden')) {
     activeTable.setData();
   }
 }, 30000);
@@ -237,6 +244,11 @@ setInterval(function() {
 
 .pure-form label {
   margin-right: 10px;
+}
+
+/* Initial state - history table hidden by default */
+.tab-hidden {
+  display: none !important;
 }
 </style>
 
