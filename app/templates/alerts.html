@@ -120,7 +120,7 @@ const activeTable = new Tabulator("#active-alerts-table", {
        return '<span style="color: ' + color + '; font-weight: bold;">' + value + '</span>';
      }
     },
-    {title: "Started", field: "start_time", width: 150,
+    {title: "Started", field: "start_time", width: 180,
      formatter: function(cell) {
        return formatTimestamp(cell.getValue());
      }
@@ -152,12 +152,12 @@ const historyTable = new Tabulator("#history-alerts-table", {
        return '<span style="color: ' + color + '; font-weight: bold;">' + value + '</span>';
      }
     },
-    {title: "Started", field: "start_time", width: 150,
+    {title: "Started", field: "start_time", width: 180,
      formatter: function(cell) {
        return formatTimestamp(cell.getValue());
      }
     },
-    {title: "Ended", field: "end_time", width: 150,
+    {title: "Ended", field: "end_time", width: 180,
      formatter: function(cell) {
        const value = cell.getValue();
        return value ? formatTimestamp(value) : 'Active';
