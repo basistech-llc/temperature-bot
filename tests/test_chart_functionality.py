@@ -50,7 +50,6 @@ def test_status_api_devices_sorted_alphabetically(flask_test_client): # noqa: F8
     data = json.loads(response.data)
     assert 'devices' in data
     device_names = [device['device_name'] for device in data['devices']]
-    
     # Check that device names are sorted alphabetically
     sorted_device_names = sorted(device_names)
     assert device_names == sorted_device_names, \
