@@ -127,6 +127,10 @@ install-ubuntu:
 
 install-macos:
 	@echo Use pipx for the latest poetry
+	@if ! command -v brew >/dev/null 2>&1; then \
+		echo "Error: Homebrew is not installed. Please install Homebrew from https://brew.sh/ and try again."; \
+		exit 1; \
+	fi
 	brew install pipx
 	make install-either
 
