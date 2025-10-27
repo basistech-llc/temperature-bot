@@ -1,3 +1,9 @@
+-- ****************************************************************
+-- BE AWARE:
+-- As of now (2025-Oct-24), this file is run at runtime on the existing database. It
+-- must not assume an empty database.
+-- ****************************************************************
+
 CREATE TABLE IF NOT EXISTS devices (
     device_id INTEGER PRIMARY KEY AUTOINCREMENT,
     device_name TEXT UNIQUE NOT NULL

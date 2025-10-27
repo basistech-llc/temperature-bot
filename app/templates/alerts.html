@@ -40,7 +40,7 @@
 <div class="pure-g">
   <div class="pure-u-1">
     <div id="active-alerts-table"></div>
-    <div id="history-alerts-table" style="display: none;"></div>
+    <div id="history-alerts-table" class="tab-hidden"></div>
   </div>
 </div>
 
@@ -63,9 +63,16 @@ function showTab(tabName) {
   });
   document.getElementById(tabName + '-tab').classList.add('active');
 
-  // Show/hide tables
-  document.getElementById('active-alerts-table').style.display = tabName === 'active' ? 'block' : 'none';
-  document.getElementById('history-alerts-table').style.display = tabName === 'history' ? 'block' : 'none';
+  const activeDiv = document.getElementById('active-alerts-table');
+  const historyDiv = document.getElementById('history-alerts-table');
+
+  if (tabName === 'active') {
+    activeDiv.classList.remove('tab-hidden');
+    historyDiv.classList.add('tab-hidden');
+  } else {
+    activeDiv.classList.add('tab-hidden');
+    historyDiv.classList.remove('tab-hidden');
+  }
 
   // Refresh data
   if (tabName === 'active') {
@@ -101,6 +108,39 @@ function formatTimestamp(timestamp) {
   return new Date(timestamp * 1000).toLocaleString();
 }
 
+// Shared formatters
+function rowFormatterFunction(row) {
+  const data = row.getData();
+  // Active alerts have no end_time field, or end_time is null
+  const isResolved = data.end_time != null;
+
+  if (!isResolved) {
+    if (data.alert_type === 'Filter warning') {
+      // Unresolved filter warning - lighter orange background
+      row.getElement().style.backgroundColor = '#fff5e6';
+      row.getElement().style.opacity = '0.7';
+    } else if (data.alert_type === 'Error') {
+      // Unresolved error - light red background
+      row.getElement().style.backgroundColor = '#ffe6e6';
+    } else if (data.alert_type === 'Water issue') {
+      // Unresolved water issue - light orange background
+      row.getElement().style.backgroundColor = '#fff0e6';
+    }
+  }
+}
+
+function alertTypeFormatter(cell) {
+  const value = cell.getValue();
+  if (value === 'Filter warning') {
+    return value;
+  } else if (value === 'Error') {
+    return '<span style="color: #ff4444; font-weight: bold;">' + value + '</span>';
+  } else if (value === 'Water issue') {
+    return '<span style="color: #ff8800; font-weight: bold;">' + value + '</span>';
+  }
+  return value;
+}
+
 // Active alerts table
 const activeTable = new Tabulator("#active-alerts-table", {
   ajaxURL: "/api/v1/alerts/active",
@@ -110,17 +150,13 @@ const activeTable = new Tabulator("#active-alerts-table", {
   layout: "fitColumns",
   pagination: "local",
   paginationSize: 50,
+  rowFormatter: rowFormatterFunction,
   columns: [
     {title: "Device", field: "device_name", width: 150},
-    {title: "Alert Type", field: "alert_type", width: 120},
-    {title: "Status", field: "alert_value", width: 80,
-     formatter: function(cell) {
-       const value = cell.getValue();
-       const color = value === 'ON' ? '#ff4444' : '#44ff44';
-       return '<span style="color: ' + color + '; font-weight: bold;">' + value + '</span>';
-     }
+    {title: "Alert Type", field: "alert_type", width: 120,
+     formatter: alertTypeFormatter
     },
-    {title: "Started", field: "start_time", width: 150,
+    {title: "Started", field: "start_time", width: 180,
      formatter: function(cell) {
        return formatTimestamp(cell.getValue());
      }
@@ -142,22 +178,18 @@ const historyTable = new Tabulator("#history-alerts-table", {
   layout: "fitColumns",
   pagination: "local",
   paginationSize: 50,
+  rowFormatter: rowFormatterFunction,
   columns: [
     {title: "Device", field: "device_name", width: 150},
-    {title: "Alert Type", field: "alert_type", width: 120},
-    {title: "Status", field: "alert_value", width: 80,
-     formatter: function(cell) {
-       const value = cell.getValue();
-       const color = value === 'ON' ? '#ff4444' : '#44ff44';
-       return '<span style="color: ' + color + '; font-weight: bold;">' + value + '</span>';
-     }
+    {title: "Alert Type", field: "alert_type", width: 120,
+     formatter: alertTypeFormatter
     },
-    {title: "Started", field: "start_time", width: 150,
+    {title: "Started", field: "start_time", width: 180,
      formatter: function(cell) {
        return formatTimestamp(cell.getValue());
      }
     },
-    {title: "Ended", field: "end_time", width: 150,
+    {title: "Ended", field: "end_time", width: 180,
      formatter: function(cell) {
        const value = cell.getValue();
        return value ? formatTimestamp(value) : 'Active';
@@ -173,7 +205,7 @@ const historyTable = new Tabulator("#history-alerts-table", {
 
 // Auto-refresh every 30 seconds
 setInterval(function() {
-  if (document.getElementById('active-alerts-table').style.display !== 'none') {
+  if (!document.getElementById('active-alerts-table').classList.contains('tab-hidden')) {
     activeTable.setData();
   }
 }, 30000);
@@ -191,6 +223,11 @@ setInterval(function() {
 
 .pure-form label {
   margin-right: 10px;
+}
+
+/* Initial state - history table hidden by default */
+.tab-hidden {
+  display: none !important;
 }
 </style>
 
