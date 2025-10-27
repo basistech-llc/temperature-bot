@@ -7,9 +7,12 @@ TEMPLATE_DIR := app/templates
 # Centralize the Playwright cache path so CI can cache it
 export PLAYWRIGHT_BROWSERS_PATH := .playwright
 
-# Pin tool versions (helps avoid “invisible” cache invalidations)
+# Pin tool versions (helps avoid "invisible" cache invalidations)
 POETRY_VERSION ?= 2.1.3
 RUFF_VERSION   ?= 0.13.2
+
+# Detect if pipx is available as a command (for apt-installed pipx) vs python module (for pip-installed pipx)
+PIPX_CMD = $(shell which pipx 2>/dev/null || echo "python3 -m pipx")
 
 
 ################################################################
@@ -93,8 +96,8 @@ daily: $(REQ)
 	$(PYTHON) -m bin.runner --daily
 
 install-either:
-	python3 -m pipx ensurepath
-	python3 -m pipx install poetry==$(POETRY_VERSION)
+	$(PIPX_CMD) ensurepath
+	$(PIPX_CMD) install poetry==$(POETRY_VERSION)
 	poetry config virtualenvs.in-project true
 	poetry lock
 	poetry install --with dev
