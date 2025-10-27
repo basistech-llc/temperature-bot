@@ -436,6 +436,20 @@ def update_devlog_map(conn, device_name: str, ae200_device_id: int):
 
 ################################################################
 ## Alerts
+def format_alert_type_display(alert_type):
+    """
+    Convert internal alert type names to user-friendly display names.
+
+    :param alert_type: Internal name ('ErrorSign', 'FilterSign', 'CheckWater')
+    :return: User-friendly display name
+    """
+    mapping = {
+        'ErrorSign': 'Error',
+        'FilterSign': 'Filter warning',
+        'CheckWater': 'Water issue'
+    }
+    return mapping.get(alert_type, alert_type)
+
 def insert_or_update_alert(conn, device_id, alert_type, alert_value, logtime=None):
     """
     Insert or update alert state transitions.
@@ -519,7 +533,7 @@ def get_active_alerts(conn, device_id=None):
             {
                 "alert_id": alert_id,
                 "device_name": device_name,
-                "alert_type": alert_type,
+                "alert_type": format_alert_type_display(alert_type),
                 "alert_value": alert_value,
                 "start_time": start_time,
                 "age": age_seconds,
@@ -568,7 +582,7 @@ def get_alert_history(conn, device_id=None, limit=100):
             {
                 "alert_id": alert_id,
                 "device_name": device_name,
-                "alert_type": alert_type,
+                "alert_type": format_alert_type_display(alert_type),
                 "alert_value": alert_value,
                 "start_time": start_time,
                 "end_time": end_time,
@@ -609,7 +623,7 @@ def get_alerts_for_device(conn, device_id):
         alerts.append(
             {
                 "alert_id": alert_id,
-                "alert_type": alert_type,
+                "alert_type": format_alert_type_display(alert_type),
                 "alert_value": alert_value,
                 "start_time": start_time,
                 "end_time": end_time,
