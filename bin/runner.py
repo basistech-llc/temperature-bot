@@ -38,7 +38,7 @@ def update_from_ae200(conn):
         devs = ae200.get_devices()
         for dev in devs:
             data = ae200.get_device_info(dev["id"])
-            process_device_data(conn, dev, data)
+            process_device_alert_data(conn, dev, data)
     else:
         # Use real AE200 device
         d = ae200.AE200Functions()
