@@ -1,5 +1,25 @@
-DBFILE := /var/db/temperature-bot.db
-DEV_DB := var/db/temperature-bot.db
+#
+# Makefile for temperature bot
+#
+# install macOS or Linux environments on clean vm:
+#    make install-ubuntu | install-macos
+#
+# Local development:
+#    make check   - static analysis
+#    make test    - dynamic analysis
+#    make make-dev-db  - creates a local database from the schema
+#    make local-dev - Runs the web backend locally with simulator
+#    make live-dev-runner - Runs the collection agent and rules runner locally, with live collection
+#
+# Environment variables:
+# DB_PATH - Environment variable to use for local development.
+#           Uses var/db/temperature-bot.db if not set (note this is a relative path)
+#           For installation, cron & systemd use /var/db/temperature-bot.db
+#
+# AES200_SIMULATOR - set to 1 for `make local-dev` -
+
+
+DB_PATH := var/db/temperature-bot.db
 REQ := .venv/pyvenv.cfg
 PYTHON := .venv/bin/python
 TEMPLATE_DIR := app/templates
@@ -41,15 +61,15 @@ fetch-dev-db:
 
 # Run web backend locally, with simulated data. (needs popuplated db too)
 local-dev: $(REQ)
-	FLASK_DEBUG=True DB_PATH=$(DEV_DB) AE200_SIMULATOR=1 $(PYTHON) run_local.py
+	FLASK_DEBUG=True AE200_SIMULATOR=1 $(PYTHON) run_local.py
 
 # Run the web backend locally, querying the hardware (assumes VPN or running in CALA)
 live-dev-web: $(REQ)
-	FLASK_DEBUG=True DB_PATH=$(DEV_DB) $(PYTHON) run_local.py
+	FLASK_DEBUG=True $(PYTHON) run_local.py
 
-# Run the data collection runner locally, querying the hardware (assumes VPN or running in CALA)
+# Run the data collection agent and rules runner locally, querying the hardware (assumes VPN or running in CALA)
 live-dev-runner: $(REQ)
-	LOG_LEVEL=DEBUG DB_PATH=$(DEV_DB) $(PYTHON) bin/runner.py
+	LOG_LEVEL=DEBUG $(PYTHON) bin/runner.py
 
 tags:
 	etags */*.py
