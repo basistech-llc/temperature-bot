@@ -19,6 +19,7 @@ from pydantic import BaseModel
 from flask import request
 
 from .constants import DB_PATH, TEST_DB_NAME
+from .paths import SCHEMA_FILE_PATH
 from .util import github_style_duration
 from . import ae200
 from . import airquality
@@ -73,8 +74,8 @@ def get_db_connection():
         conn = connect_db(db_path)
 
         # Apply schema changes automatically
-        from .paths import SCHEMA_FILE_PATH
-
+        # [TODO] This poorman hack should be replaced with real migration management. This lacks
+        # rollback and relies on schema.sql not doing anything destructive to an existing DB
         setup_database(conn, SCHEMA_FILE_PATH)
 
         return conn
@@ -494,25 +495,21 @@ def get_active_alerts(conn, device_id=None):
     """
     c = conn.cursor()
 
+    query = """
+        SELECT a.alert_id, d.device_name, a.alert_type, a.alert_value, a.start_time
+        FROM alerts a
+        JOIN devices d ON a.device_id = d.device_id
+        WHERE a.end_time IS NULL
+    """
+    args = []
+
     if device_id:
-        c.execute(
-            """
-            SELECT a.alert_id, d.device_name, a.alert_type, a.alert_value, a.start_time
-            FROM alerts a
-            JOIN devices d ON a.device_id = d.device_id
-            WHERE a.end_time IS NULL AND a.device_id = ?
-            ORDER BY a.start_time DESC
-        """,
-            (device_id,),
-        )
-    else:
-        c.execute("""
-            SELECT a.alert_id, d.device_name, a.alert_type, a.alert_value, a.start_time
-            FROM alerts a
-            JOIN devices d ON a.device_id = d.device_id
-            WHERE a.end_time IS NULL
-            ORDER BY a.start_time DESC
-        """)
+        query += " AND a.device_id = ?"
+        args.append(device_id)
+
+    query += " ORDER BY a.start_time DESC"
+
+    c.execute(query, args)
 
     alerts = []
     for row in c.fetchall():
@@ -543,31 +540,22 @@ def get_alert_history(conn, device_id=None, limit=100):
     """
     c = conn.cursor()
 
+    query = """
+        SELECT a.alert_id, d.device_name, a.alert_type, a.alert_value,
+               a.start_time, a.end_time
+        FROM alerts a
+        JOIN devices d ON a.device_id = d.device_id
+    """
+    args = []
+
     if device_id:
-        c.execute(
-            """
-            SELECT a.alert_id, d.device_name, a.alert_type, a.alert_value,
-                   a.start_time, a.end_time
-            FROM alerts a
-            JOIN devices d ON a.device_id = d.device_id
-            WHERE a.device_id = ?
-            ORDER BY a.start_time DESC
-            LIMIT ?
-        """,
-            (device_id, limit),
-        )
-    else:
-        c.execute(
-            """
-            SELECT a.alert_id, d.device_name, a.alert_type, a.alert_value,
-                   a.start_time, a.end_time
-            FROM alerts a
-            JOIN devices d ON a.device_id = d.device_id
-            ORDER BY a.start_time DESC
-            LIMIT ?
-        """,
-            (limit,),
-        )
+        query += " WHERE a.device_id = ?"
+        args.append(device_id)
+
+    query += " ORDER BY a.start_time DESC LIMIT ?"
+    args.append(limit)
+
+    c.execute(query, args)
 
     alerts = []
     for row in c.fetchall():
