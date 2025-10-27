@@ -118,8 +118,11 @@ def create_web_routes(app):
     @with_db_connection
     def show_alerts(conn):
         """Alerts page"""
-        device_ids = db.devices_to_device_id(conn)
-        return render_template("alerts.html", devices=device_ids, current_page="alerts")
+        # Get devices as device_id:device_name for the dropdown
+        c = conn.cursor()
+        c.execute("SELECT device_id, device_name FROM devices ORDER BY device_name")
+        devices = {dev["device_id"]: dev["device_name"] for dev in c.fetchall()}
+        return render_template("alerts.html", devices=devices, current_page="alerts")
 
     @app.route("/privacy")
     def privacy():
