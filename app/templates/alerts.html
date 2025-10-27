@@ -108,6 +108,39 @@ function formatTimestamp(timestamp) {
   return new Date(timestamp * 1000).toLocaleString();
 }
 
+// Shared formatters
+function rowFormatterFunction(row) {
+  const data = row.getData();
+  // Active alerts have no end_time field, or end_time is null
+  const isResolved = data.end_time != null;
+
+  if (!isResolved) {
+    if (data.alert_type === 'Filter warning') {
+      // Unresolved filter warning - lighter orange background
+      row.getElement().style.backgroundColor = '#fff5e6';
+      row.getElement().style.opacity = '0.7';
+    } else if (data.alert_type === 'Error') {
+      // Unresolved error - light red background
+      row.getElement().style.backgroundColor = '#ffe6e6';
+    } else if (data.alert_type === 'Water issue') {
+      // Unresolved water issue - light orange background
+      row.getElement().style.backgroundColor = '#fff0e6';
+    }
+  }
+}
+
+function alertTypeFormatter(cell) {
+  const value = cell.getValue();
+  if (value === 'Filter warning') {
+    return value;
+  } else if (value === 'Error') {
+    return '<span style="color: #ff4444; font-weight: bold;">' + value + '</span>';
+  } else if (value === 'Water issue') {
+    return '<span style="color: #ff8800; font-weight: bold;">' + value + '</span>';
+  }
+  return value;
+}
+
 // Active alerts table
 const activeTable = new Tabulator("#active-alerts-table", {
   ajaxURL: "/api/v1/alerts/active",
@@ -117,38 +150,11 @@ const activeTable = new Tabulator("#active-alerts-table", {
   layout: "fitColumns",
   pagination: "local",
   paginationSize: 50,
-  rowFormatter: function(row) {
-    const data = row.getData();
-    if (data.alert_type === 'Filter warning') {
-      row.getElement().style.opacity = '0.7';
-    }
-  },
+  rowFormatter: rowFormatterFunction,
   columns: [
     {title: "Device", field: "device_name", width: 150},
     {title: "Alert Type", field: "alert_type", width: 120,
-     formatter: function(cell) {
-       const value = cell.getValue();
-       if (value === 'Filter warning') {
-         return '<span style="opacity: 0.6; font-style: italic;">' + value + '</span>';
-       }
-       return value;
-     }
-    },
-    {title: "Status", field: "alert_value", width: 80,
-     formatter: function(cell) {
-       const value = cell.getValue();
-       const rowData = cell.getRow().getData();
-       const isFilterWarning = rowData.alert_type === 'Filter warning';
-
-       if (value === 'ON') {
-         const color = isFilterWarning ? '#ff8800' : '#ff4444'; // Orange for filters, red for critical
-         const weight = isFilterWarning ? 'normal' : 'bold';
-         return '<span style="color: ' + color + '; font-weight: ' + weight + ';">' + value + '</span>';
-       } else {
-         const color = '#44ff44';
-         return '<span style="color: ' + color + '; font-weight: bold;">' + value + '</span>';
-       }
-     }
+     formatter: alertTypeFormatter
     },
     {title: "Started", field: "start_time", width: 180,
      formatter: function(cell) {
@@ -172,38 +178,11 @@ const historyTable = new Tabulator("#history-alerts-table", {
   layout: "fitColumns",
   pagination: "local",
   paginationSize: 50,
-  rowFormatter: function(row) {
-    const data = row.getData();
-    if (data.alert_type === 'Filter warning') {
-      row.getElement().style.opacity = '0.7';
-    }
-  },
+  rowFormatter: rowFormatterFunction,
   columns: [
     {title: "Device", field: "device_name", width: 150},
     {title: "Alert Type", field: "alert_type", width: 120,
-     formatter: function(cell) {
-       const value = cell.getValue();
-       if (value === 'Filter warning') {
-         return '<span style="opacity: 0.6; font-style: italic;">' + value + '</span>';
-       }
-       return value;
-     }
-    },
-    {title: "Status", field: "alert_value", width: 80,
-     formatter: function(cell) {
-       const value = cell.getValue();
-       const rowData = cell.getRow().getData();
-       const isFilterWarning = rowData.alert_type === 'Filter warning';
-
-       if (value === 'ON') {
-         const color = isFilterWarning ? '#ff8800' : '#ff4444'; // Orange for filters, red for critical
-         const weight = isFilterWarning ? 'normal' : 'bold';
-         return '<span style="color: ' + color + '; font-weight: ' + weight + ';">' + value + '</span>';
-       } else {
-         const color = '#44ff44';
-         return '<span style="color: ' + color + '; font-weight: bold;">' + value + '</span>';
-       }
-     }
+     formatter: alertTypeFormatter
     },
     {title: "Started", field: "start_time", width: 180,
      formatter: function(cell) {
