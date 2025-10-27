@@ -16,7 +16,7 @@
 #           Uses var/db/temperature-bot.db if not set (note this is a relative path)
 #           For installation, cron & systemd use /var/db/temperature-bot.db
 #
-# AES200_SIMULATOR - set to 1 for `make local-dev` -
+# AE200_SIMULATOR - set to 1 for `make local-dev` -
 
 
 DB_PATH := var/db/temperature-bot.db
