@@ -129,7 +129,8 @@ def disable_rules(conn):
 def alerts_active(conn):
     """Get all active alerts"""
     device_id = request.args.get("device_id", type=int)
-    alerts = db.get_active_alerts(conn, device_id)
+    include_details = request.args.get("include_details", "false").lower() == "true"
+    alerts = db.get_active_alerts(conn, device_id, include_details)
     return jsonify(alerts)
 
 
@@ -139,5 +140,6 @@ def alerts_history(conn):
     """Get alert history"""
     device_id = request.args.get("device_id", type=int)
     limit = request.args.get("limit", type=int, default=100)
-    alerts = db.get_alert_history(conn, device_id, limit)
+    include_details = request.args.get("include_details", "false").lower() == "true"
+    alerts = db.get_alert_history(conn, device_id, limit, include_details)
     return jsonify(alerts)

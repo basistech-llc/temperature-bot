@@ -444,11 +444,77 @@ def format_alert_type_display(alert_type):
     :return: User-friendly display name
     """
     mapping = {
-        'ErrorSign': 'Error',
-        'FilterSign': 'Filter warning',
-        'CheckWater': 'Water issue'
+        "ErrorSign": "Error",
+        "FilterSign": "Filter warning",
+        "CheckWater": "Water issue",
     }
     return mapping.get(alert_type, alert_type)
+
+
+def extract_relevant_status_fields(status_json):
+    """
+    Extract relevant diagnostic fields from status_json for alert details.
+
+    :param status_json: JSON string containing device status
+    :return: Dictionary with relevant diagnostic fields or None
+    """
+    if not status_json:
+        return None
+
+    try:
+        data = json.loads(status_json)
+    except (TypeError, json.JSONDecodeError):
+        return None
+
+    # Extract key diagnostic fields
+    return {
+        "mode": data.get("Mode"),
+        "drive": data.get("Drive"),
+        "inlet_temp": data.get("InletTemp"),
+        "set_temp": data.get("SetTemp"),
+        "fan_speed": data.get("FanSpeed"),
+        "filter_sign": data.get("FilterSign"),
+        "check_water": data.get("CheckWater"),
+        "error_sign": data.get("ErrorSign"),
+        "remote_control": data.get("RemoCon"),
+        "group_id": data.get("Group"),
+        "hold": data.get("Hold"),
+        "ventilation": data.get("Ventilation"),
+        "mode_status": data.get("ModeStatus"),
+    }
+
+
+def get_alert_device_status(conn, device_id, alert_start_time):
+    """
+    Get the device status_json from devlog for the alert start time.
+    Handles RLE encoding by looking for records that span the alert time.
+
+    :param conn: database connection
+    :param device_id: device ID
+    :param alert_start_time: Unix timestamp when alert started
+    :return: status_json string or None
+    """
+    c = conn.cursor()
+
+    # Handle RLE encoding: look for records where alert_start_time falls within the logtime + duration range
+    # This works because devlog uses run-length encoding where records extend over time periods
+    c.execute(
+        """
+        SELECT status_json, logtime, duration
+        FROM devlog
+        WHERE device_id = ?
+        AND logtime <= ?
+        AND (logtime + duration) >= ?
+        AND status_json IS NOT NULL
+        ORDER BY logtime DESC
+        LIMIT 1
+    """,
+        (device_id, alert_start_time, alert_start_time),
+    )
+
+    row = c.fetchone()
+    return row[0] if row else None
+
 
 def insert_or_update_alert(conn, device_id, alert_type, alert_value, logtime=None):
     """
@@ -499,18 +565,19 @@ def insert_or_update_alert(conn, device_id, alert_type, alert_value, logtime=Non
     conn.commit()
 
 
-def get_active_alerts(conn, device_id=None):
+def get_active_alerts(conn, device_id=None, include_details=False):
     """
     Get all active alerts (end_time IS NULL).
 
     :param conn: database connection
     :param device_id: optional filter by device
+    :param include_details: if True, include device status details
     :return: list of dicts with alert data
     """
     c = conn.cursor()
 
     query = """
-        SELECT a.alert_id, d.device_name, a.alert_type, a.alert_value, a.start_time
+        SELECT a.alert_id, a.device_id, d.device_name, a.alert_type, a.alert_value, a.start_time
         FROM alerts a
         JOIN devices d ON a.device_id = d.device_id
         WHERE a.end_time IS NULL
@@ -527,35 +594,43 @@ def get_active_alerts(conn, device_id=None):
 
     alerts = []
     for row in c.fetchall():
-        alert_id, device_name, alert_type, alert_value, start_time = row
+        alert_id, device_id_val, device_name, alert_type, alert_value, start_time = row
         age_seconds = int(time.time()) - start_time
-        alerts.append(
-            {
-                "alert_id": alert_id,
-                "device_name": device_name,
-                "alert_type": format_alert_type_display(alert_type),
-                "alert_value": alert_value,
-                "start_time": start_time,
-                "age": age_seconds,
-            }
-        )
+
+        alert_dict = {
+            "alert_id": alert_id,
+            "device_name": device_name,
+            "alert_type": format_alert_type_display(alert_type),
+            "alert_value": alert_value,
+            "start_time": start_time,
+            "age": age_seconds,
+        }
+
+        # Add device status details if requested
+        if include_details:
+            status_json = get_alert_device_status(conn, device_id_val, start_time)
+            if status_json:
+                alert_dict["details"] = extract_relevant_status_fields(status_json)
+
+        alerts.append(alert_dict)
 
     return alerts
 
 
-def get_alert_history(conn, device_id=None, limit=100):
+def get_alert_history(conn, device_id=None, limit=100, include_details=False):
     """
     Get alert history (all alerts including resolved).
 
     :param conn: database connection
     :param device_id: optional filter by device
     :param limit: maximum number of alerts to return
+    :param include_details: if True, include device status details
     :return: list of dicts with alert data
     """
     c = conn.cursor()
 
     query = """
-        SELECT a.alert_id, d.device_name, a.alert_type, a.alert_value,
+        SELECT a.alert_id, a.device_id, d.device_name, a.alert_type, a.alert_value,
                a.start_time, a.end_time
         FROM alerts a
         JOIN devices d ON a.device_id = d.device_id
@@ -573,22 +648,36 @@ def get_alert_history(conn, device_id=None, limit=100):
 
     alerts = []
     for row in c.fetchall():
-        alert_id, device_name, alert_type, alert_value, start_time, end_time = row
+        (
+            alert_id,
+            device_id_val,
+            device_name,
+            alert_type,
+            alert_value,
+            start_time,
+            end_time,
+        ) = row
         duration = None
         if end_time:
             duration = end_time - start_time
 
-        alerts.append(
-            {
-                "alert_id": alert_id,
-                "device_name": device_name,
-                "alert_type": format_alert_type_display(alert_type),
-                "alert_value": alert_value,
-                "start_time": start_time,
-                "end_time": end_time,
-                "duration": duration,
-            }
-        )
+        alert_dict = {
+            "alert_id": alert_id,
+            "device_name": device_name,
+            "alert_type": format_alert_type_display(alert_type),
+            "alert_value": alert_value,
+            "start_time": start_time,
+            "end_time": end_time,
+            "duration": duration,
+        }
+
+        # Add device status details if requested
+        if include_details:
+            status_json = get_alert_device_status(conn, device_id_val, start_time)
+            if status_json:
+                alert_dict["details"] = extract_relevant_status_fields(status_json)
+
+        alerts.append(alert_dict)
 
     return alerts
 

@@ -143,7 +143,7 @@ function alertTypeFormatter(cell) {
 
 // Active alerts table
 const activeTable = new Tabulator("#active-alerts-table", {
-  ajaxURL: "/api/v1/alerts/active",
+  ajaxURL: "/api/v1/alerts/active?include_details=true",
   ajaxResponse: function(url, params, response) {
     return response;
   },
@@ -152,7 +152,7 @@ const activeTable = new Tabulator("#active-alerts-table", {
   paginationSize: 50,
   rowFormatter: rowFormatterFunction,
   columns: [
-    {title: "Device", field: "device_name", width: 150},
+    {title: "Device", field: "device_name", width: 120},
     {title: "Alert Type", field: "alert_type", width: 120,
      formatter: alertTypeFormatter
     },
@@ -165,13 +165,20 @@ const activeTable = new Tabulator("#active-alerts-table", {
      formatter: function(cell) {
        return formatDuration(cell.getValue());
      }
+    },
+    {title: "Device Status", field: "details", width: 420,
+     formatter: function(cell) {
+       const details = cell.getValue();
+       if (!details) return '';
+       return details.mode + ' | Drive: ' + details.drive + ' | Temp: ' + details.inlet_temp + '°C / ' + details.set_temp + '°C | Fan: ' + details.fan_speed;
+     }
     }
   ]
 });
 
 // History alerts table
 const historyTable = new Tabulator("#history-alerts-table", {
-  ajaxURL: "/api/v1/alerts/history",
+  ajaxURL: "/api/v1/alerts/history?include_details=true",
   ajaxResponse: function(url, params, response) {
     return response;
   },
@@ -180,7 +187,7 @@ const historyTable = new Tabulator("#history-alerts-table", {
   paginationSize: 50,
   rowFormatter: rowFormatterFunction,
   columns: [
-    {title: "Device", field: "device_name", width: 150},
+    {title: "Device", field: "device_name", width: 130},
     {title: "Alert Type", field: "alert_type", width: 120,
      formatter: alertTypeFormatter
     },
@@ -198,6 +205,13 @@ const historyTable = new Tabulator("#history-alerts-table", {
     {title: "Duration", field: "duration", width: 100,
      formatter: function(cell) {
        return formatDuration(cell.getValue());
+     }
+    },
+    {title: "Device Status", field: "details", width: 420,
+     formatter: function(cell) {
+       const details = cell.getValue();
+       if (!details) return '';
+       return details.mode + ' | Drive: ' + details.drive + ' | Temp: ' + details.inlet_temp + '°C / ' + details.set_temp + '°C | Fan: ' + details.fan_speed;
      }
     }
   ]
