@@ -104,7 +104,15 @@ function createLogTable() {
         sorter: "number",
         formatter: function (cell) {
           const ts = cell.getValue() * 1000;
-          return new Date(ts).toLocaleString();
+          return new Intl.DateTimeFormat(undefined, {
+            year: "numeric",
+            month: "short",
+            day: "numeric",
+            hour: "2-digit",
+            minute: "2-digit",
+            hour12: false,
+            timeZoneName: "short",
+          }).format(new Date(ts));
         },
         widthGrow: 2,
       },
