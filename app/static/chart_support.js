@@ -117,6 +117,8 @@ function formatTime(ts) {
     return new Intl.DateTimeFormat(undefined, {
       hour: "2-digit",
       minute: "2-digit",
+      hour12: false,
+      timeZoneName: "short",
     }).format(date);
   } else {
     // For longer periods, show day and time
@@ -126,6 +128,8 @@ function formatTime(ts) {
       day: "numeric",
       hour: "2-digit",
       minute: "2-digit",
+      hour12: false,
+      timeZoneName: "short",
     }).format(date);
   }
 }
@@ -403,7 +407,7 @@ function updateTempChart() {
       selectedMode: series.length <= 1 ? false : true,
       selected: legendSelected,
     },
-    grid: { top: 200, left: 100, right: 100, bottom: 100 },
+    grid: { top: 200, left: 100, right: 100, bottom: 120 },
     xAxis: {
       type: "time",
       name: "Time",
@@ -600,6 +604,8 @@ function updateAQChart() {
           day: "numeric",
           hour: "2-digit",
           minute: "2-digit",
+          hour12: false,
+          timeZoneName: "short",
         }).format(d);
         return params.reduce((out, p) => {
           return (

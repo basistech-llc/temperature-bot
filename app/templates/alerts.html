@@ -105,7 +105,15 @@ function formatDuration(seconds) {
 
 // Format timestamp
 function formatTimestamp(timestamp) {
-  return new Date(timestamp * 1000).toLocaleString();
+  return new Intl.DateTimeFormat(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    timeZoneName: "short",
+  }).format(new Date(timestamp * 1000));
 }
 
 // Shared formatters
@@ -156,7 +164,7 @@ const activeTable = new Tabulator("#active-alerts-table", {
     {title: "Alert Type", field: "alert_type", width: 120,
      formatter: alertTypeFormatter
     },
-    {title: "Started", field: "start_time", width: 180,
+    {title: "Started", field: "start_time", width: 200,
      formatter: function(cell) {
        return formatTimestamp(cell.getValue());
      }
@@ -191,12 +199,12 @@ const historyTable = new Tabulator("#history-alerts-table", {
     {title: "Alert Type", field: "alert_type", width: 120,
      formatter: alertTypeFormatter
     },
-    {title: "Started", field: "start_time", width: 180,
+    {title: "Started", field: "start_time", width: 200,
      formatter: function(cell) {
        return formatTimestamp(cell.getValue());
      }
     },
-    {title: "Ended", field: "end_time", width: 180,
+    {title: "Ended", field: "end_time", width: 200,
      formatter: function(cell) {
        const value = cell.getValue();
        return value ? formatTimestamp(value) : 'Active';
