@@ -122,3 +122,51 @@ class WeatherTestData:
     def get_mock_aqi(aqi_value: int = 45) -> int:
         """Get mock AQI value."""
         return aqi_value
+
+
+class AlertTestData:
+    """Test data specifically for alert testing."""
+
+    @staticmethod
+    def create_device_with_alert(
+        conn,
+        device_name: str,
+        alert_type: str,
+        status_json: Dict[str, Any],
+        alert_start_time: int,
+        alert_value: str = "ON",
+        end_time: Optional[int] = None,
+    ) -> int:
+        """
+        Create a device with a status entry and an associated alert.
+
+        :param conn: Database connection
+        :param device_name: Name for the device
+        :param alert_type: Type of alert (ErrorSign, FilterSign, CheckWater)
+        :param status_json: Status data to store in devlog
+        :param alert_start_time: When the alert started
+        :param alert_value: Alert value (ON or OFF)
+        :param end_time: When the alert ended (None for active alerts)
+        :return: device_id
+        """
+        import json
+        import sqlite3
+
+        cursor = conn.cursor()
+        cursor.execute("INSERT INTO devices (device_name) VALUES (?)", (device_name,))
+        device_id = cursor.lastrowid
+
+        # Create status entry
+        cursor.execute(
+            "INSERT INTO devlog (device_id, logtime, duration, temp10x, status_json) VALUES (?, ?, ?, ?, ?)",
+            (device_id, alert_start_time, 600, 250, json.dumps(status_json)),
+        )
+
+        # Create alert
+        cursor.execute(
+            "INSERT INTO alerts (device_id, alert_type, alert_value, start_time, end_time) VALUES (?, ?, ?, ?, ?)",
+            (device_id, alert_type, alert_value, alert_start_time, end_time),
+        )
+
+        conn.commit()
+        return device_id

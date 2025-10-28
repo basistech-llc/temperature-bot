@@ -11,7 +11,7 @@ from unittest.mock import patch
 
 import pytest
 from conftest import flask_test_client, skip_on_github  # noqa: F401  # pylint: disable=unused-import
-from helpers.data_factories import DeviceTestData
+from helpers.data_factories import DeviceTestData, AlertTestData
 from helpers.mock_helpers import MockHelper
 
 from app import ae200
@@ -223,3 +223,133 @@ def test_set_fan_speed_endpoint(
             assert cl["agent"].startswith("Werkzeug") or cl["agent"] == "web"
 
         test_conn_verify.close()
+
+
+def test_alerts_active_endpoint(flask_test_client):  # noqa: F811
+    """Test the /api/v1/alerts/active endpoint"""
+    response = flask_test_client.get("/api/v1/alerts/active")
+    assert response.status_code == 200
+    alerts = response.json
+    assert isinstance(alerts, list)
+
+
+def test_alerts_active_endpoint_with_details(
+    flask_test_client, test_database_conn_with_test_data
+):  # noqa: F811
+    """Test the /api/v1/alerts/active endpoint with include_details parameter"""
+
+    conn = test_database_conn_with_test_data[0]
+    device_id = test_database_conn_with_test_data[1]
+
+    # Create an alert with corresponding status entry using helper
+    now = int(time.time())
+    alert_time = now - 300
+
+    # Add alert to existing device
+    cursor = conn.cursor()
+    cursor.execute(
+        "INSERT INTO devlog (device_id, logtime, duration, temp10x, status_json) VALUES (?, ?, ?, ?, ?)",
+        (device_id, alert_time, 600, 250, '{"Mode": "AUTO", "Drive": "ON", "FanSpeed": "MEDIUM"}'),
+    )
+    cursor.execute(
+        "INSERT INTO alerts (device_id, alert_type, alert_value, start_time, end_time) VALUES (?, ?, ?, ?, ?)",
+        (device_id, "ErrorSign", "ON", alert_time, None),
+    )
+    conn.commit()
+
+    # Request without details
+    response = flask_test_client.get("/api/v1/alerts/active")
+    assert response.status_code == 200
+    alerts = response.json
+    assert len(alerts) >= 1
+    assert "details" not in alerts[0]
+
+    # Request with details
+    response = flask_test_client.get("/api/v1/alerts/active?include_details=true")
+    assert response.status_code == 200
+    alerts = response.json
+    assert len(alerts) >= 1
+    assert "details" in alerts[0]
+    assert alerts[0]["details"]["mode"] == "AUTO"
+    assert alerts[0]["details"]["fan_speed"] == "MEDIUM"
+
+
+def test_alerts_history_endpoint(flask_test_client):  # noqa: F811
+    """Test the /api/v1/alerts/history endpoint"""
+    response = flask_test_client.get("/api/v1/alerts/history")
+    assert response.status_code == 200
+    alerts = response.json
+    assert isinstance(alerts, list)
+
+
+def test_alerts_history_endpoint_with_details(
+    flask_test_client, test_database_conn_with_test_data
+):  # noqa: F811
+    """Test the /api/v1/alerts/history endpoint with include_details parameter"""
+
+    conn = test_database_conn_with_test_data[0]
+    device_id = test_database_conn_with_test_data[1]
+
+    # Create a resolved alert with corresponding status entry
+    now = int(time.time())
+    alert_start = now - 1000
+
+    cursor = conn.cursor()
+    cursor.execute(
+        "INSERT INTO devlog (device_id, logtime, duration, temp10x, status_json) VALUES (?, ?, ?, ?, ?)",
+        (device_id, alert_start, 600, 250, '{"Mode": "AUTO", "Drive": "ON", "FanSpeed": "HIGH"}'),
+    )
+    cursor.execute(
+        "INSERT INTO alerts (device_id, alert_type, alert_value, start_time, end_time) VALUES (?, ?, ?, ?, ?)",
+        (device_id, "ErrorSign", "ON", alert_start, now - 500),
+    )
+    conn.commit()
+
+    # Request without details
+    response = flask_test_client.get("/api/v1/alerts/history")
+    assert response.status_code == 200
+    alerts = response.json
+    assert len(alerts) >= 1
+    assert "details" not in alerts[0]
+
+    # Request with details
+    response = flask_test_client.get("/api/v1/alerts/history?include_details=true")
+    assert response.status_code == 200
+    alerts = response.json
+    assert len(alerts) >= 1
+    assert "details" in alerts[0]
+    assert alerts[0]["details"]["mode"] == "AUTO"
+    assert alerts[0]["details"]["fan_speed"] == "HIGH"
+
+
+def test_alerts_history_endpoint_limit(
+    flask_test_client, test_database_conn_with_test_data
+):  # noqa: F811
+    """Test the /api/v1/alerts/history endpoint with limit parameter"""
+
+    conn = test_database_conn_with_test_data[0]
+    device_id = test_database_conn_with_test_data[1]
+
+    # Create multiple alerts
+    now = int(time.time())
+    cursor = conn.cursor()
+
+    for i in range(5):
+        cursor.execute(
+            "INSERT INTO alerts (device_id, alert_type, alert_value, start_time, end_time) VALUES (?, ?, ?, ?, ?)",
+            (
+                device_id,
+                "ErrorSign",
+                "ON",
+                now - 5000 + i * 100,
+                now - 5000 + i * 100 + 50,
+            ),
+        )
+
+    conn.commit()
+
+    # Request with limit
+    response = flask_test_client.get("/api/v1/alerts/history?limit=3")
+    assert response.status_code == 200
+    alerts = response.json
+    assert len(alerts) == 3
