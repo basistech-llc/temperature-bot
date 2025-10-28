@@ -1,6 +1,7 @@
 """
 test Flask endpoints
 """
+
 import logging
 import sqlite3
 import os
@@ -19,14 +20,16 @@ from app.constants import __version__
 
 logger = logging.getLogger(__name__)
 
-def test_get_version(flask_test_client):   # noqa: F811
+
+def test_get_version(flask_test_client):  # noqa: F811
     response = flask_test_client.get("/version")
     assert response.status_code == 200
-    assert response.data.decode('utf-8') == f'version: {__version__}'
+    assert response.data.decode("utf-8") == f"version: {__version__}"
 
     response = flask_test_client.get("/api/v1/version")
     assert response.status_code == 200
-    assert response.json == {'version': __version__}
+    assert response.json == {"version": __version__}
+
 
 def test_status_endpoint(flask_test_client):  # noqa: F811
     response = flask_test_client.get("/api/v1/status")
@@ -43,7 +46,7 @@ def test_status_endpoint_with_schema_validation(flask_test_client):  # noqa: F81
     preventing 'no such column' errors in production.
     """
     # First, verify the test database has the expected schema
-    test_db_path = os.environ.get('TEST_DB_NAME')
+    test_db_path = os.environ.get("TEST_DB_NAME")
     assert test_db_path, "TEST_DB_NAME environment variable should be set"
 
     conn = sqlite3.connect(test_db_path)
@@ -52,26 +55,46 @@ def test_status_endpoint_with_schema_validation(flask_test_client):  # noqa: F81
 
     # Get the schema for the devices table
     cursor.execute("PRAGMA table_info(devices)")
-    columns = [row['name'] for row in cursor.fetchall()]
+    columns = [row["name"] for row in cursor.fetchall()]
 
     # Verify all expected columns exist
-    expected_columns = ['device_id', 'device_name', 'ae200_device_id', 'disabled_until', 'notes']
+    expected_columns = [
+        "device_id",
+        "device_name",
+        "ae200_device_id",
+        "disabled_until",
+        "notes",
+    ]
     for expected_col in expected_columns:
-        assert expected_col in columns, f"Missing required column '{expected_col}' in devices table. Found columns: {columns}"
+        assert expected_col in columns, (
+            f"Missing required column '{expected_col}' in devices table. Found columns: {columns}"
+        )
 
     # Add a test device with all columns to ensure the query works
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
-    cursor.execute("""
+    cursor.execute(
+        """
         INSERT INTO devices (device_name, ae200_device_id, disabled_until, notes)
         VALUES (?, ?, ?, ?)
-    """, ("Test Device", 1, None, "Test notes"))
+    """,
+        ("Test Device", 1, None, "Test notes"),
+    )
 
     # Add a status entry
-    cursor.execute("""
+    cursor.execute(
+        """
         INSERT INTO devlog (device_id, logtime, duration, temp10x, status_json)
         VALUES (?, ?, ?, ?, ?)
-    """, (cursor.lastrowid, int(time.time()), 60, 240, '{"Drive": "ON", "FanSpeed": "LOW"}'))
+    """,
+        (
+            cursor.lastrowid,
+            int(time.time()),
+            60,
+            240,
+            '{"Drive": "ON", "FanSpeed": "LOW"}',
+        ),
+    )
     conn.commit()
     conn.close()
 
@@ -83,7 +106,9 @@ def test_status_endpoint_with_schema_validation(flask_test_client):  # noqa: F81
     assert len(response_json["devices"]) >= 1
 
     # Verify the device data includes all expected fields
-    test_device = next((d for d in response_json["devices"] if d["device_name"] == "Test Device"), None)
+    test_device = next(
+        (d for d in response_json["devices"] if d["device_name"] == "Test Device"), None
+    )
     assert test_device is not None, "Test device should be returned"
     assert "notes" in test_device, "Device should include notes field"
     assert test_device["notes"] == "Test notes"
@@ -92,7 +117,9 @@ def test_status_endpoint_with_schema_validation(flask_test_client):  # noqa: F81
 @skip_on_github
 @patch("app.weather.get_weather_data")
 @patch("app.airquality.get_aqi")
-def test_weather_endpoint(mock_get_airquality, mock_get_weather_data, flask_test_client):  # noqa: F811
+def test_weather_endpoint(
+    mock_get_airquality, mock_get_weather_data, flask_test_client
+):  # noqa: F811
     # Use new mock helper
     MockHelper.setup_weather_mocks(mock_get_airquality, mock_get_weather_data, 45, 72)
 
@@ -107,74 +134,92 @@ def test_weather_endpoint(mock_get_airquality, mock_get_weather_data, flask_test
 
 
 # pylint: disable=too-many-arguments, disable=too-many-positional-arguments
-BROADWAY_SOUTH=10
-@pytest.mark.parametrize("start_speed,target_speed,expected_calls", [
-    (1, 1, 0),  # Same speed - should not call set_fan_speed
-    (1, 2, 1),  # Different speed - should call set_fan_speed once
-    (1, 3, 1),  # Different speed - should call set_fan_speed once
-    (1, 4, 1),  # Different speed - should call set_fan_speed once
-    (2, 1, 1),  # Different speed - should call set_fan_speed once
-    (2, 2, 0),  # Same speed - should not call set_fan_speed
-    (2, 3, 1),  # Different speed - should call set_fan_speed once
-    (2, 4, 1),  # Different speed - should call set_fan_speed once
-])
-def test_set_fan_speed_endpoint(flask_test_client, start_speed, target_speed, expected_calls): # noqa: F811
+BROADWAY_SOUTH = 10
+
+
+@pytest.mark.parametrize(
+    "start_speed,target_speed,expected_calls",
+    [
+        (1, 1, 0),  # Same speed - should not call set_fan_speed
+        (1, 2, 1),  # Different speed - should call set_fan_speed once
+        (1, 3, 1),  # Different speed - should call set_fan_speed once
+        (1, 4, 1),  # Different speed - should call set_fan_speed once
+        (2, 1, 1),  # Different speed - should call set_fan_speed once
+        (2, 2, 0),  # Same speed - should not call set_fan_speed
+        (2, 3, 1),  # Different speed - should call set_fan_speed once
+        (2, 4, 1),  # Different speed - should call set_fan_speed once
+    ],
+)
+def test_set_fan_speed_endpoint(
+    flask_test_client, start_speed, target_speed, expected_calls
+):  # noqa: F811
     # Set up simulator with initial speed
     ae200.set_fan_speed(BROADWAY_SOUTH, start_speed)
-    now = int(time.time())      #
+    now = int(time.time())  #
 
     # get device_id
-    conn = sqlite3.connect(os.environ['TEST_DB_NAME'])
+    conn = sqlite3.connect(os.environ["TEST_DB_NAME"])
     conn.row_factory = sqlite3.Row
     device_id = db.get_or_create_device_id(conn, "Broadway Test")
     c = conn.cursor()
-    c.execute("UPDATE devices set ae200_device_id=? where device_id=?",(BROADWAY_SOUTH,device_id))
+    c.execute(
+        "UPDATE devices set ae200_device_id=? where device_id=?",
+        (BROADWAY_SOUTH, device_id),
+    )
     conn.commit()
     conn.close()
 
     # Send the /set_fan_speed
     response = flask_test_client.post(
         "/api/v1/set_fan_speed",
-        json={"device_id": device_id, "fan_speed": target_speed}
+        json={"device_id": device_id, "fan_speed": target_speed},
     )
     assert response.status_code == 200  # Check for successful HTTP status
     response_json = response.json
     assert response_json["status"] == "ok"
     assert response_json["device_id"] == device_id
-    assert str(response_json['unit']) == str(BROADWAY_SOUTH)
+    assert str(response_json["unit"]) == str(BROADWAY_SOUTH)
     assert response_json["speed"] == target_speed
 
     # Verify the simulator state was updated correctly
     device_info = ae200.get_device_info(BROADWAY_SOUTH)
     speed_names = DeviceTestData.get_speed_names()
     expected_speed_name = speed_names[target_speed]
-    assert device_info['FanSpeed'] == expected_speed_name
+    assert device_info["FanSpeed"] == expected_speed_name
 
     # Verify that the database got updated only when speed changes
     if expected_calls > 0:
         # Note that we are using the TEST_DB_NAME put in the environment.
-        test_conn_verify = sqlite3.connect(os.environ['TEST_DB_NAME'])
+        test_conn_verify = sqlite3.connect(os.environ["TEST_DB_NAME"])
         test_conn_verify.row_factory = sqlite3.Row
         cursor = test_conn_verify.cursor()
 
         cursor.execute("SELECT * from devices where device_name=?", ("Broadway Test",))
         devrow = cursor.fetchone()
         logging.debug("row=%s", dict(devrow))
-        assert devrow['disabled_until'] >= now+60         # make sure that rules are disabled for at least 60 seconds...
-        device_id = devrow['device_id']
-        cursor.execute("SELECT * from devlog where device_id=? order by logtime desc", (device_id,))
+        assert (
+            devrow["disabled_until"] >= now + 60
+        )  # make sure that rules are disabled for at least 60 seconds...
+        device_id = devrow["device_id"]
+        cursor.execute(
+            "SELECT * from devlog where device_id=? order by logtime desc", (device_id,)
+        )
         devlogrow = cursor.fetchone()
-        extracted_status = ae200.extract_drive_and_fan_speed(json.loads(devlogrow['status_json']))
-        assert extracted_status['fan_speed'] == target_speed
+        extracted_status = ae200.extract_drive_and_fan_speed(
+            json.loads(devlogrow["status_json"])
+        )
+        assert extracted_status["fan_speed"] == target_speed
 
-        cursor.execute("SELECT ipaddr, device_id, new_value, agent FROM changelog order by changelog_id DESC limit 2")
+        cursor.execute(
+            "SELECT ipaddr, device_id, new_value, agent FROM changelog order by changelog_id DESC limit 2"
+        )
         changelog_entries = cursor.fetchall()
 
-        assert len(changelog_entries)==2 # should have two entries
+        assert len(changelog_entries) == 2  # should have two entries
         for cl in changelog_entries:
-            logging.debug("changelog_entry=%s",dict(cl))
-            assert cl['ipaddr'] == '127.0.0.1'  # Flask test client IP
-            assert cl['device_id'] == device_id
-            assert cl['agent'].startswith('Werkzeug') or cl['agent'] == 'web'
+            logging.debug("changelog_entry=%s", dict(cl))
+            assert cl["ipaddr"] == "127.0.0.1"  # Flask test client IP
+            assert cl["device_id"] == device_id
+            assert cl["agent"].startswith("Werkzeug") or cl["agent"] == "web"
 
         test_conn_verify.close()

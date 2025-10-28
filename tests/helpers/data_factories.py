@@ -1,6 +1,7 @@
 """
 Test data factories for creating consistent test data.
 """
+
 import time
 from typing import Dict, Any, Optional
 from app import db
@@ -8,19 +9,26 @@ from app import db
 
 class TestDataFactory:
     """Factory for creating consistent test data."""
+
     @staticmethod
     def create_broadway_south_device(conn, ae200_device_id: int = 10) -> int:
         """Create Broadway Test device for testing."""
         device_id = db.get_or_create_device_id(conn, "Broadway Test")
         c = conn.cursor()
-        c.execute("UPDATE devices set ae200_device_id=? where device_id=?", (ae200_device_id, device_id))
+        c.execute(
+            "UPDATE devices set ae200_device_id=? where device_id=?",
+            (ae200_device_id, device_id),
+        )
         conn.commit()
         return device_id
 
     @staticmethod
-    def create_device_with_status(conn, device_name: str,
-                                  status_dict: Dict[str, Any],
-                                  logtime: Optional[int] = None) -> int:
+    def create_device_with_status(
+        conn,
+        device_name: str,
+        status_dict: Dict[str, Any],
+        logtime: Optional[int] = None,
+    ) -> int:
         """Create a device with initial status data."""
         if logtime is None:
             logtime = int(time.time())
@@ -29,10 +37,10 @@ class TestDataFactory:
         db.insert_devlog_entry(
             conn,
             device_id=device_id,
-            temp=float(status_dict.get('InletTemp', 24.0)),
+            temp=float(status_dict.get("InletTemp", 24.0)),
             statusdict=status_dict,
             logtime=logtime,
-            force=True
+            force=True,
         )
         return device_id
 
@@ -41,7 +49,7 @@ class TestDataFactory:
         """Create mock weather data for testing."""
         return {
             "current": {"temperature": temperature, "conditions": "Sunny"},
-            "forecast": []
+            "forecast": [],
         }
 
     @staticmethod
@@ -52,19 +60,12 @@ class TestDataFactory:
     @staticmethod
     def create_broadway_south_initial_status() -> Dict[str, Any]:
         """Create initial status data for Broadway Test device."""
-        return {
-            "Drive": "ON",
-            "FanSpeed": "LOW",
-            "InletTemp": "24.0"
-        }
+        return {"Drive": "ON", "FanSpeed": "LOW", "InletTemp": "24.0"}
 
     @staticmethod
     def create_no_speed_device_status() -> Dict[str, Any]:
         """Create status data for a device without speed control."""
-        return {
-            "Drive": "ON",
-            "InletTemp": "22.0"
-        }
+        return {"Drive": "ON", "InletTemp": "22.0"}
 
     @staticmethod
     def create_speed_mapping() -> Dict[int, str]:
@@ -77,7 +78,6 @@ class TestDataFactory:
         return {0: "OFF", 1: "ON"}
 
 
-
 class DeviceTestData:
     """Test data specifically for device testing."""
 
@@ -87,19 +87,12 @@ class DeviceTestData:
     @staticmethod
     def get_initial_status() -> Dict[str, Any]:
         """Get initial status for Broadway Test."""
-        return {
-            "Drive": "ON",
-            "FanSpeed": "LOW",
-            "InletTemp": "24.0"
-        }
+        return {"Drive": "ON", "FanSpeed": "LOW", "InletTemp": "24.0"}
 
     @staticmethod
     def get_no_speed_status() -> Dict[str, Any]:
         """Get status for device without speed control."""
-        return {
-            "Drive": "ON",
-            "InletTemp": "22.0"
-        }
+        return {"Drive": "ON", "InletTemp": "22.0"}
 
     @staticmethod
     def get_speed_names() -> Dict[int, str]:
@@ -116,11 +109,13 @@ class WeatherTestData:
     """Test data specifically for weather testing."""
 
     @staticmethod
-    def get_mock_weather(temperature: int = 32, conditions: str = "Sunny") -> Dict[str, Any]:
+    def get_mock_weather(
+        temperature: int = 32, conditions: str = "Sunny"
+    ) -> Dict[str, Any]:
         """Get mock weather data."""
         return {
             "current": {"temperature": temperature, "conditions": conditions},
-            "forecast": []
+            "forecast": [],
         }
 
     @staticmethod
