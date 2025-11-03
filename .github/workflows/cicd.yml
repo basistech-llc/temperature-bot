@@ -32,6 +32,11 @@ jobs:
           cache-dependency-path: |
             poetry.lock
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
       # Cache the project venv (created by Poetry in-project)
       - name: Cache .venv
         uses: actions/cache@v4
