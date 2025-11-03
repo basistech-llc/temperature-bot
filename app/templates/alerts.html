@@ -174,11 +174,18 @@ const activeTable = new Tabulator("#active-alerts-table", {
        return formatDuration(cell.getValue());
      }
     },
-    {title: "Device Status", field: "details", width: 420,
+    {title: "Device Status During Alert", field: "details", width: 420,
      formatter: function(cell) {
        const details = cell.getValue();
        if (!details) return '';
        return details.mode + ' | Drive: ' + details.drive + ' | Temp: ' + details.inlet_temp + '°C / ' + details.set_temp + '°C | Fan: ' + details.fan_speed;
+     }
+    },
+    {title: "Status Measured At", field: "details", width: 200,
+     formatter: function(cell) {
+       const details = cell.getValue();
+       if (!details || !details.status_timestamp) return '';
+       return formatTimestamp(details.status_timestamp);
      }
     }
   ]
@@ -215,11 +222,18 @@ const historyTable = new Tabulator("#history-alerts-table", {
        return formatDuration(cell.getValue());
      }
     },
-    {title: "Device Status", field: "details", width: 420,
+    {title: "Device Status During Alert", field: "details", width: 420,
      formatter: function(cell) {
        const details = cell.getValue();
        if (!details) return '';
        return details.mode + ' | Drive: ' + details.drive + ' | Temp: ' + details.inlet_temp + '°C / ' + details.set_temp + '°C | Fan: ' + details.fan_speed;
+     }
+    },
+    {title: "Status Measured At", field: "details", width: 200,
+     formatter: function(cell) {
+       const details = cell.getValue();
+       if (!details || !details.status_timestamp) return '';
+       return formatTimestamp(details.status_timestamp);
      }
     }
   ]
