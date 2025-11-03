@@ -72,7 +72,7 @@ def test_get_alert_device_status_rle_encoding(test_database_conn):
     result = db.get_alert_device_status(conn, device_id, 1050)
 
     assert result is not None
-    assert result == status_json
+    assert result == (status_json, 1000)
 
 
 def test_get_alert_device_status_not_found(test_database_conn):
@@ -86,7 +86,7 @@ def test_get_alert_device_status_not_found(test_database_conn):
     conn.commit()
 
     result = db.get_alert_device_status(conn, device_id, 1000)
-    assert result is None
+    assert result == (None, None)
 
 
 def test_get_active_alerts_with_details(test_database_conn):
