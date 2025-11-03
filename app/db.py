@@ -488,15 +488,16 @@ def get_alert_device_status(conn, device_id, alert_start_time):
     """
     Get the device status_json from devlog for the alert start time.
     Handles RLE encoding by looking for records that span the alert time.
+    Falls back to nearest entry with status_json if exact span doesn't have status.
 
     :param conn: database connection
     :param device_id: device ID
     :param alert_start_time: Unix timestamp when alert started
-    :return: status_json string or None
+    :return: tuple of (status_json string, logtime int) or (None, None) if not found
     """
     c = conn.cursor()
 
-    # Handle RLE encoding: look for records where alert_start_time falls within the logtime + duration range
+    # First try: Handle RLE encoding - look for records where alert_start_time falls within the logtime + duration range
     # This works because devlog uses run-length encoding where records extend over time periods
     c.execute(
         """
@@ -513,7 +514,29 @@ def get_alert_device_status(conn, device_id, alert_start_time):
     )
 
     row = c.fetchone()
-    return row[0] if row else None
+    if row:
+        return (row[0], row[1])
+
+    # Fallback: If no spanning entry has status_json, look for the most recent
+    # entry with status_json before the alert time. This handles cases where
+    # status_json was removed by compression.
+    c.execute(
+        """
+        SELECT status_json, logtime, duration
+        FROM devlog
+        WHERE device_id = ?
+        AND status_json IS NOT NULL
+        AND logtime <= ?
+        ORDER BY logtime DESC
+        LIMIT 1
+    """,
+        (device_id, alert_start_time),
+    )
+
+    row = c.fetchone()
+    if row:
+        return (row[0], row[1])
+    return (None, None)
 
 
 def insert_or_update_alert(conn, device_id, alert_type, alert_value, logtime=None):
@@ -608,9 +631,14 @@ def get_active_alerts(conn, device_id=None, include_details=False):
 
         # Add device status details if requested
         if include_details:
-            status_json = get_alert_device_status(conn, device_id_val, start_time)
+            status_json, status_logtime = get_alert_device_status(
+                conn, device_id_val, start_time
+            )
             if status_json:
-                alert_dict["details"] = extract_relevant_status_fields(status_json)
+                details = extract_relevant_status_fields(status_json)
+                if details:
+                    details["status_timestamp"] = status_logtime
+                    alert_dict["details"] = details
 
         alerts.append(alert_dict)
 
@@ -673,9 +701,14 @@ def get_alert_history(conn, device_id=None, limit=100, include_details=False):
 
         # Add device status details if requested
         if include_details:
-            status_json = get_alert_device_status(conn, device_id_val, start_time)
+            status_json, status_logtime = get_alert_device_status(
+                conn, device_id_val, start_time
+            )
             if status_json:
-                alert_dict["details"] = extract_relevant_status_fields(status_json)
+                details = extract_relevant_status_fields(status_json)
+                if details:
+                    details["status_timestamp"] = status_logtime
+                    alert_dict["details"] = details
 
         alerts.append(alert_dict)
 
