@@ -105,8 +105,15 @@ check-types: $(REQ)
 pytest: $(REQ)
 	make pylint
 	$(PYTHON) -m pytest . -v --cov=. --cov-report=xml --cov-report=html --log-cli-level=DEBUG --log-file-level=DEBUG
-	@echo covreage report in htmlcov/
-test: pytest
+	@echo coverage report in htmlcov/
+test-js:
+	@echo "Running JavaScript unit tests..."
+	node tests/test_time_utils.js
+test: $(REQ)
+	@python_exit=0; js_exit=0; \
+	make pytest || python_exit=$$?; \
+	make test-js || js_exit=$$?; \
+	exit $$(($$python_exit + $$js_exit))
 
 ################################################################
 ## Every minutes
