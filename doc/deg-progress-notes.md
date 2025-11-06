@@ -1,3 +1,28 @@
+## Notes to self
+
+Looks like I'll be touching this only at the end of each month, so stashing notes, thoughts, and
+open tabs here:
+
+- VPN for BasisTech: Tailscale, installed on MacBook deg-mac-2023
+- Site links:
+  - [main site](https://air.basistech.net/)
+  - [Simson's clone](https://slg1.basistech.net/)
+  - [David's clone](https://deg1.basistech.net/)
+  - [local](http://localhost:8000/)
+- Database: Often useful to copy latest database from /var/db on server to each instance. Placed in
+  root or var/db.
+- Raw view of [Mitsubishi HVAC](http://10.2.1.20/control/index.html). Credentials in
+  Bitwarden. Nominal manual [here](http://10.2.1.20/en/maintenance.html) but requires insecure Java
+  browser.
+- [Git repo](https://github.com/basistech-llc/temperature-bot)
+- [ChatGPT project](https://chatgpt.com/g/g-p-68f5f96a17a081918d4bb454409e6602-temperature-bot/project)
+- [Maps and other CALA operations notes](https://drive.google.com/drive/folders/1bEr7AV2xa5vEsoc0z8lx5yMtcLWnAdGs)
+- [ClickHouse DB](https://clickhouse.com/)
+- Related project: [Home Assistant](https://home-assistant.basistech.net/)
+- CSS tooling used in this project: [pure.css](https://pure-css.github.io/)
+- Other notes in Git repo and Slack with Simson
+
+
 # Progress notes
 
 ## 19 Oct, 2025
