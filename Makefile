@@ -31,8 +31,6 @@ export PLAYWRIGHT_BROWSERS_PATH := .playwright
 POETRY_VERSION ?= 2.1.3
 RUFF_VERSION   ?= 0.13.2
 
-# Detect if pipx is available as a command (for apt-installed pipx) vs python module (for pip-installed pipx)
-PIPX_CMD = $(shell which pipx 2>/dev/null || echo "python3 -m pipx")
 
 
 ################################################################
@@ -123,8 +121,8 @@ daily: $(REQ)
 	$(PYTHON) -m bin.runner --daily
 
 install-either:
-	$(PIPX_CMD) ensurepath
-	$(PIPX_CMD) install poetry==$(POETRY_VERSION)
+	pipx ensurepath
+	pipx install poetry==$(POETRY_VERSION)
 	poetry config virtualenvs.in-project true
 	poetry lock
 	poetry install --with dev
@@ -136,7 +134,11 @@ install-ubuntu:
 
 install-macos:
 	@echo Use pipx for the latest poetry
-	which pipx >/dev/null || python3 -m pip install -U pip pipx
+	@if ! command -v brew >/dev/null 2>&1; then \
+		echo "Error: Homebrew is not installed. Please install Homebrew from https://brew.sh/ and try again."; \
+		exit 1; \
+	fi
+	brew install pipx
 	make install-either
 
 install-browser-sync:
