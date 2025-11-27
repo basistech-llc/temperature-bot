@@ -143,3 +143,21 @@ def create_web_routes(app):
     def get_version():
         """Version page"""
         return f"version: {__version__}"
+
+    def _render_room_dashboard(location: str):
+        """Helper function to render room dashboard"""
+        return render_template(
+            "room_dashboard.html",
+            location=location,
+            hide_nav=True,  # Hide navigation menu
+        )
+
+    @app.route("/kitchen")
+    def kitchen_dashboard():
+        """Kitchen room dashboard"""
+        return _render_room_dashboard("Kitchen")
+
+    @app.route("/studio")
+    def studio_dashboard():
+        """Studio room dashboard"""
+        return _render_room_dashboard("Studio")
