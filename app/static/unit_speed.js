@@ -189,6 +189,26 @@ function asctime(date) {
   );
 }
 
+/**
+ * Update device notes via API.
+ * @param {number} deviceId - Device ID
+ * @param {string|null} notes - Notes text (null to clear)
+ */
+async function updateNote(deviceId, notes) {
+  try {
+    const response = await fetch("/api/v1/update_note", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ device_id: deviceId, notes: notes }),
+    });
+    await response.json();
+    forceRefresh = true;
+  } catch (e) {
+    console.error("Failed to update note:", e);
+    alert("Error updating note.");
+  }
+}
+
 // Handle all user events
 function setupMatrixListenerss() {
   // Add event listeners for fan sliders
@@ -211,6 +231,76 @@ function setupMatrixListenerss() {
       const fan_speed = parseInt(this.getAttribute("x-data-fan_speed"));
       setFanSpeed(deviceId, fan_speed);
     });
+  });
+
+  // Add event listeners for editable notes
+  setupEditableNotes();
+}
+
+/**
+ * Initialize click-to-edit functionality for note fields.
+ */
+function setupEditableNotes() {
+  document.querySelectorAll(".editable-notes").forEach((noteElement) => {
+    noteElement.addEventListener("click", function () {
+      if (this.classList.contains("editing")) {
+        return;
+      }
+
+      const deviceId = parseInt(this.getAttribute("data-device-id"));
+      const currentText = this.textContent.trim();
+      const input = createNoteInput(currentText);
+
+      this.classList.add("editing");
+      this.innerHTML = "";
+      this.appendChild(input);
+      input.focus();
+      input.select();
+
+      setupNoteInputHandlers(input, this, deviceId, currentText);
+    });
+  });
+}
+
+/**
+ * Create an input element for editing notes.
+ * @param {string} value - Initial input value
+ * @returns {HTMLInputElement}
+ */
+function createNoteInput(value) {
+  const input = document.createElement("input");
+  input.type = "text";
+  input.value = value;
+  input.style.width = "100%";
+  input.style.minWidth = "150px";
+  return input;
+}
+
+/**
+ * Set up event handlers for note input field.
+ * @param {HTMLInputElement} input - Input element
+ * @param {HTMLElement} noteElement - Parent note element
+ * @param {number} deviceId - Device ID
+ * @param {string} originalText - Original text for cancel
+ */
+function setupNoteInputHandlers(input, noteElement, deviceId, originalText) {
+  const saveNote = () => {
+    const newText = input.value.trim();
+    noteElement.classList.remove("editing");
+    noteElement.textContent = newText;
+    updateNote(deviceId, newText || null);
+  };
+
+  input.addEventListener("blur", saveNote);
+  input.addEventListener("keydown", function (e) {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      input.blur();
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      noteElement.classList.remove("editing");
+      noteElement.textContent = originalText;
+    }
   });
 }
 
@@ -288,17 +378,8 @@ const refreshGridRows = () => {
                 );
               }
             }
-            if (dev.notes) {
-              const cell = document.getElementById(`notes-${dev.device_id}`);
-              cell.innerHTML = dev.notes;
-            }
-            if (dev.disabled_until) {
-              dt = new Date(dev.disabled_until * 1000);
-              const cell = document.getElementById(
-                `notes-disabled-${dev.device_id}`,
-              );
-              cell.innerHTML = `Rules disabled until ${asctime(dt)}`;
-            }
+            updateDeviceNotes(dev);
+            updateRulesDisabledBadge(dev);
           }
 
         // Update last refresh time
@@ -350,6 +431,43 @@ async function loadWeatherAndStartRefresh() {
     refreshGridRows();
   } catch (e) {
     console.error("Error in loadWeatherAndStartRefresh():", e);
+  }
+}
+
+/**
+ * Update device notes display.
+ * @param {Object} dev - Device data object
+ */
+function updateDeviceNotes(dev) {
+  if (dev.notes === undefined) {
+    return;
+  }
+  const cell = document.getElementById(`notes-${dev.device_id}`);
+  if (cell && !cell.classList.contains("editing")) {
+    cell.textContent = dev.notes || "";
+  }
+}
+
+/**
+ * Update rules disabled badge display.
+ * @param {Object} dev - Device data object
+ */
+function updateRulesDisabledBadge(dev) {
+  const badge = document.getElementById(`rules-disabled-${dev.device_id}`);
+  if (!badge) {
+    return;
+  }
+
+  if (dev.disabled_until) {
+    const dt = new Date(dev.disabled_until * 1000);
+    const now = Math.floor(Date.now() / 1000);
+    const hoursRemaining = Math.ceil((dev.disabled_until - now) / 3600);
+    const tooltipText = `Rules disabled until ${asctime(dt)} (${hoursRemaining} hour${hoursRemaining !== 1 ? 's' : ''})`;
+    badge.textContent = "rules disabled";
+    badge.setAttribute("title", tooltipText);
+    badge.style.display = "inline";
+  } else {
+    badge.style.display = "none";
   }
 }
 

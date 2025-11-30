@@ -45,6 +45,13 @@ class DriveControl(BaseModel):
     drive: int
 
 
+class NoteControl(BaseModel):
+    """Pydantic model for note update requests."""
+
+    device_id: int
+    notes: str | None
+
+
 def connect_db(db_path):
     """Establishes a connection to the SQLite database."""
     logger.debug("connect_db(%s)", db_path)
@@ -800,6 +807,15 @@ def disable_rules_for_device(
         (now, ipaddr, device_id, current_value, until, agent, comment),
     )
     conn.commit()
+
+
+def update_device_notes(conn, device_id: int, notes: str | None):
+    """Update the notes field for a device."""
+    logger.debug("update_device_notes: device_id=%s, notes=%s", device_id, notes)
+    c = conn.cursor()
+    c.execute("UPDATE devices SET notes=? WHERE device_id=?", (notes, device_id))
+    conn.commit()
+    return device_id
 
 
 ################################################################

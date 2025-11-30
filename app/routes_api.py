@@ -13,7 +13,7 @@ from . import rules_engine
 from .utils.request_utils import parse_device_ids
 from .utils.db_utils import with_db_connection
 
-from .db import SpeedControl, DriveControl
+from .db import SpeedControl, DriveControl, NoteControl
 
 logger = logging.getLogger(__name__)
 
@@ -143,3 +143,14 @@ def alerts_history(conn):
     include_details = request.args.get("include_details", "false").lower() == "true"
     alerts = db.get_alert_history(conn, device_id, limit, include_details)
     return jsonify(alerts)
+
+
+@api_v1.route("/update_note", methods=["POST"])
+@validate()
+@with_db_connection
+def update_note(conn, body: NoteControl):
+    """Update device notes"""
+    logger.debug("/update_note: body=[%s]", body)
+    notes = body.notes if body.notes else None
+    device_id = db.update_device_notes(conn, body.device_id, notes)
+    return jsonify({"status": "ok", "device_id": device_id})
