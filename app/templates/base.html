@@ -1,6 +1,6 @@
 <!DOCTYPE html><!-- -*- mode: html -*- -->
 <html lang="en">
-{% set only = request.args.get('only') %}
+{% set only = hide_nav if hide_nav is defined else request.args.get('only') %}
 {% set dist=0 %}
 <head>
   <meta charset="utf-8">

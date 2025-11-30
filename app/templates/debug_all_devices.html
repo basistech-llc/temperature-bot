@@ -1,0 +1,31 @@
+{% extends 'base.html' %}
+{% block title %}Debug: All Devices{% endblock %}
+
+{% block body %}
+<div class="pure-g">
+  <div class="pure-u-1">
+    <h1>Debug: All Devices</h1>
+  </div>
+</div>
+
+<div class="pure-g">
+  <div class="pure-u-1">
+    <h2>All Devices (from Database - like Chart page)</h2>
+    <h3>Device Names</h3>
+    <pre class="debug-pre">{{ all_devices_names_json }}</pre>
+    <h3>Full Device Data</h3>
+    <pre class="debug-pre">{{ all_devices_json }}</pre>
+  </div>
+</div>
+
+<div class="pure-g">
+  <div class="pure-u-1">
+    <h2>Hubitat Devices (Testing)</h2>
+    <h3>Device Names</h3>
+    <pre class="debug-pre">{{ hubitat_names_json }}</pre>
+    <h3>Full Device Data</h3>
+    <pre class="debug-pre">{{ hubitat_json }}</pre>
+  </div>
+</div>
+{% endblock %}
+

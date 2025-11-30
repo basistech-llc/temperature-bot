@@ -1,0 +1,318 @@
+{% extends 'base.html' %}
+{% set hide_nav = True %}
+{% block title %}{{ location }} HVAC Control{% endblock %}
+{% block head %}
+<style>
+/* Tablet-optimized control panel design */
+body {
+  padding: 1em;
+  background: #f5f5f5;
+}
+
+.notes-banner {
+  background: #ffeb3b;
+  padding: 1em;
+  margin-bottom: 1.5em;
+  border-left: 6px solid #ffc107;
+  border-radius: 4px;
+  font: bold 1.1em sans-serif;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.dashboard-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 2em;
+  text-align: center;
+  color: #333;
+}
+
+.dashboard-header h1 {
+  margin: 0;
+  flex: 1;
+}
+
+.temperature-toggle-container {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Shared card styles */
+.device-card, .sensors-card {
+  background: white;
+  border: 2px solid #e0e0e0;
+  border-radius: 12px;
+  padding: 1.5em;
+  margin-bottom: 2em;
+  box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+}
+
+.device-card h2, .sensors-card h2 {
+  margin: 0 0 1em 0;
+  color: #1976d2;
+  font-size: 1.5em;
+}
+
+.device-status {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5em;
+  padding: 1em;
+  background: #f8f9fa;
+  border-radius: 8px;
+}
+
+.status-label {
+  font: 500 1.1em sans-serif;
+  color: #666;
+}
+
+.status-value {
+  font: bold 1.4em sans-serif;
+  color: #1976d2;
+}
+
+.temp-display {
+  font: bold 2em sans-serif;
+  color: #d32f2f;
+}
+
+.speed-buttons {
+  display: flex;
+  gap: 1em;
+  justify-content: center;
+  align-items: center;
+  flex-wrap: nowrap;
+}
+
+.speed-btn {
+  width: 100px;
+  height: 100px;
+  padding: 0;
+  border: 3px solid transparent;
+  border-radius: 12px;
+  font: bold 1.4em sans-serif;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 6px rgba(0,0,0,0.15);
+}
+
+.speed-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 8px rgba(0,0,0,0.2);
+}
+
+.speed-btn:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 4px rgba(0,0,0,0.15);
+}
+
+.speed-btn.off { background: #757575; color: white; }
+.speed-btn.speed-1 { background: #81c784; color: white; }
+.speed-btn.speed-2 { background: #66bb6a; color: white; }
+.speed-btn.speed-3 { background: #4caf50; color: white; }
+.speed-btn.speed-4 { background: #2e7d32; color: white; }
+
+.speed-btn.active {
+  border-color: #ffc107;
+  box-shadow: 0 0 0 4px rgba(255, 193, 7, 0.3);
+  transform: scale(1.05);
+}
+
+.speed-btn:disabled, .speed-btn.loading {
+  opacity: 0.6;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.speed-btn.loading {
+  position: relative;
+}
+
+.speed-btn.loading::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 20px;
+  height: 20px;
+  margin: -10px 0 0 -10px;
+  border: 3px solid rgba(255, 255, 255, 0.3);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.status-setting {
+  color: #ff9800;
+  font-style: italic;
+}
+
+.sensors-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 0.75em;
+}
+
+.sensor-tile {
+  background: #f8f9fa;
+  border-left: 3px solid #1976d2;
+  border-radius: 6px;
+  padding: 0.75em;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: 70px;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.sensor-tile:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.sensor-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 0.5em;
+}
+
+.sensor-name {
+  font: 500 0.95em sans-serif;
+  color: #333;
+  line-height: 1.2;
+}
+
+.sensor-room {
+  font: italic 0.75em sans-serif;
+  color: #666;
+  margin-top: 0.2em;
+}
+
+.sensor-temp {
+  font: bold 1.5em sans-serif;
+  color: #d32f2f;
+  text-align: right;
+  line-height: 1;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .speed-btn {
+    width: 80px;
+    height: 80px;
+    font-size: 1.2em;
+  }
+  .speed-buttons { gap: 0.7em; }
+  .temp-display { font-size: 1.5em; }
+  .device-card, .sensors-card { padding: 1em; }
+  .sensors-grid { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0.5em; }
+  .sensor-tile { padding: 0.6em; min-height: 60px; }
+  .sensor-temp { font-size: 1.3em; }
+}
+
+@media (min-width: 769px) {
+  .speed-buttons {
+    max-width: 700px;
+    margin: 0 auto;
+  }
+}
+</style>
+{% endblock %}
+
+{% block body %}
+{% if notes %}
+<div class="notes-banner">{{ notes }}</div>
+{% endif %}
+
+<div class="dashboard-header">
+  <h1>{{ location }} HVAC Control</h1>
+  <div class="temperature-toggle-container">
+    <span class="temp-unit-label">°C</span>
+    <div class="toggle-switch">
+      <input type="checkbox" id="temp-unit-toggle" class="toggle-input">
+      <label for="temp-unit-toggle" class="toggle-label">
+        <span class="toggle-slider"></span>
+      </label>
+    </div>
+    <span class="temp-unit-label">°F</span>
+  </div>
+</div>
+
+<!-- ERV and Fan Controls -->
+{% macro device_control_card(device, device_type) %}
+<div class="device-card">
+  <h2>{{ device.device_name }}</h2>
+  <div class="device-status">
+    <div>
+      <div class="status-label">Status</div>
+      <div class="status-value" id="{{ device_type }}-{{ device.device_id }}-status">--</div>
+    </div>
+    <div>
+      <div class="status-label">Temperature</div>
+      <div class="temp-display" id="{{ device_type }}-{{ device.device_id }}-temp" data-temp-c="">--</div>
+    </div>
+  </div>
+  <div class="speed-buttons">
+    <button class="speed-btn off" data-device-id="{{ device.device_id }}" data-speed="0">OFF</button>
+    <button class="speed-btn speed-1" data-device-id="{{ device.device_id }}" data-speed="1">1</button>
+    <button class="speed-btn speed-2" data-device-id="{{ device.device_id }}" data-speed="2">2</button>
+    <button class="speed-btn speed-3" data-device-id="{{ device.device_id }}" data-speed="3">3</button>
+    <button class="speed-btn speed-4" data-device-id="{{ device.device_id }}" data-speed="4">MAX</button>
+  </div>
+</div>
+{% endmacro %}
+
+{% if erv_devices %}
+{% for device in erv_devices %}
+{{ device_control_card(device, 'erv') }}
+{% endfor %}
+{% endif %}
+
+{% if fan_devices %}
+{% for device in fan_devices %}
+{{ device_control_card(device, 'fan') }}
+{% endfor %}
+{% endif %}
+
+<!-- Temperature Sensors -->
+{% if hubitat_sensors %}
+<div class="sensors-card">
+  <h2>Temperature Sensors</h2>
+  <div class="sensors-grid">
+    {% for sensor in hubitat_sensors %}
+    <div class="sensor-tile">
+      <div class="sensor-header">
+        <div>
+          <div class="sensor-name">{{ sensor.name }}</div>
+          <div class="sensor-room">{{ sensor.room or 'N/A' }}</div>
+        </div>
+      </div>
+      <div class="sensor-temp" id="sensor-{{ sensor.id }}-temp" data-temp-c="{% if sensor.attributes and sensor.attributes.temperature %}{{ sensor.attributes.temperature }}{% endif %}">
+        {% if sensor.attributes and sensor.attributes.temperature %}
+          {{ sensor.attributes.temperature }}°C
+        {% else %}
+          --
+        {% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+<script src="/static/temperature_utils.js"></script>
+<script src="/static/room_dashboard.js"></script>
+{% endblock %}
