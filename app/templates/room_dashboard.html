@@ -2,7 +2,19 @@
 {% set hide_nav = True %}
 {% block title %}{{ location }} HVAC Control{% endblock %}
 {% block head %}
+<link rel="stylesheet" href="/static/slider.css">
 <style>
+/* CSS Variables for maintainability */
+:root {
+  --btn-unselected-opacity: 0.85;
+  --btn-selected-scale: 1.08;
+  --btn-active-border-width: 4px;
+  --btn-active-glow-size: 6px;
+  --btn-active-glow-color: rgba(255, 193, 7, 0.4);
+  --btn-active-shadow: 0 6px 12px rgba(0,0,0,0.3);
+  --color-yellow-border: #ffc107;
+}
+
 /* Tablet-optimized control panel design */
 body {
   padding: 1em;
@@ -80,17 +92,67 @@ body {
   color: #d32f2f;
 }
 
-.speed-buttons {
+/* Tablet-optimized control panel */
+.control-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 2em;
+  align-items: center;
+  width: 100%;
+}
+
+/* Motor control - large toggle switch */
+.motor-control {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5em;
+}
+
+.motor-control .switch {
+  width: 80px;
+  height: 44px;
+}
+
+.motor-control .switch .slider {
+  border-radius: 44px;
+}
+
+.motor-control .switch .slider:before {
+  height: 36px;
+  width: 36px;
+  left: 4px;
+  bottom: 4px;
+}
+
+.motor-control .switch input:checked + .slider:before {
+  transform: translateX(36px);
+}
+
+.motor-control .switch input:disabled + .slider {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.motor-label {
+  font-size: 1em;
+  font-weight: 600;
+  color: #555;
+}
+
+/* Speed controls - large touch-friendly buttons */
+.speed-controls {
   display: flex;
   gap: 1em;
   justify-content: center;
   align-items: center;
   flex-wrap: nowrap;
+  width: 100%;
 }
 
 .speed-btn {
-  width: 100px;
-  height: 100px;
+  width: 110px;
+  height: 110px;
   padding: 0;
   border: 3px solid transparent;
   border-radius: 12px;
@@ -100,40 +162,60 @@ body {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  transition: all 0.2s ease;
-  box-shadow: 0 4px 6px rgba(0,0,0,0.15);
-}
-
-.speed-btn:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 8px rgba(0,0,0,0.2);
-}
-
-.speed-btn:active {
-  transform: translateY(0);
+  transition: all 0.15s ease;
+  color: white;
   box-shadow: 0 2px 4px rgba(0,0,0,0.15);
+  text-align: center;
+  line-height: 1.2;
 }
 
-.speed-btn.off { background: #757575; color: white; }
-.speed-btn.speed-1 { background: #81c784; color: white; }
-.speed-btn.speed-2 { background: #66bb6a; color: white; }
-.speed-btn.speed-3 { background: #4caf50; color: white; }
-.speed-btn.speed-4 { background: #2e7d32; color: white; }
+.speed-btn:hover:not(:disabled):not(.active) {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+}
 
+.speed-btn:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: 0 1px 2px rgba(0,0,0,0.15);
+}
+
+/* Speed button colors - graduated greens */
+.speed-btn[data-speed="1"] { background: #81c784; }
+.speed-btn[data-speed="2"] { background: #66bb6a; }
+.speed-btn[data-speed="3"] { background: #4caf50; }
+.speed-btn[data-speed="4"] { background: #2e7d32; }
+
+/* Unselected buttons - reduced opacity */
+.speed-btn:not(.active) {
+  opacity: var(--btn-unselected-opacity);
+}
+
+/* Auto button - distinct color with spacing */
+.speed-btn.speed-auto {
+  background: #9e9e9e;
+  font-size: 1.6em;
+  margin-right: 1.5em;
+}
+
+/* Active/selected button - full opacity, enhanced styling */
 .speed-btn.active {
-  border-color: #ffc107;
-  box-shadow: 0 0 0 4px rgba(255, 193, 7, 0.3);
-  transform: scale(1.05);
+  opacity: 1;
+  border-color: var(--color-yellow-border);
+  border-width: var(--btn-active-border-width);
+  box-shadow: 0 0 0 var(--btn-active-glow-size) var(--btn-active-glow-color), var(--btn-active-shadow);
+  transform: scale(var(--btn-selected-scale));
+  font-weight: 700;
 }
 
-.speed-btn:disabled, .speed-btn.loading {
-  opacity: 0.6;
+.speed-btn:disabled {
+  opacity: 0.5;
   cursor: not-allowed;
   pointer-events: none;
 }
 
 .speed-btn.loading {
   position: relative;
+  color: transparent;
 }
 
 .speed-btn.loading::after {
@@ -141,9 +223,9 @@ body {
   position: absolute;
   top: 50%;
   left: 50%;
-  width: 20px;
-  height: 20px;
-  margin: -10px 0 0 -10px;
+  width: 24px;
+  height: 24px;
+  margin: -12px 0 0 -12px;
   border: 3px solid rgba(255, 255, 255, 0.3);
   border-top-color: white;
   border-radius: 50%;
@@ -211,11 +293,22 @@ body {
 /* Responsive */
 @media (max-width: 768px) {
   .speed-btn {
-    width: 80px;
-    height: 80px;
-    font-size: 1.2em;
+    width: 90px;
+    height: 90px;
+    font-size: 1.6em;
   }
-  .speed-buttons { gap: 0.7em; }
+  .speed-controls { gap: 0.75em; }
+  .motor-control .switch {
+    width: 70px;
+    height: 38px;
+  }
+  .motor-control .switch .slider:before {
+    height: 30px;
+    width: 30px;
+  }
+  .motor-control .switch input:checked + .slider:before {
+    transform: translateX(32px);
+  }
   .temp-display { font-size: 1.5em; }
   .device-card, .sensors-card { padding: 1em; }
   .sensors-grid { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0.5em; }
@@ -224,8 +317,8 @@ body {
 }
 
 @media (min-width: 769px) {
-  .speed-buttons {
-    max-width: 700px;
+  .speed-controls {
+    max-width: 600px;
     margin: 0 auto;
   }
 }
@@ -265,12 +358,29 @@ body {
       <div class="temp-display" id="{{ device_type }}-{{ device.device_id }}-temp" data-temp-c="">--</div>
     </div>
   </div>
-  <div class="speed-buttons">
-    <button class="speed-btn off" data-device-id="{{ device.device_id }}" data-speed="0">OFF</button>
-    <button class="speed-btn speed-1" data-device-id="{{ device.device_id }}" data-speed="1">1</button>
-    <button class="speed-btn speed-2" data-device-id="{{ device.device_id }}" data-speed="2">2</button>
-    <button class="speed-btn speed-3" data-device-id="{{ device.device_id }}" data-speed="3">3</button>
-    <button class="speed-btn speed-4" data-device-id="{{ device.device_id }}" data-speed="4">MAX</button>
+  <div class="control-panel">
+    <div class="motor-control">
+      <label class="switch">
+        <input type="checkbox" id="drive-{{ device_type }}-{{ device.device_id }}"
+               data-device-id="{{ device.device_id }}"
+               class="drive-toggle">
+        <span class="slider round"></span>
+      </label>
+      <div class="motor-label">Motor</div>
+    </div>
+    <div class="speed-controls">
+      {% if device_type == 'erv' %}
+      <button class="speed-btn" data-device-id="{{ device.device_id }}" data-speed="1">LO</button>
+      <button class="speed-btn" data-device-id="{{ device.device_id }}" data-speed="2">MED-LO</button>
+      <button class="speed-btn" data-device-id="{{ device.device_id }}" data-speed="3">MED-HI</button>
+      <button class="speed-btn" data-device-id="{{ device.device_id }}" data-speed="4">HI</button>
+      {% else %}
+      <button class="speed-btn speed-auto" data-device-id="{{ device.device_id }}" data-speed="-1">Auto</button>
+      <button class="speed-btn" data-device-id="{{ device.device_id }}" data-speed="2">LO</button>
+      <button class="speed-btn" data-device-id="{{ device.device_id }}" data-speed="3">MED</button>
+      <button class="speed-btn" data-device-id="{{ device.device_id }}" data-speed="4">HI</button>
+      {% endif %}
+    </div>
   </div>
 </div>
 {% endmacro %}
