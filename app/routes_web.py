@@ -12,6 +12,7 @@ from .constants import __version__
 from . import db
 from . import rules_engine
 from . import hubitat
+from . import room_config
 from .utils.request_utils import parse_device_ids
 from .utils.db_utils import with_db_connection
 
@@ -198,11 +199,83 @@ def create_web_routes(app):
         )
 
     @app.route("/kitchen")
-    def kitchen_dashboard():
+    @with_db_connection
+    def kitchen_dashboard(conn):
         """Kitchen room dashboard"""
-        return _render_room_dashboard("Kitchen")
+        return _render_room_dashboard_with_data(conn, "Kitchen")
 
     @app.route("/studio")
-    def studio_dashboard():
+    @with_db_connection
+    def studio_dashboard(conn):
         """Studio room dashboard"""
-        return _render_room_dashboard("Studio")
+        return _render_room_dashboard_with_data(conn, "Studio")
+
+    def _render_room_dashboard_with_data(conn, location: str):
+        """Helper function to render room dashboard with device data"""
+        # Get room config (location is "Kitchen" or "Studio", need lowercase key)
+        room_key = location.lower()
+        config = room_config.ROOM_CONFIGS.get(room_key, {})
+
+        # Get all devices from database
+        all_devices = db.get_device_status(conn)
+
+        # Filter ERVs (devices with speed control matching ERV names)
+        erv_devices = []
+        for device in all_devices:
+            if device.get("has_speed_control") and device.get(
+                "device_name"
+            ) in config.get("ervs", []):
+                erv_devices.append(device)
+
+        # Filter fans (devices with speed control matching fan names)
+        # For studio, use first available fan from the list
+        fan_devices = []
+        fan_names = config.get("fans", [])
+        if fan_names:
+            for device in all_devices:
+                if (
+                    device.get("has_speed_control")
+                    and device.get("device_name") in fan_names
+                ):
+                    fan_devices.append(device)
+                    break  # Only take first match
+
+        # Get Hubitat sensors
+        # Filter by exact sensor name match
+        hubitat_sensors = []
+        try:
+            all_hubitat = hubitat.get_all_devices()
+            sensor_names = config.get("sensors", [])
+
+            if sensor_names:
+                # Filter by exact name match
+                hubitat_sensors = [
+                    dev
+                    for dev in all_hubitat
+                    if "TemperatureMeasurement" in dev.get("capabilities", [])
+                    and dev.get("name") in sensor_names
+                ]
+            else:
+                # If no sensors specified, show no sensors
+                hubitat_sensors = []
+        except Exception as e:
+            logger.warning("Failed to fetch Hubitat sensors: %s", e)
+            hubitat_sensors = []
+
+        # Collect all notes from devices
+        all_notes = []
+        for device in erv_devices + fan_devices:
+            notes = device.get("notes")
+            if notes:
+                all_notes.append(f"{device.get('device_name')}: {notes}")
+
+        return render_template(
+            "room_dashboard.html",
+            location=location,
+            hide_nav=True,
+            config=config,
+            erv_devices=erv_devices,
+            fan_devices=fan_devices,
+            hubitat_sensors=hubitat_sensors,
+            notes=" | ".join(all_notes) if all_notes else None,
+        )

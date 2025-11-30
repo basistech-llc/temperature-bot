@@ -1,12 +1,357 @@
 {% extends 'base.html' %}
 {% set hide_nav = True %}
-{% block title %}{{ location }} Dashboard{% endblock %}
+{% block title %}{{ location }} HVAC Control{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="/static/slider.css">
+<style>
+/* Tablet-optimized control panel design */
+body {
+  padding: 1em;
+  background-color: #f5f5f5;
+}
 
-{% block body %}
-<div class="pure-g">
-  <div class="pure-u-1">
-    <h1>Hello world, from the {{ location }}</h1>
-  </div>
-</div>
+.notes-banner {
+  background-color: #ffeb3b;
+  padding: 1em;
+  margin-bottom: 1.5em;
+  border-left: 6px solid #ffc107;
+  font-weight: bold;
+  font-size: 1.1em;
+  border-radius: 4px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.dashboard-header {
+  text-align: center;
+  margin-bottom: 2em;
+  color: #333;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.dashboard-header h1 {
+  margin: 0;
+  flex: 1;
+}
+
+.temperature-toggle-container {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.device-card {
+  background: white;
+  border-radius: 12px;
+  padding: 1.5em;
+  margin-bottom: 2em;
+  box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+  border: 2px solid #e0e0e0;
+}
+
+.device-card h2 {
+  margin-top: 0;
+  margin-bottom: 1em;
+  color: #1976d2;
+  font-size: 1.5em;
+}
+
+.device-status {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5em;
+  padding: 1em;
+  background-color: #f8f9fa;
+  border-radius: 8px;
+}
+
+.status-label {
+  font-size: 1.1em;
+  color: #666;
+  font-weight: 500;
+}
+
+.status-value {
+  font-size: 1.4em;
+  font-weight: bold;
+  color: #1976d2;
+}
+
+.temp-display {
+  font-size: 2em;
+  font-weight: bold;
+  color: #d32f2f;
+}
+
+.speed-buttons {
+  display: flex;
+  gap: 1em;
+  justify-content: center;
+  flex-wrap: nowrap;
+  align-items: center;
+}
+
+.speed-btn {
+  width: 100px;
+  height: 100px;
+  font-size: 1.4em;
+  font-weight: bold;
+  border-radius: 12px;
+  border: 3px solid transparent;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 6px rgba(0,0,0,0.15);
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.speed-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 8px rgba(0,0,0,0.2);
+}
+
+.speed-btn:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 4px rgba(0,0,0,0.15);
+}
+
+.speed-btn.off {
+  background-color: #757575;
+  color: white;
+}
+
+.speed-btn.speed-1 {
+  background-color: #81c784;
+  color: white;
+}
+
+.speed-btn.speed-2 {
+  background-color: #66bb6a;
+  color: white;
+}
+
+.speed-btn.speed-3 {
+  background-color: #4caf50;
+  color: white;
+}
+
+.speed-btn.speed-4 {
+  background-color: #2e7d32;
+  color: white;
+}
+
+.speed-btn.active {
+  border-color: #ffc107;
+  box-shadow: 0 0 0 4px rgba(255, 193, 7, 0.3);
+  transform: scale(1.05);
+}
+
+.speed-btn:disabled,
+.speed-btn.loading {
+  opacity: 0.6;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.speed-btn.loading {
+  position: relative;
+}
+
+.speed-btn.loading::after {
+  content: '';
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  top: 50%;
+  left: 50%;
+  margin-left: -10px;
+  margin-top: -10px;
+  border: 3px solid rgba(255, 255, 255, 0.3);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.status-setting {
+  color: #ff9800;
+  font-style: italic;
+}
+
+.sensors-card {
+  background: white;
+  border-radius: 12px;
+  padding: 1.5em;
+  box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+  border: 2px solid #e0e0e0;
+}
+
+.sensors-card h2 {
+  margin-top: 0;
+  color: #1976d2;
+  font-size: 1.5em;
+}
+
+.sensor-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1em;
+  margin: 0.5em 0;
+  background-color: #f8f9fa;
+  border-radius: 8px;
+  border-left: 4px solid #1976d2;
+}
+
+.sensor-name {
+  font-size: 1.1em;
+  font-weight: 500;
+  color: #333;
+}
+
+.sensor-room {
+  font-size: 0.9em;
+  color: #666;
+  font-style: italic;
+}
+
+.sensor-temp {
+  font-size: 1.8em;
+  font-weight: bold;
+  color: #d32f2f;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .speed-btn {
+    width: 80px;
+    height: 80px;
+    font-size: 1.2em;
+  }
+
+  .speed-buttons {
+    gap: 0.7em;
+  }
+
+  .temp-display {
+    font-size: 1.5em;
+  }
+
+  .device-card, .sensors-card {
+    padding: 1em;
+  }
+}
+
+@media (min-width: 769px) {
+  .speed-buttons {
+    max-width: 700px;
+    margin: 0 auto;
+  }
+}
+</style>
 {% endblock %}
 
+{% block body %}
+{% if notes %}
+<div class="notes-banner">{{ notes }}</div>
+{% endif %}
+
+<div class="dashboard-header">
+  <h1>{{ location }} HVAC Control</h1>
+  <div class="temperature-toggle-container">
+    <span class="temp-unit-label">°C</span>
+    <div class="toggle-switch">
+      <input type="checkbox" id="temp-unit-toggle" class="toggle-input">
+      <label for="temp-unit-toggle" class="toggle-label">
+        <span class="toggle-slider"></span>
+      </label>
+    </div>
+    <span class="temp-unit-label">°F</span>
+  </div>
+</div>
+
+<!-- ERV Controls -->
+{% if erv_devices %}
+{% for device in erv_devices %}
+<div class="device-card">
+  <h2>{{ device.device_name }}</h2>
+  <div class="device-status">
+    <div>
+      <div class="status-label">Status</div>
+      <div class="status-value" id="erv-{{ device.device_id }}-status">--</div>
+    </div>
+    <div>
+      <div class="status-label">Temperature</div>
+      <div class="temp-display" id="erv-{{ device.device_id }}-temp" data-temp-c="">--</div>
+    </div>
+  </div>
+  <div class="speed-buttons">
+    <button class="speed-btn off" data-device-id="{{ device.device_id }}" data-speed="0">OFF</button>
+    <button class="speed-btn speed-1" data-device-id="{{ device.device_id }}" data-speed="1">1</button>
+    <button class="speed-btn speed-2" data-device-id="{{ device.device_id }}" data-speed="2">2</button>
+    <button class="speed-btn speed-3" data-device-id="{{ device.device_id }}" data-speed="3">3</button>
+    <button class="speed-btn speed-4" data-device-id="{{ device.device_id }}" data-speed="4">MAX</button>
+  </div>
+</div>
+{% endfor %}
+{% endif %}
+
+<!-- Fan Controls -->
+{% if fan_devices %}
+{% for device in fan_devices %}
+<div class="device-card">
+  <h2>{{ device.device_name }}</h2>
+  <div class="device-status">
+    <div>
+      <div class="status-label">Status</div>
+      <div class="status-value" id="fan-{{ device.device_id }}-status">--</div>
+    </div>
+    <div>
+      <div class="status-label">Temperature</div>
+      <div class="temp-display" id="fan-{{ device.device_id }}-temp" data-temp-c="">--</div>
+    </div>
+  </div>
+  <div class="speed-buttons">
+    <button class="speed-btn off" data-device-id="{{ device.device_id }}" data-speed="0">OFF</button>
+    <button class="speed-btn speed-1" data-device-id="{{ device.device_id }}" data-speed="1">1</button>
+    <button class="speed-btn speed-2" data-device-id="{{ device.device_id }}" data-speed="2">2</button>
+    <button class="speed-btn speed-3" data-device-id="{{ device.device_id }}" data-speed="3">3</button>
+    <button class="speed-btn speed-4" data-device-id="{{ device.device_id }}" data-speed="4">MAX</button>
+  </div>
+</div>
+{% endfor %}
+{% endif %}
+
+<!-- Temperature Sensors -->
+{% if hubitat_sensors %}
+<div class="sensors-card">
+  <h2>Temperature Sensors</h2>
+  {% for sensor in hubitat_sensors %}
+  <div class="sensor-row">
+    <div>
+      <div class="sensor-name">{{ sensor.name }}</div>
+      <div class="sensor-room">{{ sensor.room or 'N/A' }}</div>
+    </div>
+    <div class="sensor-temp" id="sensor-{{ sensor.id }}-temp" data-temp-c="{% if sensor.attributes and sensor.attributes.temperature %}{{ sensor.attributes.temperature }}{% endif %}">
+      {% if sensor.attributes and sensor.attributes.temperature %}
+        {{ sensor.attributes.temperature }}°C
+      {% else %}
+        --
+      {% endif %}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+<script src="/static/temperature_utils.js"></script>
+<script src="/static/room_dashboard.js"></script>
+{% endblock %}
