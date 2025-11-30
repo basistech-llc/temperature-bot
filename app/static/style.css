@@ -385,22 +385,6 @@ table.rules-table th  {
     vertical-align: top;
 }
 
-/****************************************************************
- ** Buttons
- **/
-.erv-buttons {
-  text-align: center;
-}
-.square {
-  width: 90%;
-  max-width: 200px;
-  aspect-ratio: 1 / 1;
-  margin: 0.5em;
-  font-size: 0.9em;
-}
-
-
-
 /* optional: make tables respect the column width instead of expanding it */
 
 /**************** Chart */
