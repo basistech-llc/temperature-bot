@@ -140,8 +140,12 @@ def create_web_routes(app):
 
     @app.route("/buttons")
     def buttons():
-        """Buttons page"""
-        return render_template("buttons.html", current_page="buttons")
+        """Buttons page - links to room dashboards"""
+        rooms = [
+            {"name": name.capitalize(), "url": config.get("url", "")}
+            for name, config in room_config.ROOM_CONFIGS.items()
+        ]
+        return render_template("buttons.html", current_page="buttons", rooms=rooms)
 
     @app.route("/version")
     def get_version():
