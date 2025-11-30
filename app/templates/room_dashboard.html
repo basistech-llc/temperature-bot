@@ -159,30 +159,53 @@ body {
   font-style: italic;
 }
 
-.sensor-row {
+.sensors-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 0.75em;
+}
+
+.sensor-tile {
+  background: #f8f9fa;
+  border-left: 3px solid #1976d2;
+  border-radius: 6px;
+  padding: 0.75em;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: 70px;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.sensor-tile:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.sensor-header {
   display: flex;
   justify-content: space-between;
-  align-items: center;
-  padding: 1em;
-  margin: 0.5em 0;
-  background: #f8f9fa;
-  border-left: 4px solid #1976d2;
-  border-radius: 8px;
+  align-items: flex-start;
+  margin-bottom: 0.5em;
 }
 
 .sensor-name {
-  font: 500 1.1em sans-serif;
+  font: 500 0.95em sans-serif;
   color: #333;
+  line-height: 1.2;
 }
 
 .sensor-room {
-  font: italic 0.9em sans-serif;
+  font: italic 0.75em sans-serif;
   color: #666;
+  margin-top: 0.2em;
 }
 
 .sensor-temp {
-  font: bold 1.8em sans-serif;
+  font: bold 1.5em sans-serif;
   color: #d32f2f;
+  text-align: right;
+  line-height: 1;
 }
 
 /* Responsive */
@@ -195,6 +218,9 @@ body {
   .speed-buttons { gap: 0.7em; }
   .temp-display { font-size: 1.5em; }
   .device-card, .sensors-card { padding: 1em; }
+  .sensors-grid { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0.5em; }
+  .sensor-tile { padding: 0.6em; min-height: 60px; }
+  .sensor-temp { font-size: 1.3em; }
 }
 
 @media (min-width: 769px) {
@@ -265,21 +291,25 @@ body {
 {% if hubitat_sensors %}
 <div class="sensors-card">
   <h2>Temperature Sensors</h2>
-  {% for sensor in hubitat_sensors %}
-  <div class="sensor-row">
-    <div>
-      <div class="sensor-name">{{ sensor.name }}</div>
-      <div class="sensor-room">{{ sensor.room or 'N/A' }}</div>
+  <div class="sensors-grid">
+    {% for sensor in hubitat_sensors %}
+    <div class="sensor-tile">
+      <div class="sensor-header">
+        <div>
+          <div class="sensor-name">{{ sensor.name }}</div>
+          <div class="sensor-room">{{ sensor.room or 'N/A' }}</div>
+        </div>
+      </div>
+      <div class="sensor-temp" id="sensor-{{ sensor.id }}-temp" data-temp-c="{% if sensor.attributes and sensor.attributes.temperature %}{{ sensor.attributes.temperature }}{% endif %}">
+        {% if sensor.attributes and sensor.attributes.temperature %}
+          {{ sensor.attributes.temperature }}°C
+        {% else %}
+          --
+        {% endif %}
+      </div>
     </div>
-    <div class="sensor-temp" id="sensor-{{ sensor.id }}-temp" data-temp-c="{% if sensor.attributes and sensor.attributes.temperature %}{{ sensor.attributes.temperature }}{% endif %}">
-      {% if sensor.attributes and sensor.attributes.temperature %}
-        {{ sensor.attributes.temperature }}°C
-      {% else %}
-        --
-      {% endif %}
-    </div>
+    {% endfor %}
   </div>
-  {% endfor %}
 </div>
 {% endif %}
 
