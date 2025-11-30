@@ -6,6 +6,7 @@ import logging
 import datetime
 import time
 import json
+from typing import List
 from flask import render_template, request
 
 from .constants import __version__
@@ -201,81 +202,80 @@ def create_web_routes(app):
     @app.route("/kitchen")
     @with_db_connection
     def kitchen_dashboard(conn):
-        """Kitchen room dashboard"""
+        """Kitchen HVAC control dashboard."""
         return _render_room_dashboard_with_data(conn, "Kitchen")
 
     @app.route("/studio")
     @with_db_connection
     def studio_dashboard(conn):
-        """Studio room dashboard"""
+        """Studio HVAC control dashboard."""
         return _render_room_dashboard_with_data(conn, "Studio")
 
+    def _filter_speed_control_devices(devices, device_names):
+        """Filter devices with speed control matching given names."""
+        return [
+            device
+            for device in devices
+            if device.get("has_speed_control")
+            and device.get("device_name") in device_names
+        ]
+
+    def _get_hubitat_sensors(sensor_names):
+        """Fetch and filter Hubitat temperature sensors by exact name match."""
+        if not sensor_names:
+            return []
+
+        try:
+            all_hubitat = hubitat.get_all_devices()
+            return [
+                dev
+                for dev in all_hubitat
+                if "TemperatureMeasurement" in dev.get("capabilities", [])
+                and dev.get("name") in sensor_names
+            ]
+        except Exception as e:
+            logger.warning("Failed to fetch Hubitat sensors: %s", e)
+            return []
+
+    def _collect_device_notes(devices):
+        """Collect notes from devices and format as banner text."""
+        notes = [
+            f"{device.get('device_name')}: {device.get('notes')}"
+            for device in devices
+            if device.get("notes")
+        ]
+        return " | ".join(notes) if notes else None
+
     def _render_room_dashboard_with_data(conn, location: str):
-        """Helper function to render room dashboard with device data"""
-        # Get room config (location is "Kitchen" or "Studio", need lowercase key)
+        """Render room dashboard with device data filtered by configuration."""
         room_key = location.lower()
         config = room_config.ROOM_CONFIGS.get(room_key, {})
 
-        # Get all devices from database
         all_devices = db.get_device_status(conn)
 
-        # Filter ERVs (devices with speed control matching ERV names)
-        erv_devices = []
-        for device in all_devices:
-            if device.get("has_speed_control") and device.get(
-                "device_name"
-            ) in config.get("ervs", []):
-                erv_devices.append(device)
+        # Filter ERVs and fans
+        erv_devices = _filter_speed_control_devices(all_devices, config.get("ervs", []))
 
-        # Filter fans (devices with speed control matching fan names)
-        # For studio, use first available fan from the list
+        # For fans, take first available match
+        fan_names: List[str] = config.get("fans", [])
         fan_devices = []
-        fan_names = config.get("fans", [])
         if fan_names:
-            for device in all_devices:
-                if (
-                    device.get("has_speed_control")
-                    and device.get("device_name") in fan_names
-                ):
-                    fan_devices.append(device)
-                    break  # Only take first match
+            filtered = _filter_speed_control_devices(all_devices, fan_names)
+            if filtered:
+                fan_devices = [filtered[0]]  # Only first match
 
         # Get Hubitat sensors
-        # Filter by exact sensor name match
-        hubitat_sensors = []
-        try:
-            all_hubitat = hubitat.get_all_devices()
-            sensor_names = config.get("sensors", [])
+        hubitat_sensors = _get_hubitat_sensors(config.get("sensors", []))
 
-            if sensor_names:
-                # Filter by exact name match
-                hubitat_sensors = [
-                    dev
-                    for dev in all_hubitat
-                    if "TemperatureMeasurement" in dev.get("capabilities", [])
-                    and dev.get("name") in sensor_names
-                ]
-            else:
-                # If no sensors specified, show no sensors
-                hubitat_sensors = []
-        except Exception as e:
-            logger.warning("Failed to fetch Hubitat sensors: %s", e)
-            hubitat_sensors = []
-
-        # Collect all notes from devices
-        all_notes = []
-        for device in erv_devices + fan_devices:
-            notes = device.get("notes")
-            if notes:
-                all_notes.append(f"{device.get('device_name')}: {notes}")
+        # Collect notes
+        notes = _collect_device_notes(erv_devices + fan_devices)
 
         return render_template(
             "room_dashboard.html",
             location=location,
             hide_nav=True,
-            config=config,
             erv_devices=erv_devices,
             fan_devices=fan_devices,
             hubitat_sensors=hubitat_sensors,
-            notes=" | ".join(all_notes) if all_notes else None,
+            notes=notes,
         )

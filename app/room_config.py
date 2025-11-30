@@ -1,9 +1,18 @@
 """
-Configuration for room dashboards (kitchen/studio)
-Each room specifies which ERVs, fans, and sensors to display
+Configuration for room dashboards (kitchen/studio).
+
+Each room specifies which ERVs, fans, and sensors to display.
+All device names must match exactly with names in the database or Hubitat.
 """
 
-ROOM_CONFIGS = {
+from typing import Dict, Any
+
+RoomConfig = Dict[str, Any]
+"""Type alias for room configuration dict.
+Keys: 'url' (str), 'ervs' (list[str]), 'fans' (list[str]), 'sensors' (list[str])
+"""
+
+ROOM_CONFIGS: Dict[str, RoomConfig] = {
     "kitchen": {
         "url": "/kitchen",
         "ervs": ["ERV Kitchen"],

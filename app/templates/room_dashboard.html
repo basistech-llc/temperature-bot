@@ -2,32 +2,30 @@
 {% set hide_nav = True %}
 {% block title %}{{ location }} HVAC Control{% endblock %}
 {% block head %}
-<link rel="stylesheet" href="/static/slider.css">
 <style>
 /* Tablet-optimized control panel design */
 body {
   padding: 1em;
-  background-color: #f5f5f5;
+  background: #f5f5f5;
 }
 
 .notes-banner {
-  background-color: #ffeb3b;
+  background: #ffeb3b;
   padding: 1em;
   margin-bottom: 1.5em;
   border-left: 6px solid #ffc107;
-  font-weight: bold;
-  font-size: 1.1em;
   border-radius: 4px;
+  font: bold 1.1em sans-serif;
   box-shadow: 0 2px 4px rgba(0,0,0,0.1);
 }
 
 .dashboard-header {
-  text-align: center;
-  margin-bottom: 2em;
-  color: #333;
   display: flex;
   justify-content: space-between;
   align-items: center;
+  margin-bottom: 2em;
+  text-align: center;
+  color: #333;
 }
 
 .dashboard-header h1 {
@@ -41,18 +39,18 @@ body {
   gap: 8px;
 }
 
-.device-card {
+/* Shared card styles */
+.device-card, .sensors-card {
   background: white;
+  border: 2px solid #e0e0e0;
   border-radius: 12px;
   padding: 1.5em;
   margin-bottom: 2em;
   box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-  border: 2px solid #e0e0e0;
 }
 
-.device-card h2 {
-  margin-top: 0;
-  margin-bottom: 1em;
+.device-card h2, .sensors-card h2 {
+  margin: 0 0 1em 0;
   color: #1976d2;
   font-size: 1.5em;
 }
@@ -63,25 +61,22 @@ body {
   align-items: center;
   margin-bottom: 1.5em;
   padding: 1em;
-  background-color: #f8f9fa;
+  background: #f8f9fa;
   border-radius: 8px;
 }
 
 .status-label {
-  font-size: 1.1em;
+  font: 500 1.1em sans-serif;
   color: #666;
-  font-weight: 500;
 }
 
 .status-value {
-  font-size: 1.4em;
-  font-weight: bold;
+  font: bold 1.4em sans-serif;
   color: #1976d2;
 }
 
 .temp-display {
-  font-size: 2em;
-  font-weight: bold;
+  font: bold 2em sans-serif;
   color: #d32f2f;
 }
 
@@ -89,25 +84,24 @@ body {
   display: flex;
   gap: 1em;
   justify-content: center;
-  flex-wrap: nowrap;
   align-items: center;
+  flex-wrap: nowrap;
 }
 
 .speed-btn {
   width: 100px;
   height: 100px;
-  font-size: 1.4em;
-  font-weight: bold;
-  border-radius: 12px;
-  border: 3px solid transparent;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  box-shadow: 0 4px 6px rgba(0,0,0,0.15);
   padding: 0;
+  border: 3px solid transparent;
+  border-radius: 12px;
+  font: bold 1.4em sans-serif;
+  cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 6px rgba(0,0,0,0.15);
 }
 
 .speed-btn:hover {
@@ -120,30 +114,11 @@ body {
   box-shadow: 0 2px 4px rgba(0,0,0,0.15);
 }
 
-.speed-btn.off {
-  background-color: #757575;
-  color: white;
-}
-
-.speed-btn.speed-1 {
-  background-color: #81c784;
-  color: white;
-}
-
-.speed-btn.speed-2 {
-  background-color: #66bb6a;
-  color: white;
-}
-
-.speed-btn.speed-3 {
-  background-color: #4caf50;
-  color: white;
-}
-
-.speed-btn.speed-4 {
-  background-color: #2e7d32;
-  color: white;
-}
+.speed-btn.off { background: #757575; color: white; }
+.speed-btn.speed-1 { background: #81c784; color: white; }
+.speed-btn.speed-2 { background: #66bb6a; color: white; }
+.speed-btn.speed-3 { background: #4caf50; color: white; }
+.speed-btn.speed-4 { background: #2e7d32; color: white; }
 
 .speed-btn.active {
   border-color: #ffc107;
@@ -151,8 +126,7 @@ body {
   transform: scale(1.05);
 }
 
-.speed-btn:disabled,
-.speed-btn.loading {
+.speed-btn:disabled, .speed-btn.loading {
   opacity: 0.6;
   cursor: not-allowed;
   pointer-events: none;
@@ -165,12 +139,11 @@ body {
 .speed-btn.loading::after {
   content: '';
   position: absolute;
-  width: 20px;
-  height: 20px;
   top: 50%;
   left: 50%;
-  margin-left: -10px;
-  margin-top: -10px;
+  width: 20px;
+  height: 20px;
+  margin: -10px 0 0 -10px;
   border: 3px solid rgba(255, 255, 255, 0.3);
   border-top-color: white;
   border-radius: 50%;
@@ -186,68 +159,42 @@ body {
   font-style: italic;
 }
 
-.sensors-card {
-  background: white;
-  border-radius: 12px;
-  padding: 1.5em;
-  box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-  border: 2px solid #e0e0e0;
-}
-
-.sensors-card h2 {
-  margin-top: 0;
-  color: #1976d2;
-  font-size: 1.5em;
-}
-
 .sensor-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
   padding: 1em;
   margin: 0.5em 0;
-  background-color: #f8f9fa;
-  border-radius: 8px;
+  background: #f8f9fa;
   border-left: 4px solid #1976d2;
+  border-radius: 8px;
 }
 
 .sensor-name {
-  font-size: 1.1em;
-  font-weight: 500;
+  font: 500 1.1em sans-serif;
   color: #333;
 }
 
 .sensor-room {
-  font-size: 0.9em;
+  font: italic 0.9em sans-serif;
   color: #666;
-  font-style: italic;
 }
 
 .sensor-temp {
-  font-size: 1.8em;
-  font-weight: bold;
+  font: bold 1.8em sans-serif;
   color: #d32f2f;
 }
 
-/* Responsive adjustments */
+/* Responsive */
 @media (max-width: 768px) {
   .speed-btn {
     width: 80px;
     height: 80px;
     font-size: 1.2em;
   }
-
-  .speed-buttons {
-    gap: 0.7em;
-  }
-
-  .temp-display {
-    font-size: 1.5em;
-  }
-
-  .device-card, .sensors-card {
-    padding: 1em;
-  }
+  .speed-buttons { gap: 0.7em; }
+  .temp-display { font-size: 1.5em; }
+  .device-card, .sensors-card { padding: 1em; }
 }
 
 @media (min-width: 769px) {
@@ -278,19 +225,18 @@ body {
   </div>
 </div>
 
-<!-- ERV Controls -->
-{% if erv_devices %}
-{% for device in erv_devices %}
+<!-- ERV and Fan Controls -->
+{% macro device_control_card(device, device_type) %}
 <div class="device-card">
   <h2>{{ device.device_name }}</h2>
   <div class="device-status">
     <div>
       <div class="status-label">Status</div>
-      <div class="status-value" id="erv-{{ device.device_id }}-status">--</div>
+      <div class="status-value" id="{{ device_type }}-{{ device.device_id }}-status">--</div>
     </div>
     <div>
       <div class="status-label">Temperature</div>
-      <div class="temp-display" id="erv-{{ device.device_id }}-temp" data-temp-c="">--</div>
+      <div class="temp-display" id="{{ device_type }}-{{ device.device_id }}-temp" data-temp-c="">--</div>
     </div>
   </div>
   <div class="speed-buttons">
@@ -301,32 +247,17 @@ body {
     <button class="speed-btn speed-4" data-device-id="{{ device.device_id }}" data-speed="4">MAX</button>
   </div>
 </div>
+{% endmacro %}
+
+{% if erv_devices %}
+{% for device in erv_devices %}
+{{ device_control_card(device, 'erv') }}
 {% endfor %}
 {% endif %}
 
-<!-- Fan Controls -->
 {% if fan_devices %}
 {% for device in fan_devices %}
-<div class="device-card">
-  <h2>{{ device.device_name }}</h2>
-  <div class="device-status">
-    <div>
-      <div class="status-label">Status</div>
-      <div class="status-value" id="fan-{{ device.device_id }}-status">--</div>
-    </div>
-    <div>
-      <div class="status-label">Temperature</div>
-      <div class="temp-display" id="fan-{{ device.device_id }}-temp" data-temp-c="">--</div>
-    </div>
-  </div>
-  <div class="speed-buttons">
-    <button class="speed-btn off" data-device-id="{{ device.device_id }}" data-speed="0">OFF</button>
-    <button class="speed-btn speed-1" data-device-id="{{ device.device_id }}" data-speed="1">1</button>
-    <button class="speed-btn speed-2" data-device-id="{{ device.device_id }}" data-speed="2">2</button>
-    <button class="speed-btn speed-3" data-device-id="{{ device.device_id }}" data-speed="3">3</button>
-    <button class="speed-btn speed-4" data-device-id="{{ device.device_id }}" data-speed="4">MAX</button>
-  </div>
-</div>
+{{ device_control_card(device, 'fan') }}
 {% endfor %}
 {% endif %}
 
