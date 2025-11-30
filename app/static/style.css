@@ -155,8 +155,103 @@ td.cell-notes:not(:empty) {
     width: 300px;
 }
 
-td span.notes-disabled {
-    color: red;
+.rules-disabled-superscript {
+    color: #c62828;
+    font-size: 0.7em;
+    vertical-align: super;
+    margin-left: 4px;
+    cursor: default;
+    font-weight: 500;
+    position: relative;
+}
+
+.rules-disabled-superscript:hover::after {
+    content: attr(title);
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    background-color: #333;
+    color: white;
+    padding: 6px 10px;
+    border-radius: 4px;
+    font-size: 0.85em;
+    white-space: nowrap;
+    margin-bottom: 5px;
+    z-index: 1000;
+    pointer-events: none;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+}
+
+.rules-disabled-superscript:hover::before {
+    content: '';
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    border: 5px solid transparent;
+    border-top-color: #333;
+    margin-bottom: -5px;
+    z-index: 1000;
+    pointer-events: none;
+}
+
+/* Editable notes field */
+.editable-notes {
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 3px;
+    transition: all 0.2s ease;
+    display: inline-block;
+    min-width: 150px;
+    min-height: 1.5em;
+    position: relative;
+}
+
+/* Empty state: show placeholder and dashed border */
+.editable-notes:empty {
+    border: 1px dashed #ccc;
+    background-color: #fafafa;
+}
+
+.editable-notes:empty::before {
+    content: "Add note...";
+    color: #999;
+    font-style: italic;
+}
+
+.editable-notes:empty:hover {
+    background-color: #f0f0f0;
+    border-color: #999;
+    border-style: solid;
+}
+
+/* Filled state: transparent until hover */
+.editable-notes:not(:empty) {
+    border: 1px solid transparent;
+    background-color: transparent;
+}
+
+.editable-notes:not(:empty):hover {
+    background-color: #f0f0f0;
+    border-color: #ddd;
+}
+
+.editable-notes.editing {
+    background-color: #fff;
+    border: 1px solid #0078e7;
+    outline: none;
+}
+
+.editable-notes input {
+    border: none;
+    outline: none;
+    background: transparent;
+    font: inherit;
+    padding: 0;
+    margin: 0;
+    width: 100%;
+    min-width: 150px;
 }
 
 .age {

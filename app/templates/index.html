@@ -50,7 +50,7 @@
                 {% if (device.has_speed_control and table==1) or (not device.has_speed_control and table==2) %}
                 <tr class="device-row" x-data-device-id="{{ device.device_id }}">
                   <td class="cell-unit">
-                    {{ device.device_name }}
+                    {{ device.device_name }}<span class="rules-disabled-superscript" id="rules-disabled-{{ device.device_id }}" style="display: none;" title=""></span>
                     <span id="device-{{ device.device_id }}-notes"></span>
                     <div class="temporal-links">
                       <a href="/chart?device_ids={{ device.device_id }}" target="_blank">graph</a>
@@ -83,8 +83,7 @@
                   {% endfor %}
                   {% endif %}<!-- devices with speed controls -->
                   <td class="cell-notes">
-                    <span class="notes" id="notes-{{ device.device_id }}"></span>
-                    <span class="notes-disabled" id="notes-disabled-{{ device.device_id }}"></span>
+                    <span class="notes editable-notes" id="notes-{{ device.device_id }}" data-device-id="{{ device.device_id }}" title="Click to edit"></span>
                   </td>
                 </tr><!-- table row -->
                 {% endif %}
