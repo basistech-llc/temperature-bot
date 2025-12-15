@@ -4,6 +4,7 @@ test for db.py
 
 import logging
 import json
+import types
 
 from app import db
 from bin import runner
@@ -73,3 +74,66 @@ def test_temperature_insert(test_database_conn_with_test_data):
     assert rows[0]['logtime']==100
     assert rows[0]['duration']==50
     assert rows[0]['temp10x']==210 # 1 seconds at 20, 1 second at 21, 1 second at 22
+
+
+def test_get_db_connection_applies_schema_once_per_mtime(monkeypatch):
+    """setup_database should be called once for a given schema mtime."""
+
+    # Ensure we start from a clean cached state
+    db._SCHEMA_MTIME = None
+
+    # Provide a DB_PATH so get_db_connection can resolve a path
+    monkeypatch.setenv(db.DB_PATH, "/tmp/test.db")
+
+    # Stub connect_db to avoid touching a real SQLite database
+    fake_conn = types.SimpleNamespace()
+    monkeypatch.setattr(db, "connect_db", lambda path: fake_conn)
+
+    calls = []
+
+    def fake_setup_database(conn, schema_file):
+        calls.append((conn, schema_file))
+
+    monkeypatch.setattr(db, "setup_database", fake_setup_database)
+    monkeypatch.setattr(db.os.path, "getmtime", lambda path: 123.0)
+
+    # Two connections with same mtime should only run setup once
+    conn1 = db.get_db_connection()
+    conn2 = db.get_db_connection()
+
+    assert conn1 is fake_conn
+    assert conn2 is fake_conn
+    assert len(calls) == 1
+
+
+def test_get_db_connection_reapplies_schema_on_mtime_change(monkeypatch):
+    """setup_database should be called again when schema mtime changes."""
+
+    db._SCHEMA_MTIME = None
+    monkeypatch.setenv(db.DB_PATH, "/tmp/test.db")
+
+    fake_conn = types.SimpleNamespace()
+    monkeypatch.setattr(db, "connect_db", lambda path: fake_conn)
+
+    calls = []
+
+    def fake_setup_database(conn, schema_file):
+        calls.append((conn, schema_file))
+
+    monkeypatch.setattr(db, "setup_database", fake_setup_database)
+
+    mtimes = [123.0, 456.0]
+
+    def fake_getmtime(path):
+        # Pop from the front so successive calls see different mtimes
+        return mtimes.pop(0) if mtimes else 456.0
+
+    monkeypatch.setattr(db.os.path, "getmtime", fake_getmtime)
+
+    db.get_db_connection()
+    db.get_db_connection()
+
+    # Once for each distinct mtime value
+    assert len(calls) == 2
+    # Final cached mtime should reflect the latest value
+    assert db._SCHEMA_MTIME == 456.0
