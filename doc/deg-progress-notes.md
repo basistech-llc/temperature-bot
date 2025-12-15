@@ -97,19 +97,32 @@ The system runs continuously: `runner.py` collects data every minute, rules adju
    make install-macos  # or install-ubuntu on Linux
    ```
    This installs Poetry, creates a virtual environment, and installs all dependencies.
+   
+   
+2. **Connect**
 
-2. **Create local database**:
+To do anything with the live system, you will need to first login with Tailscale for access.
+
+3. **Create local database**:
    ```bash
    make make-dev-db
    ```
-   Creates `var/db/temperature-bot.db` from the schema.
+   Creates a fresh `var/db/temperature-bot.db` from the schema.
+   
+   Or, and usually preferred, clone the live database
+   
+   ```bash
+   make fetch-dev-db
+   ```
+   
+   Clone a snapshot of the live DB locally.
 
-3. **Configure**:
+4. **Configure**:
    - Copy `temperature-bot-config.yaml` and fill in your values (or use existing one)
    - For simulator mode, you don't need real Hubitat/AE200 credentials
    - For live mode, you'll need VPN access (Tailscale) and real credentials
 
-**Running the Web Server** (with simulator):
+**Running the Web Server**
 
 ```bash
 DB_PATH=var/db/temperature-bot.db make local-dev
@@ -120,7 +133,14 @@ This runs the Flask app on `http://localhost:8000` with:
 - `FLASK_DEBUG=True` (auto-reload on code changes)
 - Database at `var/db/temperature-bot.db`
 
-The web interface will be available but won't have real device data unless you've populated the database.
+The web interface will be available but won't have real device data unless you've populated the
+database.
+
+Alternatively, you can run against the live hardware (but still using a local copy of the DB) with:
+
+```bash
+DB_PATH=var/db/temperature-bot.db make live-dev-web
+```
 
 **Running the Data Collector/Rules Engine** (with simulator):
 
