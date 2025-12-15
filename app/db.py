@@ -30,6 +30,14 @@ logger = logging.getLogger(__name__)
 DEVICE_MAP: dict[str, int] = {}
 MAX_DURATION = 3600  # don't extend more than an hour
 
+# Cache the schema file's modification time so we only re-apply the schema
+# when the file actually changes on disk. This keeps the convenient
+# auto-setup behavior without running the full schema on every request.
+# We do this here (rather than at "server startup") because this module
+# is also used by CLI tools and schedulers that may not go through a single
+# well-defined startup path.
+_SCHEMA_MTIME: float | None = None
+
 
 class SpeedControl(BaseModel):
     """Pydantic model for speed control requests."""
@@ -80,10 +88,17 @@ def get_db_connection():
             db_path = os.environ[DB_PATH]
         conn = connect_db(db_path)
 
-        # Apply schema changes automatically
+        # Apply schema changes automatically, but only when the schema file
+        # has actually changed on disk. This preserves the Poorman migration
+        # convenience while avoiding running the full schema on every request.
         # [TODO] This poorman hack should be replaced with real migration management. This lacks
         # rollback and relies on schema.sql not doing anything destructive to an existing DB
-        setup_database(conn, SCHEMA_FILE_PATH)
+        global _SCHEMA_MTIME  # pylint: disable=global-statement
+        current_mtime = os.path.getmtime(SCHEMA_FILE_PATH)
+
+        if _SCHEMA_MTIME is None or current_mtime != _SCHEMA_MTIME:
+            setup_database(conn, SCHEMA_FILE_PATH)
+            _SCHEMA_MTIME = current_mtime
 
         return conn
     except KeyError as e:
