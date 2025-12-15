@@ -6,6 +6,7 @@ import logging
 import datetime
 import time
 import json
+import asyncio
 from typing import List
 from flask import render_template, request
 
@@ -13,6 +14,7 @@ from .constants import __version__
 from . import db
 from . import rules_engine
 from . import hubitat
+from . import ae200
 from . import room_config
 from .utils.request_utils import parse_device_ids
 from .utils.db_utils import with_db_connection
@@ -195,12 +197,59 @@ def create_web_routes(app):
             hubitat_names_json = json.dumps({"error": str(e)}, indent=2)
             hubitat_json = json.dumps({"error": str(e)}, indent=2)
 
+        # Fetch Mitsubishi AE-200 devices and details
+        ae200_names_json = None
+        ae200_json = None
+        ae200_device_info_json = None
+        try:
+            ae200_devices = ae200.get_devices()
+            # Extract just the names into a simple array
+            ae200_device_names = [dev.get("name", "Unknown") for dev in ae200_devices]
+            ae200_names_json = json.dumps(ae200_device_names, indent=2)
+            # Raw list from AE-200 (id + name)
+            ae200_json = json.dumps(ae200_devices, indent=2)
+
+            # Per-device status direct from AE-200, fetched concurrently
+            async def _fetch_ae200_details_async(devices):
+                ae200_details: dict[str, dict] = {}
+                tasks = []
+                ids: list[str] = []
+                for dev in devices:
+                    device_id = dev.get("id")
+                    if device_id is None:
+                        continue
+                    ids.append(str(device_id))
+                    tasks.append(ae200.get_device_info_async(device_id))
+                if not tasks:
+                    return ae200_details
+                results = await asyncio.gather(*tasks, return_exceptions=True)
+                for key, result in zip(ids, results):
+                    if isinstance(result, Exception):
+                        ae200_details[key] = {"error": str(result)}
+                    else:
+                        ae200_details[key] = result
+                return ae200_details
+
+            ae200_details = ae200.runner.run_async_safely(
+                _fetch_ae200_details_async(ae200_devices)
+            )
+            ae200_device_info_json = json.dumps(ae200_details, indent=2, default=str)
+        except Exception as e:
+            logger.warning("Failed to fetch AE-200 devices: %s", e)
+            ae200_names_json = json.dumps({"error": str(e)}, indent=2)
+            ae200_json = json.dumps({"error": str(e)}, indent=2)
+            ae200_device_info_json = json.dumps({"error": str(e)}, indent=2)
+
         return render_template(
             "debug_all_devices.html",
             all_devices_names_json=all_devices_names_json,
             all_devices_json=all_devices_json,
             hubitat_names_json=hubitat_names_json,
             hubitat_json=hubitat_json,
+            ae200_names_json=ae200_names_json,
+            ae200_json=ae200_json,
+            ae200_device_info_json=ae200_device_info_json,
+            hide_nav=True,
         )
 
     @app.route("/kitchen")
