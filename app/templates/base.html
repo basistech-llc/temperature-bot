@@ -16,8 +16,8 @@
   <link rel="stylesheet" href="/static/style.css">
   <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
 <!--   <script src="https://code.jquery.com/jquery-3.3.1.slim.min.js" integrity="sha384-q8i/X+965DzO0rT7abK41JStQIAqVgRVzpbzo5smXKp4YfRvH+8abtTE1Pi6jizo" crossorigin="anonymous"></script> -->
-  <script src="/static/github_menu.js"></script>
   <script src="/static/temperature_utils.js"></script>
+  <script src="/static/rooms_menu.js"></script>
 
   {% block head %}
   {% endblock %}
@@ -42,27 +42,18 @@
       <li class="pure-menu-item{% if current_page == 'alerts' %} pure-menu-selected{% endif %}">
         <a href="/alerts" class="pure-menu-link">Alerts</a>
       </li>
-      <li class="pure-menu-item{% if current_page == 'buttons' %} pure-menu-selected{% endif %}">
-        <a href="/buttons" class="pure-menu-link">Buttons</a>
-      </li>
       <li class="pure-menu-item{% if current_page == 'rules' %} pure-menu-selected{% endif %}">
         <a href="/rules" class="pure-menu-link">Rules</a>
       </li>
-      <li class="pure-menu-item{% if current_page == 'privacy' %} pure-menu-selected{% endif %}">
-        <a href="/privacy" class="pure-menu-link">Privacy</a>
-      </li>
-      <li class="pure-menu-item{% if current_page == 'terms' %} pure-menu-selected{% endif %}">
-        <a href="/terms" class="pure-menu-link">Terms</a>
-      </li>
       <li class="pure-menu-item">
-        <a href="mailto:simsong@basistech.com" class="pure-menu-link">Contact</a>
-      </li>
-      <li class="pure-menu-item">
-        <a href="#" id="github-menu-link" class="pure-menu-link">GitHub</a>
-        <div id="github-popup" class="github-popup">
-          <a href="https://github.com/basistech-llc/temperature-bot/" target="_blank">Repo</a>
-          <a href="https://github.com/basistech-llc/temperature-bot/issues/new" target="_blank">Bug Report</a>
+        <a href="#" id="rooms-menu-link" class="pure-menu-link">Rooms</a>
+        <div id="rooms-popup" class="github-popup">
+          <a href="/kitchen">Kitchen</a>
+          <a href="/hickory">Hickory</a>
         </div>
+      </li>
+      <li class="pure-menu-item{% if current_page == 'about' %} pure-menu-selected{% endif %}">
+        <a href="/about" class="pure-menu-link">About</a>
       </li>
       <li class="pure-menu-item">
         <div class="temperature-toggle">
@@ -94,11 +85,7 @@
       |
       <a href="/rules">Rules</a>
       |
-      <a href="/privacy">Privacy Policy</a>
-      |
-      <a href="/terms">Terms of Service</a>
-      |
-      <a href="mailto:simsong@basistech.com">Contact</a>
+      <a href="/about">About</a>
     </p>
   </footer>
   {% endif %}

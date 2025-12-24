@@ -8,7 +8,7 @@ import time
 import json
 import asyncio
 from typing import List
-from flask import render_template, request
+from flask import render_template, request, redirect, url_for
 
 from .constants import __version__
 from . import db
@@ -130,24 +130,20 @@ def create_web_routes(app):
         devices = {dev["device_id"]: dev["device_name"] for dev in c.fetchall()}
         return render_template("alerts.html", devices=devices, current_page="alerts")
 
+    @app.route("/about")
+    def about():
+        """About page"""
+        return render_template("about.html", current_page="about")
+
     @app.route("/privacy")
     def privacy():
-        """Privacy page"""
-        return render_template("privacy.html", current_page="privacy")
+        """Privacy page - redirects to About"""
+        return redirect(url_for("about"))
 
     @app.route("/terms")
     def terms():
-        """Terms page"""
-        return render_template("terms.html", current_page="terms")
-
-    @app.route("/buttons")
-    def buttons():
-        """Buttons page - links to room dashboards"""
-        rooms = [
-            {"name": name.capitalize(), "url": config.get("url", "")}
-            for name, config in room_config.ROOM_CONFIGS.items()
-        ]
-        return render_template("buttons.html", current_page="buttons", rooms=rooms)
+        """Terms page - redirects to About"""
+        return redirect(url_for("about"))
 
     @app.route("/version")
     def get_version():
@@ -258,11 +254,11 @@ def create_web_routes(app):
         """Kitchen HVAC control dashboard."""
         return _render_room_dashboard_with_data(conn, "Kitchen")
 
-    @app.route("/studio")
+    @app.route("/hickory")
     @with_db_connection
-    def studio_dashboard(conn):
-        """Studio HVAC control dashboard."""
-        return _render_room_dashboard_with_data(conn, "Studio")
+    def hickory_dashboard(conn):
+        """Hickory HVAC control dashboard."""
+        return _render_room_dashboard_with_data(conn, "Hickory")
 
     def _filter_speed_control_devices(devices, device_names):
         """Filter devices with speed control matching given names."""
