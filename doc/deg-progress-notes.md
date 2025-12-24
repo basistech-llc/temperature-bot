@@ -136,13 +136,18 @@ This runs the Flask app on `http://localhost:8000` with:
 The web interface will be available but won't have real device data unless you've populated the
 database.
 
-Alternatively, you can run against the live hardware (but still using a local copy of the DB) with:
+Alternatively, you can run against the live hardware (but still using a local copy of the DB) by
+connecting with TailScale and:
 
 ```bash
 DB_PATH=var/db/temperature-bot.db make live-dev-web
 ```
 
-**Running the Data Collector/Rules Engine** (with simulator):
+[old?] Or: `DB_PATH=var/db/temperature-bot.db FLASK_DEBUG=True poetry run python run_local.py`
+(without `AE200_SIMULATOR`)
+
+
+**Running the Data Collector/Rules Engine**
 
 ```bash
 DB_PATH=var/db/temperature-bot.db make live-dev-runner
@@ -161,16 +166,8 @@ This will:
 - Run rules engine
 - Log everything to the database
 
-**Running with Live Hardware** (requires VPN):
+Or, you can run against the live hardware with
 
-1. **Connect to VPN**: Ensure Tailscale is connected
-2. **Web server**:
-   ```bash
-   DB_PATH=var/db/temperature-bot.db make live-dev-web
-   ```
-   Or: `DB_PATH=var/db/temperature-bot.db FLASK_DEBUG=True poetry run python run_local.py` (without `AE200_SIMULATOR`)
-
-3. **Runner**:
    ```bash
    DB_PATH=var/db/temperature-bot.db make live-dev-runner
    ```
@@ -191,7 +188,11 @@ To get a copy of the production database with real data:
 ```bash
 make fetch-dev-db
 ```
-This copies the database from `slg1.basistech.net` to `var/db/` and shows stats.
+This copies the database from `slg1.basistech.net` to `var/db/** and shows stats.
+
+**Mitsubishi control panel**
+
+(requires TailScale connection) https://10.2.1.20/control/index.html
 
 **Testing**:
 
@@ -205,26 +206,11 @@ Tests automatically use `AE200_SIMULATOR=1` via `tests/conftest.py`.
 
 # Progress notes
 
-## 19 Oct, 2025
-
-- First read of code
-- Cursor-driven code review to identify unclear areas
-- VPN configured
-- Accessed slg1.basistech.net via browser
-- Accessed slg1.basistech.net via ssh
-- Updated password
-
-## 20 Oct, 2025
-
-- Reviewed nginx config
-- Setup nginx and systemctl
-- Start testing deployment
-
 ## Config notes
 
 - air.basistech.net runs on port 8100
 - slg1.basistech.net runs on port 8003
-- deg1... will be on 8004
+- deg1.basistech.net will be on 8004
 
 ### nginx config
 
