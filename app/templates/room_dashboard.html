@@ -101,45 +101,6 @@ body {
   width: 100%;
 }
 
-/* Motor control - large toggle switch */
-.motor-control {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.5em;
-}
-
-.motor-control .switch {
-  width: 80px;
-  height: 44px;
-}
-
-.motor-control .switch .slider {
-  border-radius: 44px;
-}
-
-.motor-control .switch .slider:before {
-  height: 36px;
-  width: 36px;
-  left: 4px;
-  bottom: 4px;
-}
-
-.motor-control .switch input:checked + .slider:before {
-  transform: translateX(36px);
-}
-
-.motor-control .switch input:disabled + .slider {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.motor-label {
-  font-size: 1em;
-  font-weight: 600;
-  color: #555;
-}
-
 /* Speed controls - large touch-friendly buttons */
 .speed-controls {
   display: flex;
@@ -190,11 +151,25 @@ body {
   opacity: var(--btn-unselected-opacity);
 }
 
-/* Auto button - distinct color with spacing */
+/* Off button - distinct red color */
+.speed-btn.speed-off {
+  background: #d32f2f;
+  font-size: 1.4em;
+  margin-right: 0.5em;
+}
+
+/* Auto button - diagonal stripes in three green colors */
 .speed-btn.speed-auto {
-  background: #9e9e9e;
+  background: repeating-linear-gradient(
+    45deg,
+    #81c784,
+    #81c784 20px,
+    #66bb6a 20px,
+    #66bb6a 40px,
+    #4caf50 40px,
+    #4caf50 60px
+  );
   font-size: 1.6em;
-  margin-right: 1.5em;
 }
 
 /* Active/selected button - full opacity, enhanced styling */
@@ -298,17 +273,6 @@ body {
     font-size: 1.6em;
   }
   .speed-controls { gap: 0.75em; }
-  .motor-control .switch {
-    width: 70px;
-    height: 38px;
-  }
-  .motor-control .switch .slider:before {
-    height: 30px;
-    width: 30px;
-  }
-  .motor-control .switch input:checked + .slider:before {
-    transform: translateX(32px);
-  }
   .temp-display { font-size: 1.5em; }
   .device-card, .sensors-card { padding: 1em; }
   .sensors-grid { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0.5em; }
@@ -388,16 +352,8 @@ body {
     </div>
   </div>
   <div class="control-panel">
-    <div class="motor-control">
-      <label class="switch">
-        <input type="checkbox" id="drive-{{ device_type }}-{{ device.device_id }}"
-               data-device-id="{{ device.device_id }}"
-               class="drive-toggle">
-        <span class="slider round"></span>
-      </label>
-      <div class="motor-label">Motor</div>
-    </div>
     <div class="speed-controls">
+      <button class="speed-btn speed-off" data-device-id="{{ device.device_id }}" data-speed="0">Off</button>
       {% if device_type == 'erv' %}
       <button class="speed-btn" data-device-id="{{ device.device_id }}" data-speed="1">LO</button>
       <button class="speed-btn" data-device-id="{{ device.device_id }}" data-speed="2">MED-LO</button>

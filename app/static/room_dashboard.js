@@ -86,7 +86,6 @@ function getDeviceTempElement(deviceId) {
  */
 function setDeviceLoading(deviceId, isLoading, activeButton = null) {
     const buttons = document.querySelectorAll(`button.speed-btn[data-device-id="${deviceId}"]`);
-    const toggles = document.querySelectorAll(`input.drive-toggle[data-device-id="${deviceId}"]`);
     const statusEl = getDeviceStatusElement(deviceId);
 
     buttons.forEach(button => {
@@ -101,10 +100,6 @@ function setDeviceLoading(deviceId, isLoading, activeButton = null) {
         }
     });
 
-    toggles.forEach(toggle => {
-        toggle.disabled = isLoading;
-    });
-
     if (statusEl) {
         if (isLoading) {
             statusEl.textContent = 'Setting...';
@@ -113,20 +108,6 @@ function setDeviceLoading(deviceId, isLoading, activeButton = null) {
             statusEl.classList.remove('status-setting');
         }
     }
-}
-
-/**
- * Handle drive toggle switch change.
- * @param {HTMLElement} toggle - Toggle checkbox element
- */
-function handleDriveToggle(toggle) {
-    const deviceId = parseInt(toggle.getAttribute('data-device-id'));
-    const drive = toggle.checked ? 1 : 0;
-
-    setDeviceLoading(deviceId, true);
-    setDrive(deviceId, drive)
-        .then(() => refreshStatus())
-        .catch(() => setDeviceLoading(deviceId, false));
 }
 
 /**
@@ -142,13 +123,21 @@ function handleSpeedButton(button) {
     const handleError = () => setDeviceLoading(deviceId, false);
     const handleSuccess = () => refreshStatus();
 
-    // Set speed (and turn on motor if it's off)
-    Promise.all([
-        setDrive(deviceId, 1),
-        setFanSpeed(deviceId, speed)
-    ])
-        .then(handleSuccess)
-        .catch(handleError);
+    // Off button: turn off motor
+    if (speed === 0) {
+        setDrive(deviceId, 0)
+            .then(handleSuccess)
+            .catch(handleError);
+    }
+    // Speed buttons: set speed (and turn on motor if it's off)
+    else {
+        Promise.all([
+            setDrive(deviceId, 1),
+            setFanSpeed(deviceId, speed)
+        ])
+            .then(handleSuccess)
+            .catch(handleError);
+    }
 }
 
 /**
@@ -164,21 +153,8 @@ function formatTemperature(tempC) {
 }
 
 /**
- * Update drive toggle state based on device status.
- * @param {number} deviceId - Device ID
- * @param {Object} device - Device data
- */
-function updateDriveToggle(deviceId, device) {
-    const toggle = document.querySelector(`input.drive-toggle[data-device-id="${deviceId}"]`);
-    const isOn = device.drive === 'On' || device.drive === 1;
-
-    if (toggle) {
-        toggle.checked = isOn;
-    }
-}
-
-/**
  * Update button active state based on device status.
+ * Off button is active when drive is off.
  * Speed buttons are active when drive is on AND that speed is set.
  * Auto button is active when speed is -1 (regardless of drive state, as Auto can be set when off).
  * @param {HTMLElement} button - Button element
@@ -190,8 +166,12 @@ function updateButtonActiveState(button, device) {
     const isOff = device.drive === 'Off' || device.drive === 0;
     const currentSpeed = parseInt(device.fan_speed || device.speed || 0);
 
+    // Off button: active when drive is off
+    if (buttonSpeed === 0 && isOff) {
+        button.classList.add('active');
+    }
     // Auto button: active when speed is -1 (can be set even when motor is off)
-    if (buttonSpeed === FAN_SPEED_AUTO && currentSpeed === FAN_SPEED_AUTO) {
+    else if (buttonSpeed === FAN_SPEED_AUTO && currentSpeed === FAN_SPEED_AUTO) {
         button.classList.add('active');
     }
     // Speed button: active when drive is on AND this speed is set
@@ -233,9 +213,6 @@ function updateDeviceStatus(devices) {
             tempEl.setAttribute('data-temp-c', tempC);
             tempEl.textContent = formatTemperature(tempC);
         }
-
-        // Update drive toggle state
-        updateDriveToggle(deviceId, device);
 
         // Update button active states
         const buttons = document.querySelectorAll(`button.speed-btn[data-device-id="${deviceId}"]`);
@@ -312,11 +289,6 @@ function setupTemperatureToggle() {
  * Initialize room dashboard functionality.
  */
 function setupRoomDashboard() {
-    // Set up drive toggle switches
-    document.querySelectorAll('input.drive-toggle').forEach(toggle => {
-        toggle.addEventListener('change', () => handleDriveToggle(toggle));
-    });
-
     // Set up speed control buttons
     document.querySelectorAll('button.speed-btn[data-device-id][data-speed]').forEach(button => {
         button.addEventListener('click', () => handleSpeedButton(button));
