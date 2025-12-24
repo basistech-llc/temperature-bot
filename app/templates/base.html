@@ -17,6 +17,7 @@
   <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
 <!--   <script src="https://code.jquery.com/jquery-3.3.1.slim.min.js" integrity="sha384-q8i/X+965DzO0rT7abK41JStQIAqVgRVzpbzo5smXKp4YfRvH+8abtTE1Pi6jizo" crossorigin="anonymous"></script> -->
   <script src="/static/temperature_utils.js"></script>
+  <script src="/static/rooms_menu.js"></script>
 
   {% block head %}
   {% endblock %}
@@ -41,11 +42,15 @@
       <li class="pure-menu-item{% if current_page == 'alerts' %} pure-menu-selected{% endif %}">
         <a href="/alerts" class="pure-menu-link">Alerts</a>
       </li>
-      <li class="pure-menu-item{% if current_page == 'buttons' %} pure-menu-selected{% endif %}">
-        <a href="/buttons" class="pure-menu-link">Buttons</a>
-      </li>
       <li class="pure-menu-item{% if current_page == 'rules' %} pure-menu-selected{% endif %}">
         <a href="/rules" class="pure-menu-link">Rules</a>
+      </li>
+      <li class="pure-menu-item">
+        <a href="#" id="rooms-menu-link" class="pure-menu-link">Rooms</a>
+        <div id="rooms-popup" class="github-popup">
+          <a href="/kitchen">Kitchen</a>
+          <a href="/studio">Studio</a>
+        </div>
       </li>
       <li class="pure-menu-item{% if current_page == 'about' %} pure-menu-selected{% endif %}">
         <a href="/about" class="pure-menu-link">About</a>

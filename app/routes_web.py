@@ -145,15 +145,6 @@ def create_web_routes(app):
         """Terms page - redirects to About"""
         return redirect(url_for("about"))
 
-    @app.route("/buttons")
-    def buttons():
-        """Buttons page - links to room dashboards"""
-        rooms = [
-            {"name": name.capitalize(), "url": config.get("url", "")}
-            for name, config in room_config.ROOM_CONFIGS.items()
-        ]
-        return render_template("buttons.html", current_page="buttons", rooms=rooms)
-
     @app.route("/version")
     def get_version():
         """Version page"""

@@ -326,6 +326,35 @@ body {
 {% endblock %}
 
 {% block body %}
+<a href="/" class="pure-button pure-button-primary" id="main-link" style="margin-bottom: 1em;">&larr; Main</a>
+<script>
+  // Use browser history to go back, but only if previous page is from same site
+  document.addEventListener('DOMContentLoaded', function() {
+    const mainLink = document.getElementById('main-link');
+    if (mainLink) {
+      mainLink.addEventListener('click', function(e) {
+        // Check if referrer exists and is from the same origin
+        const referrer = document.referrer;
+        if (referrer) {
+          try {
+            const referrerUrl = new URL(referrer);
+            const currentUrl = new URL(window.location.href);
+            // Only use history.back() if referrer is from same origin
+            if (referrerUrl.origin === currentUrl.origin) {
+              e.preventDefault();
+              window.history.back();
+            }
+            // Otherwise, let the default href="/" behavior work
+          } catch (err) {
+            // If URL parsing fails, fall back to default behavior
+          }
+        }
+        // If no referrer, let the default href="/" behavior work
+      });
+    }
+  });
+</script>
+
 {% if notes %}
 <div class="notes-banner">{{ notes }}</div>
 {% endif %}
