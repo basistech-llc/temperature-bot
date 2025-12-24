@@ -1,5 +1,5 @@
 """
-Configuration for room dashboards (kitchen/studio).
+Configuration for room dashboards (kitchen/hickory).
 
 Each room specifies which ERVs, fans, and sensors to display.
 All device names must match exactly with names in the database or Hubitat.
@@ -24,8 +24,8 @@ ROOM_CONFIGS: Dict[str, RoomConfig] = {
             "Broadway Sensor South on Somerville Broadway",
         ],
     },
-    "studio": {
-        "url": "/studio",
+    "hickory": {
+        "url": "/hickory",
         "ervs": ["ERV Restrooms"],
         "fans": ["Area 51", "Dungeon"],
         "sensors": [

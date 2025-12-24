@@ -254,11 +254,11 @@ def create_web_routes(app):
         """Kitchen HVAC control dashboard."""
         return _render_room_dashboard_with_data(conn, "Kitchen")
 
-    @app.route("/studio")
+    @app.route("/hickory")
     @with_db_connection
-    def studio_dashboard(conn):
-        """Studio HVAC control dashboard."""
-        return _render_room_dashboard_with_data(conn, "Studio")
+    def hickory_dashboard(conn):
+        """Hickory HVAC control dashboard."""
+        return _render_room_dashboard_with_data(conn, "Hickory")
 
     def _filter_speed_control_devices(devices, device_names):
         """Filter devices with speed control matching given names."""
