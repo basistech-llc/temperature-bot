@@ -125,8 +125,29 @@ function updateAllTemperatureDisplays() {
     }
   });
 
+  // Update main page temperature cells (temp-{device_id})
+  const tempCells = document.querySelectorAll('[id^="temp-"]');
+  tempCells.forEach((element) => {
+    // Get original Celsius value from data attribute
+    const tempC = parseFloat(element.getAttribute("data-temp-c"));
+    if (!isNaN(tempC)) {
+      // Extract age if present from current HTML
+      const currentHTML = element.innerHTML;
+      const ageMatch = currentHTML.match(/<span class=['"]age['"]>\(([^)]+)\)<\/span>/);
+      const age = ageMatch ? ageMatch[1] : null;
+      // Update with new format using stored Celsius value
+      element.innerHTML = formatTemperature(tempC) + (age ? ` <span class='age'>(${age})</span> ` : "");
+    }
+  });
+
   // Update weather displays
-  // This will be handled by the weather refresh cycle
+  // Re-render weather if it's available
+  if (typeof window.getCurrentWeatherData === "function") {
+    const weatherData = window.getCurrentWeatherData();
+    if (weatherData && typeof window.displayWeather === "function") {
+      window.displayWeather(weatherData);
+    }
+  }
 }
 
 /**
@@ -149,10 +170,9 @@ function initializeTemperatureUtils() {
         updateTempChart();
       }
 
-      // Trigger main dashboard refresh if unit_speed.js is loaded
-      if (typeof window.refreshGridRows === "function") {
-        window.refreshGridRows();
-      }
+      // Immediately update all temperature displays (no API call needed)
+      // The main dashboard temperatures will be updated on next refresh cycle
+      // but we've already updated the display above
     });
   } else {
     console.warn("Temperature toggle element not found - toggle functionality disabled");

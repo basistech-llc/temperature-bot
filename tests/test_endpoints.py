@@ -11,7 +11,7 @@ from unittest.mock import patch
 
 import pytest
 from conftest import flask_test_client, skip_on_github  # noqa: F401  # pylint: disable=unused-import
-from helpers.data_factories import DeviceTestData, AlertTestData
+from helpers.data_factories import DeviceTestData
 from helpers.mock_helpers import MockHelper
 
 from app import ae200
@@ -353,3 +353,128 @@ def test_alerts_history_endpoint_limit(
     assert response.status_code == 200
     alerts = response.json
     assert len(alerts) == 3
+
+
+def test_update_note_endpoint(flask_test_client, test_database_conn_with_test_data):  # noqa: F811
+    """Test the /api/v1/update_note endpoint"""
+    conn = test_database_conn_with_test_data[0]
+    device_id = test_database_conn_with_test_data[1]
+
+    # Update note
+    response = flask_test_client.post(
+        "/api/v1/update_note",
+        json={"device_id": device_id, "notes": "Test note"},
+    )
+    assert response.status_code == 200
+    response_json = response.json
+    assert response_json["status"] == "ok"
+    assert response_json["device_id"] == device_id
+
+    # Verify note was saved
+    cursor = conn.cursor()
+    cursor.execute("SELECT notes FROM devices WHERE device_id = ?", (device_id,))
+    row = cursor.fetchone()
+    assert row["notes"] == "Test note"
+
+    # Clear note
+    response = flask_test_client.post(
+        "/api/v1/update_note",
+        json={"device_id": device_id, "notes": None},
+    )
+    assert response.status_code == 200
+
+    # Verify note was cleared
+    cursor.execute("SELECT notes FROM devices WHERE device_id = ?", (device_id,))
+    row = cursor.fetchone()
+    assert row["notes"] is None
+
+
+def test_debug_db_devices_endpoint(flask_test_client, test_database_conn_with_test_data):  # noqa: F811
+    """Test the /api/v1/debug/db_devices endpoint"""
+    conn = test_database_conn_with_test_data[0]
+    device_id = test_database_conn_with_test_data[1]
+
+    # Add a device name
+    cursor = conn.cursor()
+    cursor.execute(
+        "UPDATE devices SET device_name = ? WHERE device_id = ?",
+        ("Test Device Name", device_id),
+    )
+    conn.commit()
+
+    response = flask_test_client.get("/api/v1/debug/db_devices")
+    assert response.status_code == 200
+    response_json = response.json
+    assert "names" in response_json
+    assert "data" in response_json
+    assert isinstance(response_json["names"], list)
+    assert isinstance(response_json["data"], list)
+    assert len(response_json["names"]) > 0
+    assert len(response_json["data"]) > 0
+
+
+@patch("app.routes_api.hubitat.get_all_devices")
+def test_debug_hubitat_devices_endpoint(mock_get_all_devices, flask_test_client):  # noqa: F811
+    """Test the /api/v1/debug/hubitat_devices endpoint"""
+    # Mock Hubitat devices
+    mock_get_all_devices.return_value = [
+        {"name": "Test Hubitat Device", "id": 1, "capabilities": ["TemperatureMeasurement"]}
+    ]
+
+    response = flask_test_client.get("/api/v1/debug/hubitat_devices")
+    assert response.status_code == 200
+    response_json = response.json
+    assert "names" in response_json
+    assert "data" in response_json
+    assert isinstance(response_json["names"], list)
+    assert isinstance(response_json["data"], list)
+    assert "Test Hubitat Device" in response_json["names"]
+
+
+@patch("app.routes_api.hubitat.get_all_devices")
+def test_debug_hubitat_devices_endpoint_error(mock_get_all_devices, flask_test_client):  # noqa: F811
+    """Test the /api/v1/debug/hubitat_devices endpoint handles errors"""
+    # Mock error - use RuntimeError which is caught by the handler
+    mock_get_all_devices.side_effect = RuntimeError("Hubitat connection error")
+
+    response = flask_test_client.get("/api/v1/debug/hubitat_devices")
+    assert response.status_code == 500
+    response_json = response.json
+    assert "error" in response_json
+
+
+@patch("app.routes_api.ae200.runner.run_async_safely")
+@patch("app.routes_api.ae200.get_devices")
+def test_debug_ae200_devices_endpoint(
+    mock_get_devices, mock_run_async, flask_test_client
+):  # noqa: F811
+    """Test the /api/v1/debug/ae200_devices endpoint"""
+    # Mock AE-200 devices
+    mock_get_devices.return_value = [
+        {"name": "Test AE200 Device", "id": "10"}
+    ]
+    # Mock the async runner to return the details directly
+    mock_run_async.return_value = {"10": {"Drive": "ON", "FanSpeed": "LOW"}}
+
+    response = flask_test_client.get("/api/v1/debug/ae200_devices")
+    assert response.status_code == 200
+    response_json = response.json
+    assert "names" in response_json
+    assert "devices" in response_json
+    assert "details" in response_json
+    assert isinstance(response_json["names"], list)
+    assert isinstance(response_json["devices"], list)
+    assert isinstance(response_json["details"], dict)
+    assert "Test AE200 Device" in response_json["names"]
+
+
+@patch("app.routes_api.ae200.get_devices")
+def test_debug_ae200_devices_endpoint_error(mock_get_devices, flask_test_client):  # noqa: F811
+    """Test the /api/v1/debug/ae200_devices endpoint handles errors"""
+    # Mock error - use RuntimeError which is caught by the handler
+    mock_get_devices.side_effect = RuntimeError("AE200 connection error")
+
+    response = flask_test_client.get("/api/v1/debug/ae200_devices")
+    assert response.status_code == 500
+    response_json = response.json
+    assert "error" in response_json

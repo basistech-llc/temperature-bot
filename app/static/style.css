@@ -32,26 +32,31 @@ body {
      padding-left: 50px;
 }
 
-/* Temperature unit toggle */
+/* Temperature unit toggle - consistent styling everywhere */
 .temperature-toggle {
     display: flex;
     align-items: center;
-    gap: 4px;
-    padding: 1px 4px;
-    background-color: #f5f5f5;
-    border: 1px solid #ddd;
-    border-radius: 12px;
-    font-size: 10px;
-    height: 24px;
+    justify-content: center;
+    gap: 6px;
+    padding: 4px 8px;
+    background-color: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 16px;
+    font-size: 11px;
+    height: 26px;
+    min-width: 85px;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
 }
 
 .temp-unit-label {
     font-weight: 500;
-    color: #666;
-    min-width: 16px;
+    color: #6c757d;
+    min-width: 18px;
     text-align: center;
-    transition: color 0.2s ease;
-    line-height: 1;
+    transition: color 0.2s ease, font-weight 0.2s ease;
+    line-height: 1.2;
+    font-size: 11px;
+    user-select: none;
 }
 
 .temp-unit-label.active {
@@ -62,35 +67,37 @@ body {
 .toggle-switch {
     position: relative;
     display: inline-block;
+    flex-shrink: 0;
 }
 
 .toggle-input {
     opacity: 0;
     width: 0;
     height: 0;
+    position: absolute;
 }
 
 .toggle-label {
     display: block;
-    width: 28px;
-    height: 14px;
-    background-color: #ccc;
-    border-radius: 14px;
+    width: 32px;
+    height: 18px;
+    background-color: #ced4da;
+    border-radius: 18px;
     position: relative;
     cursor: pointer;
-    transition: background-color 0.2s ease;
+    transition: background-color 0.3s ease;
 }
 
 .toggle-slider {
     position: absolute;
-    top: 1px;
-    left: 1px;
-    width: 12px;
-    height: 12px;
+    top: 2px;
+    left: 2px;
+    width: 14px;
+    height: 14px;
     background-color: white;
     border-radius: 50%;
-    transition: transform 0.2s ease;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+    transition: transform 0.3s ease;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
 }
 
 .toggle-input:checked + .toggle-label {
@@ -99,6 +106,14 @@ body {
 
 .toggle-input:checked + .toggle-label .toggle-slider {
     transform: translateX(14px);
+}
+
+.toggle-label:hover {
+    background-color: #adb5bd;
+}
+
+.toggle-input:checked + .toggle-label:hover {
+    background-color: #0056b3;
 }
 
 /* main grid */
@@ -139,6 +154,10 @@ button {
 
 .column-temp {
     min-width: 80px;
+}
+
+.cell-temp {
+    color: #000; /* Default black for fresh temperatures */
 }
 
 /* Make a minimum width of 150 if the text is not empty */
@@ -256,6 +275,10 @@ td.cell-notes:not(:empty) {
 
 .age {
     color: #aaa;
+}
+
+.temp-stale {
+    color: #999;
 }
 
 .weather-icon {
@@ -377,6 +400,16 @@ table.rules-table th  {
 }
 
 .column-speed {
+    text-align: center;
+}
+
+/* Pale red shading for Off column cells */
+td.cell-speed-off {
+    background-color: #ffe0e0;
+}
+
+/* Center buttons in auto column */
+.cell-speed-auto {
     text-align: center;
 }
 
@@ -551,6 +584,12 @@ table.rules-table th  {
     position: relative;
 }
 
+/* Ensure temperature toggle menu item is properly aligned */
+li.pure-menu-item > .temperature-toggle {
+    display: inline-flex;
+    vertical-align: middle;
+}
+
 .github-popup {
     display: none;
     position: absolute;
@@ -581,6 +620,12 @@ table.rules-table th  {
     background-color: #f0f0f0;
 }
 
+.github-popup a.pure-menu-selected {
+    background-color: #e6f3ff;
+    color: #0078e7;
+    font-weight: 600;
+}
+
 /* Active/Selected menu item styling */
 .pure-menu-selected {
     background-color: #e6f3ff !important;
@@ -590,6 +635,11 @@ table.rules-table th  {
 .pure-menu-selected .pure-menu-link {
     color: #0078e7 !important;
     font-weight: 600;
+}
+
+/* Override Pure.css uppercase transformation for menu heading */
+.pure-menu-heading {
+    text-transform: none !important;
 }
 
 .pure-menu-heading.pure-menu-selected {
@@ -636,4 +686,10 @@ table.rules-table th  {
     border: 1px solid #ddd;
     border-radius: 4px;
     overflow-x: auto;
+}
+
+.loading-indicator {
+    padding: 1em;
+    color: #666;
+    font-style: italic;
 }

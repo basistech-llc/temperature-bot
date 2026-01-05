@@ -9,13 +9,13 @@ const RUNNING_MINUTES = 10; // minutes to run before stopping
 const SHOW_REFRESH_COUNTDOWN = false;
 let lastRefreshTime = 0;
 
-const LOG_DAYS = 5;
-const SECONDS_PER_DAY = 60 * 60 * 24;
-
 // Refresh logic
 var start = Date.now();
 var forceRefresh = false;
 const FAN_SPEEDS = [-1, 0, 1, 2, 3, 4];
+
+// Store weather data globally so it can be re-rendered when unit changes
+let currentWeatherData = null;
 
 ////////////////////////////////////////////////////////////////
 // Weather display functions
@@ -36,9 +36,9 @@ function displayWeather(weatherInfo) {
   // Add weather content
   if (weatherInfo.current) {
     const current = weatherInfo.current;
-        const temp = current.temperature
-          ? `${TemperatureUtils.formatTemperature(current.temperature)} (Boston Logan Airport)`
-          : "N/A";
+    const temp = current.temperature
+      ? `${TemperatureUtils.formatTemperature(current.temperature)} (Boston Logan Airport)`
+      : "N/A";
     html += `<div><strong>Current:</strong> ${temp} `;
     if (current.icon) {
       html += ` <img src="${current.icon}" alt="weather icon" class="weather-icon">`;
@@ -50,12 +50,12 @@ function displayWeather(weatherInfo) {
   // Forecast
   if (weatherInfo.forecast && weatherInfo.forecast.length > 0) {
     html += `<div><strong>Forecast for CALA:</strong></div>`;
-        weatherInfo.forecast.forEach((period) => {
-          // Convert forecast temp from Fahrenheit to Celsius first, then apply unit preference
-          const tempF = parseFloat(period.temperature);
-          const tempC = TemperatureUtils.fahrenheitToCelsius(tempF);
-          const formattedTemp = TemperatureUtils.formatTemperature(tempC);
-          html += `<div>${period.time} ${formattedTemp} `;
+    weatherInfo.forecast.forEach((period) => {
+      // Convert forecast temp from Fahrenheit to Celsius first, then apply unit preference
+      const tempF = parseFloat(period.temperature);
+      const tempC = TemperatureUtils.fahrenheitToCelsius(tempF);
+      const formattedTemp = TemperatureUtils.formatTemperature(tempC);
+      html += `<div>${period.time} ${formattedTemp} `;
       if (period.icon) {
         html += ` <img src="${period.icon}" alt="weather icon" class="weather-icon">`;
       }
@@ -64,73 +64,8 @@ function displayWeather(weatherInfo) {
     console.log("Added forecast to HTML");
   }
   weatherDiv.innerHTML = html;
-}
-
-////////////////////////////////////////////////////////////////
-// Log tables
-function getTodayUnixRange() {
-  const now = new Date();
-  const start_today = new Date(
-    now.getFullYear(),
-    now.getMonth(),
-    now.getDate(),
-  );
-  const start = new Date(
-    start_today.getTime() - (LOG_DAYS - 1) * SECONDS_PER_DAY * 1000,
-  );
-  const end = new Date(start_today.getTime() + 86400000); // midnight next day
-  return {
-    start: Math.floor(start.getTime() / 1000),
-    end: Math.floor(end.getTime() / 1000),
-  };
-}
-
-let logTable;
-function createLogTable() {
-  const { start, end } = getTodayUnixRange();
-  console.log("start=", start, "end=", end);
-
-  logTable = new Tabulator("#log-table", {
-    layout: "fitColumns",
-    height: "400px",
-    ajaxURL: `/api/v1/logs?start=${start}&end=${end}`,
-    ajaxResponse: function (url, params, response) {
-      return response.data; // Tabulator expects an array of row objects
-    },
-    columns: [
-      {
-        title: "Time",
-        field: "logtime",
-        sorter: "number",
-        formatter: function (cell) {
-          const ts = cell.getValue() * 1000;
-          return new Intl.DateTimeFormat(undefined, {
-            year: "numeric",
-            month: "short",
-            day: "numeric",
-            hour: "2-digit",
-            minute: "2-digit",
-            hour12: false,
-            timeZoneName: "short",
-          }).format(new Date(ts));
-        },
-        widthGrow: 2,
-      },
-      { title: "IP Address", field: "ipaddr", widthGrow: 2 },
-      { title: "Unit", field: "unit", hozAlign: "center" },
-      { title: "Speed", field: "new_value", hozAlign: "center" },
-      { title: "Agent", field: "agent", widthGrow: 2 },
-      { title: "Comment", field: "comment", widthGrow: 3 },
-    ],
-    placeholder: "No logs found for today.",
-    pagination: "local",
-    paginationSize: 10,
-  });
-}
-
-function refreshLogTable() {
-  const { start, end } = getTodayUnixRange();
-  logTable.setData(`/api/v1/logs?start=${start}&end=${end}`);
+  // Store weather data for later re-rendering
+  currentWeatherData = weatherInfo;
 }
 
 ////////////////////////////////////////////////////////////////
@@ -211,17 +146,7 @@ async function updateNote(deviceId, notes) {
 
 // Handle all user events
 function setupMatrixListenerss() {
-  // Add event listeners for fan sliders
-  const driveSwitches = document.querySelectorAll(
-    'input[type="checkbox"][x-drive]',
-  );
-  driveSwitches.forEach((ds) => {
-    ds.addEventListener("change", function () {
-      const deviceId = parseInt(this.getAttribute("x-data-device-id"));
-      setDrive(deviceId, this.checked ? 1 : 0);
-    });
-  });
-  // Add event listeners for radio buttons
+  // Add event listeners for radio buttons (including Off button)
   const radioButtons = document.querySelectorAll(
     'input[type="radio"][x-data-device-id]',
   );
@@ -229,7 +154,20 @@ function setupMatrixListenerss() {
     radio.addEventListener("change", function () {
       const deviceId = parseInt(this.getAttribute("x-data-device-id"));
       const fan_speed = parseInt(this.getAttribute("x-data-fan_speed"));
-      setFanSpeed(deviceId, fan_speed);
+
+      // Off button (0): turn off drive
+      if (fan_speed === 0) {
+        setDrive(deviceId, 0);
+      }
+      // Speed buttons: turn on drive AND set speed
+      else {
+        Promise.all([
+          setDrive(deviceId, 1),
+          setFanSpeed(deviceId, fan_speed),
+        ]).catch((error) => {
+          console.error("Error setting drive and speed:", error);
+        });
+      }
     });
   });
 
@@ -330,7 +268,6 @@ const refreshGridRows = () => {
 
   // If it's time to refresh, run the status api and update all of the temps, fan_speeds, and status columsn
   if (secondsUntilRefresh <= 0) {
-    refreshLogTable();
     const formData = new FormData();
     fetch(window.location.href + "api/v1/status", { method: "GET" })
       .then((response) => response.json())
@@ -344,37 +281,64 @@ const refreshGridRows = () => {
           for (const dev of data.devices) {
             if (dev.temp10x) {
               const cell = document.getElementById(`temp-${dev.device_id}`);
-              var myformat = Intl.NumberFormat("en-US", {
-                minimumIntegerDigits: 2,
-                minimumFractionDigits: 1,
-              });
-              cell.innerHTML =
-                TemperatureUtils.formatTemperature(dev.temp10x / 10) +
-                (dev.age ? ` <span class='age'>(${dev.age})</span> ` : "");
+              const tempC = dev.temp10x / 10;
+              // Store original Celsius value in data attribute for instant conversion
+              cell.setAttribute("data-temp-c", tempC.toString());
+
+              // Calculate if temperature is stale (>= 5 minutes = 300 seconds)
+              const now = Math.floor(Date.now() / 1000);
+              const lastUpdate = (dev.logtime || 0) + (dev.duration || 0);
+              const ageSeconds = now - lastUpdate;
+              const isStale = ageSeconds >= 300; // 5 minutes
+
+              // Set title attribute for hover tooltip
+              if (dev.age) {
+                cell.setAttribute("title", `Last updated: ${dev.age} ago`);
+              }
+
+              // Apply color class based on staleness
+              cell.classList.remove("temp-stale");
+              if (isStale) {
+                cell.classList.add("temp-stale");
+              }
+
+              // Display temperature without age
+              cell.innerHTML = TemperatureUtils.formatTemperature(tempC);
             }
-            if (dev.drive) {
-              const slider = document.getElementById(
-                `fan_drive-${dev.device_id}`,
+            // Update radio button selection based on drive and speed state
+            const isOff = dev.drive === "Off" || dev.drive === 0 || !dev.drive;
+            const currentSpeed = dev.fan_speed || dev.speed;
+            const speedValue =
+              currentSpeed != null ? parseInt(currentSpeed) : null;
+
+            // Auto button (-1) can be active even when drive is off
+            if (speedValue === -1) {
+              const autoRadio = document.getElementById(
+                `radio-${dev.device_id}-auto`,
               );
-              if (slider) {
-                slider.checked = dev.drive ? true : false;
-              } else {
-                console.warn(
-                  `Drive slider not found for fan_drive${dev.device_ide} dev=`,
-                  dev,
-                );
+              if (autoRadio) {
+                autoRadio.checked = true;
               }
             }
-            if (dev.fan_speed) {
+            // If drive is off and not auto, select the "Off" button (value 0)
+            else if (isOff) {
+              const offRadio = document.getElementById(
+                `radio-${dev.device_id}-0`,
+              );
+              if (offRadio) {
+                offRadio.checked = true;
+              }
+            }
+            // If drive is on, select the appropriate speed button
+            else if (speedValue != null) {
               const radio = document.getElementById(
-                `radio-${dev.device_id}-${dev.fan_speed}`,
+                `radio-${dev.device_id}-${speedValue}`,
               );
               if (radio) {
                 radio.checked = true;
               } else {
                 console.warn(
-                  `Radio button not found for radio-${dev.device_id}-${dev.fan_speed} dev=`,
-                  dev,
+                  `Radio button not found for radio-${dev.device_id}-${speedValue}, device_id=${dev.device_id}, speed=${speedValue}`,
                 );
               }
             }
@@ -462,7 +426,7 @@ function updateRulesDisabledBadge(dev) {
     const dt = new Date(dev.disabled_until * 1000);
     const now = Math.floor(Date.now() / 1000);
     const hoursRemaining = Math.ceil((dev.disabled_until - now) / 3600);
-    const tooltipText = `Rules disabled until ${asctime(dt)} (${hoursRemaining} hour${hoursRemaining !== 1 ? 's' : ''})`;
+    const tooltipText = `Rules disabled until ${asctime(dt)} (${hoursRemaining} hour${hoursRemaining !== 1 ? "s" : ""})`;
     badge.textContent = "rules disabled";
     badge.setAttribute("title", tooltipText);
     badge.style.display = "inline";
@@ -471,10 +435,11 @@ function updateRulesDisabledBadge(dev) {
   }
 }
 
-// Make refreshGridRows available globally for temperature unit changes
+// Make refreshGridRows and displayWeather available globally for temperature unit changes
 window.refreshGridRows = refreshGridRows;
+window.displayWeather = displayWeather;
+window.getCurrentWeatherData = function() { return currentWeatherData; };
 
-createLogTable();
 window.addEventListener("DOMContentLoaded", function () {
   setupMatrixListenerss();
   loadWeatherAndStartRefresh();

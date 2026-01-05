@@ -6,8 +6,9 @@ import json
 import time
 import logging
 
-from app import db
 from helpers.data_factories import AlertTestData
+
+from app import db
 
 logger = logging.getLogger(__name__)
 
@@ -97,7 +98,7 @@ def test_get_active_alerts_with_details(test_database_conn):
     alert_time = now - 300
 
     # Create device with alert using helper
-    device_id = AlertTestData.create_device_with_alert(
+    AlertTestData.create_device_with_alert(
         conn,
         "Device 1",
         "ErrorSign",
@@ -128,7 +129,7 @@ def test_get_alert_history_with_details(test_database_conn):
     alert_start = now - 1000
 
     # Create device with resolved alert using helper
-    device_id = AlertTestData.create_device_with_alert(
+    AlertTestData.create_device_with_alert(
         conn,
         "Device 1",
         "ErrorSign",
