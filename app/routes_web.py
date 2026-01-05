@@ -96,6 +96,11 @@ def create_web_routes(app):
         """Logs page"""
         return render_template("logs.html", current_page="logs")
 
+    @app.route("/logs_today")
+    def logs_today():
+        """Today's Log page"""
+        return render_template("logs_today.html", current_page="logs_today")
+
     @app.route("/device_log/<device_id>")
     @with_db_connection
     def device_log(conn, device_id):
