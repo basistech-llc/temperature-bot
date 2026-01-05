@@ -163,94 +163,13 @@ def create_web_routes(app):
             hide_nav=True,  # Hide navigation menu
         )
 
-    @app.route("/dbg/all_devices")
-    @with_db_connection
-    def debug_all_devices(conn):
+    @app.route("/all_devices")
+    def debug_all_devices():
         """Debug endpoint to show all devices from database and Hubitat"""
-        # Fetch all devices from database (like chart page shows)
-        all_devices_names_json = None
-        all_devices_json = None
-        try:
-            device_data = db.get_device_status(conn)
-            # Extract just the names into a simple array
-            device_names = [dev.get("device_name", "Unknown") for dev in device_data]
-            all_devices_names_json = json.dumps(device_names, indent=2)
-            # Format full data as JSON string for display
-            all_devices_json = json.dumps(device_data, indent=2, default=str)
-        except Exception as e:
-            logger.warning("Failed to fetch all devices: %s", e)
-            all_devices_names_json = json.dumps({"error": str(e)}, indent=2)
-            all_devices_json = json.dumps({"error": str(e)}, indent=2)
-
-        # Fetch Hubitat devices for testing
-        hubitat_devices = None
-        hubitat_names_json = None
-        hubitat_json = None
-        try:
-            hubitat_devices = hubitat.get_all_devices()
-            # Extract just the names into a simple array
-            device_names = [dev.get("name", "Unknown") for dev in hubitat_devices]
-            hubitat_names_json = json.dumps(device_names, indent=2)
-            # Format full data as JSON string for display
-            hubitat_json = json.dumps(hubitat_devices, indent=2)
-        except Exception as e:
-            logger.warning("Failed to fetch Hubitat devices: %s", e)
-            hubitat_names_json = json.dumps({"error": str(e)}, indent=2)
-            hubitat_json = json.dumps({"error": str(e)}, indent=2)
-
-        # Fetch Mitsubishi AE-200 devices and details
-        ae200_names_json = None
-        ae200_json = None
-        ae200_device_info_json = None
-        try:
-            ae200_devices = ae200.get_devices()
-            # Extract just the names into a simple array
-            ae200_device_names = [dev.get("name", "Unknown") for dev in ae200_devices]
-            ae200_names_json = json.dumps(ae200_device_names, indent=2)
-            # Raw list from AE-200 (id + name)
-            ae200_json = json.dumps(ae200_devices, indent=2)
-
-            # Per-device status direct from AE-200, fetched concurrently
-            async def _fetch_ae200_details_async(devices):
-                ae200_details: dict[str, dict] = {}
-                tasks = []
-                ids: list[str] = []
-                for dev in devices:
-                    device_id = dev.get("id")
-                    if device_id is None:
-                        continue
-                    ids.append(str(device_id))
-                    tasks.append(ae200.get_device_info_async(device_id))
-                if not tasks:
-                    return ae200_details
-                results = await asyncio.gather(*tasks, return_exceptions=True)
-                for key, result in zip(ids, results):
-                    if isinstance(result, Exception):
-                        ae200_details[key] = {"error": str(result)}
-                    else:
-                        ae200_details[key] = result
-                return ae200_details
-
-            ae200_details = ae200.runner.run_async_safely(
-                _fetch_ae200_details_async(ae200_devices)
-            )
-            ae200_device_info_json = json.dumps(ae200_details, indent=2, default=str)
-        except Exception as e:
-            logger.warning("Failed to fetch AE-200 devices: %s", e)
-            ae200_names_json = json.dumps({"error": str(e)}, indent=2)
-            ae200_json = json.dumps({"error": str(e)}, indent=2)
-            ae200_device_info_json = json.dumps({"error": str(e)}, indent=2)
-
+        # Render page immediately, data will be loaded asynchronously
         return render_template(
             "debug_all_devices.html",
-            all_devices_names_json=all_devices_names_json,
-            all_devices_json=all_devices_json,
-            hubitat_names_json=hubitat_names_json,
-            hubitat_json=hubitat_json,
-            ae200_names_json=ae200_names_json,
-            ae200_json=ae200_json,
-            ae200_device_info_json=ae200_device_info_json,
-            hide_nav=True,
+            current_page="all_devices",
         )
 
     @app.route("/kitchen")

@@ -1,10 +1,10 @@
 {% extends 'base.html' %}
-{% block title %}Debug: All Devices{% endblock %}
+{% block title %}All Devices{% endblock %}
 
 {% block body %}
 <div class="pure-g">
   <div class="pure-u-1">
-    <h1>Debug: All Devices</h1>
+    <h1>All Devices</h1>
   </div>
 </div>
 
@@ -15,12 +15,14 @@
       <h3>Device Names</h3>
       <details open>
         <summary>Show / hide database device names</summary>
-        <pre class="debug-pre">{{ all_devices_names_json }}</pre>
+        <div id="db-names-loading" class="loading-indicator">Loading...</div>
+        <pre id="db-names-pre" class="debug-pre" style="display: none;"></pre>
       </details>
       <h3>Full Device Data</h3>
       <details>
         <summary>Show / hide full database device data</summary>
-        <pre class="debug-pre">{{ all_devices_json }}</pre>
+        <div id="db-data-loading" class="loading-indicator">Loading...</div>
+        <pre id="db-data-pre" class="debug-pre" style="display: none;"></pre>
       </details>
     </div>
   </div>
@@ -33,12 +35,14 @@
       <h3>Device Names</h3>
       <details open>
         <summary>Show / hide Hubitat device names</summary>
-        <pre class="debug-pre">{{ hubitat_names_json }}</pre>
+        <div id="hubitat-names-loading" class="loading-indicator">Loading...</div>
+        <pre id="hubitat-names-pre" class="debug-pre" style="display: none;"></pre>
       </details>
       <h3>Full Device Data</h3>
       <details>
         <summary>Show / hide full Hubitat device data</summary>
-        <pre class="debug-pre">{{ hubitat_json }}</pre>
+        <div id="hubitat-data-loading" class="loading-indicator">Loading...</div>
+        <pre id="hubitat-data-pre" class="debug-pre" style="display: none;"></pre>
       </details>
     </div>
   </div>
@@ -51,20 +55,98 @@
       <h3>Unit Names (from AE-200)</h3>
       <details open>
         <summary>Show / hide AE-200 unit names</summary>
-        <pre class="debug-pre">{{ ae200_names_json }}</pre>
+        <div id="ae200-names-loading" class="loading-indicator">Loading...</div>
+        <pre id="ae200-names-pre" class="debug-pre" style="display: none;"></pre>
       </details>
       <h3>Raw Unit List (id + name)</h3>
       <details>
         <summary>Show / hide raw AE-200 unit list</summary>
-        <pre class="debug-pre">{{ ae200_json }}</pre>
+        <div id="ae200-devices-loading" class="loading-indicator">Loading...</div>
+        <pre id="ae200-devices-pre" class="debug-pre" style="display: none;"></pre>
       </details>
       <h3>Per-Unit Status (from AE-200)</h3>
       <details>
         <summary>Show / hide AE-200 per-unit status</summary>
-        <pre class="debug-pre">{{ ae200_device_info_json }}</pre>
+        <div id="ae200-details-loading" class="loading-indicator">Loading...</div>
+        <pre id="ae200-details-pre" class="debug-pre" style="display: none;"></pre>
       </details>
     </div>
   </div>
 </section>
-{% endblock %}
 
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Load database devices
+    fetch('/api/v1/debug/db_devices')
+        .then(response => response.json())
+        .then(data => {
+            if (data.error) {
+                document.getElementById('db-names-loading').textContent = 'Error: ' + data.error;
+                document.getElementById('db-data-loading').textContent = 'Error: ' + data.error;
+            } else {
+                document.getElementById('db-names-loading').style.display = 'none';
+                document.getElementById('db-names-pre').textContent = JSON.stringify(data.names, null, 2);
+                document.getElementById('db-names-pre').style.display = 'block';
+
+                document.getElementById('db-data-loading').style.display = 'none';
+                document.getElementById('db-data-pre').textContent = JSON.stringify(data.data, null, 2);
+                document.getElementById('db-data-pre').style.display = 'block';
+            }
+        })
+        .catch(error => {
+            document.getElementById('db-names-loading').textContent = 'Error loading data: ' + error.message;
+            document.getElementById('db-data-loading').textContent = 'Error loading data: ' + error.message;
+        });
+
+    // Load Hubitat devices
+    fetch('/api/v1/debug/hubitat_devices')
+        .then(response => response.json())
+        .then(data => {
+            if (data.error) {
+                document.getElementById('hubitat-names-loading').textContent = 'Error: ' + data.error;
+                document.getElementById('hubitat-data-loading').textContent = 'Error: ' + data.error;
+            } else {
+                document.getElementById('hubitat-names-loading').style.display = 'none';
+                document.getElementById('hubitat-names-pre').textContent = JSON.stringify(data.names, null, 2);
+                document.getElementById('hubitat-names-pre').style.display = 'block';
+
+                document.getElementById('hubitat-data-loading').style.display = 'none';
+                document.getElementById('hubitat-data-pre').textContent = JSON.stringify(data.data, null, 2);
+                document.getElementById('hubitat-data-pre').style.display = 'block';
+            }
+        })
+        .catch(error => {
+            document.getElementById('hubitat-names-loading').textContent = 'Error loading data: ' + error.message;
+            document.getElementById('hubitat-data-loading').textContent = 'Error loading data: ' + error.message;
+        });
+
+    // Load AE-200 devices
+    fetch('/api/v1/debug/ae200_devices')
+        .then(response => response.json())
+        .then(data => {
+            if (data.error) {
+                document.getElementById('ae200-names-loading').textContent = 'Error: ' + data.error;
+                document.getElementById('ae200-devices-loading').textContent = 'Error: ' + data.error;
+                document.getElementById('ae200-details-loading').textContent = 'Error: ' + data.error;
+            } else {
+                document.getElementById('ae200-names-loading').style.display = 'none';
+                document.getElementById('ae200-names-pre').textContent = JSON.stringify(data.names, null, 2);
+                document.getElementById('ae200-names-pre').style.display = 'block';
+
+                document.getElementById('ae200-devices-loading').style.display = 'none';
+                document.getElementById('ae200-devices-pre').textContent = JSON.stringify(data.devices, null, 2);
+                document.getElementById('ae200-devices-pre').style.display = 'block';
+
+                document.getElementById('ae200-details-loading').style.display = 'none';
+                document.getElementById('ae200-details-pre').textContent = JSON.stringify(data.details, null, 2);
+                document.getElementById('ae200-details-pre').style.display = 'block';
+            }
+        })
+        .catch(error => {
+            document.getElementById('ae200-names-loading').textContent = 'Error loading data: ' + error.message;
+            document.getElementById('ae200-devices-loading').textContent = 'Error loading data: ' + error.message;
+            document.getElementById('ae200-details-loading').textContent = 'Error loading data: ' + error.message;
+        });
+});
+</script>
+{% endblock %}

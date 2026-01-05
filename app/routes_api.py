@@ -154,3 +154,77 @@ def update_note(conn, body: NoteControl):
     notes = body.notes if body.notes else None
     device_id = db.update_device_notes(conn, body.device_id, notes)
     return jsonify({"status": "ok", "device_id": device_id})
+
+
+@api_v1.route("/debug/db_devices")
+@with_db_connection
+def debug_db_devices(conn):
+    """Get all devices from database for debug page"""
+    import json
+
+    try:
+        device_data = db.get_device_status(conn)
+        device_names = [dev.get("device_name", "Unknown") for dev in device_data]
+        return jsonify({"names": device_names, "data": device_data})
+    except Exception as e:
+        logger.warning("Failed to fetch all devices: %s", e)
+        return jsonify({"error": str(e)}), 500
+
+
+@api_v1.route("/debug/hubitat_devices")
+def debug_hubitat_devices():
+    """Get all Hubitat devices for debug page"""
+    import json
+    from . import hubitat
+
+    try:
+        hubitat_devices = hubitat.get_all_devices()
+        device_names = [dev.get("name", "Unknown") for dev in hubitat_devices]
+        return jsonify({"names": device_names, "data": hubitat_devices})
+    except Exception as e:
+        logger.warning("Failed to fetch Hubitat devices: %s", e)
+        return jsonify({"error": str(e)}), 500
+
+
+@api_v1.route("/debug/ae200_devices")
+def debug_ae200_devices():
+    """Get all AE-200 devices for debug page"""
+    import json
+    import asyncio
+    from . import ae200
+
+    try:
+        ae200_devices = ae200.get_devices()
+        device_names = [dev.get("name", "Unknown") for dev in ae200_devices]
+
+        # Per-device status direct from AE-200, fetched concurrently
+        async def _fetch_ae200_details_async(devices):
+            ae200_details = {}
+            tasks = []
+            ids = []
+            for dev in devices:
+                device_id = dev.get("id")
+                if device_id is None:
+                    continue
+                ids.append(str(device_id))
+                tasks.append(ae200.get_device_info_async(device_id))
+            if not tasks:
+                return ae200_details
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            for key, result in zip(ids, results):
+                if isinstance(result, Exception):
+                    ae200_details[key] = {"error": str(result)}
+                else:
+                    ae200_details[key] = result
+            return ae200_details
+
+        ae200_details = ae200.runner.run_async_safely(
+            _fetch_ae200_details_async(ae200_devices)
+        )
+
+        return jsonify(
+            {"names": device_names, "devices": ae200_devices, "details": ae200_details}
+        )
+    except Exception as e:
+        logger.warning("Failed to fetch AE-200 devices: %s", e)
+        return jsonify({"error": str(e)}), 500

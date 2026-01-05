@@ -687,3 +687,9 @@ li.pure-menu-item > .temperature-toggle {
     border-radius: 4px;
     overflow-x: auto;
 }
+
+.loading-indicator {
+    padding: 1em;
+    color: #666;
+    font-style: italic;
+}
