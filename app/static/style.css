@@ -592,6 +592,11 @@ table.rules-table th  {
     font-weight: 600;
 }
 
+/* Override Pure.css uppercase transformation for menu heading */
+.pure-menu-heading {
+    text-transform: none !important;
+}
+
 .pure-menu-heading.pure-menu-selected {
     background-color: #e6f3ff !important;
     border-radius: 4px;
