@@ -20,9 +20,9 @@
         <!-- one form, two tables. Table #1 = devices that have fans. Table #2 = devices that do not have fans -->
         {% for table in [1, 2] %}
           {% if table == 1 %}
-            <h2> Fan drive and speed controls </h2>
+            <h2> Heating and Cooling </h2>
             {% else %}
-            <h2> Temperature Panel </h2>
+            <h2> Outside Air Exchange </h2>
           {% endif %}
             <table class="pure-table">
               <thead>
