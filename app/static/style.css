@@ -581,6 +581,12 @@ table.rules-table th  {
     background-color: #f0f0f0;
 }
 
+.github-popup a.pure-menu-selected {
+    background-color: #e6f3ff;
+    color: #0078e7;
+    font-weight: 600;
+}
+
 /* Active/Selected menu item styling */
 .pure-menu-selected {
     background-color: #e6f3ff !important;
