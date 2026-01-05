@@ -47,7 +47,7 @@
               </thead>
               <tbody>
                 {% for device in devices %}
-                {% if (device.has_speed_control and table==1) or (not device.has_speed_control and table==2) %}
+                {% if (device.has_speed_control and table==1) or (not device.has_speed_control and device.temp10x and table==2) %}
                 <tr class="device-row" x-data-device-id="{{ device.device_id }}">
                   <td class="cell-unit">
                     {{ device.device_name }}<span class="rules-disabled-superscript" id="rules-disabled-{{ device.device_id }}" style="display: none;" title=""></span>

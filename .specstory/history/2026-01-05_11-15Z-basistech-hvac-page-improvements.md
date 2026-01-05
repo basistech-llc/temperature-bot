@@ -798,3 +798,1335 @@ Renamed "Fan drive and speed controls" to "Heating and Cooling" in the main page
 
 ---
 
+_**User (2026-01-05 10:38Z)**_
+
+Rename "Temperature Panel" to "Outside Air Exchange"
+
+---
+
+_**Agent (model default, mode Agent)**_
+
+
+
+---
+
+
+Renaming "Temperature Panel" to "Outside Air Exchange" on the main page.
+
+
+---
+
+<tool-use data-tool-type="search" data-tool-name="grep">
+<details>
+<summary>Tool use: **grep** • Grep for "Temperature Panel" in "app" • 1 match</summary>
+
+Output mode: content
+
+
+| File | Content | Line |
+|------|------|------|
+| `app/templates/index.html` | `<h2> Temperature Panel </h2>` | L25 |
+
+
+</details>
+</tool-use>
+
+---
+
+
+
+---
+
+
+
+
+
+---
+
+<tool-use data-tool-type="write" data-tool-name="search_replace">
+
+<details><summary>Tool use: **search_replace** • Edit file: /Users/deg/Documents/basistech/temperature-bot/app/templates/index.html</summary>
+
+**Chunk 1**
+Lines added: 1, lines removed: 1
+
+```diff
+@@ -23,5 +23,5 @@
+              &lt;h2&gt; Heating and Cooling &lt;/h2&gt;
+              {% else %}
+-             &lt;h2&gt; Temperature Panel &lt;/h2&gt;
++             &lt;h2&gt; Outside Air Exchange &lt;/h2&gt;
+            {% endif %}
+              &lt;table class="pure-table"&gt;
+```
+
+</details>
+
+</tool-use>
+
+---
+
+<tool-use data-tool-type="generic" data-tool-name="read_lints">
+<details>
+          <summary>Tool use: **read_lints** • Read lints for 1 file</summary>
+      
+Lint paths:
+
+- `app/templates/index.html`
+
+Lint results
+
+
+**No lint errors found**
+</details>
+</tool-use>
+
+---
+
+
+
+---
+
+
+Renamed "Temperature Panel" to "Outside Air Exchange" on the main page. The change is in `index.html` and passes linting.
+
+---
+
+_**User (2026-01-05 10:38Z)**_
+
+In the Outside Air Exchange section, it looks like we are now including some devices that are not AQI.  Identify the problem (don't fix yet)
+
+---
+
+_**Agent (model default, mode Agent)**_
+
+
+
+---
+
+
+Examining the logic that determines which devices appear in the "Outside Air Exchange" section.
+
+
+---
+
+<tool-use data-tool-type="read" data-tool-name="read_file">
+<details><summary>Tool use: **read_file** • Read file: /Users/deg/Documents/basistech/temperature-bot/app/templates/index.html</summary>
+
+</details>
+</tool-use>
+
+---
+
+<tool-use data-tool-type="search" data-tool-name="codebase_search">
+<details>
+                <summary>Tool use: **codebase_search** • Searched codebase "What determines which devices should be in the Outside Air Exchange section versus Heating and Cooling section?" • **14** results</summary>
+            
+| File | Lines |
+|------|-------|
+| `app/room_config.py` | L39 |
+| `app/routes_web.py` | L19-334 |
+| `app/templates/index.html` | L27 |
+| `app/templates/index.html` | L44-75 |
+| `app/templates/room_dashboard.html` | L334-383 |
+| `bin/rules.py` | L43 |
+| `app/rules_engine.py` | L123-184 |
+| `app/ae200.py` | L117-227 |
+| `app/hubitat.py` | L20-43 |
+| `app/static/room_dashboard.js` | L162-224 |
+| `etc/schema.sql` | L41 |
+| `bin/runner.py` | L69 |
+| `doc/deg-progress-notes.md` | L40-79 |
+| `app/ae200.py` | L50-83 |
+
+</details>
+</tool-use>
+
+---
+
+<tool-use data-tool-type="search" data-tool-name="grep">
+<details>
+<summary>Tool use: **grep** • Grep for "has_speed_control|has_aqi|aqi|air_quality" in "app" • 122 matches</summary>
+
+Output mode: content
+
+
+| File | Content | Line |
+|------|------|------|
+| `app/templates/index.html` | `\{% if (device.has_speed_control and table==1) or (not device.has_speed_control and table==2) %\}` | L50 |
+| `app/templates/index.html` | `\{% if device.has_speed_control %\}` | L64 |
+| `app/templates/index.html` | `<div class="pure-u-1" id="aqi-weather">` | L100 |
+| `app/templates/index.html` | `<div id="aqi">` | L101 |
+| `app/templates/index.html` | `<div id="aqi-status">AQI <span id="aqi-value"></span> <span id="aqi-name"></span></div>` | L102 |
+| `app/routes_web.py` | `AQI_LIST = [0, 51, 101, 151]` | L60 |
+| `app/routes_web.py` | `+ "".join([f"<th>AQI \{aqi\}</th>" for aqi in AQI_LIST])` | L65 |
+| `app/routes_web.py` | `for aqi in AQI_LIST:` | L71 |
+| `app/routes_web.py` | `conn, when.timestamp(), aqi=aqi` | L73 |
+| `app/routes_web.py` | `if device.get("has_speed_control")` | L273 |
+| `app/static/unit_speed.js` | `const aqiValueElement = document.getElementById("aqi-value");` | L344 |
+| `app/static/unit_speed.js` | `const aqiNameElement = document.getElementById("aqi-name");` | L345 |
+| `app/static/unit_speed.js` | `if (aqiValueElement && aqiNameElement) \{` | L347 |
+| `app/static/unit_speed.js` | `if (data.aqi.error) \{` | L348 |
+| `app/static/unit_speed.js` | `aqiValueElement.textContent = "Error";` | L349 |
+| `app/static/unit_speed.js` | `aqiNameElement.textContent = data.aqi.error;` | L350 |
+| `app/static/unit_speed.js` | `aqiValueElement.textContent = data.aqi.value;` | L352 |
+| `app/static/unit_speed.js` | `aqiNameElement.textContent = data.aqi.name;` | L353 |
+| `app/static/unit_speed.js` | `aqiNameElement.style.backgroundColor = data.aqi.color;` | L354 |
+| `app/static/style.css` | `#aqi-weather \{` | L347 |
+| `app/static/style.css` | `#aqi-status \{` | L353 |
+| `app/static/style.css` | `#aqi-chart \{` | L652 |
+| `app/db.py` | `## AQI and Temperature` | L847 |
+| `app/db.py` | `## AQI` | L867 |
+| `app/db.py` | `def get_last_aqi(conn):` | L868 |
+| `app/db.py` | `c.execute("select aqi from aqi order by logtime DESC limit 1")` | L870 |
+| `app/db.py` | `aqi = c.fetchone()[0]` | L871 |
+| `app/db.py` | `logger.debug("last_aqi=%s", aqi)` | L872 |
+| `app/db.py` | `return aqi` | L873 |
+| `app/db.py` | `def get_aqi_series(conn):` | L876 |
+| `app/db.py` | `cmd = """ SELECT * from aqi where 1 """` | L878 |
+| `app/db.py` | `def insert_into_aqi(conn, values):` | L1000 |
+| `app/db.py` | `"INSERT INTO aqi (logtime,aqi,co,h,no2,o3,p,pm10,pm25,so2,t,w) values (:logtime,:aqi,:co,:h,:no2,:o3,:p,:pm10,:pm25,:so2,:t,:w)",` | L1003 |
+| `app/db.py` | `def get_db_aqi(conn) -> dict:` | L1009 |
+| `app/db.py` | `Get AQI from database.` | L1011 |
+| `app/db.py` | `:return: AQI data dict with value, color, name` | L1014 |
+| `app/db.py` | `# Check for recent AQI data in database` | L1016 |
+| `app/db.py` | `c.execute("SELECT aqi FROM aqi order by logtime DESC limit 1")` | L1018 |
+| `app/db.py` | `aqi = row[0] if row is not None else 0` | L1020 |
+| `app/db.py` | `return airquality.aqi_decode(aqi)` | L1021 |
+| `app/db.py` | `def get_aqi_and_weather_data(conn) -> dict:` | L1024 |
+| `app/db.py` | `"""Get combined weather and AQI data"""` | L1025 |
+| `app/db.py` | `aqi_data = get_db_aqi(conn)` | L1026 |
+| `app/db.py` | `return \{"aqi": aqi_data, "weather": weather_data\}` | L1028 |
+| `app/rules_engine.py` | `c.execute("SELECT * FROM aqi ORDER BY logtime DESC LIMIT 1")` | L44 |
+| `app/rules_engine.py` | `return \{'AQI':0,'CO':0,'H':0,'NO2':0,'O3':0,'P':0,'PM10':0,'PM25':0,'SO2':0,'T':0,'W':0\}` | L47 |
+| `app/rules_engine.py` | `def rules_results(conn, when=None, aqi=50):` | L124 |
+| `app/rules_engine.py` | `"""Reports what would happen if the rules were run at `when` with a specific AQI"""` | L125 |
+| `app/rules_engine.py` | `global_vars['AQI'] = aqi` | L135 |
+| `app/rules_engine.py` | `v1['AQI'] = db.get_last_aqi(conn)` | L170 |
+| `app/routes_api.py` | `"""Get weather and AQI data"""` | L78 |
+| `app/routes_api.py` | `weather_data = db.get_aqi_and_weather_data(conn)` | L79 |
+| `app/routes_api.py` | `@api_v1.route("/air_quality")` | L94 |
+| `app/routes_api.py` | `"""Return aqi series data"""` | L97 |
+| `app/routes_api.py` | `return jsonify(db.get_aqi_series(conn))` | L98 |
+| `app/templates/chart.html` | `<div class="pure-g"><div id="aqi-chart" ></div></div>` | L34 |
+| `app/static/chart_support.js` | `// chart_support.js - AQI and Temperature chart functionality` | L1 |
+| `app/static/chart_support.js` | `let aqiChart = null;` | L5 |
+| `app/static/chart_support.js` | `let aqiData = [];` | L6 |
+| `app/static/chart_support.js` | `const AQI_ENDPOINT = "/api/v1/air_quality";` | L14 |
+| `app/static/chart_support.js` | `AQI_UNITS = \{` | L473 |
+| `app/static/chart_support.js` | `let url = AQI_ENDPOINT;` | L482 |
+| `app/static/chart_support.js` | `// \{ pm25: [[ts,val],...], pm10: [...], o3: [...], no2: [...], co: [...], aqi: [...] \}` | L492 |
+| `app/static/chart_support.js` | `aqiData = json;` | L493 |
+| `app/static/chart_support.js` | `if (!aqiChart) return;` | L522 |
+| `app/static/chart_support.js` | `\{ name: "PM2.5", data: toMs(aqiData.pm25), unit: "µg/m³", yAxisIndex: 0 \},` | L528 |
+| `app/static/chart_support.js` | `\{ name: "PM10", data: toMs(aqiData.pm10), unit: "µg/m³", yAxisIndex: 1 \},` | L529 |
+| `app/static/chart_support.js` | `\{ name: "O₃", data: toMs(aqiData.o3), unit: "ppb", yAxisIndex: 2 \},` | L530 |
+| `app/static/chart_support.js` | `\{ name: "NO₂", data: toMs(aqiData.no2), unit: "ppb", yAxisIndex: 3 \},` | L531 |
+| `app/static/chart_support.js` | `\{ name: "CO", data: toMs(aqiData.co), unit: "ppm", yAxisIndex: 4 \},` | L532 |
+| `app/static/chart_support.js` | `\{ name: "AQI", data: toMs(aqiData.aqi), unit: "", yAxisIndex: 5 \},` | L533 |
+| `app/static/chart_support.js` | `name: "AQI",` | L581 |
+| `app/static/chart_support.js` | `aqiChart.setOption(option, \{ notMerge: false \});` | L630 |
+| `app/static/chart_support.js` | `// try \{ echarts.connect([tempChart, aqiChart]); \} catch(_) \{}` | L633 |
+| `app/static/chart_support.js` | `// try \{ echarts.connect([tempChart  aqiChart ]); \} catch(_) \{}` | L778 |
+| `app/static/chart_support.js` | `aqiChart = echarts.init(document.getElementById("aqi-chart")); // aqi chart` | L793 |
+| `app/static/chart_support.js` | `console.log("aqiChart=", aqiChart, "tempChart=", tempChart);` | L796 |
+| `app/ae200.py` | `"""Return a dict with drive/speed/has_speed_control"""` | L94 |
+| `app/ae200.py` | `return \{'has_speed_control':False\}` | L98 |
+| `app/ae200.py` | `'has_speed_control': True` | L102 |
+| `app/google_environment.py` | `# Google Environmenta APIs - AQI, Pollen API, and Weather API` | L2 |
+| `app/airquality.py` | `Synchronous implementation of AirNow AQI API.` | L2 |
+| `app/airquality.py` | `AQI_TABLE = [` | L18 |
+| `app/airquality.py` | `class AQIError(Exception):` | L28 |
+| `app/airquality.py` | `def aqi_decode(aqi):` | L31 |
+| `app/airquality.py` | `aqi = int(aqi)` | L32 |
+| `app/airquality.py` | `for row in AQI_TABLE:` | L33 |
+| `app/airquality.py` | `if row[0] <= aqi <= row[1]:` | L34 |
+| `app/airquality.py` | `return \{'value':aqi, 'name':row[2], 'color_name': row[3], 'color':row[4]\}` | L35 |
+| `app/airquality.py` | `raise ValueError(f"aqi=\{aqi\}")` | L36 |
+| `app/airquality.py` | `def get_aqi_airnow():` | L38 |
+| `app/airquality.py` | `"""Get AQI data from AirNow API synchronously"""` | L39 |
+| `app/airquality.py` | `logger.info("get_aqi: %s", url)` | L43 |
+| `app/airquality.py` | `return r.json()[0]["AQI"]` | L51 |
+| `app/airquality.py` | `raise AQIError("timeout") from e` | L54 |
+| `app/airquality.py` | `logger.error("Exception in get_aqi: %s", e)` | L59 |
+| `app/airquality.py` | `def get_aqi_google():` | L62 |
+| `app/airquality.py` | `"""Get AQI data from Google API"""` | L63 |
+| `app/airquality.py` | `API_KEY = get_secret('google', 'air_quality_api_key')` | L74 |
+| `app/airquality.py` | `logger.debug("get_aqi: %s params=%s", url,params)` | L76 |
+| `app/airquality.py` | `return r.json()['hoursInfo'][0]['indexes'][0]['aqi']` | L81 |
+| `app/airquality.py` | `raise AQIError("timeout") from e` | L84 |
+| `app/airquality.py` | `logger.error("Exception in get_aqi: %s", e)` | L89 |
+| `app/airquality.py` | `# aqicn.org` | L92 |
+| `app/airquality.py` | `# https://aqicn.org/json-api/doc/` | L93 |
+| `app/airquality.py` | `def get_aqi_aqicn_full():` | L95 |
+| `app/airquality.py` | `token = get_secret('aqicn', 'token')` | L101 |
+| `app/airquality.py` | `r = requests.get(f'https://api.waqi.info/feed/\{city\}/?token=\{token\}', timeout=TIMEOUT_SECONDS)` | L102 |
+| `app/airquality.py` | `def get_aqi_aqicn():` | L109 |
+| `app/airquality.py` | `return get_aqi_aqicn_full()['aqi']` | L110 |
+| `app/airquality.py` | `def get_aqi():` | L112 |
+| `app/airquality.py` | `return get_aqi_aqicn()` | L113 |
+| `app/airquality.py` | `print("get_aqi_google:",get_aqi_google())` | L118 |
+| `app/airquality.py` | `except AQIError as e:` | L119 |
+| `app/airquality.py` | `print("get_aqi_google: ",e)` | L120 |
+| `app/airquality.py` | `print("get_aqi_airnow:",get_aqi_airnow())` | L122 |
+| `app/airquality.py` | `except AQIError as e:` | L123 |
+| `app/airquality.py` | `print("get_aqi_airnow: ",e)` | L124 |
+| `app/airquality.py` | `print("get_aqi_aqicn:",json.dumps(get_aqi_aqicn(),indent=4))` | L126 |
+| `app/airquality.py` | `print("get_aqi_aqicn:",json.dumps(get_aqi_aqicn_full(),indent=4))` | L127 |
+| `app/airquality.py` | `except AQIError as e:` | L128 |
+| `app/airquality.py` | `print("get_aqi_aqicn: ",e)` | L129 |
+
+
+</details>
+</tool-use>
+
+---
+
+
+
+---
+
+
+Checking device properties to identify AQI/air exchange devices:
+
+
+---
+
+<tool-use data-tool-type="search" data-tool-name="codebase_search">
+<details>
+                <summary>Tool use: **codebase_search** • Searched codebase "What properties or fields identify a device as an AQI or air exchange device versus other types of devices?" • **15** results</summary>
+            
+| File | Lines |
+|------|-------|
+| `etc/schema.sql` | L41 |
+| `app/test_data/hubitat_get_devices.json` | L55 |
+| `tests/helpers/data_factories.py` | L77 |
+| `doc/deg-progress-notes.md` | L40-79 |
+| `etc/sample_hubitat.json` | L55 |
+| `airthings.py` | L47 |
+| `app/rules_engine.py` | L123-184 |
+| `airthings.py` | L38-74 |
+| `app/templates/index.html` | L44-75 |
+| `airthings.py` | L76-109 |
+| `etc/data/on.json` | L75 |
+| `airthings.py` | L59-106 |
+| `app/templates/index.html` | L73-115 |
+| `app/ae200.py` | L85-108 |
+| `app/room_config.py` | L39 |
+
+</details>
+</tool-use>
+
+---
+
+<tool-use data-tool-type="search" data-tool-name="grep">
+<details>
+<summary>Tool use: **grep** • Grep for "get_device_status|device_name|device_type|device_class" in "app/db.py" • 41 matches</summary>
+
+Output mode: content
+
+
+| File | Content | Line |
+|------|------|------|
+| `app/db.py` | `def get_or_create_device_id(conn, device_name, use_cache=True):` | L142 |
+| `app/db.py` | `if use_cache and (device_name in DEVICE_MAP):` | L153 |
+| `app/db.py` | `device_name,` | L156 |
+| `app/db.py` | `DEVICE_MAP[device_name],` | L157 |
+| `app/db.py` | `return DEVICE_MAP[device_name]` | L159 |
+| `app/db.py` | `logger.debug("INSERT OR IGNORE device_name=%s", device_name)` | L162 |
+| `app/db.py` | `"INSERT OR IGNORE INTO devices (device_name) VALUES (?);", (device_name,)` | L164 |
+| `app/db.py` | `cursor.execute("SELECT * FROM devices WHERE device_name = ?;", (device_name,))` | L168 |
+| `app/db.py` | `"get_or_create_device_id(%s) result=%s", device_name, dict(result)` | L173 |
+| `app/db.py` | `DEVICE_MAP[device_name] = result["device_id"]` | L175 |
+| `app/db.py` | `return DEVICE_MAP[device_name]` | L176 |
+| `app/db.py` | `logger.error("Could not retrieve ID for device name: %s", device_name)` | L178 |
+| `app/db.py` | `raise ValueError("Could not retrieve ID for device name: %s" % device_name)  # pylint: disable=consider-using-f-string` | L179 |
+| `app/db.py` | `"""Return a dictionary of device_name:device_id"""` | L202 |
+| `app/db.py` | `c.execute("SELECT * from devices order by device_name")` | L204 |
+| `app/db.py` | `dev["device_name"].replace(" ", "_").upper(): dev["device_id"]` | L206 |
+| `app/db.py` | `SELECT a.*,b.device_name,b.notes,b.disabled_until` | L217 |
+| `app/db.py` | `ORDER by b.device_name""")` | L220 |
+| `app/db.py` | `t.id, t.logtime, s.name AS device_name, t.temp10x, s.notes` | L250 |
+| `app/db.py` | `def get_recent_devlogs(conn, device_name: str, seconds: int):` | L261 |
+| `app/db.py` | `:param device_name: the device name to query` | L266 |
+| `app/db.py` | `device_id = get_or_create_device_id(conn, device_name)` | L276 |
+| `app/db.py` | `SELECT d.*, dn.device_name` | L282 |
+| `app/db.py` | `device_name: str \| None = None,` | L307 |
+| `app/db.py` | `:param device_name: the device (if device_id is not provided)` | L317 |
+| `app/db.py` | `"device_id=%s device_name=%s temp=%s logtime=%s force=%s commit=%s",` | L326 |
+| `app/db.py` | `device_name,` | L328 |
+| `app/db.py` | `assert device_name is not None` | L344 |
+| `app/db.py` | `device_id = get_or_create_device_id(conn, device_name)` | L345 |
+| `app/db.py` | `def update_devlog_map(conn, device_name: str, ae200_device_id: int):` | L447 |
+| `app/db.py` | `logger.debug("device_name=%s ae200_device_id=%s", device_name, ae200_device_id)` | L448 |
+| `app/db.py` | `device_id = get_or_create_device_id(conn, device_name)` | L450 |
+| `app/db.py` | `SELECT a.alert_id, a.device_id, d.device_name, a.alert_type, a.alert_value, a.start_time` | L625 |
+| `app/db.py` | `alert_id, device_id_val, device_name, alert_type, alert_value, start_time = row` | L642 |
+| `app/db.py` | `"device_name": device_name,` | L647 |
+| `app/db.py` | `SELECT a.alert_id, a.device_id, d.device_name, a.alert_type, a.alert_value,` | L683 |
+| `app/db.py` | `device_name,` | L704 |
+| `app/db.py` | `"device_name": device_name,` | L716 |
+| `app/db.py` | `series.append(\{"name": dev["device_name"], "data": data\})` | L917 |
+| `app/db.py` | `def get_device_status(conn) -> List[Dict[str, Any]]:` | L921 |
+| `app/db.py` | `cmd = """SELECT c.logtime, c.ipaddr, d.device_name as unit, c.new_value, c.agent, c.comment FROM changelog c` | L941 |
+
+
+</details>
+</tool-use>
+
+---
+
+<tool-use data-tool-type="read" data-tool-name="read_file">
+<details><summary>Tool use: **read_file** • Read file: /Users/deg/Documents/basistech/temperature-bot/app/db.py</summary>
+
+</details>
+</tool-use>
+
+---
+
+
+
+---
+
+
+Checking the `get_device_status` function to see what device properties are available:
+
+
+---
+
+<tool-use data-tool-type="read" data-tool-name="read_file">
+<details><summary>Tool use: **read_file** • Read file: /Users/deg/Documents/basistech/temperature-bot/app/db.py</summary>
+
+</details>
+</tool-use>
+
+---
+
+<tool-use data-tool-type="search" data-tool-name="grep">
+<details>
+<summary>Tool use: **grep** • Grep for "ERV|erv|air|exchange" in "app" • 104 matches</summary>
+
+Output mode: content
+
+
+| File | Content | Line |
+|------|------|------|
+| `app/templates/index.html` | `<h2> Outside Air Exchange </h2>` | L25 |
+| `app/static/logs_today.js` | `setInterval(refreshLogTable, 30000); // Refresh every 30 seconds` | L74 |
+| `app/templates/base.html` | `<p>🚧 This is the develop site. Please use <a href='https://air.basistech.net/'>` | L30 |
+| `app/templates/base.html` | `https://air.basistech.net/</a>.</p>` | L31 |
+| `app/routes_web.py` | `air=rules_engine.get_air_dict(conn),` | L86 |
+| `app/routes_web.py` | `# Filter ERVs and fans` | L310 |
+| `app/routes_web.py` | `erv_devices = _filter_speed_control_devices(all_devices, config.get("ervs", []))` | L311 |
+| `app/routes_web.py` | `notes = _collect_device_notes(erv_devices + fan_devices)` | L325 |
+| `app/routes_web.py` | `erv_devices=erv_devices,` | L331 |
+| `app/static/unit_speed.js` | `const REFRESH_INTERVAL = 10; // seconds between refreshes` | L7 |
+| `app/static/unit_speed.js` | `? `$\{TemperatureUtils.formatTemperature(current.temperature)\} (Boston Logan Airport)`` | L38 |
+| `app/static/unit_speed.js` | `: REFRESH_INTERVAL - secondsSinceRefresh;` | L244 |
+| `app/templates/room_dashboard.html` | `<!-- ERV and Fan Controls -->` | L335 |
+| `app/templates/room_dashboard.html` | `\{% if device_type == 'erv' %\}` | L352 |
+| `app/templates/room_dashboard.html` | `\{% if erv_devices %\}` | L368 |
+| `app/templates/room_dashboard.html` | `\{% for device in erv_devices %\}` | L369 |
+| `app/templates/room_dashboard.html` | `\{{ device_control_card(device, 'erv') \}}` | L370 |
+| `app/static/style.css` | `#chart-airquality \{` | L417 |
+| `app/db.py` | `from . import airquality` | L25 |
+| `app/db.py` | `# We do this here (rather than at "server startup") because this module` | L36 |
+| `app/db.py` | `# has actually changed on disk. This preserves the Poorman migration` | L92 |
+| `app/db.py` | `return airquality.aqi_decode(aqi)` | L1021 |
+| `app/templates/about.html` | `<h2>Terms of Service</h2>` | L38 |
+| `app/templates/about.html` | `<p>You set the terms, we serve.</p>` | L39 |
+| `app/static/room_dashboard.js` | `const REFRESH_INTERVAL = 10; // seconds between refreshes` | L3 |
+| `app/static/room_dashboard.js` | `* Get status element for a device (works for both ERV and fan).` | L62 |
+| `app/static/room_dashboard.js` | `return document.getElementById(`erv-$\{deviceId\}-status`) \|\|` | L67 |
+| `app/static/room_dashboard.js` | `* Get temperature element for a device (works for both ERV and fan).` | L72 |
+| `app/static/room_dashboard.js` | `return document.getElementById(`erv-$\{deviceId\}-temp`) \|\|` | L77 |
+| `app/static/room_dashboard.js` | `setInterval(refreshStatus, REFRESH_INTERVAL * 1000);` | L304 |
+| `app/room_config.py` | `Each room specifies which ERVs, fans, and sensors to display.` | L4 |
+| `app/room_config.py` | `Keys: 'url' (str), 'ervs' (list[str]), 'fans' (list[str]), 'sensors' (list[str])` | L12 |
+| `app/room_config.py` | `"ervs": ["ERV Kitchen"],` | L18 |
+| `app/room_config.py` | `"Lobby Sensor on Somerville Broadway",` | L21 |
+| `app/room_config.py` | `"Broadway Sensor Center on Somerville Broadway",` | L22 |
+| `app/room_config.py` | `"Broadway Sensor North on Somerville Broadway",` | L23 |
+| `app/room_config.py` | `"Broadway Sensor South on Somerville Broadway",` | L24 |
+| `app/room_config.py` | `"ervs": ["ERV Restrooms"],` | L29 |
+| `app/rules_engine.py` | `def get_air_dict(conn):` | L42 |
+| `app/routes_api.py` | `@api_v1.route("/air_quality")` | L94 |
+| `app/templates/chart.html` | `<!-- air-quality chart -->` | L33 |
+| `app/templates/alerts.html` | `setInterval(function() \{` | L232 |
+| `app/static/chart_support.js` | `const AQI_ENDPOINT = "/api/v1/air_quality";` | L14 |
+| `app/static/chart_support.js` | `interval: TemperatureUtils.getTemperatureUnitPreference() ? 10 : 5, // 10°F intervals for Fahrenheit, 5°C intervals for Celsius` | L426 |
+| `app/static/chart_support.js` | `// Air Quality chart setup` | L469 |
+| `app/static/chart_support.js` | `// Air Quality Display and Units` | L472 |
+| `app/static/chart_support.js` | `function loadAirQualityData() \{` | L481 |
+| `app/static/chart_support.js` | `console.error("Error loading air quality:", err);` | L497 |
+| `app/static/chart_support.js` | `// Render the Air Quality chart` | L519 |
+| `app/static/chart_support.js` | `title: \{ text: "Air Quality (multi-axis)", top: 0 \},` | L594 |
+| `app/static/chart_support.js` | `// Keep charts linked (crosshair/zoom)` | L632 |
+| `app/static/chart_support.js` | `Promise.all([loadTempData(), loadAirQualityData()]).then(() => \{` | L776 |
+| `app/static/chart_support.js` | `// When both updated, keep crosshair synced` | L777 |
+| `app/ae200.py` | `f'<Mnet Group="\{deviceId\}" Drive="*" Vent24h="*" Mode="*" VentMode="*" ModeStatus="*" SetTemp="*" SetTemp1="*" SetTemp2="*" SetTemp3="*" SetTemp4="*" SetTemp5="*" SetHumidity="*" InletTemp="*" InletHumidity="*" AirDirection="*" FanSpeed="*" RemoCon="*" DriveItem="*" ModeItem="*" SetTempItem="*" FilterItem="*" AirDirItem="*" FanSpeedItem="*" TimerItem="*" CheckWaterItem="*" FilterSign="*" Hold="*" EnergyControl="*" EnergyControlIC="*" SetbackControl="*" Ventilation="*" VentiDrive="*" VentiFan="*" Schedule="*" ScheduleAvail="*" ErrorSign="*" CheckWater="*" TempLimitCool="*" TempLimitHeat="*" TempLimit="*" CoolMin="*" CoolMax="*" HeatMin="*" HeatMax="*" AutoMin="*" AutoMax="*" TurnOff="*" MaxSaveValue="*" RoomHumidity="*" Brightness="*" Occupancy="*" NightPurge="*" Humid="*" Vent24hMode="*" SnowFanMode="*" InletTempHWHP="*" OutletTempHWHP="*" HeadTempHWHP="*" OutdoorTemp="*" BrineTemp="*" HeadInletTempCH="*" BACnetTurnOff="*" AISmartStart="*"  />'` | L66 |
+| `app/weather.py` | `Weather functions from the US National Weather Service` | L2 |
+| `app/weather.py` | `class WeatherService:` | L15 |
+| `app/weather.py` | `observation_stations_url = self.weather_points['properties']['observationStations']` | L42 |
+| `app/weather.py` | `response = self.session.get(observation_stations_url)` | L43 |
+| `app/weather.py` | `logger.debug("get %s",observation_stations_url)` | L44 |
+| `app/weather.py` | `observations_url = f"https://api.weather.gov/stations/\{station_id\}/observations/latest"` | L54 |
+| `app/weather.py` | `logger.debug("get %s",observations_url)` | L55 |
+| `app/weather.py` | `response = self.session.get(observations_url)` | L56 |
+| `app/weather.py` | `observation = response.json()` | L58 |
+| `app/weather.py` | `if not observation['properties']:` | L60 |
+| `app/weather.py` | `props = observation['properties']` | L63 |
+| `app/weather.py` | `service = WeatherService(latitude=latitude, longitude=longitude)` | L119 |
+| `app/weather.py` | `return service.get_all_weather_data()` | L121 |
+| `app/weather.py` | `service.close()` | L123 |
+| `app/test_data/hubitat_get_devices.json` | `"name": "Lobby Sensor on Somerville Broadway",` | L360 |
+| `app/test_data/hubitat_get_devices.json` | `"name": "Greenhouse Sensor East on Somerville Greenhouse",` | L412 |
+| `app/test_data/hubitat_get_devices.json` | `"name": "Greenhouse Sensor West on Somerville Greenhouse",` | L467 |
+| `app/test_data/hubitat_get_devices.json` | `"name": "Broadway Sensor Center on Somerville Broadway",` | L522 |
+| `app/test_data/hubitat_get_devices.json` | `"name": "Broadway Sensor North on Somerville Broadway",` | L574 |
+| `app/test_data/hubitat_get_devices.json` | `"name": "Broadway Sensor South on Somerville Broadway",` | L626 |
+| `app/test_data/hubitat_get_devices.json` | `"name": "Data Closet Sensor on Somerville Broadway",` | L678 |
+| `app/test_data/ae200_get_devices.json` | `\{"id": "12", "name": "ERV Kitchen"\},` | L3 |
+| `app/test_data/ae200_get_devices.json` | `\{"id": "13", "name": "ERV Restrooms"\}` | L4 |
+| `app/test_data/ae200_get_device_13.json` | `"AirDirection": "HORIZONTAL",` | L17 |
+| `app/test_data/ae200_get_device_13.json` | `"AirDirItem": "CHK_OFF",` | L24 |
+| `app/test_data/ae200_get_device_12.json` | `"AirDirection": "HORIZONTAL",` | L17 |
+| `app/test_data/ae200_get_device_12.json` | `"AirDirItem": "CHK_OFF",` | L24 |
+| `app/test_data/ae200_get_device_11.json` | `"AirDirection": "HORIZONTAL",` | L17 |
+| `app/test_data/ae200_get_device_11.json` | `"AirDirItem": "CHK_OFF",` | L24 |
+| `app/test_data/ae200_get_device_10.json` | `"AirDirection": "HORIZONTAL",` | L17 |
+| `app/test_data/ae200_get_device_10.json` | `"AirDirItem": "CHK_OFF",` | L24 |
+| `app/templates/terms.html` | `\{% block title %\} Terms of Service \{% endblock%\}` | L2 |
+| `app/templates/terms.html` | `<h1>Terms of Service</h1>` | L6 |
+| `app/templates/terms.html` | `You set the terms, we serve.` | L7 |
+| `app/templates/rules.html` | `<h2>Air Quality Variables (right now)</h2>` | L28 |
+| `app/templates/rules.html` | `\{% for key, value in air.items() %\}` | L30 |
+| `app/static/echarts@5` | `* All rights reserved.` | L40 |
+| `app/main.py` | `# Serve static files` | L50 |
+| `app/airquality.py` | `Synchronous implementation of AirNow AQI API.` | L2 |
+| `app/airquality.py` | `AIRNOW_URL = "https://www.airnowapi.org/aq/observation/zipCode/current/?format=application/json&zipCode=\{zipcode\}&distance=15&API_KEY=\{API_KEY\}"` | L12 |
+| `app/airquality.py` | `GOOGLE_URL = "https://airquality.googleapis.com/v1/history:lookup?key=\{API_KEY\}"` | L13 |
+| `app/airquality.py` | `# https://docs.airnowapi.org/aq101` | L17 |
+| `app/airquality.py` | `def get_aqi_airnow():` | L38 |
+| `app/airquality.py` | `"""Get AQI data from AirNow API synchronously"""` | L39 |
+| `app/airquality.py` | `API_KEY = get_secret('airnow', 'api_key')` | L41 |
+| `app/airquality.py` | `url = AIRNOW_URL.format(zipcode=zipcode, API_KEY=API_KEY)` | L42 |
+| `app/airquality.py` | `return \{"error": "AirNow API returned []; likely rate-limited"\}` | L50 |
+| `app/airquality.py` | `API_KEY = get_secret('google', 'air_quality_api_key')` | L74 |
+| `app/airquality.py` | `print("get_aqi_airnow:",get_aqi_airnow())` | L122 |
+| `app/airquality.py` | `print("get_aqi_airnow: ",e)` | L124 |
+
+
+</details>
+</tool-use>
+
+---
+
+
+
+---
+
+
+## Problem Identified
+
+In `app/templates/index.html` at line 50, the condition that determines which devices appear in the "Outside Air Exchange" section is:
+
+```50:50:app/templates/index.html
+{% if (device.has_speed_control and table==1) or (not device.has_speed_control and table==2) %}
+```
+
+**The Issue:**
+- Table 1 (Heating and Cooling): devices with `has_speed_control == True` ✓
+- Table 2 (Outside Air Exchange): devices with `has_speed_control == False` ✗
+
+The problem is that Table 2 uses a negative condition (`not device.has_speed_control`), so it includes all devices without speed control, not just ERV/air exchange devices.
+
+**What should be in "Outside Air Exchange":**
+- ERV devices (e.g., "ERV Kitchen", "ERV Restrooms") that handle air exchange
+
+**What's currently being included incorrectly:**
+- Any device without speed control, which may include:
+  - Temperature sensors
+  - Other non-ERV devices
+  - Devices that simply don't have fan speed controls
+
+**The Fix Needed:**
+Instead of using `not device.has_speed_control`, filter by devices that are actually ERV/air exchange devices. This could be done by:
+1. Checking if the device name contains "ERV" or similar identifiers
+2. Adding a device property/flag to mark air exchange devices
+3. Using a whitelist of known ERV device names
+
+The current logic is too broad and includes non-AQI/air exchange devices in the "Outside Air Exchange" section.
+
+---
+
+_**User (2026-01-05 10:38Z)**_
+
+Explore and suggest the best strategy to identify these devices.  (http://localhost:8000/dbg/all_devices may help you)
+
+
+---
+
+_**Agent (model default, mode Agent)**_
+
+
+
+---
+
+
+Exploring the debug endpoint and device data to identify ERV/air exchange devices.
+
+
+---
+
+<tool-use data-tool-type="read" data-tool-name="read_file">
+<details><summary>Tool use: **read_file** • Read file: /Users/deg/Documents/basistech/temperature-bot/app/routes_web.py</summary>
+
+</details>
+</tool-use>
+
+---
+
+<tool-use data-tool-type="search" data-tool-name="codebase_search">
+<details>
+                <summary>Tool use: **codebase_search** • Searched codebase "How are ERV devices identified or distinguished from other devices in the system?" • **15** results</summary>
+            
+| File | Lines |
+|------|-------|
+| `app/room_config.py` | L39 |
+| `app/templates/room_dashboard.html` | L334-383 |
+| `app/routes_web.py` | L19-334 |
+| `bin/rules.py` | L43 |
+| `app/db.py` | L114-190 |
+| `app/static/room_dashboard.js` | L49-74 |
+| `etc/schema.sql` | L41 |
+| `app/ae200.py` | L117-227 |
+| `bin/runner.py` | L69 |
+| `app/hubitat.py` | L20-43 |
+| `bin/runner.py` | L34-79 |
+| `app/utils/request_utils.py` | L19 |
+| `app/ae200.py` | L289-322 |
+| `app/rules_engine.py` | L39 |
+| `app/static/room_dashboard.js` | L65-85 |
+
+</details>
+</tool-use>
+
+---
+
+<tool-use data-tool-type="search" data-tool-name="grep">
+<details>
+<summary>Tool use: **grep** • Grep for "device_name|ERV|erv" in "app/room_config.py" • 8 matches</summary>
+
+Output mode: content
+
+
+| File | Content | Line |
+|------|------|------|
+| `app/room_config.py` | `Each room specifies which ERVs, fans, and sensors to display.` | L4 |
+| `app/room_config.py` | `Keys: 'url' (str), 'ervs' (list[str]), 'fans' (list[str]), 'sensors' (list[str])` | L12 |
+| `app/room_config.py` | `"ervs": ["ERV Kitchen"],` | L18 |
+| `app/room_config.py` | `"Lobby Sensor on Somerville Broadway",` | L21 |
+| `app/room_config.py` | `"Broadway Sensor Center on Somerville Broadway",` | L22 |
+| `app/room_config.py` | `"Broadway Sensor North on Somerville Broadway",` | L23 |
+| `app/room_config.py` | `"Broadway Sensor South on Somerville Broadway",` | L24 |
+| `app/room_config.py` | `"ervs": ["ERV Restrooms"],` | L29 |
+
+
+</details>
+</tool-use>
+
+---
+
+<tool-use data-tool-type="read" data-tool-name="read_file">
+<details><summary>Tool use: **read_file** • Read file: /Users/deg/Documents/basistech/temperature-bot/app/db.py</summary>
+
+</details>
+</tool-use>
+
+---
+
+
+
+---
+
+
+Checking device data structure and available fields:
+
+
+---
+
+<tool-use data-tool-type="read" data-tool-name="read_file">
+<details><summary>Tool use: **read_file** • Read file: /Users/deg/Documents/basistech/temperature-bot/app/ae200.py</summary>
+
+</details>
+</tool-use>
+
+---
+
+<tool-use data-tool-type="read" data-tool-name="read_file">
+<details><summary>Tool use: **read_file** • Read file: /Users/deg/Documents/basistech/temperature-bot/app/test_data/ae200_get_devices.json</summary>
+
+</details>
+</tool-use>
+
+---
+
+<tool-use data-tool-type="search" data-tool-name="grep">
+<details>
+<summary>Tool use: **grep** • Grep for "ae200_device_id|device_name" in "app/db.py" • 47 matches</summary>
+
+Output mode: content
+
+
+| File | Content | Line |
+|------|------|------|
+| `app/db.py` | `def get_or_create_device_id(conn, device_name, use_cache=True):` | L142 |
+| `app/db.py` | `if use_cache and (device_name in DEVICE_MAP):` | L153 |
+| `app/db.py` | `device_name,` | L156 |
+| `app/db.py` | `DEVICE_MAP[device_name],` | L157 |
+| `app/db.py` | `return DEVICE_MAP[device_name]` | L159 |
+| `app/db.py` | `logger.debug("INSERT OR IGNORE device_name=%s", device_name)` | L162 |
+| `app/db.py` | `"INSERT OR IGNORE INTO devices (device_name) VALUES (?);", (device_name,)` | L164 |
+| `app/db.py` | `cursor.execute("SELECT * FROM devices WHERE device_name = ?;", (device_name,))` | L168 |
+| `app/db.py` | `"get_or_create_device_id(%s) result=%s", device_name, dict(result)` | L173 |
+| `app/db.py` | `DEVICE_MAP[device_name] = result["device_id"]` | L175 |
+| `app/db.py` | `return DEVICE_MAP[device_name]` | L176 |
+| `app/db.py` | `logger.error("Could not retrieve ID for device name: %s", device_name)` | L178 |
+| `app/db.py` | `raise ValueError("Could not retrieve ID for device name: %s" % device_name)  # pylint: disable=consider-using-f-string` | L179 |
+| `app/db.py` | `"""Return a dictionary of device_name:device_id"""` | L202 |
+| `app/db.py` | `c.execute("SELECT * from devices order by device_name")` | L204 |
+| `app/db.py` | `dev["device_name"].replace(" ", "_").upper(): dev["device_id"]` | L206 |
+| `app/db.py` | `SELECT a.*,b.device_name,b.notes,b.disabled_until` | L217 |
+| `app/db.py` | `ORDER by b.device_name""")` | L220 |
+| `app/db.py` | `t.id, t.logtime, s.name AS device_name, t.temp10x, s.notes` | L250 |
+| `app/db.py` | `def get_recent_devlogs(conn, device_name: str, seconds: int):` | L261 |
+| `app/db.py` | `:param device_name: the device name to query` | L266 |
+| `app/db.py` | `device_id = get_or_create_device_id(conn, device_name)` | L276 |
+| `app/db.py` | `SELECT d.*, dn.device_name` | L282 |
+| `app/db.py` | `device_name: str \| None = None,` | L307 |
+| `app/db.py` | `:param device_name: the device (if device_id is not provided)` | L317 |
+| `app/db.py` | `"device_id=%s device_name=%s temp=%s logtime=%s force=%s commit=%s",` | L326 |
+| `app/db.py` | `device_name,` | L328 |
+| `app/db.py` | `assert device_name is not None` | L344 |
+| `app/db.py` | `device_id = get_or_create_device_id(conn, device_name)` | L345 |
+| `app/db.py` | `ae200_device_id: int,` | L419 |
+| `app/db.py` | `assert ae200_device_id is not None, "ae200_device_id must be provided"` | L425 |
+| `app/db.py` | `ae200_device_id,` | L437 |
+| `app/db.py` | `def update_devlog_map(conn, device_name: str, ae200_device_id: int):` | L447 |
+| `app/db.py` | `logger.debug("device_name=%s ae200_device_id=%s", device_name, ae200_device_id)` | L448 |
+| `app/db.py` | `device_id = get_or_create_device_id(conn, device_name)` | L450 |
+| `app/db.py` | `"UPDATE devices set ae200_device_id = ? where device_id=?",` | L452 |
+| `app/db.py` | `(ae200_device_id, device_id),` | L453 |
+| `app/db.py` | `SELECT a.alert_id, a.device_id, d.device_name, a.alert_type, a.alert_value, a.start_time` | L625 |
+| `app/db.py` | `alert_id, device_id_val, device_name, alert_type, alert_value, start_time = row` | L642 |
+| `app/db.py` | `"device_name": device_name,` | L647 |
+| `app/db.py` | `SELECT a.alert_id, a.device_id, d.device_name, a.alert_type, a.alert_value,` | L683 |
+| `app/db.py` | `device_name,` | L704 |
+| `app/db.py` | `"device_name": device_name,` | L716 |
+| `app/db.py` | `c.execute("select ae200_device_id from devices where device_id=?", (device_id,))` | L840 |
+| `app/db.py` | `ret = c.fetchone()["ae200_device_id"]` | L841 |
+| `app/db.py` | `series.append(\{"name": dev["device_name"], "data": data\})` | L917 |
+| `app/db.py` | `cmd = """SELECT c.logtime, c.ipaddr, d.device_name as unit, c.new_value, c.agent, c.comment FROM changelog c` | L941 |
+
+
+</details>
+</tool-use>
+
+---
+
+<tool-use data-tool-type="read" data-tool-name="read_file">
+<details><summary>Tool use: **read_file** • Read file: /Users/deg/Documents/basistech/temperature-bot/app/routes_web.py</summary>
+
+</details>
+</tool-use>
+
+---
+
+
+
+---
+
+
+Checking the database schema and device status structure:
+
+
+---
+
+<tool-use data-tool-type="read" data-tool-name="read_file">
+<details><summary>Tool use: **read_file** • Read file: /Users/deg/Documents/basistech/temperature-bot/etc/schema.sql</summary>
+
+</details>
+</tool-use>
+
+---
+
+<tool-use data-tool-type="search" data-tool-name="codebase_search">
+<details>
+                <summary>Tool use: **codebase_search** • Searched codebase "What fields are available in device status objects returned by get_device_status?" • **15** results</summary>
+            
+| File | Lines |
+|------|-------|
+| `app/db.py` | L888-966 |
+| `app/db.py` | L460-560 |
+| `app/routes_api.py` | L46-79 |
+| `app/db.py` | L475-609 |
+| `app/db.py` | L563-736 |
+| `app/test_data/hubitat_get_devices.json` | L55 |
+| `app/db.py` | L200-235 |
+| `app/static/room_dashboard.js` | L162-224 |
+| `app/db.py` | L212-257 |
+| `app/db.py` | L612-777 |
+| `app/static/unit_speed.js` | L235-332 |
+| `app/static/room_dashboard.js` | L225-261 |
+| `app/ae200.py` | L151-237 |
+| `app/static/room_dashboard.js` | L49-74 |
+| `app/routes_web.py` | L334 |
+
+</details>
+</tool-use>
+
+---
+
+<tool-use data-tool-type="read" data-tool-name="read_file">
+<details><summary>Tool use: **read_file** • Read file: /Users/deg/Documents/basistech/temperature-bot/app/db.py</summary>
+
+</details>
+</tool-use>
+
+---
+
+
+
+---
+
+
+Checking device status fields for ERV-specific characteristics:
+
+
+---
+
+<tool-use data-tool-type="read" data-tool-name="read_file">
+<details><summary>Tool use: **read_file** • Read file: /Users/deg/Documents/basistech/temperature-bot/app/test_data/ae200_get_device_12.json</summary>
+
+</details>
+</tool-use>
+
+---
+
+<tool-use data-tool-type="read" data-tool-name="read_file">
+<details><summary>Tool use: **read_file** • Read file: /Users/deg/Documents/basistech/temperature-bot/app/test_data/ae200_get_device_13.json</summary>
+
+</details>
+</tool-use>
+
+---
+
+<tool-use data-tool-type="read" data-tool-name="read_file">
+<details><summary>Tool use: **read_file** • Read file: /Users/deg/Documents/basistech/temperature-bot/app/test_data/ae200_get_device_10.json</summary>
+
+</details>
+</tool-use>
+
+---
+
+
+
+---
+
+
+## Analysis and Strategy Recommendations
+
+### Current Problem
+The "Outside Air Exchange" section uses `not device.has_speed_control`, which includes all devices without speed control, not just ERV/air exchange devices.
+
+### Available Device Data
+From `get_device_status()`, each device includes:
+- `device_name` (e.g., "ERV Kitchen", "ERV Restrooms", "Broadway South", "Area 51")
+- `device_id`
+- `ae200_device_id` (may be NULL)
+- `has_speed_control` (boolean)
+- `status` (dict with fields like `Drive`, `FanSpeed`, `Ventilation`, `Mode`, etc.)
+- `temp10x`, `logtime`, `notes`, `disabled_until`
+
+### ERV Device Characteristics (from codebase)
+1. Name pattern: names start with "ERV" (e.g., "ERV Kitchen", "ERV Restrooms")
+2. AE-200 devices: they have `ae200_device_id` set
+3. Room config: explicitly listed in `room_config.py` as ERV devices
+
+### Recommended Strategies (ranked)
+
+#### Strategy 1: Name-based pattern matching (recommended)
+- Pros: Simple, reliable, matches existing patterns
+- Cons: Requires consistent naming
+- Implementation:
+```python
+device_name.lower().startswith("erv")
+```
+
+#### Strategy 2: Configuration-based whitelist
+- Pros: Explicit, maintainable, flexible
+- Cons: Requires maintaining a list
+- Implementation: Create a list of ERV device names (could extract from `room_config.py` or create a separate config)
+
+#### Strategy 3: AE-200 device + no speed control
+- Pros: Uses existing data
+- Cons: Assumes all AE-200 devices without speed control are ERVs (may not be true)
+- Implementation:
+```python
+device.get("ae200_device_id") is not None and not device.get("has_speed_control", False)
+```
+
+#### Strategy 4: Status-based detection
+- Pros: Uses device capabilities
+- Cons: More complex, may be unreliable if status is missing
+- Implementation: Check for ERV-specific status fields (e.g., `Ventilation` mode)
+
+### Recommendation
+Use Strategy 1 (name-based pattern matching) as the primary method, with Strategy 2 (whitelist) as a fallback or enhancement.
+
+Reasoning:
+1. Consistent with existing patterns (`room_config.py` uses exact name matching)
+2. Simple and maintainable
+3. ERV devices follow a clear naming convention
+4. Can be combined with a whitelist for edge cases
+
+### Suggested Implementation
+```python
+def is_erv_device(device):
+    """Check if device is an ERV/air exchange device"""
+    name = device.get("device_name", "").lower()
+    # Primary: name starts with "erv"
+    if name.startswith("erv"):
+        return True
+    # Optional: could add whitelist here for edge cases
+    return False
+```
+
+Then in the template:
+```jinja
+{% if (device.has_speed_control and table==1) or (is_erv_device(device) and table==2) %}
+```
+
+Should I implement this solution?
+
+---
+
+_**User (2026-01-05 10:38Z)**_
+
+What devices would Strategy 3 find?
+
+---
+
+_**Agent (model default, mode Agent)**_
+
+
+
+---
+
+
+Analyzing which devices Strategy 3 would identify. Checking device data and the logic:
+
+
+---
+
+<tool-use data-tool-type="read" data-tool-name="read_file">
+<details><summary>Tool use: **read_file** • Read file: /Users/deg/Documents/basistech/temperature-bot/app/ae200.py</summary>
+
+</details>
+</tool-use>
+
+---
+
+<tool-use data-tool-type="read" data-tool-name="read_file">
+<details><summary>Tool use: **read_file** • Read file: /Users/deg/Documents/basistech/temperature-bot/app/test_data/ae200_get_device_10.json</summary>
+
+</details>
+</tool-use>
+
+---
+
+<tool-use data-tool-type="read" data-tool-name="read_file">
+<details><summary>Tool use: **read_file** • Read file: /Users/deg/Documents/basistech/temperature-bot/app/test_data/ae200_get_device_11.json</summary>
+
+</details>
+</tool-use>
+
+---
+
+<tool-use data-tool-type="search" data-tool-name="codebase_search">
+<details>
+                <summary>Tool use: **codebase_search** • Searched codebase "What determines if a device has ae200_device_id set in the database?" • **15** results</summary>
+            
+| File | Lines |
+|------|-------|
+| `app/db.py` | L826-862 |
+| `etc/schema.sql` | L41 |
+| `app/db.py` | L413-472 |
+| `app/db.py` | L114-190 |
+| `tests/helpers/data_factories.py` | L77 |
+| `bin/runner.py` | L34-79 |
+| `doc/deg-progress-notes.md` | L40-79 |
+| `app/routes_web.py` | L19-334 |
+| `app/rules_engine.py` | L39 |
+| `bin/runner.py` | L69 |
+| `app/db.py` | L888-966 |
+| `app/db.py` | L52 |
+| `app/db.py` | L302-455 |
+| `tests/conftest.py` | L77-150 |
+| `app/ae200.py` | L253-296 |
+
+</details>
+</tool-use>
+
+---
+
+<tool-use data-tool-type="search" data-tool-name="grep">
+<details>
+<summary>Tool use: **grep** • Grep for "ae200_device_id|update_devlog_map" in "app" • 11 matches</summary>
+
+Output mode: content
+
+
+| File | Content | Line |
+|------|------|------|
+| `app/db.py` | `ae200_device_id: int,` | L419 |
+| `app/db.py` | `assert ae200_device_id is not None, "ae200_device_id must be provided"` | L425 |
+| `app/db.py` | `ae200_device_id,` | L437 |
+| `app/db.py` | `def update_devlog_map(conn, device_name: str, ae200_device_id: int):` | L447 |
+| `app/db.py` | `logger.debug("device_name=%s ae200_device_id=%s", device_name, ae200_device_id)` | L448 |
+| `app/db.py` | `"UPDATE devices set ae200_device_id = ? where device_id=?",` | L452 |
+| `app/db.py` | `(ae200_device_id, device_id),` | L453 |
+| `app/db.py` | `c.execute("select ae200_device_id from devices where device_id=?", (device_id,))` | L840 |
+| `app/db.py` | `ret = c.fetchone()["ae200_device_id"]` | L841 |
+| `app/rules_engine.py` | `db.insert_changelog(conn, ipaddr=ipaddr, device_id=body.device_id, ae200_device_id=unit_id,` | L90 |
+| `app/rules_engine.py` | `db.insert_changelog(conn, ipaddr=ipaddr, device_id=body.device_id, ae200_device_id=unit_id,` | L115 |
+
+
+</details>
+</tool-use>
+
+---
+
+
+
+---
+
+
+Analyzing which devices Strategy 3 would identify. Checking the logic and available device data:
+
+
+---
+
+<tool-use data-tool-type="read" data-tool-name="read_file">
+<details><summary>Tool use: **read_file** • Read file: /Users/deg/Documents/basistech/temperature-bot/app/db.py</summary>
+
+</details>
+</tool-use>
+
+---
+
+<tool-use data-tool-type="read" data-tool-name="read_file">
+<details><summary>Tool use: **read_file** • Read file: /Users/deg/Documents/basistech/temperature-bot/bin/runner.py</summary>
+
+</details>
+</tool-use>
+
+---
+
+<tool-use data-tool-type="search" data-tool-name="grep">
+<details>
+<summary>Tool use: **grep** • Grep for "fetch_last_status|device_name|ae200_device_id" in "app/db.py" • 52 matches</summary>
+
+Output mode: content
+
+
+| File | Content | Line |
+|------|------|------|
+| `app/db.py` | `def get_or_create_device_id(conn, device_name, use_cache=True):` | L142 |
+| `app/db.py` | `if use_cache and (device_name in DEVICE_MAP):` | L153 |
+| `app/db.py` | `device_name,` | L156 |
+| `app/db.py` | `DEVICE_MAP[device_name],` | L157 |
+| `app/db.py` | `return DEVICE_MAP[device_name]` | L159 |
+| `app/db.py` | `logger.debug("INSERT OR IGNORE device_name=%s", device_name)` | L162 |
+| `app/db.py` | `"INSERT OR IGNORE INTO devices (device_name) VALUES (?);", (device_name,)` | L164 |
+| `app/db.py` | `cursor.execute("SELECT * FROM devices WHERE device_name = ?;", (device_name,))` | L168 |
+| `app/db.py` | `"get_or_create_device_id(%s) result=%s", device_name, dict(result)` | L173 |
+| `app/db.py` | `DEVICE_MAP[device_name] = result["device_id"]` | L175 |
+| `app/db.py` | `return DEVICE_MAP[device_name]` | L176 |
+| `app/db.py` | `logger.error("Could not retrieve ID for device name: %s", device_name)` | L178 |
+| `app/db.py` | `raise ValueError("Could not retrieve ID for device name: %s" % device_name)  # pylint: disable=consider-using-f-string` | L179 |
+| `app/db.py` | `"""Return a dictionary of device_name:device_id"""` | L202 |
+| `app/db.py` | `c.execute("SELECT * from devices order by device_name")` | L204 |
+| `app/db.py` | `dev["device_name"].replace(" ", "_").upper(): dev["device_id"]` | L206 |
+| `app/db.py` | `def fetch_last_status(conn):` | L213 |
+| `app/db.py` | `SELECT a.*,b.device_name,b.notes,b.disabled_until` | L217 |
+| `app/db.py` | `ORDER by b.device_name""")` | L220 |
+| `app/db.py` | `def fetch_last_status_fixed(conn):` | L224 |
+| `app/db.py` | `"""Runs db.fetch_last_status(conn) and then converts `status_json` into the actual dictionary for each status_json object"""` | L225 |
+| `app/db.py` | `return [fix_status_json(dd) for dd in fetch_last_status(conn)]` | L236 |
+| `app/db.py` | `t.id, t.logtime, s.name AS device_name, t.temp10x, s.notes` | L250 |
+| `app/db.py` | `def get_recent_devlogs(conn, device_name: str, seconds: int):` | L261 |
+| `app/db.py` | `:param device_name: the device name to query` | L266 |
+| `app/db.py` | `device_id = get_or_create_device_id(conn, device_name)` | L276 |
+| `app/db.py` | `SELECT d.*, dn.device_name` | L282 |
+| `app/db.py` | `device_name: str \| None = None,` | L307 |
+| `app/db.py` | `:param device_name: the device (if device_id is not provided)` | L317 |
+| `app/db.py` | `"device_id=%s device_name=%s temp=%s logtime=%s force=%s commit=%s",` | L326 |
+| `app/db.py` | `device_name,` | L328 |
+| `app/db.py` | `assert device_name is not None` | L344 |
+| `app/db.py` | `device_id = get_or_create_device_id(conn, device_name)` | L345 |
+| `app/db.py` | `ae200_device_id: int,` | L419 |
+| `app/db.py` | `assert ae200_device_id is not None, "ae200_device_id must be provided"` | L425 |
+| `app/db.py` | `ae200_device_id,` | L437 |
+| `app/db.py` | `def update_devlog_map(conn, device_name: str, ae200_device_id: int):` | L447 |
+| `app/db.py` | `logger.debug("device_name=%s ae200_device_id=%s", device_name, ae200_device_id)` | L448 |
+| `app/db.py` | `device_id = get_or_create_device_id(conn, device_name)` | L450 |
+| `app/db.py` | `"UPDATE devices set ae200_device_id = ? where device_id=?",` | L452 |
+| `app/db.py` | `(ae200_device_id, device_id),` | L453 |
+| `app/db.py` | `SELECT a.alert_id, a.device_id, d.device_name, a.alert_type, a.alert_value, a.start_time` | L625 |
+| `app/db.py` | `alert_id, device_id_val, device_name, alert_type, alert_value, start_time = row` | L642 |
+| `app/db.py` | `"device_name": device_name,` | L647 |
+| `app/db.py` | `SELECT a.alert_id, a.device_id, d.device_name, a.alert_type, a.alert_value,` | L683 |
+| `app/db.py` | `device_name,` | L704 |
+| `app/db.py` | `"device_name": device_name,` | L716 |
+| `app/db.py` | `c.execute("select ae200_device_id from devices where device_id=?", (device_id,))` | L840 |
+| `app/db.py` | `ret = c.fetchone()["ae200_device_id"]` | L841 |
+| `app/db.py` | `series.append(\{"name": dev["device_name"], "data": data\})` | L917 |
+| `app/db.py` | `device_data = fetch_last_status_fixed(conn)` | L923 |
+| `app/db.py` | `cmd = """SELECT c.logtime, c.ipaddr, d.device_name as unit, c.new_value, c.agent, c.comment FROM changelog c` | L941 |
+
+
+</details>
+</tool-use>
+
+---
+
+
+
+---
+
+
+Checking if `ae200_device_id` is included in the device status data:
+
+
+---
+
+<tool-use data-tool-type="read" data-tool-name="read_file">
+<details><summary>Tool use: **read_file** • Read file: /Users/deg/Documents/basistech/temperature-bot/app/db.py</summary>
+
+</details>
+</tool-use>
+
+---
+
+<tool-use data-tool-type="search" data-tool-name="grep">
+<details>
+<summary>Tool use: **grep** • Grep for "SELECT.*ae200_device_id|ae200_device_id.*SELECT" in "app/db.py" • 0 matches</summary>
+
+Output mode: content
+
+
+_No matches found_
+
+</details>
+</tool-use>
+
+---
+
+<tool-use data-tool-type="search" data-tool-name="codebase_search">
+<details>
+                <summary>Tool use: **codebase_search** • Searched codebase "Does get_device_status include ae200_device_id field in the returned device data?" • **15** results</summary>
+            
+| File | Lines |
+|------|-------|
+| `app/db.py` | L888-966 |
+| `app/ae200.py` | L151-237 |
+| `app/db.py` | L475-609 |
+| `app/routes_api.py` | L46-79 |
+| `app/db.py` | L460-560 |
+| `app/db.py` | L826-862 |
+| `app/db.py` | L563-736 |
+| `app/routes_web.py` | L19-334 |
+| `app/ae200.py` | L317-359 |
+| `app/ae200.py` | L289-322 |
+| `app/db.py` | L612-777 |
+| `app/static/room_dashboard.js` | L162-224 |
+| `app/routes_web.py` | L334 |
+| `app/test_data/ae200_get_device_10.json` | L66 |
+| `app/db.py` | L200-235 |
+
+</details>
+</tool-use>
+
+---
+
+
+
+---
+
+
+## Analysis: What Strategy 3 Would Find
+
+**Strategy 3 condition:**
+```python
+device.get("ae200_device_id") is not None and not device.get("has_speed_control", False)
+```
+
+This finds devices that:
+1. Have `ae200_device_id` set (AE-200 devices)
+2. Have `has_speed_control == False` (missing `Drive` or `FanSpeed` in status)
+
+### Issue: `ae200_device_id` is not in device status
+
+Looking at `fetch_last_status()` in `db.py`:
+
+```217:220:app/db.py
+        SELECT a.*,b.device_name,b.notes,b.disabled_until
+        FROM (SELECT * FROM devlog GROUP BY device_id HAVING logtime=max(logtime)) AS a
+        LEFT JOIN devices b where a.device_id = b.device_id
+        ORDER by b.device_name""")
+```
+
+The query does not include `ae200_device_id` from the devices table, so Strategy 3 cannot work as-is.
+
+### If `ae200_device_id` were included
+
+From the test data:
+- Device 10 (Broadway South): Has `Drive` and `FanSpeed` → `has_speed_control = True`
+- Device 12 (ERV Kitchen): Has `Drive` and `FanSpeed` → `has_speed_control = True`
+- Device 13 (ERV Restrooms): Has `Drive` and `FanSpeed` → `has_speed_control = True`
+
+Result: Strategy 3 would find zero devices, because all AE-200 devices in the test data have both `Drive` and `FanSpeed`, so they all have `has_speed_control = True`.
+
+### Edge cases where it might find devices
+
+1. Missing status data: If a device has `ae200_device_id` but no recent `status_json` (or it’s missing `Drive`/`FanSpeed`), it would have `has_speed_control = False`.
+2. Incomplete status: If `status_json` exists but lacks `Drive` or `FanSpeed`, `extract_drive_and_fan_speed()` returns `has_speed_control = False`.
+
+### Conclusion
+
+Strategy 3 would likely find zero devices in normal operation, because:
+- All AE-200 devices appear to have speed control (they have `Drive` and `FanSpeed`)
+- ERV devices also have speed control (they have both fields)
+- It would only match devices with missing or incomplete status data
+
+This suggests Strategy 3 is not suitable for identifying ERV devices, since ERVs have speed control and the condition requires `has_speed_control == False`.
+
+---
+
+_**User (2026-01-05 10:38Z)**_
+
+I'm looking at the current list (see attached screenshot).
+What we actualy want are all the temperature-reporting devices --- in the current list, everything that does not show Temp as "n/a".  What's the cleanest way to recognize these?
+
+
+
+---
+
+_**Agent (model default, mode Agent)**_
+
+
+
+---
+
+
+Filtering the "Outside Air Exchange" section to devices with temperature readings. Checking how temperature is determined in the template:
+
+
+---
+
+<tool-use data-tool-type="read" data-tool-name="read_file">
+<details><summary>Tool use: **read_file** • Read file: /Users/deg/Documents/basistech/temperature-bot/app/templates/index.html</summary>
+
+</details>
+</tool-use>
+
+---
+
+<tool-use data-tool-type="search" data-tool-name="grep">
+<details>
+<summary>Tool use: **grep** • Grep for "temp10x|cell-temp-na" in "app/templates/index.html" • 2 matches</summary>
+
+Output mode: content
+
+
+| File | Content | Line |
+|------|------|------|
+| `app/templates/index.html` | `\{% if device.temp10x %\}` | L59 |
+| `app/templates/index.html` | `<td class="cell-temp cell-temp-na">n/a</td>` | L62 |
+
+
+</details>
+</tool-use>
+
+---
+
+
+
+---
+
+
+Using `device.temp10x` to determine if a device has a temperature reading. If present and truthy, it shows a temperature; otherwise it shows "n/a".
+
+Cleanest fix: add `device.temp10x` to the condition for the "Outside Air Exchange" section (table 2). Update the condition to require `device.temp10x` for table 2.
+
+
+---
+
+<tool-use data-tool-type="write" data-tool-name="search_replace">
+
+<details><summary>Tool use: **search_replace** • Edit file: /Users/deg/Documents/basistech/temperature-bot/app/templates/index.html</summary>
+
+**Chunk 1**
+Lines added: 1, lines removed: 1
+
+```diff
+@@ -48,5 +48,5 @@
+                &lt;tbody&gt;
+                  {% for device in devices %}
+-                 {% if (device.has_speed_control and table==1) or (not device.has_speed_control and table==2) %}
++                 {% if (device.has_speed_control and table==1) or (not device.has_speed_control and device.temp10x and table==2) %}
+                  &lt;tr class="device-row" x-data-device-id="{{ device.device_id }}"&gt;
+                    &lt;td class="cell-unit"&gt;
+```
+
+</details>
+
+</tool-use>
+
+---
+
+<tool-use data-tool-type="generic" data-tool-name="read_lints">
+<details>
+          <summary>Tool use: **read_lints** • Read lints for 1 file</summary>
+      
+Lint paths:
+
+- `app/templates/index.html`
+
+Lint results
+
+
+**No lint errors found**
+</details>
+</tool-use>
+
+---
+
+
+
+---
+
+
+Updated the condition so the "Outside Air Exchange" section only shows devices that:
+
+1. Don't have speed control (`not device.has_speed_control`)
+2. Have temperature readings (`device.temp10x`)
+
+This filters out devices with "n/a" temperatures. The condition now checks `device.temp10x` for table 2, which is the same field used to determine whether to show a temperature or "n/a" in the display.
+
+The "Outside Air Exchange" section will now only show temperature-reporting devices (sensors), excluding dimmers and other devices without temperature readings.
+
+---
+
