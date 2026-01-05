@@ -403,6 +403,16 @@ table.rules-table th  {
     text-align: center;
 }
 
+/* Pale red shading for Off column cells */
+td.cell-speed-off {
+    background-color: #ffe0e0;
+}
+
+/* Center buttons in auto column */
+.cell-speed-auto {
+    text-align: center;
+}
+
 .cell-unit {
     white-space: nowrap;
     vertical-align: top;

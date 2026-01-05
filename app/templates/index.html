@@ -30,13 +30,13 @@
                   <th class="column-unit" rowspan="2">Unit</th>
                   <th class="column-temp" rowspan="2">Temp</th>
                   {% if table == 1  %}
-                  <th class="column-drive"  rowspan="2">Fan Motor</th>
-                  <th class="column-speed" colspan="5">Fan Speed</th>
+                  <th class="column-speed" colspan="6">Fan Speed</th>
                   {% endif %}
                   <th class="column-notes" rowspan="2">Notes</th>
                 </tr>
                 {% if table == 1 %}
                 <tr>
+                  <th class="column-speed column-speed-off">Off</th>
                   <th class="column-speed column-speed-auto">auto</th>
                   <th class="column-speed column-speed-low">1</th>
                   <th class="column-speed column-speed-mid2">2</th>
@@ -62,23 +62,47 @@
                   <td class="cell-temp cell-temp-na">n/a</td>
                   {% endif %}
                   {% if device.has_speed_control %}
-                  <td class="cell-drive">
-                    <label class="switch">
-                      <input type="checkbox"
-                             id="fan_drive-{{ device.device_id }}"
-                             x-data-device-id="{{ device.device_id }}"
-                             x-drive="yes">
-                      <span class="slider round"></span>
-                    </label>
+                  {% set is_erv = device.device_name.lower().startswith('erv') %}
+                  <!-- Off button (always shown) -->
+                  <td class="cell-speed cell-speed-off">
+                    <input type="radio" name="fan_speed-{{ device.device_id }}"
+                           value="0"
+                           id="radio-{{ device.device_id }}-0"
+                           x-data-device-id="{{ device.device_id }}"
+                           x-data-fan_speed="0"
+                           title="Turn {{ device.device_name }} off">
                   </td>
-                  {% for fan_speed in [-1, 1, 2, 3, 4] %}
+                  <!-- Auto button (only for non-ERV devices) -->
+                  <td class="cell-speed cell-speed-auto">
+                    {% if not is_erv %}
+                    <input type="radio" name="fan_speed-{{ device.device_id }}"
+                           value="-1"
+                           id="radio-{{ device.device_id }}-auto"
+                           x-data-device-id="{{ device.device_id }}"
+                           x-data-fan_speed="-1"
+                           title="Set {{ device.device_name }} to auto">
+                    {% endif %}
+                  </td>
+                  <!-- Speed 1 button (only for ERV devices) -->
+                  <td class="cell-speed cell-speed-low">
+                    {% if is_erv %}
+                    <input type="radio" name="fan_speed-{{ device.device_id }}"
+                           value="1"
+                           id="radio-{{ device.device_id }}-1"
+                           x-data-device-id="{{ device.device_id }}"
+                           x-data-fan_speed="1"
+                           title="Set {{ device.device_name }} to speed 1">
+                    {% endif %}
+                  </td>
+                  <!-- Speeds 2, 3, 4 (always shown) -->
+                  {% for fan_speed in [2, 3, 4] %}
                   <td class="cell-speed cell-speed-{{ fan_speed }}">
                     <input type="radio" name="fan_speed-{{ device.device_id }}"
                            value="{{ fan_speed }}"
                            id="radio-{{ device.device_id }}-{{ fan_speed }}"
                            x-data-device-id="{{ device.device_id }}"
                            x-data-fan_speed="{{ fan_speed }}"
-                           title="Set {{ device.device_name }} to fan_speed {{ fan_speed }}">
+                           title="Set {{ device.device_name }} to speed {{ fan_speed }}">
                   </td>
                   {% endfor %}
                   {% endif %}<!-- devices with speed controls -->

@@ -141,17 +141,7 @@ async function updateNote(deviceId, notes) {
 
 // Handle all user events
 function setupMatrixListenerss() {
-  // Add event listeners for fan sliders
-  const driveSwitches = document.querySelectorAll(
-    'input[type="checkbox"][x-drive]',
-  );
-  driveSwitches.forEach((ds) => {
-    ds.addEventListener("change", function () {
-      const deviceId = parseInt(this.getAttribute("x-data-device-id"));
-      setDrive(deviceId, this.checked ? 1 : 0);
-    });
-  });
-  // Add event listeners for radio buttons
+  // Add event listeners for radio buttons (including Off button)
   const radioButtons = document.querySelectorAll(
     'input[type="radio"][x-data-device-id]',
   );
@@ -159,7 +149,20 @@ function setupMatrixListenerss() {
     radio.addEventListener("change", function () {
       const deviceId = parseInt(this.getAttribute("x-data-device-id"));
       const fan_speed = parseInt(this.getAttribute("x-data-fan_speed"));
-      setFanSpeed(deviceId, fan_speed);
+
+      // Off button (0): turn off drive
+      if (fan_speed === 0) {
+        setDrive(deviceId, 0);
+      }
+      // Speed buttons: turn on drive AND set speed
+      else {
+        Promise.all([
+          setDrive(deviceId, 1),
+          setFanSpeed(deviceId, fan_speed),
+        ]).catch((error) => {
+          console.error("Error setting drive and speed:", error);
+        });
+      }
     });
   });
 
@@ -297,29 +300,40 @@ const refreshGridRows = () => {
               // Display temperature without age
               cell.innerHTML = TemperatureUtils.formatTemperature(tempC);
             }
-            if (dev.drive) {
-              const slider = document.getElementById(
-                `fan_drive-${dev.device_id}`,
+            // Update radio button selection based on drive and speed state
+            const isOff = dev.drive === "Off" || dev.drive === 0 || !dev.drive;
+            const currentSpeed = dev.fan_speed || dev.speed;
+            const speedValue =
+              currentSpeed != null ? parseInt(currentSpeed) : null;
+
+            // Auto button (-1) can be active even when drive is off
+            if (speedValue === -1) {
+              const autoRadio = document.getElementById(
+                `radio-${dev.device_id}-auto`,
               );
-              if (slider) {
-                slider.checked = dev.drive ? true : false;
-              } else {
-                console.warn(
-                  `Drive slider not found for fan_drive${dev.device_ide} dev=`,
-                  dev,
-                );
+              if (autoRadio) {
+                autoRadio.checked = true;
               }
             }
-            if (dev.fan_speed) {
+            // If drive is off and not auto, select the "Off" button (value 0)
+            else if (isOff) {
+              const offRadio = document.getElementById(
+                `radio-${dev.device_id}-0`,
+              );
+              if (offRadio) {
+                offRadio.checked = true;
+              }
+            }
+            // If drive is on, select the appropriate speed button
+            else if (speedValue != null) {
               const radio = document.getElementById(
-                `radio-${dev.device_id}-${dev.fan_speed}`,
+                `radio-${dev.device_id}-${speedValue}`,
               );
               if (radio) {
                 radio.checked = true;
               } else {
                 console.warn(
-                  `Radio button not found for radio-${dev.device_id}-${dev.fan_speed} dev=`,
-                  dev,
+                  `Radio button not found for radio-${dev.device_id}-${speedValue}, device_id=${dev.device_id}, speed=${speedValue}`,
                 );
               }
             }
