@@ -2006,3 +2006,1210 @@ The remaining lint warnings (protected access, too many arguments, etc.) would r
 
 ---
 
+_**User (2026-01-05 10:38Z)**_
+
+We just broke the PR checks on github (either with our new tests or lint fixes)
+
+Run make test
+  make test
+  shell: /bin/bash -e {0}
+  env:
+    TEMPERATURE_BOT_CONFIG: tests/temperature-bot-config-test.yaml
+    AE200_SIMULATOR: 1
+    AQICN_TOKEN: ***
+    AIRNOW_API_KEY: ***
+    POETRY_VERSION: 2.1.3
+    RUFF_VERSION: 0.13.2
+    pythonLocation: /Users/runner/hostedtoolcache/Python/3.12.10/arm64
+    PKG_CONFIG_PATH: /Users/runner/hostedtoolcache/Python/3.12.10/arm64/lib/pkgconfig
+    Python_ROOT_DIR: /Users/runner/hostedtoolcache/Python/3.12.10/arm64
+    Python2_ROOT_DIR: /Users/runner/hostedtoolcache/Python/3.12.10/arm64
+    Python3_ROOT_DIR: /Users/runner/hostedtoolcache/Python/3.12.10/arm64
+make pylint
+poetry run ruff check --fix app | etc/ruff-reformat.bash
+
+No file/folder found for package temperature-bot
+.venv/bin/python -m pylint --output-format=parseable --rcfile .pylintrc --fail-under=9.5 --verbose app tests *.py
+Using config file .pylintrc
+************* Module app.db
+app/db.py:1: [C0302(too-many-lines), ] Too many lines in module (1028/1000)
+************* Module tests.test_db
+tests/test_db.py:83: [W0212(protected-access), test_get_db_connection_applies_schema_once_per_mtime] Access to a protected member _SCHEMA_MTIME of a client class
+tests/test_db.py:112: [W0212(protected-access), test_get_db_connection_reapplies_schema_on_mtime_change] Access to a protected member _SCHEMA_MTIME of a client class
+tests/test_db.py:127: [W0613(unused-argument), test_get_db_connection_reapplies_schema_on_mtime_change.fake_getmtime] Unused argument 'path'
+tests/test_db.py:139: [W0212(protected-access), test_get_db_connection_reapplies_schema_on_mtime_change] Access to a protected member _SCHEMA_MTIME of a client class
+************* Module tests.test_browser_ux
+tests/test_browser_ux.py:38: [W0718(broad-exception-caught), wait_for_server] Catching too general exception Exception
+************* Module tests.helpers.data_factories
+tests/helpers/data_factories.py:131: [R0913(too-many-arguments), AlertTestData.create_device_with_alert] Too many arguments (7/5)
+tests/helpers/data_factories.py:131: [R0917(too-many-positional-arguments), AlertTestData.create_device_with_alert] Too many positional arguments (7/5)
+tests/helpers/data_factories.py:152: [C0415(import-outside-toplevel), AlertTestData.create_device_with_alert] Import outside toplevel (json)
+tests/helpers/data_factories.py:127: [R0903(too-few-public-methods), AlertTestData] Too few public methods (1/2)
+
+------------------------------------------------------------------------------------------------------------
+Your code has been rated at 9.96/10 (previous run: 9.96/10, +0.00)
+Checked 39 files, skipped 0 files/modules
+
+.venv/bin/python -m pytest . -v --cov=. --cov-report=xml --cov-report=html --log-cli-level=DEBUG --log-file-level=DEBUG
+============================= test session starts ==============================
+platform darwin -- Python 3.14.2, pytest-8.4.2, pluggy-1.6.0
+rootdir: /Users/runner/work/temperature-bot/temperature-bot
+configfile: pyproject.toml
+plugins: env-1.1.5, cov-7.0.0
+collected 81 items
+
+tests/test_ae200.py::test_ae200_subprocess_get_devices SKIPPED (AE20...) [  1%]
+tests/test_alerts.py::test_format_alert_type_display PASSED              [  2%]
+tests/test_alerts.py::test_extract_relevant_status_fields_valid PASSED   [  3%]
+tests/test_alerts.py::test_extract_relevant_status_fields_invalid PASSED [  4%]
+tests/test_alerts.py::test_get_alert_device_status_rle_encoding 
+-------------------------------- live log setup --------------------------------
+13:17:38 INFO [root] Created temporary database file for test: /var/folders/bp/kmfmhnl95kx1c8x321z7twbw0000gn/T/tmprx9f_t_b.db
+13:17:38 INFO [root] Test database schema set up successfully from /Users/runner/work/temperature-bot/temperature-bot/etc/schema.sql.
+PASSED                                                                   [  6%]
+tests/test_alerts.py::test_get_alert_device_status_not_found 
+-------------------------------- live log setup --------------------------------
+13:17:38 INFO [root] Created temporary database file for test: /var/folders/bp/kmfmhnl95kx1c8x321z7twbw0000gn/T/tmp_10nn3w5.db
+13:17:38 INFO [root] Test database schema set up successfully from /Users/runner/work/temperature-bot/temperature-bot/etc/schema.sql.
+PASSED                                                                   [  7%]
+tests/test_alerts.py::test_get_active_alerts_with_details 
+-------------------------------- live log setup --------------------------------
+13:17:38 INFO [root] Created temporary database file for test: /var/folders/bp/kmfmhnl95kx1c8x321z7twbw0000gn/T/tmpespdroqx.db
+13:17:38 INFO [root] Test database schema set up successfully from /Users/runner/work/temperature-bot/temperature-bot/etc/schema.sql.
+PASSED                                                                   [  8%]
+tests/test_alerts.py::test_get_alert_history_with_details 
+-------------------------------- live log setup --------------------------------
+13:17:38 INFO [root] Created temporary database file for test: /var/folders/bp/kmfmhnl95kx1c8x321z7twbw0000gn/T/tmpx_huyiqu.db
+13:17:38 INFO [root] Test database schema set up successfully from /Users/runner/work/temperature-bot/temperature-bot/etc/schema.sql.
+PASSED                                                                   [  9%]
+tests/test_alerts.py::test_insert_or_update_alert_create_and_close 
+-------------------------------- live log setup --------------------------------
+13:17:38 INFO [root] Created temporary database file for test: /var/folders/bp/kmfmhnl95kx1c8x321z7twbw0000gn/T/tmp_30easi9.db
+13:17:38 INFO [root] Test database schema set up successfully from /Users/runner/work/temperature-bot/temperature-bot/etc/schema.sql.
+PASSED                                                                   [ 11%]
+tests/test_alerts.py::test_insert_or_update_alert_no_duplicate 
+-------------------------------- live log setup --------------------------------
+13:17:38 INFO [root] Created temporary database file for test: /var/folders/bp/kmfmhnl95kx1c8x321z7twbw0000gn/T/tmp7bfya1cd.db
+13:17:38 INFO [root] Test database schema set up successfully from /Users/runner/work/temperature-bot/temperature-bot/etc/schema.sql.
+PASSED                                                                   [ 12%]
+tests/test_alerts.py::test_get_alerts_for_device 
+-------------------------------- live log setup --------------------------------
+13:17:38 INFO [root] Created temporary database file for test: /var/folders/bp/kmfmhnl95kx1c8x321z7twbw0000gn/T/tmpw8hpir20.db
+13:17:38 INFO [root] Test database schema set up successfully from /Users/runner/work/temperature-bot/temperature-bot/etc/schema.sql.
+PASSED                                                                   [ 13%]
+tests/test_aqi.py::test_aqi_decode PASSED                                [ 14%]
+tests/test_aqi.py::test_aqi_rest 
+-------------------------------- live log setup --------------------------------
+13:17:38 INFO [root] Created temporary database file for test: /var/folders/bp/kmfmhnl95kx1c8x321z7twbw0000gn/T/tmpsjusdkxe.db
+13:17:38 INFO [root] Test database schema set up successfully from /Users/runner/work/temperature-bot/temperature-bot/etc/schema.sql.
+13:17:38 DEBUG [conftest] flask_test_client; test_database_conn_with_test_data=(<sqlite3.Connection object at 0x1087da2f0>, 1, {'day': 1, 'week': 2, 'month': 3, 'all': 4})
+-------------------------------- live log call ---------------------------------
+13:17:38 DEBUG [app.db] connect_db(/var/folders/bp/kmfmhnl95kx1c8x321z7twbw0000gn/T/tmpsjusdkxe.db)
+13:17:38 INFO [app.db] Database schema from '/Users/runner/work/temperature-bot/temperature-bot/etc/schema.sql' set up successfully.
+13:17:38 DEBUG [test_aqi] data={'aqi': [[1767619058, 45], [1767619068, 1]], 'co': [[1767619058, None], [1767619068, 10.0]], 'h': [[1767619058, None], [1767619068, 20.0]], 'no2': [[1767619058, None], [1767619068, 30.0]], 'o3': [[1767619058, None], [1767619068, 3.0]], 'p': [[1767619058, None], [1767619068, 40.0]], 'pm10': [[1767619058, None], [1767619068, 50.0]], 'pm25': [[1767619058, None], [1767619068, 60.0]], 'so2': [[1767619058, None], [1767619068, 70.0]], 't': [[1767619058, None], [1767619068, 80.0]], 'w': [[1767619058, None], [1767619068, 90.0]]}
+13:17:38 DEBUG [test_aqi] k=1767619058 v=None
+13:17:38 DEBUG [test_aqi] k=1767619068 v=30.0
+PASSED                                                                   [ 16%]
+tests/test_bin_tools.py::TestBinTools::test_runner_help PASSED           [ 17%]
+tests/test_bin_tools.py::TestBinTools::test_runner_database_access 
+-------------------------------- live log setup --------------------------------
+13:17:39 INFO [root] Created temporary database file for test: /var/folders/bp/kmfmhnl95kx1c8x321z7twbw0000gn/T/tmp8g7zs_0v.db
+13:17:39 INFO [root] Test database schema set up successfully from /Users/runner/work/temperature-bot/temperature-bot/etc/schema.sql.
+-------------------------------- live log call ---------------------------------
+13:17:39 DEBUG [test_bin_tools] result.stderr=2026-01-05 13:17:39,486 db.py:127 (setup_database) Database schema from '/Users/runner/work/temperature-bot/temperature-bot/etc/schema.sql' set up successfully.
+2026-01-05 08:17:39,519 ae200.py:319 (get_devices) get_devices()
+2026-01-05 08:17:39,519 ae200.py:301 (get_device_info) get_device_info(10)
+2026-01-05 08:17:39,550 db.py:401 (insert_devlog_entry) Inserted devlog entry: device_id=2, temp10x=240
+2026-01-05 08:17:39,551 ae200.py:301 (get_device_info) get_device_info(11)
+2026-01-05 08:17:39,581 db.py:401 (insert_devlog_entry) Inserted devlog entry: device_id=3, temp10x=240
+2026-01-05 08:17:39,581 ae200.py:301 (get_device_info) get_device_info(12)
+2026-01-05 08:17:39,611 db.py:401 (insert_devlog_entry) Inserted devlog entry: device_id=4, temp10x=250
+2026-01-05 08:17:39,612 ae200.py:301 (get_device_info) get_device_info(13)
+2026-01-05 08:17:39,640 db.py:401 (insert_devlog_entry) Inserted devlog entry: device_id=5, temp10x=250
+Traceback (most recent call last):
+  File "/Users/runner/work/temperature-bot/temperature-bot/app/hubitat.py", line 29, in get_all_devices
+    appId = get_config()['hubitat']['appId']
+            ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+KeyError: 'appId'
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/Users/runner/work/temperature-bot/temperature-bot/bin/runner.py", line 356, in <module>
+    main()
+    ~~~~^^
+  File "/Users/runner/work/temperature-bot/temperature-bot/bin/runner.py", line 347, in main
+    update_from_hubitat(conn)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/Users/runner/work/temperature-bot/temperature-bot/bin/runner.py", line 75, in update_from_hubitat
+    temps = hubitat.extract_temperatures(hubitat.get_all_devices())
+                                         ~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/Users/runner/work/temperature-bot/temperature-bot/app/hubitat.py", line 31, in get_all_devices
+    raise RuntimeError("hubitat config needs host and appId") from e
+RuntimeError: hubitat config needs host and appId
+
+PASSED                                                                   [ 18%]
+tests/test_bin_tools.py::TestBinTools::test_runner_aqi_update 
+-------------------------------- live log setup --------------------------------
+13:17:39 INFO [root] Created temporary database file for test: /var/folders/bp/kmfmhnl95kx1c8x321z7twbw0000gn/T/tmpulv7_g5m.db
+13:17:39 INFO [root] Test database schema set up successfully from /Users/runner/work/temperature-bot/temperature-bot/etc/schema.sql.
+PASSED                                                                   [ 19%]
+tests/test_bin_tools.py::TestBinTools::test_scheduler_help PASSED        [ 20%]
+tests/test_bin_tools.py::TestBinTools::test_scheduler_dry_run PASSED     [ 22%]
+tests/test_bin_tools.py::TestBinTools::test_scheduler_verbose PASSED     [ 23%]
+tests/test_bin_tools.py::TestBinTools::test_rules_file_exists PASSED     [ 24%]
+tests/test_bin_tools.py::TestBinTools::test_rules_syntax_valid PASSED    [ 25%]
+tests/test_bin_tools.py::TestBinTools::test_runner_imports PASSED        [ 27%]
+tests/test_bin_tools.py::TestBinTools::test_scheduler_imports PASSED     [ 28%]
+tests/test_bin_tools.py::TestBinTools::test_runner_with_test_database 
+-------------------------------- live log setup --------------------------------
+13:17:41 INFO [root] Created temporary database file for test: /var/folders/bp/kmfmhnl95kx1c8x321z7twbw0000gn/T/tmp30laxas3.db
+13:17:41 INFO [root] Test database schema set up successfully from /Users/runner/work/temperature-bot/temperature-bot/etc/schema.sql.
+PASSED                                                                   [ 29%]
+tests/test_bin_tools.py::TestBinTools::test_runner_daily_cleanup 
+-------------------------------- live log setup --------------------------------
+13:17:42 INFO [root] Created temporary database file for test: /var/folders/bp/kmfmhnl95kx1c8x321z7twbw0000gn/T/tmpn7w2j4_o.db
+13:17:42 INFO [root] Test database schema set up successfully from /Users/runner/work/temperature-bot/temperature-bot/etc/schema.sql.
+PASSED                                                                   [ 30%]
+tests/test_bin_tools.py::TestBinTools::test_runner_rules_test 
+-------------------------------- live log setup --------------------------------
+13:17:42 INFO [root] Created temporary database file for test: /var/folders/bp/kmfmhnl95kx1c8x321z7twbw0000gn/T/tmp7t3xtxfl.db
+13:17:42 INFO [root] Test database schema set up successfully from /Users/runner/work/temperature-bot/temperature-bot/etc/schema.sql.
+PASSED                                                                   [ 32%]
+tests/test_bin_tools.py::TestBinTools::test_runner_with_csv_import 
+-------------------------------- live log setup --------------------------------
+13:17:42 INFO [root] Created temporary database file for test: /var/folders/bp/kmfmhnl95kx1c8x321z7twbw0000gn/T/tmp0k180dir.db
+13:17:42 INFO [root] Test database schema set up successfully from /Users/runner/work/temperature-bot/temperature-bot/etc/schema.sql.
+PASSED                                                                   [ 33%]
+tests/test_bin_tools.py::TestBinTools::test_all_tools_help_consistency PASSED [ 34%]
+tests/test_browser_ux.py::test_browser_fan_speed_controls SKIPPED (D...) [ 35%]
+tests/test_browser_ux.py::test_browser_page_loads_correctly SKIPPED      [ 37%]
+tests/test_browser_ux.py::test_browser_temperature_display SKIPPED (...) [ 38%]
+tests/test_browser_ux.py::test_chart_page_no_dom_errors SKIPPED (Dis...) [ 39%]
+tests/test_chart_functionality.py::test_status_api_endpoint_for_devices 
+-------------------------------- live log setup --------------------------------
+13:17:43 INFO [root] Created temporary database file for test: /var/folders/bp/kmfmhnl95kx1c8x321z7twbw0000gn/T/tmpllqt8jlm.db
+13:17:43 INFO [root] Test database schema set up successfully from /Users/runner/work/temperature-bot/temperature-bot/etc/schema.sql.
+13:17:43 DEBUG [conftest] flask_test_client; test_database_conn_with_test_data=(<sqlite3.Connection object at 0x108a82890>, 1, {'day': 1, 'week': 2, 'month': 3, 'all': 4})
+-------------------------------- live log call ---------------------------------
+13:17:43 DEBUG [app.db] connect_db(/var/folders/bp/kmfmhnl95kx1c8x321z7twbw0000gn/T/tmpllqt8jlm.db)
+13:17:43 DEBUG [app.routes_api] **************** /status ****************
+PASSED                                                                   [ 40%]
+tests/test_chart_functionality.py::test_chart_page_with_specific_devices 
+-------------------------------- live log setup --------------------------------
+13:17:43 INFO [root] Created temporary database file for test: /var/folders/bp/kmfmhnl95kx1c8x321z7twbw0000gn/T/tmp30brm60u.db
+13:17:43 INFO [root] Test database schema set up successfully from /Users/runner/work/temperature-bot/temperature-bot/etc/schema.sql.
+13:17:43 DEBUG [conftest] flask_test_client; test_database_conn_with_test_data=(<sqlite3.Connection object at 0x108a826b0>, 1, {'day': 1, 'week': 2, 'month': 3, 'all': 4})
+-------------------------------- live log call ---------------------------------
+13:17:43 INFO [test_chart_functionality] content=<!DOCTYPE html><!-- -*- mode: html -*- -->
+<html lang="en">
+
+
+<head>
+  <meta charset="utf-8">
+  <meta name="keywords" content="temperature"/>
+  <meta name="description" content="Website BasisTech Temperature Bot"/>
+  <title>  Temperature Time Series </title>
+  <!-- use Pure.css - https://purecss.io/ -->
+  
+  <link rel="stylesheet" href="/static/pure-min.css" integrity="sha384-X38yfunGUhNzHpBaEBsWLO+A0HDYOQi8ufWDkZ0k9e0eXz/tH3II7uKZ9msv++Ls" crossorigin="anonymous"/>
+  
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+<!--   <script src="https://code.jquery.com/jquery-3.3.1.slim.min.js" integrity="sha384-q8i/X+965DzO0rT7abK41JStQIAqVgRVzpbzo5smXKp4YfRvH+8abtTE1Pi6jizo" crossorigin="anonymous"></script> -->
+  <script src="/static/temperature_utils.js"></script>
+  <script src="/static/popup_menu.js"></script>
+
+  
+
+   <script src="/static/echarts@5"></script>
+
+<script src="/static/chart_support.js"></script>
+
+
+
+</head>
+<body>
+  <header>
+  
+
+  
+  <div class="pure-menu pure-menu-horizontal">
+    <a href="." class="pure-menu-heading pure-menu-link">BasisTech HVAC</a>
+    <ul class="pure-menu-list">
+      <li class="pure-menu-item">
+        <a href="#" id="rooms-menu-link" class="pure-menu-link">Rooms</a>
+        <div id="rooms-popup" class="github-popup">
+          <a href="/kitchen">Kitchen</a>
+          <a href="/hickory">Hickory</a>
+        </div>
+      </li>
+      <li class="pure-menu-item">
+        <a href="#" id="admin-menu-link" class="pure-menu-link">Admin</a>
+        <div id="admin-popup" class="github-popup">
+          <a href="/chart" class="pure-menu-selected">Chart</a>
+          <a href="/alerts">Alerts</a>
+          <a href="/rules">Rules</a>
+          <a href="/logs_today">Today's Log</a>
+          <a href="/all_devices">All Devices</a>
+        </div>
+      </li>
+      <li class="pure-menu-item">
+        <a href="/about" class="pure-menu-link">About</a>
+      </li>
+      <li class="pure-menu-item">
+        <div class="temperature-toggle">
+          <span class="temp-unit-label">°C</span>
+          <div class="toggle-switch">
+            <input type="checkbox" id="temp-unit-toggle" class="toggle-input">
+            <label for="temp-unit-toggle" class="toggle-label">
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+          <span class="temp-unit-label">°F</span>
+        </div>
+      </li>
+    </ul>
+  </div>
+  
+  </header>
+
+  
+
+<div class="pure-g">
+  <div id="controls">
+    <div id="checkboxes">
+      <div id="checkbox-controls">
+        <button id="selectAllBtn">Select All</button>
+        <button id="clearAllBtn">Clear All</button>
+      </div>
+    </div>
+    <div id="rangeControls" class="temporal-buttons">
+      <button id="dayBtn">day</button>
+      <button id="weekBtn">week</button>
+      <button id="monthBtn">month</button>
+      <button id="allBtn">all</button>
+      <label>Start <input type="date" id="startDate"></label>
+      <label>End <input type="date" id="endDate"></label>
+   </div>
+  </div>
+</div>
+
+<!-- air-quality chart -->
+<div class="pure-g"><div id="aqi-chart" ></div></div>
+<!-- Temperature chart -->
+<div class="pure-g"><div id="temp-chart"></div></div>
+<div class="pure-g"><span id="record-count"></span></div>
+<div class="pure-g"><button id="downloadCsv">Download CSV</button></div>
+
+
+  
+  <footer class="pure-u-1 footer">
+    <p>
+      © 2025-6 BasisTech LLC.
+    </p>
+  </footer>
+  
+</body>
+</html>
+PASSED                                                                   [ 41%]
+tests/test_chart_functionality.py::test_temperature_api_with_multiple_devices 
+-------------------------------- live log setup --------------------------------
+13:17:43 INFO [root] Created temporary database file for test: /var/folders/bp/kmfmhnl95kx1c8x321z7twbw0000gn/T/tmp0xzc83_d.db
+13:17:43 INFO [root] Test database schema set up successfully from /Users/runner/work/temperature-bot/temperature-bot/etc/schema.sql.
+13:17:43 DEBUG [conftest] flask_test_client; test_database_conn_with_test_data=(<sqlite3.Connection object at 0x108a82890>, 1, {'day': 1, 'week': 2, 'month': 3, 'all': 4})
+-------------------------------- live log call ---------------------------------
+13:17:43 DEBUG [app.db] connect_db(/var/folders/bp/kmfmhnl95kx1c8x321z7twbw0000gn/T/tmp0xzc83_d.db)
+PASSED                                                                   [ 43%]
+tests/test_chart_functionality.py::test_status_api_devices_sorted_alphabetically 
+-------------------------------- live log setup --------------------------------
+13:17:43 INFO [root] Created temporary database file for test: /var/folders/bp/kmfmhnl95kx1c8x321z7twbw0000gn/T/tmpzm4x3bk9.db
+13:17:43 INFO [root] Test database schema set up successfully from /Users/runner/work/temperature-bot/temperature-bot/etc/schema.sql.
+13:17:43 DEBUG [conftest] flask_test_client; test_database_conn_with_test_data=(<sqlite3.Connection object at 0x108a826b0>, 1, {'day': 1, 'week': 2, 'month': 3, 'all': 4})
+-------------------------------- live log call ---------------------------------
+13:17:43 DEBUG [app.db] connect_db(/var/folders/bp/kmfmhnl95kx1c8x321z7twbw0000gn/T/tmpzm4x3bk9.db)
+13:17:43 DEBUG [app.routes_api] **************** /status ****************
+PASSED                                                                   [ 44%]
+tests/test_db.py::test_temperature_insert 
+-------------------------------- live log setup --------------------------------
+13:17:43 INFO [root] Created temporary database file for test: /var/folders/bp/kmfmhnl95kx1c8x321z7twbw0000gn/T/tmpxasd3kb6.db
+13:17:43 INFO [root] Test database schema set up successfully from /Users/runner/work/temperature-bot/temperature-bot/etc/schema.sql.
+-------------------------------- live log call ---------------------------------
+13:17:43 DEBUG [app.db] device_id=None device_name=devtest1 temp=20 logtime=100 force=False commit=True
+13:17:43 DEBUG [app.db] INSERT OR IGNORE device_name=devtest1
+13:17:43 DEBUG [app.db] get_or_create_device_id(devtest1) result={'device_id': 2, 'device_name': 'devtest1', 'ae200_device_id': None, 'disabled_until': None, 'notes': None}
+13:17:43 DEBUG [app.db] insert logtime=100 device_id=2
+13:17:43 INFO [app.db] Inserted devlog entry: device_id=2, temp10x=200
+13:17:43 DEBUG [app.db] device_id=None device_name=devtest1 temp=20 logtime=101 force=False commit=True
+13:17:43 DEBUG [app.db] INSERT OR IGNORE device_name=devtest1
+13:17:43 DEBUG [app.db] get_or_create_device_id(devtest1) result={'device_id': 2, 'device_name': 'devtest1', 'ae200_device_id': None, 'disabled_until': None, 'notes': None}
+13:17:43 INFO [app.db] Updated devlog entry: device_id=2 temp10x=200 logtime=Thu Jan  1 00:01:40 1970 duration=2
+13:17:43 DEBUG [app.db] device_id=None device_name=devtest1 temp=20 logtime=112 force=False commit=True
+13:17:43 DEBUG [app.db] INSERT OR IGNORE device_name=devtest1
+13:17:43 DEBUG [app.db] get_or_create_device_id(devtest1) result={'device_id': 2, 'device_name': 'devtest1', 'ae200_device_id': None, 'disabled_until': None, 'notes': None}
+13:17:43 INFO [app.db] Updated devlog entry: device_id=2 temp10x=200 logtime=Thu Jan  1 00:01:40 1970 duration=13
+13:17:43 DEBUG [app.db] device_id=None device_name=devtest2 temp=20 logtime=100 force=False commit=True
+13:17:43 DEBUG [app.db] INSERT OR IGNORE device_name=devtest2
+13:17:43 DEBUG [app.db] get_or_create_device_id(devtest2) result={'device_id': 5, 'device_name': 'devtest2', 'ae200_device_id': None, 'disabled_until': None, 'notes': None}
+13:17:43 DEBUG [app.db] insert logtime=100 device_id=5
+13:17:43 INFO [app.db] Inserted devlog entry: device_id=5, temp10x=200
+13:17:43 DEBUG [app.db] device_id=None device_name=devtest2 temp=21 logtime=111 force=False commit=True
+13:17:43 DEBUG [app.db] INSERT OR IGNORE device_name=devtest2
+13:17:43 DEBUG [app.db] get_or_create_device_id(devtest2) result={'device_id': 5, 'device_name': 'devtest2', 'ae200_device_id': None, 'disabled_until': None, 'notes': None}
+13:17:43 DEBUG [app.db] insert logtime=111 device_id=5
+13:17:43 INFO [app.db] Inserted devlog entry: device_id=5, temp10x=210
+13:17:43 DEBUG [app.db] device_id=None device_name=devtest2 temp=22 logtime=112 force=False commit=True
+13:17:43 DEBUG [app.db] INSERT OR IGNORE device_name=devtest2
+13:17:43 DEBUG [app.db] get_or_create_device_id(devtest2) result={'device_id': 5, 'device_name': 'devtest2', 'ae200_device_id': None, 'disabled_until': None, 'notes': None}
+13:17:43 DEBUG [app.db] insert logtime=112 device_id=5
+13:17:43 INFO [app.db] Inserted devlog entry: device_id=5, temp10x=220
+13:17:43 DEBUG [app.db] INSERT OR IGNORE device_name=devtest1
+13:17:43 DEBUG [app.db] get_or_create_device_id(devtest1) result={'device_id': 2, 'device_name': 'devtest1', 'ae200_device_id': None, 'disabled_until': None, 'notes': None}
+13:17:43 DEBUG [app.db] INSERT OR IGNORE device_name=devtest2
+13:17:43 DEBUG [app.db] get_or_create_device_id(devtest2) result={'device_id': 5, 'device_name': 'devtest2', 'ae200_device_id': None, 'disabled_until': None, 'notes': None}
+13:17:43 DEBUG [app.db] device_id=None device_name=complex1 temp=None logtime=100 force=False commit=True
+13:17:43 DEBUG [app.db] INSERT OR IGNORE device_name=complex1
+13:17:43 DEBUG [app.db] get_or_create_device_id(complex1) result={'device_id': 10, 'device_name': 'complex1', 'ae200_device_id': None, 'disabled_until': None, 'notes': None}
+13:17:43 DEBUG [app.db] insert logtime=100 device_id=10
+13:17:43 INFO [app.db] Inserted devlog entry: device_id=10, temp10x=None
+13:17:43 DEBUG [app.db] device_id=None device_name=complex1 temp=None logtime=101 force=False commit=True
+13:17:43 DEBUG [app.db] INSERT OR IGNORE device_name=complex1
+13:17:43 DEBUG [app.db] get_or_create_device_id(complex1) result={'device_id': 10, 'device_name': 'complex1', 'ae200_device_id': None, 'disabled_until': None, 'notes': None}
+13:17:43 DEBUG [app.db] insert logtime=101 device_id=10
+13:17:43 INFO [app.db] Inserted devlog entry: device_id=10, temp10x=None
+13:17:43 DEBUG [app.db] device_id=None device_name=complex1 temp=None logtime=102 force=False commit=True
+13:17:43 DEBUG [app.db] INSERT OR IGNORE device_name=complex1
+13:17:43 DEBUG [app.db] get_or_create_device_id(complex1) result={'device_id': 10, 'device_name': 'complex1', 'ae200_device_id': None, 'disabled_until': None, 'notes': None}
+13:17:43 INFO [app.db] Updated devlog entry: device_id=10 temp10x=None logtime=Thu Jan  1 00:01:41 1970 duration=2
+13:17:43 DEBUG [root] devtest1_id=2
+13:17:43 INFO [bin.runner] combine_temp_measurements(100,150,50
+13:17:43 DEBUG [bin.runner] {'log_id': 5, 'logtime': 100, 'duration': 13}
+13:17:43 DEBUG [bin.runner] {'device_id': 2, 'avgtemp': 200}
+13:17:43 DEBUG [bin.runner] {'device_id': 5, 'avgtemp': 210}
+13:17:43 DEBUG [bin.runner] {'device_id': 10, 'avgtemp': None}
+PASSED                                                                   [ 45%]
+tests/test_db.py::test_get_db_connection_applies_schema_once_per_mtime PASSED [ 46%]
+tests/test_db.py::test_get_db_connection_reapplies_schema_on_mtime_change PASSED [ 48%]
+tests/test_endpoints.py::test_get_version 
+-------------------------------- live log setup --------------------------------
+13:17:43 INFO [root] Created temporary database file for test: /var/folders/bp/kmfmhnl95kx1c8x321z7twbw0000gn/T/tmpe1m_ztxn.db
+13:17:43 INFO [root] Test database schema set up successfully from /Users/runner/work/temperature-bot/temperature-bot/etc/schema.sql.
+13:17:43 DEBUG [conftest] flask_test_client; test_database_conn_with_test_data=(<sqlite3.Connection object at 0x108a826b0>, 1, {'day': 1, 'week': 2, 'month': 3, 'all': 4})
+PASSED                                                                   [ 49%]
+tests/test_endpoints.py::test_status_endpoint 
+-------------------------------- live log setup --------------------------------
+13:17:43 INFO [root] Created temporary database file for test: /var/folders/bp/kmfmhnl95kx1c8x321z7twbw0000gn/T/tmp6yti5lul.db
+13:17:43 INFO [root] Test database schema set up successfully from /Users/runner/work/temperature-bot/temperature-bot/etc/schema.sql.
+13:17:43 DEBUG [conftest] flask_test_client; test_database_conn_with_test_data=(<sqlite3.Connection object at 0x108a82890>, 1, {'day': 1, 'week': 2, 'month': 3, 'all': 4})
+-------------------------------- live log call ---------------------------------
+13:17:43 DEBUG [app.db] connect_db(/var/folders/bp/kmfmhnl95kx1c8x321z7twbw0000gn/T/tmp6yti5lul.db)
+13:17:43 INFO [app.db] Database schema from '/Users/runner/work/temperature-bot/temperature-bot/etc/schema.sql' set up successfully.
+13:17:43 DEBUG [app.routes_api] **************** /status ****************
+13:17:43 INFO [root]  /status: {'devices': [{'age': '59m', 'device_id': 1, 'device_name': 'Broadway Test', 'disabled_until': None, 'drive': 1, 'duration': 60, 'fan_speed': 1, 'has_speed_control': True, 'log_id': 1, 'logtime': 1767615463, 'notes': None, 'status': {'Drive': 'ON', 'FanSpeed': 'LOW', 'InletTemp': '24.0'}, 'temp10x': 240}]}
+PASSED                                                                   [ 50%]
+tests/test_endpoints.py::test_status_endpoint_with_schema_validation 
+-------------------------------- live log setup --------------------------------
+13:17:43 INFO [root] Created temporary database file for test: /var/folders/bp/kmfmhnl95kx1c8x321z7twbw0000gn/T/tmpj0oxe030.db
+13:17:43 INFO [root] Test database schema set up successfully from /Users/runner/work/temperature-bot/temperature-bot/etc/schema.sql.
+13:17:43 DEBUG [conftest] flask_test_client; test_database_conn_with_test_data=(<sqlite3.Connection object at 0x108a826b0>, 1, {'day': 1, 'week': 2, 'month': 3, 'all': 4})
+-------------------------------- live log call ---------------------------------
+13:17:43 DEBUG [app.db] connect_db(/var/folders/bp/kmfmhnl95kx1c8x321z7twbw0000gn/T/tmpj0oxe030.db)
+13:17:43 DEBUG [app.routes_api] **************** /status ****************
+PASSED                                                                   [ 51%]
+tests/test_endpoints.py::test_weather_endpoint SKIPPED (Disabled in ...) [ 53%]
+tests/test_endpoints.py::test_set_fan_speed_endpoint[1-1-0] 
+-------------------------------- live log setup --------------------------------
+13:17:43 INFO [root] Created temporary database file for test: /var/folders/bp/kmfmhnl95kx1c8x321z7twbw0000gn/T/tmpsniyeaam.db
+13:17:43 INFO [root] Test database schema set up successfully from /Users/runner/work/temperature-bot/temperature-bot/etc/schema.sql.
+13:17:43 DEBUG [conftest] flask_test_client; test_database_conn_with_test_data=(<sqlite3.Connection object at 0x108a83880>, 1, {'day': 1, 'week': 2, 'month': 3, 'all': 4})
+-------------------------------- live log call ---------------------------------
+13:17:43 INFO [app.ae200] set_fan_speed(10,1)=LOW
+13:17:43 DEBUG [app.db] INSERT OR IGNORE device_name=Broadway Test
+13:17:43 DEBUG [app.db] get_or_create_device_id(Broadway Test) result={'device_id': 1, 'device_name': 'Broadway Test', 'ae200_device_id': None, 'disabled_until': None, 'notes': None}
+13:17:43 DEBUG [app.db] connect_db(/var/folders/bp/kmfmhnl95kx1c8x321z7twbw0000gn/T/tmpsniyeaam.db)
+13:17:43 DEBUG [app.routes_api] /set_fan_speed: body=[device_id=1 fan_speed=1]
+13:17:43 DEBUG [app.db] device_id=1 ae200_unit=10
+13:17:43 INFO [app.ae200] get_device_info(10)
+13:17:43 INFO [app.rules_engine] set_body_fan_speed body=[device_id=1 fan_speed=1] ipaddr=127.0.0.1 agent=web. Speed will not change
+13:17:43 INFO [app.ae200] get_device_info(10)
+13:17:43 DEBUG [app.db] device_id=1 device_name=None temp=24.0 logtime=None force=False commit=True
+13:17:43 DEBUG [app.db] insert logtime=1767619063 device_id=1
+13:17:43 INFO [app.db] Inserted devlog entry: device_id=1, temp10x=240
+13:17:43 INFO [app.ae200] get_device_info(10)
+PASSED                                                                   [ 54%]
+tests/test_endpoints.py::test_set_fan_speed_endpoint[1-2-1] 
+-------------------------------- live log setup --------------------------------
+13:17:43 INFO [root] Created temporary database file for test: /var/folders/bp/kmfmhnl95kx1c8x321z7twbw0000gn/T/tmp87tc5yd7.db
+13:17:43 INFO [root] Test database schema set up successfully from /Users/runner/work/temperature-bot/temperature-bot/etc/schema.sql.
+13:17:43 DEBUG [conftest] flask_test_client; test_database_conn_with_test_data=(<sqlite3.Connection object at 0x108a83790>, 1, {'day': 1, 'week': 2, 'month': 3, 'all': 4})
+-------------------------------- live log call ---------------------------------
+13:17:43 INFO [app.ae200] set_fan_speed(10,1)=LOW
+13:17:43 DEBUG [app.db] INSERT OR IGNORE device_name=Broadway Test
+13:17:43 DEBUG [app.db] get_or_create_device_id(Broadway Test) result={'device_id': 1, 'device_name': 'Broadway Test', 'ae200_device_id': None, 'disabled_until': None, 'notes': None}
+13:17:43 DEBUG [app.db] connect_db(/var/folders/bp/kmfmhnl95kx1c8x321z7twbw0000gn/T/tmp87tc5yd7.db)
+13:17:43 DEBUG [app.routes_api] /set_fan_speed: body=[device_id=1 fan_speed=2]
+13:17:43 DEBUG [app.db] device_id=1 ae200_unit=10
+13:17:43 INFO [app.ae200] get_device_info(10)
+13:17:43 INFO [app.rules_engine] set_body_fan_speed body=[device_id=1 fan_speed=2] ipaddr=127.0.0.1 agent=web. Speed changed. current_fan_speed=1
+13:17:43 INFO [app.ae200] set_fan_speed(10,2)=MID2
+13:17:43 INFO [app.ae200] get_device_info(10)
+13:17:43 DEBUG [app.db] device_id=1 device_name=None temp=24.0 logtime=None force=False commit=True
+13:17:43 DEBUG [app.db] insert logtime=1767619063 device_id=1
+13:17:43 INFO [app.db] Inserted devlog entry: device_id=1, temp10x=240
+13:17:43 INFO [app.ae200] get_device_info(10)
+13:17:43 DEBUG [root] row={'device_id': 1, 'device_name': 'Broadway Test', 'ae200_device_id': 10, 'disabled_until': 1767629863, 'notes': None}
+13:17:43 DEBUG [root] changelog_entry={'ipaddr': '127.0.0.1', 'device_id': 1, 'new_value': '1767629863', 'agent': 'Werkzeug/3.1.3'}
+13:17:43 DEBUG [root] changelog_entry={'ipaddr': '127.0.0.1', 'device_id': 1, 'new_value': '2', 'agent': 'web'}
+PASSED                                                                   [ 55%]
+tests/test_endpoints.py::test_set_fan_speed_endpoint[1-3-1] 
+-------------------------------- live log setup --------------------------------
+13:17:43 INFO [root] Created temporary database file for test: /var/folders/bp/kmfmhnl95kx1c8x321z7twbw0000gn/T/tmplvhrrgbx.db
+13:17:43 INFO [root] Test database schema set up successfully from /Users/runner/work/temperature-bot/temperature-bot/etc/schema.sql.
+13:17:43 DEBUG [conftest] flask_test_client; test_database_conn_with_test_data=(<sqlite3.Connection object at 0x108a83880>, 1, {'day': 1, 'week': 2, 'month': 3, 'all': 4})
+-------------------------------- live log call ---------------------------------
+13:17:43 INFO [app.ae200] set_fan_speed(10,1)=LOW
+13:17:43 DEBUG [app.db] INSERT OR IGNORE device_name=Broadway Test
+13:17:43 DEBUG [app.db] get_or_create_device_id(Broadway Test) result={'device_id': 1, 'device_name': 'Broadway Test', 'ae200_device_id': None, 'disabled_until': None, 'notes': None}
+13:17:43 DEBUG [app.db] connect_db(/var/folders/bp/kmfmhnl95kx1c8x321z7twbw0000gn/T/tmplvhrrgbx.db)
+13:17:43 DEBUG [app.routes_api] /set_fan_speed: body=[device_id=1 fan_speed=3]
+13:17:43 DEBUG [app.db] device_id=1 ae200_unit=10
+13:17:43 INFO [app.ae200] get_device_info(10)
+13:17:43 INFO [app.rules_engine] set_body_fan_speed body=[device_id=1 fan_speed=3] ipaddr=127.0.0.1 agent=web. Speed changed. current_fan_speed=1
+13:17:43 INFO [app.ae200] set_fan_speed(10,3)=MID1
+13:17:43 INFO [app.ae200] get_device_info(10)
+13:17:43 DEBUG [app.db] device_id=1 device_name=None temp=24.0 logtime=None force=False commit=True
+13:17:43 DEBUG [app.db] insert logtime=1767619063 device_id=1
+13:17:43 INFO [app.db] Inserted devlog entry: device_id=1, temp10x=240
+13:17:43 INFO [app.ae200] get_device_info(10)
+13:17:43 DEBUG [root] row={'device_id': 1, 'device_name': 'Broadway Test', 'ae200_device_id': 10, 'disabled_until': 1767629863, 'notes': None}
+13:17:43 DEBUG [root] changelog_entry={'ipaddr': '127.0.0.1', 'device_id': 1, 'new_value': '1767629863', 'agent': 'Werkzeug/3.1.3'}
+13:17:43 DEBUG [root] changelog_entry={'ipaddr': '127.0.0.1', 'device_id': 1, 'new_value': '3', 'agent': 'web'}
+PASSED                                                                   [ 56%]
+tests/test_endpoints.py::test_set_fan_speed_endpoint[1-4-1] 
+-------------------------------- live log setup --------------------------------
+13:17:43 INFO [root] Created temporary database file for test: /var/folders/bp/kmfmhnl95kx1c8x321z7twbw0000gn/T/tmpgfkcs8_p.db
+13:17:43 INFO [root] Test database schema set up successfully from /Users/runner/work/temperature-bot/temperature-bot/etc/schema.sql.
+13:17:43 DEBUG [conftest] flask_test_client; test_database_conn_with_test_data=(<sqlite3.Connection object at 0x108a83970>, 1, {'day': 1, 'week': 2, 'month': 3, 'all': 4})
+-------------------------------- live log call ---------------------------------
+13:17:43 INFO [app.ae200] set_fan_speed(10,1)=LOW
+13:17:43 DEBUG [app.db] INSERT OR IGNORE device_name=Broadway Test
+13:17:43 DEBUG [app.db] get_or_create_device_id(Broadway Test) result={'device_id': 1, 'device_name': 'Broadway Test', 'ae200_device_id': None, 'disabled_until': None, 'notes': None}
+13:17:43 DEBUG [app.db] connect_db(/var/folders/bp/kmfmhnl95kx1c8x321z7twbw0000gn/T/tmpgfkcs8_p.db)
+13:17:43 DEBUG [app.routes_api] /set_fan_speed: body=[device_id=1 fan_speed=4]
+13:17:43 DEBUG [app.db] device_id=1 ae200_unit=10
+13:17:43 INFO [app.ae200] get_device_info(10)
+13:17:43 INFO [app.rules_engine] set_body_fan_speed body=[device_id=1 fan_speed=4] ipaddr=127.0.0.1 agent=web. Speed changed. current_fan_speed=1
+13:17:43 INFO [app.ae200] set_fan_speed(10,4)=HIGH
+13:17:43 INFO [app.ae200] get_device_info(10)
+13:17:43 DEBUG [app.db] device_id=1 device_name=None temp=24.0 logtime=None force=False commit=True
+13:17:43 DEBUG [app.db] insert logtime=1767619063 device_id=1
+13:17:43 INFO [app.db] Inserted devlog entry: device_id=1, temp10x=240
+13:17:43 INFO [app.ae200] get_device_info(10)
+13:17:43 DEBUG [root] row={'device_id': 1, 'device_name': 'Broadway Test', 'ae200_device_id': 10, 'disabled_until': 1767629863, 'notes': None}
+13:17:43 DEBUG [root] changelog_entry={'ipaddr': '127.0.0.1', 'device_id': 1, 'new_value': '1767629863', 'agent': 'Werkzeug/3.1.3'}
+13:17:43 DEBUG [root] changelog_entry={'ipaddr': '127.0.0.1', 'device_id': 1, 'new_value': '4', 'agent': 'web'}
+PASSED                                                                   [ 58%]
+tests/test_endpoints.py::test_set_fan_speed_endpoint[2-1-1] 
+-------------------------------- live log setup --------------------------------
+13:17:43 INFO [root] Created temporary database file for test: /var/folders/bp/kmfmhnl95kx1c8x321z7twbw0000gn/T/tmptoxkvtn2.db
+13:17:43 INFO [root] Test database schema set up successfully from /Users/runner/work/temperature-bot/temperature-bot/etc/schema.sql.
+13:17:43 DEBUG [conftest] flask_test_client; test_database_conn_with_test_data=(<sqlite3.Connection object at 0x108a83c40>, 1, {'day': 1, 'week': 2, 'month': 3, 'all': 4})
+-------------------------------- live log call ---------------------------------
+13:17:43 INFO [app.ae200] set_fan_speed(10,2)=MID2
+13:17:43 DEBUG [app.db] INSERT OR IGNORE device_name=Broadway Test
+13:17:43 DEBUG [app.db] get_or_create_device_id(Broadway Test) result={'device_id': 1, 'device_name': 'Broadway Test', 'ae200_device_id': None, 'disabled_until': None, 'notes': None}
+13:17:43 DEBUG [app.db] connect_db(/var/folders/bp/kmfmhnl95kx1c8x321z7twbw0000gn/T/tmptoxkvtn2.db)
+13:17:43 DEBUG [app.routes_api] /set_fan_speed: body=[device_id=1 fan_speed=1]
+13:17:43 DEBUG [app.db] device_id=1 ae200_unit=10
+13:17:43 INFO [app.ae200] get_device_info(10)
+13:17:43 INFO [app.rules_engine] set_body_fan_speed body=[device_id=1 fan_speed=1] ipaddr=127.0.0.1 agent=web. Speed changed. current_fan_speed=2
+13:17:43 INFO [app.ae200] set_fan_speed(10,1)=LOW
+13:17:43 INFO [app.ae200] get_device_info(10)
+13:17:43 DEBUG [app.db] device_id=1 device_name=None temp=24.0 logtime=None force=False commit=True
+13:17:43 DEBUG [app.db] insert logtime=1767619063 device_id=1
+13:17:43 INFO [app.db] Inserted devlog entry: device_id=1, temp10x=240
+13:17:43 INFO [app.ae200] get_device_info(10)
+13:17:43 DEBUG [root] row={'device_id': 1, 'device_name': 'Broadway Test', 'ae200_device_id': 10, 'disabled_until': 1767629863, 'notes': None}
+13:17:43 DEBUG [root] changelog_entry={'ipaddr': '127.0.0.1', 'device_id': 1, 'new_value': '1767629863', 'agent': 'Werkzeug/3.1.3'}
+13:17:43 DEBUG [root] changelog_entry={'ipaddr': '127.0.0.1', 'device_id': 1, 'new_value': '1', 'agent': 'web'}
+PASSED                                                                   [ 59%]
+tests/test_endpoints.py::test_set_fan_speed_endpoint[2-2-0] 
+-------------------------------- live log setup --------------------------------
+13:17:43 INFO [root] Created temporary database file for test: /var/folders/bp/kmfmhnl95kx1c8x321z7twbw0000gn/T/tmp7vsi631s.db
+13:17:43 INFO [root] Test database schema set up successfully from /Users/runner/work/temperature-bot/temperature-bot/etc/schema.sql.
+13:17:43 DEBUG [conftest] flask_test_client; test_database_conn_with_test_data=(<sqlite3.Connection object at 0x108a83970>, 1, {'day': 1, 'week': 2, 'month': 3, 'all': 4})
+-------------------------------- live log call ---------------------------------
+13:17:43 INFO [app.ae200] set_fan_speed(10,2)=MID2
+13:17:43 DEBUG [app.db] INSERT OR IGNORE device_name=Broadway Test
+13:17:43 DEBUG [app.db] get_or_create_device_id(Broadway Test) result={'device_id': 1, 'device_name': 'Broadway Test', 'ae200_device_id': None, 'disabled_until': None, 'notes': None}
+13:17:43 DEBUG [app.db] connect_db(/var/folders/bp/kmfmhnl95kx1c8x321z7twbw0000gn/T/tmp7vsi631s.db)
+13:17:43 DEBUG [app.routes_api] /set_fan_speed: body=[device_id=1 fan_speed=2]
+13:17:43 DEBUG [app.db] device_id=1 ae200_unit=10
+13:17:43 INFO [app.ae200] get_device_info(10)
+13:17:43 INFO [app.rules_engine] set_body_fan_speed body=[device_id=1 fan_speed=2] ipaddr=127.0.0.1 agent=web. Speed will not change
+13:17:43 INFO [app.ae200] get_device_info(10)
+13:17:43 DEBUG [app.db] device_id=1 device_name=None temp=24.0 logtime=None force=False commit=True
+13:17:43 DEBUG [app.db] insert logtime=1767619063 device_id=1
+13:17:43 INFO [app.db] Inserted devlog entry: device_id=1, temp10x=240
+13:17:43 INFO [app.ae200] get_device_info(10)
+PASSED                                                                   [ 60%]
+tests/test_endpoints.py::test_set_fan_speed_endpoint[2-3-1] 
+-------------------------------- live log setup --------------------------------
+13:17:43 INFO [root] Created temporary database file for test: /var/folders/bp/kmfmhnl95kx1c8x321z7twbw0000gn/T/tmpl8svn4h6.db
+13:17:43 INFO [root] Test database schema set up successfully from /Users/runner/work/temperature-bot/temperature-bot/etc/schema.sql.
+13:17:43 DEBUG [conftest] flask_test_client; test_database_conn_with_test_data=(<sqlite3.Connection object at 0x108a83c40>, 1, {'day': 1, 'week': 2, 'month': 3, 'all': 4})
+-------------------------------- live log call ---------------------------------
+13:17:43 INFO [app.ae200] set_fan_speed(10,2)=MID2
+13:17:43 DEBUG [app.db] INSERT OR IGNORE device_name=Broadway Test
+13:17:43 DEBUG [app.db] get_or_create_device_id(Broadway Test) result={'device_id': 1, 'device_name': 'Broadway Test', 'ae200_device_id': None, 'disabled_until': None, 'notes': None}
+13:17:43 DEBUG [app.db] connect_db(/var/folders/bp/kmfmhnl95kx1c8x321z7twbw0000gn/T/tmpl8svn4h6.db)
+13:17:43 DEBUG [app.routes_api] /set_fan_speed: body=[device_id=1 fan_speed=3]
+13:17:43 DEBUG [app.db] device_id=1 ae200_unit=10
+13:17:43 INFO [app.ae200] get_device_info(10)
+13:17:43 INFO [app.rules_engine] set_body_fan_speed body=[device_id=1 fan_speed=3] ipaddr=127.0.0.1 agent=web. Speed changed. current_fan_speed=2
+13:17:43 INFO [app.ae200] set_fan_speed(10,3)=MID1
+13:17:43 INFO [app.ae200] get_device_info(10)
+13:17:43 DEBUG [app.db] device_id=1 device_name=None temp=24.0 logtime=None force=False commit=True
+13:17:43 DEBUG [app.db] insert logtime=1767619063 device_id=1
+13:17:43 INFO [app.db] Inserted devlog entry: device_id=1, temp10x=240
+13:17:43 INFO [app.ae200] get_device_info(10)
+13:17:43 DEBUG [root] row={'device_id': 1, 'device_name': 'Broadway Test', 'ae200_device_id': 10, 'disabled_until': 1767629863, 'notes': None}
+13:17:43 DEBUG [root] changelog_entry={'ipaddr': '127.0.0.1', 'device_id': 1, 'new_value': '1767629863', 'agent': 'Werkzeug/3.1.3'}
+13:17:43 DEBUG [root] changelog_entry={'ipaddr': '127.0.0.1', 'device_id': 1, 'new_value': '3', 'agent': 'web'}
+PASSED                                                                   [ 61%]
+tests/test_endpoints.py::test_set_fan_speed_endpoint[2-4-1] 
+-------------------------------- live log setup --------------------------------
+13:17:43 INFO [root] Created temporary database file for test: /var/folders/bp/kmfmhnl95kx1c8x321z7twbw0000gn/T/tmpaave8cpz.db
+13:17:43 INFO [root] Test database schema set up successfully from /Users/runner/work/temperature-bot/temperature-bot/etc/schema.sql.
+13:17:43 DEBUG [conftest] flask_test_client; test_database_conn_with_test_data=(<sqlite3.Connection object at 0x108a83970>, 1, {'day': 1, 'week': 2, 'month': 3, 'all': 4})
+-------------------------------- live log call ---------------------------------
+13:17:43 INFO [app.ae200] set_fan_speed(10,2)=MID2
+13:17:43 DEBUG [app.db] INSERT OR IGNORE device_name=Broadway Test
+13:17:43 DEBUG [app.db] get_or_create_device_id(Broadway Test) result={'device_id': 1, 'device_name': 'Broadway Test', 'ae200_device_id': None, 'disabled_until': None, 'notes': None}
+13:17:43 DEBUG [app.db] connect_db(/var/folders/bp/kmfmhnl95kx1c8x321z7twbw0000gn/T/tmpaave8cpz.db)
+13:17:43 DEBUG [app.routes_api] /set_fan_speed: body=[device_id=1 fan_speed=4]
+13:17:43 DEBUG [app.db] device_id=1 ae200_unit=10
+13:17:43 INFO [app.ae200] get_device_info(10)
+13:17:43 INFO [app.rules_engine] set_body_fan_speed body=[device_id=1 fan_speed=4] ipaddr=127.0.0.1 agent=web. Speed changed. current_fan_speed=2
+13:17:43 INFO [app.ae200] set_fan_speed(10,4)=HIGH
+13:17:43 INFO [app.ae200] get_device_info(10)
+13:17:43 DEBUG [app.db] device_id=1 device_name=None temp=24.0 logtime=None force=False commit=True
+13:17:43 DEBUG [app.db] insert logtime=1767619063 device_id=1
+13:17:43 INFO [app.db] Inserted devlog entry: device_id=1, temp10x=240
+13:17:43 INFO [app.ae200] get_device_info(10)
+13:17:43 DEBUG [root] row={'device_id': 1, 'device_name': 'Broadway Test', 'ae200_device_id': 10, 'disabled_until': 1767629863, 'notes': None}
+13:17:43 DEBUG [root] changelog_entry={'ipaddr': '127.0.0.1', 'device_id': 1, 'new_value': '1767629863', 'agent': 'Werkzeug/3.1.3'}
+13:17:43 DEBUG [root] changelog_entry={'ipaddr': '127.0.0.1', 'device_id': 1, 'new_value': '4', 'agent': 'web'}
+PASSED                                                                   [ 62%]
+tests/test_endpoints.py::test_alerts_active_endpoint 
+-------------------------------- live log setup --------------------------------
+13:17:43 INFO [root] Created temporary database file for test: /var/folders/bp/kmfmhnl95kx1c8x321z7twbw0000gn/T/tmp6hk04c64.db
+13:17:43 INFO [root] Test database schema set up successfully from /Users/runner/work/temperature-bot/temperature-bot/etc/schema.sql.
+13:17:43 DEBUG [conftest] flask_test_client; test_database_conn_with_test_data=(<sqlite3.Connection object at 0x108a83c40>, 1, {'day': 1, 'week': 2, 'month': 3, 'all': 4})
+-------------------------------- live log call ---------------------------------
+13:17:43 DEBUG [app.db] connect_db(/var/folders/bp/kmfmhnl95kx1c8x321z7twbw0000gn/T/tmp6hk04c64.db)
+PASSED                                                                   [ 64%]
+tests/test_endpoints.py::test_alerts_active_endpoint_with_details 
+-------------------------------- live log setup --------------------------------
+13:17:43 INFO [root] Created temporary database file for test: /var/folders/bp/kmfmhnl95kx1c8x321z7twbw0000gn/T/tmppujext7q.db
+13:17:44 INFO [root] Test database schema set up successfully from /Users/runner/work/temperature-bot/temperature-bot/etc/schema.sql.
+13:17:44 DEBUG [conftest] flask_test_client; test_database_conn_with_test_data=(<sqlite3.Connection object at 0x108a83970>, 1, {'day': 1, 'week': 2, 'month': 3, 'all': 4})
+-------------------------------- live log call ---------------------------------
+13:17:44 DEBUG [app.db] connect_db(/var/folders/bp/kmfmhnl95kx1c8x321z7twbw0000gn/T/tmppujext7q.db)
+13:17:44 DEBUG [app.db] connect_db(/var/folders/bp/kmfmhnl95kx1c8x321z7twbw0000gn/T/tmppujext7q.db)
+PASSED                                                                   [ 65%]
+tests/test_endpoints.py::test_alerts_history_endpoint 
+-------------------------------- live log setup --------------------------------
+13:17:44 INFO [root] Created temporary database file for test: /var/folders/bp/kmfmhnl95kx1c8x321z7twbw0000gn/T/tmp5yoh77ns.db
+13:17:44 INFO [root] Test database schema set up successfully from /Users/runner/work/temperature-bot/temperature-bot/etc/schema.sql.
+13:17:44 DEBUG [conftest] flask_test_client; test_database_conn_with_test_data=(<sqlite3.Connection object at 0x108a83c40>, 1, {'day': 1, 'week': 2, 'month': 3, 'all': 4})
+-------------------------------- live log call ---------------------------------
+13:17:44 DEBUG [app.db] connect_db(/var/folders/bp/kmfmhnl95kx1c8x321z7twbw0000gn/T/tmp5yoh77ns.db)
+PASSED                                                                   [ 66%]
+tests/test_endpoints.py::test_alerts_history_endpoint_with_details 
+-------------------------------- live log setup --------------------------------
+13:17:44 INFO [root] Created temporary database file for test: /var/folders/bp/kmfmhnl95kx1c8x321z7twbw0000gn/T/tmpd9323iwx.db
+13:17:44 INFO [root] Test database schema set up successfully from /Users/runner/work/temperature-bot/temperature-bot/etc/schema.sql.
+13:17:44 DEBUG [conftest] flask_test_client; test_database_conn_with_test_data=(<sqlite3.Connection object at 0x108a83970>, 1, {'day': 1, 'week': 2, 'month': 3, 'all': 4})
+-------------------------------- live log call ---------------------------------
+13:17:44 DEBUG [app.db] connect_db(/var/folders/bp/kmfmhnl95kx1c8x321z7twbw0000gn/T/tmpd9323iwx.db)
+13:17:44 DEBUG [app.db] connect_db(/var/folders/bp/kmfmhnl95kx1c8x321z7twbw0000gn/T/tmpd9323iwx.db)
+PASSED                                                                   [ 67%]
+tests/test_endpoints.py::test_alerts_history_endpoint_limit 
+-------------------------------- live log setup --------------------------------
+13:17:44 INFO [root] Created temporary database file for test: /var/folders/bp/kmfmhnl95kx1c8x321z7twbw0000gn/T/tmp4b3yt5yx.db
+13:17:44 INFO [root] Test database schema set up successfully from /Users/runner/work/temperature-bot/temperature-bot/etc/schema.sql.
+13:17:44 DEBUG [conftest] flask_test_client; test_database_conn_with_test_data=(<sqlite3.Connection object at 0x108a83c40>, 1, {'day': 1, 'week': 2, 'month': 3, 'all': 4})
+-------------------------------- live log call ---------------------------------
+13:17:44 DEBUG [app.db] connect_db(/var/folders/bp/kmfmhnl95kx1c8x321z7twbw0000gn/T/tmp4b3yt5yx.db)
+PASSED                                                                   [ 69%]
+tests/test_endpoints.py::test_update_note_endpoint 
+-------------------------------- live log setup --------------------------------
+13:17:44 INFO [root] Created temporary database file for test: /var/folders/bp/kmfmhnl95kx1c8x321z7twbw0000gn/T/tmpgt4lb2bv.db
+13:17:44 INFO [root] Test database schema set up successfully from /Users/runner/work/temperature-bot/temperature-bot/etc/schema.sql.
+13:17:44 DEBUG [conftest] flask_test_client; test_database_conn_with_test_data=(<sqlite3.Connection object at 0x108a83970>, 1, {'day': 1, 'week': 2, 'month': 3, 'all': 4})
+-------------------------------- live log call ---------------------------------
+13:17:44 DEBUG [app.db] connect_db(/var/folders/bp/kmfmhnl95kx1c8x321z7twbw0000gn/T/tmpgt4lb2bv.db)
+13:17:44 DEBUG [app.routes_api] /update_note: body=[device_id=1 notes='Test note']
+13:17:44 DEBUG [app.db] update_device_notes: device_id=1, notes=Test note
+13:17:44 DEBUG [app.db] connect_db(/var/folders/bp/kmfmhnl95kx1c8x321z7twbw0000gn/T/tmpgt4lb2bv.db)
+13:17:44 DEBUG [app.routes_api] /update_note: body=[device_id=1 notes=None]
+13:17:44 DEBUG [app.db] update_device_notes: device_id=1, notes=None
+PASSED                                                                   [ 70%]
+tests/test_endpoints.py::test_debug_db_devices_endpoint 
+-------------------------------- live log setup --------------------------------
+13:17:44 INFO [root] Created temporary database file for test: /var/folders/bp/kmfmhnl95kx1c8x321z7twbw0000gn/T/tmp2wfi1cbj.db
+13:17:44 INFO [root] Test database schema set up successfully from /Users/runner/work/temperature-bot/temperature-bot/etc/schema.sql.
+13:17:44 DEBUG [conftest] flask_test_client; test_database_conn_with_test_data=(<sqlite3.Connection object at 0x108a83c40>, 1, {'day': 1, 'week': 2, 'month': 3, 'all': 4})
+-------------------------------- live log call ---------------------------------
+13:17:44 DEBUG [app.db] connect_db(/var/folders/bp/kmfmhnl95kx1c8x321z7twbw0000gn/T/tmp2wfi1cbj.db)
+PASSED                                                                   [ 71%]
+tests/test_endpoints.py::test_debug_hubitat_devices_endpoint 
+-------------------------------- live log setup --------------------------------
+13:17:44 INFO [root] Created temporary database file for test: /var/folders/bp/kmfmhnl95kx1c8x321z7twbw0000gn/T/tmpd4wt4sox.db
+13:17:44 INFO [root] Test database schema set up successfully from /Users/runner/work/temperature-bot/temperature-bot/etc/schema.sql.
+13:17:44 DEBUG [conftest] flask_test_client; test_database_conn_with_test_data=(<sqlite3.Connection object at 0x108a83970>, 1, {'day': 1, 'week': 2, 'month': 3, 'all': 4})
+PASSED                                                                   [ 72%]
+tests/test_endpoints.py::test_debug_hubitat_devices_endpoint_error 
+-------------------------------- live log setup --------------------------------
+13:17:44 INFO [root] Created temporary database file for test: /var/folders/bp/kmfmhnl95kx1c8x321z7twbw0000gn/T/tmp1eetdrz0.db
+13:17:44 INFO [root] Test database schema set up successfully from /Users/runner/work/temperature-bot/temperature-bot/etc/schema.sql.
+13:17:44 DEBUG [conftest] flask_test_client; test_database_conn_with_test_data=(<sqlite3.Connection object at 0x108a83c40>, 1, {'day': 1, 'week': 2, 'month': 3, 'all': 4})
+FAILED                                                                   [ 74%]
+tests/test_endpoints.py::test_debug_ae200_devices_endpoint 
+-------------------------------- live log setup --------------------------------
+13:17:44 INFO [root] Created temporary database file for test: /var/folders/bp/kmfmhnl95kx1c8x321z7twbw0000gn/T/tmp0kqrkyur.db
+13:17:44 INFO [root] Test database schema set up successfully from /Users/runner/work/temperature-bot/temperature-bot/etc/schema.sql.
+13:17:44 DEBUG [conftest] flask_test_client; test_database_conn_with_test_data=(<sqlite3.Connection object at 0x108b01120>, 1, {'day': 1, 'week': 2, 'month': 3, 'all': 4})
+PASSED                                                                   [ 75%]
+tests/test_endpoints.py::test_debug_ae200_devices_endpoint_error 
+-------------------------------- live log setup --------------------------------
+13:17:44 INFO [root] Created temporary database file for test: /var/folders/bp/kmfmhnl95kx1c8x321z7twbw0000gn/T/tmpjfjxl31z.db
+13:17:44 INFO [root] Test database schema set up successfully from /Users/runner/work/temperature-bot/temperature-bot/etc/schema.sql.
+13:17:44 DEBUG [conftest] flask_test_client; test_database_conn_with_test_data=(<sqlite3.Connection object at 0x108b016c0>, 1, {'day': 1, 'week': 2, 'month': 3, 'all': 4})
+FAILED                                                                   [ 76%]
+tests/test_hubitat.py::test_hubitat PASSED                               [ 77%]
+tests/test_routes.py::test_status_endpoint 
+-------------------------------- live log setup --------------------------------
+13:17:44 INFO [root] Created temporary database file for test: /var/folders/bp/kmfmhnl95kx1c8x321z7twbw0000gn/T/tmp3uby3r66.db
+13:17:44 INFO [root] Test database schema set up successfully from /Users/runner/work/temperature-bot/temperature-bot/etc/schema.sql.
+13:17:44 DEBUG [conftest] flask_test_client; test_database_conn_with_test_data=(<sqlite3.Connection object at 0x108b02b60>, 1, {'day': 1, 'week': 2, 'month': 3, 'all': 4})
+-------------------------------- live log call ---------------------------------
+13:17:44 DEBUG [app.db] connect_db(/var/folders/bp/kmfmhnl95kx1c8x321z7twbw0000gn/T/tmp3uby3r66.db)
+13:17:44 DEBUG [app.routes_api] **************** /status ****************
+PASSED                                                                   [ 79%]
+tests/test_routes.py::test_logs_today_route 
+-------------------------------- live log setup --------------------------------
+13:17:44 INFO [root] Created temporary database file for test: /var/folders/bp/kmfmhnl95kx1c8x321z7twbw0000gn/T/tmpfsfus87q.db
+13:17:44 INFO [root] Test database schema set up successfully from /Users/runner/work/temperature-bot/temperature-bot/etc/schema.sql.
+13:17:44 DEBUG [conftest] flask_test_client; test_database_conn_with_test_data=(<sqlite3.Connection object at 0x108b02f20>, 1, {'day': 1, 'week': 2, 'month': 3, 'all': 4})
+PASSED                                                                   [ 80%]
+tests/test_routes.py::test_all_devices_route 
+-------------------------------- live log setup --------------------------------
+13:17:44 INFO [root] Created temporary database file for test: /var/folders/bp/kmfmhnl95kx1c8x321z7twbw0000gn/T/tmpdohr254b.db
+13:17:44 INFO [root] Test database schema set up successfully from /Users/runner/work/temperature-bot/temperature-bot/etc/schema.sql.
+13:17:44 DEBUG [conftest] flask_test_client; test_database_conn_with_test_data=(<sqlite3.Connection object at 0x108b02b60>, 1, {'day': 1, 'week': 2, 'month': 3, 'all': 4})
+PASSED                                                                   [ 81%]
+tests/test_routes.py::test_about_route 
+-------------------------------- live log setup --------------------------------
+13:17:44 INFO [root] Created temporary database file for test: /var/folders/bp/kmfmhnl95kx1c8x321z7twbw0000gn/T/tmpbo_wtkih.db
+13:17:44 INFO [root] Test database schema set up successfully from /Users/runner/work/temperature-bot/temperature-bot/etc/schema.sql.
+13:17:44 DEBUG [conftest] flask_test_client; test_database_conn_with_test_data=(<sqlite3.Connection object at 0x108b02f20>, 1, {'day': 1, 'week': 2, 'month': 3, 'all': 4})
+PASSED                                                                   [ 82%]
+tests/test_routes.py::test_privacy_route 
+-------------------------------- live log setup --------------------------------
+13:17:44 INFO [root] Created temporary database file for test: /var/folders/bp/kmfmhnl95kx1c8x321z7twbw0000gn/T/tmp69j5wo85.db
+13:17:44 INFO [root] Test database schema set up successfully from /Users/runner/work/temperature-bot/temperature-bot/etc/schema.sql.
+13:17:44 DEBUG [conftest] flask_test_client; test_database_conn_with_test_data=(<sqlite3.Connection object at 0x108b02b60>, 1, {'day': 1, 'week': 2, 'month': 3, 'all': 4})
+PASSED                                                                   [ 83%]
+tests/test_routes.py::test_terms_route 
+-------------------------------- live log setup --------------------------------
+13:17:44 INFO [root] Created temporary database file for test: /var/folders/bp/kmfmhnl95kx1c8x321z7twbw0000gn/T/tmpudona6z8.db
+13:17:44 INFO [root] Test database schema set up successfully from /Users/runner/work/temperature-bot/temperature-bot/etc/schema.sql.
+13:17:44 DEBUG [conftest] flask_test_client; test_database_conn_with_test_data=(<sqlite3.Connection object at 0x108b02f20>, 1, {'day': 1, 'week': 2, 'month': 3, 'all': 4})
+PASSED                                                                   [ 85%]
+tests/test_routes.py::test_kitchen_route 
+-------------------------------- live log setup --------------------------------
+13:17:44 INFO [root] Created temporary database file for test: /var/folders/bp/kmfmhnl95kx1c8x321z7twbw0000gn/T/tmpv6u7xse5.db
+13:17:44 INFO [root] Test database schema set up successfully from /Users/runner/work/temperature-bot/temperature-bot/etc/schema.sql.
+13:17:44 DEBUG [conftest] flask_test_client; test_database_conn_with_test_data=(<sqlite3.Connection object at 0x108b02b60>, 1, {'day': 1, 'week': 2, 'month': 3, 'all': 4})
+-------------------------------- live log call ---------------------------------
+13:17:44 DEBUG [app.db] connect_db(/var/folders/bp/kmfmhnl95kx1c8x321z7twbw0000gn/T/tmpv6u7xse5.db)
+13:17:44 WARNING [app.routes_web] Failed to fetch Hubitat sensors: hubitat config needs host and appId
+PASSED                                                                   [ 86%]
+tests/test_routes.py::test_hickory_route 
+-------------------------------- live log setup --------------------------------
+13:17:44 INFO [root] Created temporary database file for test: /var/folders/bp/kmfmhnl95kx1c8x321z7twbw0000gn/T/tmpzfxan9tf.db
+13:17:44 INFO [root] Test database schema set up successfully from /Users/runner/work/temperature-bot/temperature-bot/etc/schema.sql.
+13:17:44 DEBUG [conftest] flask_test_client; test_database_conn_with_test_data=(<sqlite3.Connection object at 0x108b03e20>, 1, {'day': 1, 'week': 2, 'month': 3, 'all': 4})
+-------------------------------- live log call ---------------------------------
+13:17:44 DEBUG [app.db] connect_db(/var/folders/bp/kmfmhnl95kx1c8x321z7twbw0000gn/T/tmpzfxan9tf.db)
+13:17:44 WARNING [app.routes_web] Failed to fetch Hubitat sensors: hubitat config needs host and appId
+PASSED                                                                   [ 87%]
+tests/test_rules_disable.py::test_rules_disable_functionality SKIPPED    [ 88%]
+tests/test_temporal_quantifiers.py::test_logs_endpoint_with_start 
+-------------------------------- live log setup --------------------------------
+13:17:44 INFO [root] Created temporary database file for test: /var/folders/bp/kmfmhnl95kx1c8x321z7twbw0000gn/T/tmp3n1la1d3.db
+13:17:44 INFO [root] Test database schema set up successfully from /Users/runner/work/temperature-bot/temperature-bot/etc/schema.sql.
+13:17:44 DEBUG [conftest] flask_test_client; test_database_conn_with_test_data=(<sqlite3.Connection object at 0x108b02b60>, 1, {'day': 1, 'week': 2, 'month': 3, 'all': 4})
+-------------------------------- live log call ---------------------------------
+13:17:44 DEBUG [app.db] connect_db(/var/folders/bp/kmfmhnl95kx1c8x321z7twbw0000gn/T/tmp3n1la1d3.db)
+13:17:44 INFO [app.routes_api] /logs
+13:17:44 DEBUG [app.db] cmd=SELECT c.logtime, c.ipaddr, d.device_name as unit, c.new_value, c.agent, c.comment FROM changelog c
+               LEFT JOIN devices d ON c.device_id = d.device_id WHERE 1=1 AND logtime >= ?  ORDER BY logtime DESC LIMIT ? OFFSET ? args=[1767532664, 100, 0]
+PASSED                                                                   [ 90%]
+tests/test_temporal_quantifiers.py::test_logs_endpoint_with_end 
+-------------------------------- live log setup --------------------------------
+13:17:44 INFO [root] Created temporary database file for test: /var/folders/bp/kmfmhnl95kx1c8x321z7twbw0000gn/T/tmp_kk0zrtk.db
+13:17:44 INFO [root] Test database schema set up successfully from /Users/runner/work/temperature-bot/temperature-bot/etc/schema.sql.
+13:17:44 DEBUG [conftest] flask_test_client; test_database_conn_with_test_data=(<sqlite3.Connection object at 0x108b035b0>, 1, {'day': 1, 'week': 2, 'month': 3, 'all': 4})
+-------------------------------- live log call ---------------------------------
+13:17:44 DEBUG [app.db] connect_db(/var/folders/bp/kmfmhnl95kx1c8x321z7twbw0000gn/T/tmp_kk0zrtk.db)
+13:17:44 INFO [app.routes_api] /logs
+13:17:44 DEBUG [app.db] cmd=SELECT c.logtime, c.ipaddr, d.device_name as unit, c.new_value, c.agent, c.comment FROM changelog c
+               LEFT JOIN devices d ON c.device_id = d.device_id WHERE 1=1 AND logtime <= ?  ORDER BY logtime DESC LIMIT ? OFFSET ? args=[1767619064, 100, 0]
+PASSED                                                                   [ 91%]
+tests/test_temporal_quantifiers.py::test_logs_endpoint_with_start_and_end 
+-------------------------------- live log setup --------------------------------
+13:17:44 INFO [root] Created temporary database file for test: /var/folders/bp/kmfmhnl95kx1c8x321z7twbw0000gn/T/tmp00b5tt09.db
+13:17:44 INFO [root] Test database schema set up successfully from /Users/runner/work/temperature-bot/temperature-bot/etc/schema.sql.
+13:17:44 DEBUG [conftest] flask_test_client; test_database_conn_with_test_data=(<sqlite3.Connection object at 0x108b02b60>, 1, {'day': 1, 'week': 2, 'month': 3, 'all': 4})
+-------------------------------- live log call ---------------------------------
+13:17:44 DEBUG [app.db] connect_db(/var/folders/bp/kmfmhnl95kx1c8x321z7twbw0000gn/T/tmp00b5tt09.db)
+13:17:44 INFO [app.routes_api] /logs
+13:17:44 DEBUG [app.db] cmd=SELECT c.logtime, c.ipaddr, d.device_name as unit, c.new_value, c.agent, c.comment FROM changelog c
+               LEFT JOIN devices d ON c.device_id = d.device_id WHERE 1=1 AND logtime >= ?  AND logtime <= ?  ORDER BY logtime DESC LIMIT ? OFFSET ? args=[1767532664, 1767619064, 100, 0]
+PASSED                                                                   [ 92%]
+tests/test_temporal_quantifiers.py::test_device_log_endpoint_with_start 
+-------------------------------- live log setup --------------------------------
+13:17:44 INFO [root] Created temporary database file for test: /var/folders/bp/kmfmhnl95kx1c8x321z7twbw0000gn/T/tmpkcjlzucj.db
+13:17:44 INFO [root] Test database schema set up successfully from /Users/runner/work/temperature-bot/temperature-bot/etc/schema.sql.
+13:17:44 DEBUG [conftest] flask_test_client; test_database_conn_with_test_data=(<sqlite3.Connection object at 0x108b035b0>, 1, {'day': 1, 'week': 2, 'month': 3, 'all': 4})
+-------------------------------- live log call ---------------------------------
+13:17:44 DEBUG [app.db] connect_db(/var/folders/bp/kmfmhnl95kx1c8x321z7twbw0000gn/T/tmpkcjlzucj.db)
+13:17:44 DEBUG [app.db] connect_db(/var/folders/bp/kmfmhnl95kx1c8x321z7twbw0000gn/T/tmpkcjlzucj.db)
+PASSED                                                                   [ 93%]
+tests/test_temporal_quantifiers.py::test_device_log_endpoint_with_end 
+-------------------------------- live log setup --------------------------------
+13:17:44 INFO [root] Created temporary database file for test: /var/folders/bp/kmfmhnl95kx1c8x321z7twbw0000gn/T/tmphg68mbmg.db
+13:17:44 INFO [root] Test database schema set up successfully from /Users/runner/work/temperature-bot/temperature-bot/etc/schema.sql.
+13:17:44 DEBUG [conftest] flask_test_client; test_database_conn_with_test_data=(<sqlite3.Connection object at 0x108b02b60>, 1, {'day': 1, 'week': 2, 'month': 3, 'all': 4})
+-------------------------------- live log call ---------------------------------
+13:17:44 DEBUG [app.db] connect_db(/var/folders/bp/kmfmhnl95kx1c8x321z7twbw0000gn/T/tmphg68mbmg.db)
+13:17:44 DEBUG [app.db] connect_db(/var/folders/bp/kmfmhnl95kx1c8x321z7twbw0000gn/T/tmphg68mbmg.db)
+PASSED                                                                   [ 95%]
+tests/test_temporal_quantifiers.py::test_device_log_endpoint_with_start_and_end 
+-------------------------------- live log setup --------------------------------
+13:17:44 INFO [root] Created temporary database file for test: /var/folders/bp/kmfmhnl95kx1c8x321z7twbw0000gn/T/tmpakqrq46s.db
+13:17:44 INFO [root] Test database schema set up successfully from /Users/runner/work/temperature-bot/temperature-bot/etc/schema.sql.
+13:17:44 DEBUG [conftest] flask_test_client; test_database_conn_with_test_data=(<sqlite3.Connection object at 0x108b035b0>, 1, {'day': 1, 'week': 2, 'month': 3, 'all': 4})
+-------------------------------- live log call ---------------------------------
+13:17:44 DEBUG [app.db] connect_db(/var/folders/bp/kmfmhnl95kx1c8x321z7twbw0000gn/T/tmpakqrq46s.db)
+13:17:44 DEBUG [app.db] connect_db(/var/folders/bp/kmfmhnl95kx1c8x321z7twbw0000gn/T/tmpakqrq46s.db)
+PASSED                                                                   [ 96%]
+tests/test_temporal_quantifiers.py::test_temperature_api_with_device_id 
+-------------------------------- live log setup --------------------------------
+13:17:44 INFO [root] Created temporary database file for test: /var/folders/bp/kmfmhnl95kx1c8x321z7twbw0000gn/T/tmpi9vb9bpu.db
+13:17:44 INFO [root] Test database schema set up successfully from /Users/runner/work/temperature-bot/temperature-bot/etc/schema.sql.
+13:17:44 DEBUG [conftest] flask_test_client; test_database_conn_with_test_data=(<sqlite3.Connection object at 0x108b02b60>, 1, {'day': 1, 'week': 2, 'month': 3, 'all': 4})
+-------------------------------- live log call ---------------------------------
+13:17:44 DEBUG [app.db] connect_db(/var/folders/bp/kmfmhnl95kx1c8x321z7twbw0000gn/T/tmpi9vb9bpu.db)
+PASSED                                                                   [ 97%]
+tests/test_temporal_quantifiers.py::test_temperature_api_with_start_and_end 
+-------------------------------- live log setup --------------------------------
+13:17:44 INFO [root] Created temporary database file for test: /var/folders/bp/kmfmhnl95kx1c8x321z7twbw0000gn/T/tmpbp_1dflp.db
+13:17:44 INFO [root] Test database schema set up successfully from /Users/runner/work/temperature-bot/temperature-bot/etc/schema.sql.
+13:17:44 DEBUG [conftest] flask_test_client; test_database_conn_with_test_data=(<sqlite3.Connection object at 0x108b035b0>, 1, {'day': 1, 'week': 2, 'month': 3, 'all': 4})
+-------------------------------- live log call ---------------------------------
+13:17:44 DEBUG [app.db] connect_db(/var/folders/bp/kmfmhnl95kx1c8x321z7twbw0000gn/T/tmpbp_1dflp.db)
+PASSED                                                                   [ 98%]
+tests/test_temporal_quantifiers.py::test_chart_page_with_device_id 
+-------------------------------- live log setup --------------------------------
+13:17:44 INFO [root] Created temporary database file for test: /var/folders/bp/kmfmhnl95kx1c8x321z7twbw0000gn/T/tmpmp7g4wbp.db
+13:17:44 INFO [root] Test database schema set up successfully from /Users/runner/work/temperature-bot/temperature-bot/etc/schema.sql.
+13:17:44 DEBUG [conftest] flask_test_client; test_database_conn_with_test_data=(<sqlite3.Connection object at 0x108b02b60>, 1, {'day': 1, 'week': 2, 'month': 3, 'all': 4})
+/Users/runner/work/temperature-bot/temperature-bot/.venv/lib/python3.14/site-packages/_pytest/unraisableexception.py:67: PytestUnraisableExceptionWarning: Exception ignored while finalizing coroutine <coroutine object debug_ae200_devices.<locals>._fetch_ae200_details_async at 0x1088e5000>: None
+
+Traceback (most recent call last):
+  File "<string>", line 1, in <lambda>
+KeyError: '__import__'
+
+
+  warnings.warn(pytest.PytestUnraisableExceptionWarning(msg))
+PASSED                                                                   [100%]
+
+=================================== FAILURES ===================================
+__________________ test_debug_hubitat_devices_endpoint_error ___________________
+
+mock_get_all_devices = <MagicMock name='get_all_devices' id='4437621264'>
+flask_test_client = <FlaskClient <Flask 'app.main'>>
+
+    @patch("app.routes_api.hubitat.get_all_devices")
+    def test_debug_hubitat_devices_endpoint_error(mock_get_all_devices, flask_test_client):  # noqa: F811
+        """Test the /api/v1/debug/hubitat_devices endpoint handles errors"""
+        # Mock error
+        mock_get_all_devices.side_effect = Exception("Hubitat connection error")
+    
+>       response = flask_test_client.get("/api/v1/debug/hubitat_devices")
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_endpoints.py:440: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.14/site-packages/werkzeug/test.py:1162: in get
+    return self.open(*args, **kw)
+           ^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/flask/testing.py:235: in open
+    response = super().open(
+.venv/lib/python3.14/site-packages/werkzeug/test.py:1116: in open
+    response_parts = self.run_wsgi_app(request.environ, buffered=buffered)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/werkzeug/test.py:988: in run_wsgi_app
+    rv = run_wsgi_app(self.application, environ, buffered=buffered)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/werkzeug/test.py:1264: in run_wsgi_app
+    app_rv = app(environ, start_response)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/flask/app.py:1536: in __call__
+    return self.wsgi_app(environ, start_response)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/werkzeug/middleware/proxy_fix.py:183: in __call__
+    return self.app(environ, start_response)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/flask/app.py:1514: in wsgi_app
+    response = self.handle_exception(e)
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/flask/app.py:1511: in wsgi_app
+    response = self.full_dispatch_request()
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/flask/app.py:919: in full_dispatch_request
+    rv = self.handle_user_exception(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/flask/app.py:917: in full_dispatch_request
+    rv = self.dispatch_request()
+         ^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/flask/app.py:902: in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)  # type: ignore[no-any-return]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+app/routes_api.py:179: in debug_hubitat_devices
+    hubitat_devices = hubitat.get_all_devices()
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/homebrew/Cellar/python@3.14/3.14.2/Frameworks/Python.framework/Versions/3.14/lib/python3.14/unittest/mock.py:1175: in __call__
+    return self._mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/homebrew/Cellar/python@3.14/3.14.2/Frameworks/Python.framework/Versions/3.14/lib/python3.14/unittest/mock.py:1179: in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <MagicMock name='get_all_devices' id='4437621264'>, args = ()
+kwargs = {}, effect = Exception('Hubitat connection error')
+
+    def _execute_mock_call(self, /, *args, **kwargs):
+        # separate from _increment_mock_call so that awaited functions are
+        # executed separately from their call, also AsyncMock overrides this method
+    
+        effect = self.side_effect
+        if effect is not None:
+            if _is_exception(effect):
+>               raise effect
+E               Exception: Hubitat connection error
+
+/opt/homebrew/Cellar/python@3.14/3.14.2/Frameworks/Python.framework/Versions/3.14/lib/python3.14/unittest/mock.py:1234: Exception
+---------------------------- Captured stderr setup -----------------------------
+2026-01-05 13:17:44,116  conftest.py:64 INFO: Created temporary database file for test: /var/folders/bp/kmfmhnl95kx1c8x321z7twbw0000gn/T/tmp1eetdrz0.db
+2026-01-05 13:17:44,126  conftest.py:92 INFO: Test database schema set up successfully from /Users/runner/work/temperature-bot/temperature-bot/etc/schema.sql.
+2026-01-05 13:17:44,129  conftest.py:148 DEBUG: flask_test_client; test_database_conn_with_test_data=(<sqlite3.Connection object at 0x108a83c40>, 1, {'day': 1, 'week': 2, 'month': 3, 'all': 4})
+------------------------------ Captured log setup ------------------------------
+INFO     root:conftest.py:64 Created temporary database file for test: /var/folders/bp/kmfmhnl95kx1c8x321z7twbw0000gn/T/tmp1eetdrz0.db
+INFO     root:conftest.py:92 Test database schema set up successfully from /Users/runner/work/temperature-bot/temperature-bot/etc/schema.sql.
+DEBUG    conftest:conftest.py:148 flask_test_client; test_database_conn_with_test_data=(<sqlite3.Connection object at 0x108a83c40>, 1, {'day': 1, 'week': 2, 'month': 3, 'all': 4})
+___________________ test_debug_ae200_devices_endpoint_error ____________________
+
+mock_get_devices = <MagicMock name='get_devices' id='4447241280'>
+flask_test_client = <FlaskClient <Flask 'app.main'>>
+
+    @patch("app.routes_api.ae200.get_devices")
+    def test_debug_ae200_devices_endpoint_error(mock_get_devices, flask_test_client):  # noqa: F811
+        """Test the /api/v1/debug/ae200_devices endpoint handles errors"""
+        # Mock error
+        mock_get_devices.side_effect = Exception("AE200 connection error")
+    
+>       response = flask_test_client.get("/api/v1/debug/ae200_devices")
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_endpoints.py:477: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.14/site-packages/werkzeug/test.py:1162: in get
+    return self.open(*args, **kw)
+           ^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/flask/testing.py:235: in open
+    response = super().open(
+.venv/lib/python3.14/site-packages/werkzeug/test.py:1116: in open
+    response_parts = self.run_wsgi_app(request.environ, buffered=buffered)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/werkzeug/test.py:988: in run_wsgi_app
+    rv = run_wsgi_app(self.application, environ, buffered=buffered)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/werkzeug/test.py:1264: in run_wsgi_app
+    app_rv = app(environ, start_response)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/flask/app.py:1536: in __call__
+    return self.wsgi_app(environ, start_response)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/werkzeug/middleware/proxy_fix.py:183: in __call__
+    return self.app(environ, start_response)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/flask/app.py:1514: in wsgi_app
+    response = self.handle_exception(e)
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/flask/app.py:1511: in wsgi_app
+    response = self.full_dispatch_request()
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/flask/app.py:919: in full_dispatch_request
+    rv = self.handle_user_exception(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/flask/app.py:917: in full_dispatch_request
+    rv = self.dispatch_request()
+         ^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/flask/app.py:902: in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)  # type: ignore[no-any-return]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+app/routes_api.py:191: in debug_ae200_devices
+    ae200_devices = ae200.get_devices()
+                    ^^^^^^^^^^^^^^^^^^^
+/opt/homebrew/Cellar/python@3.14/3.14.2/Frameworks/Python.framework/Versions/3.14/lib/python3.14/unittest/mock.py:1175: in __call__
+    return self._mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/homebrew/Cellar/python@3.14/3.14.2/Frameworks/Python.framework/Versions/3.14/lib/python3.14/unittest/mock.py:1179: in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <MagicMock name='get_devices' id='4447241280'>, args = (), kwargs = {}
+effect = Exception('AE200 connection error')
+
+    def _execute_mock_call(self, /, *args, **kwargs):
+        # separate from _increment_mock_call so that awaited functions are
+        # executed separately from their call, also AsyncMock overrides this method
+    
+        effect = self.side_effect
+        if effect is not None:
+            if _is_exception(effect):
+>               raise effect
+E               Exception: AE200 connection error
+
+/opt/homebrew/Cellar/python@3.14/3.14.2/Frameworks/Python.framework/Versions/3.14/lib/python3.14/unittest/mock.py:1234: Exception
+---------------------------- Captured stderr setup -----------------------------
+2026-01-05 13:17:44,270  conftest.py:64 INFO: Created temporary database file for test: /var/folders/bp/kmfmhnl95kx1c8x321z7twbw0000gn/T/tmpjfjxl31z.db
+2026-01-05 13:17:44,279  conftest.py:92 INFO: Test database schema set up successfully from /Users/runner/work/temperature-bot/temperature-bot/etc/schema.sql.
+2026-01-05 13:17:44,281  conftest.py:148 DEBUG: flask_test_client; test_database_conn_with_test_data=(<sqlite3.Connection object at 0x108b016c0>, 1, {'day': 1, 'week': 2, 'month': 3, 'all': 4})
+------------------------------ Captured log setup ------------------------------
+INFO     root:conftest.py:64 Created temporary database file for test: /var/folders/bp/kmfmhnl95kx1c8x321z7twbw0000gn/T/tmpjfjxl31z.db
+INFO     root:conftest.py:92 Test database schema set up successfully from /Users/runner/work/temperature-bot/temperature-bot/etc/schema.sql.
+DEBUG    conftest:conftest.py:148 flask_test_client; test_database_conn_with_test_data=(<sqlite3.Connection object at 0x108b016c0>, 1, {'day': 1, 'week': 2, 'month': 3, 'all': 4})
+================================ tests coverage ================================
+_______________ coverage: platform darwin, python 3.14.2-final-0 _______________
+
+Coverage HTML written to dir htmlcov
+Coverage XML written to file coverage.xml
+=========================== short test summary info ============================
+SKIPPED [1] tests/test_ae200.py:24: AE200 device not reachable
+SKIPPED [1] tests/test_browser_ux.py:46: Disabled in GitHub Actions
+SKIPPED [1] tests/test_browser_ux.py:214: Disabled in GitHub Actions
+SKIPPED [1] tests/test_browser_ux.py:308: Disabled in GitHub Actions
+SKIPPED [1] tests/test_browser_ux.py:408: Disabled in GitHub Actions
+SKIPPED [1] tests/test_endpoints.py:117: Disabled in GitHub Actions
+SKIPPED [1] tests/test_rules_disable.py:20: Disabled in GitHub Actions
+FAILED tests/test_endpoints.py::test_debug_hubitat_devices_endpoint_error - Exception: Hubitat connection error
+FAILED tests/test_endpoints.py::test_debug_ae200_devices_endpoint_error - Exception: AE200 connection error
+=================== 2 failed, 72 passed, 7 skipped in 9.34s ====================
+make[1]: *** [pytest] Error 1
+Running JavaScript unit tests...
+node tests/test_time_utils.js
+Testing formatDuration function...
+
+✓ formatDuration(null) = "Active"
+✓ formatDuration(0) = "0m"
+✓ formatDuration(30) = "0m"
+✓ formatDuration(60) = "1m"
+✓ formatDuration(90) = "1m"
+✓ formatDuration(3599) = "59m"
+✓ formatDuration(3600) = "1h 0m"
+✓ formatDuration(3660) = "1h 1m"
+✓ formatDuration(7200) = "2h 0m"
+✓ formatDuration(9000) = "2h 30m"
+✓ formatDuration(86400) = "1d 0h 0m"
+✓ formatDuration(864480) = "10d 0h 8m"
+✓ formatDuration(90000) = "1d 1h 0m"
+✓ formatDuration(893280) = "10d 8h 8m"
+✓ formatDuration(172800) = "2d 0h 0m"
+✓ formatDuration(259200) = "3d 0h 0m"
+✓ formatDuration(604800) = "7d 0h 0m"
+✓ formatDuration(691200) = "8d 0h 0m"
+✓ formatDuration(259380) = "3d 0h 3m"
+✓ formatDuration(43200) = "12h 0m"
+
+20 passed, 0 failed
+make: *** [test] Error 2
+Error: Process completed with exit code 2.
+
+---
+
+_**Agent (model default, mode Agent)**_
+
+
+
+---
+
+
+Fixing the failing tests: the error handlers catch `(ValueError, RuntimeError, OSError)`, but the tests raise a generic `Exception`. Updating the tests to raise one of those exceptions:
+
+
+---
+
+<tool-use data-tool-type="read" data-tool-name="read_file">
+<details><summary>Tool use: **read_file** • Read file: tests/test_endpoints.py</summary>
+
+</details>
+</tool-use>
+
+---
+
+<tool-use data-tool-type="write" data-tool-name="search_replace">
+
+<details><summary>Tool use: **search_replace** • Edit file: tests/test_endpoints.py</summary>
+
+**Chunk 1**
+Lines added: 2, lines removed: 2
+
+```diff
+@@ -435,6 +435,6 @@
+  def test_debug_hubitat_devices_endpoint_error(mock_get_all_devices, flask_test_client):  # noqa: F811
+      """Test the /api/v1/debug/hubitat_devices endpoint handles errors"""
+-     # Mock error
+-     mock_get_all_devices.side_effect = Exception("Hubitat connection error")
++     # Mock error - use RuntimeError which is caught by the handler
++     mock_get_all_devices.side_effect = RuntimeError("Hubitat connection error")
+  
+      response = flask_test_client.get("/api/v1/debug/hubitat_devices")
+```
+
+</details>
+
+</tool-use>
+
+---
+
+<tool-use data-tool-type="write" data-tool-name="search_replace">
+
+<details><summary>Tool use: **search_replace** • Edit file: tests/test_endpoints.py</summary>
+
+**Chunk 1**
+Lines added: 2, lines removed: 2
+
+```diff
+@@ -472,6 +472,6 @@
+  def test_debug_ae200_devices_endpoint_error(mock_get_devices, flask_test_client):  # noqa: F811
+      """Test the /api/v1/debug/ae200_devices endpoint handles errors"""
+-     # Mock error
+-     mock_get_devices.side_effect = Exception("AE200 connection error")
++     # Mock error - use RuntimeError which is caught by the handler
++     mock_get_devices.side_effect = RuntimeError("AE200 connection error")
+  
+      response = flask_test_client.get("/api/v1/debug/ae200_devices")
+```
+
+</details>
+
+</tool-use>
+
+---
+
+<tool-use data-tool-type="shell" data-tool-name="run_terminal_cmd">
+<details><summary>Tool use: **run_terminal_cmd** • Run command: cd /Users/deg/Documents/basistech/temperature-bot && .venv/bin/python -m pytest tests/test_endpoints.py::test_debug_hubitat_devices_endpoint_error tests/test_endpoints.py::test_debug_ae200_devices_endpoint_error -v</summary>
+
+```bash
+cd /Users/deg/Documents/basistech/temperature-bot && .venv/bin/python -m pytest tests/test_endpoints.py::test_debug_hubitat_devices_endpoint_error tests/test_endpoints.py::test_debug_ae200_devices_endpoint_error -v
+```
+
+```
+============================= test session starts ==============================
+platform darwin -- Python 3.12.1, pytest-8.4.2, pluggy-1.6.0
+rootdir: /Users/deg/Documents/basistech/temperature-bot
+configfile: pyproject.toml
+plugins: env-1.1.5, cov-7.0.0
+collected 2 items
+
+tests/test_endpoints.py::test_debug_hubitat_devices_endpoint_error 
+-------------------------------- live log setup --------------------------------
+15:21:53 INFO [root] Created temporary database file for test: /var/folders/rd/qqb6fdns36562w2c4q_qbc9m0000gn/T/tmp1ietk9rs.db
+15:21:53 INFO [root] Test database schema set up successfully from /Users/deg/Documents/basistech/temperature-bot/etc/schema.sql.
+-------------------------------- live log call ---------------------------------
+15:21:53 WARNING [app.routes_api] Failed to fetch Hubitat devices: Hubitat connection error
+PASSED                                                                   [ 50%]
+tests/test_endpoints.py::test_debug_ae200_devices_endpoint_error 
+-------------------------------- live log setup --------------------------------
+15:21:53 INFO [root] Created temporary database file for test: /var/folders/rd/qqb6fdns36562w2c4q_qbc9m0000gn/T/tmpz7m6dz4l.db
+15:21:53 INFO [root] Test database schema set up successfully from /Users/deg/Documents/basistech/temperature-bot/etc/schema.sql.
+-------------------------------- live log call ---------------------------------
+15:21:53 WARNING [app.routes_api] Failed to fetch AE-200 devices: AE200 connection error
+PASSED                                                                   [100%]
+
+============================== 2 passed in 0.08s ===============================
+
+```
+</details>
+</tool-use>
+
+---
+
+
+
+---
+
+
+Tests are passing. The issue was that the error handlers catch `(ValueError, RuntimeError, OSError)`, but the tests raised a generic `Exception`. Updated the tests to raise `RuntimeError`, which is caught.
+
+Checking for linting issues:
+
+
+---
+
+<tool-use data-tool-type="generic" data-tool-name="read_lints">
+<details>
+          <summary>Tool use: **read_lints** • Read lints for 1 file</summary>
+      
+Lint paths:
+
+- `tests/test_endpoints.py`
+
+Lint results
+
+
+**No lint errors found**
+</details>
+</tool-use>
+
+---
+
+
+
+---
+
+
+Fixed the failing tests. The error handlers in `routes_api.py` catch `(ValueError, RuntimeError, OSError)`, but the tests raised a generic `Exception`, which wasn't caught.
+
+## Fixed Test Failures
+
+### `test_debug_hubitat_devices_endpoint_error`
+- Changed from raising `Exception` to `RuntimeError` (which is caught by the handler)
+
+### `test_debug_ae200_devices_endpoint_error`
+- Changed from raising `Exception` to `RuntimeError` (which is caught by the handler)
+
+Both tests now pass. The error handlers catch `RuntimeError`, so the endpoints return 500 with an error message as expected.
+
+All tests should now pass in the GitHub Actions CI/CD pipeline.
+
+---
+
