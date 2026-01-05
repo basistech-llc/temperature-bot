@@ -2165,3 +2165,332 @@ Both the main menu and the room dashboard now use the same widget with consisten
 
 ---
 
+_**User (2026-01-05 10:38Z)**_
+
+On the main "BasisTech HVAC" page why does it take a while to update after switching between C and F (often 3-5 seconds)?
+
+---
+
+_**Agent (model default, mode Agent)**_
+
+
+
+---
+
+
+Investigating the temperature toggle update logic to identify the delay:
+
+
+---
+
+<tool-use data-tool-type="read" data-tool-name="read_file">
+<details><summary>Tool use: **read_file** • Read file: /Users/deg/Documents/basistech/temperature-bot/app/static/temperature_utils.js</summary>
+
+</details>
+</tool-use>
+
+---
+
+<tool-use data-tool-type="read" data-tool-name="read_file">
+<details><summary>Tool use: **read_file** • Read file: /Users/deg/Documents/basistech/temperature-bot/app/static/unit_speed.js</summary>
+
+</details>
+</tool-use>
+
+---
+
+<tool-use data-tool-type="search" data-tool-name="grep">
+<details>
+<summary>Tool use: **grep** • Grep for "temp-unit-toggle|temperature.*toggle" • 23 matches</summary>
+
+Output mode: content
+
+
+| File | Content | Line |
+|------|------|------|
+| `./app/templates/room_dashboard.html` | `<div class="temperature-toggle">` | L323 |
+| `./app/templates/room_dashboard.html` | `<input type="checkbox" id="temp-unit-toggle" class="toggle-input">` | L326 |
+| `./app/templates/room_dashboard.html` | `<label for="temp-unit-toggle" class="toggle-label">` | L327 |
+| `./app/static/style.css` | `/* Temperature unit toggle - consistent styling everywhere */` | L35 |
+| `./app/static/style.css` | `.temperature-toggle \{` | L36 |
+| `./app/static/style.css` | `/* Ensure temperature toggle menu item is properly aligned */` | L569 |
+| `./app/static/style.css` | `li.pure-menu-item > .temperature-toggle \{` | L570 |
+| `./app/templates/base.html` | `<div class="temperature-toggle">` | L58 |
+| `./app/templates/base.html` | `<input type="checkbox" id="temp-unit-toggle" class="toggle-input">` | L61 |
+| `./app/templates/base.html` | `<label for="temp-unit-toggle" class="toggle-label">` | L62 |
+| `./app/static/room_dashboard.js` | `* Set up temperature unit toggle listener.` | L265 |
+| `./app/static/room_dashboard.js` | `function setupTemperatureToggle() \{` | L267 |
+| `./app/static/room_dashboard.js` | `const toggle = document.getElementById('temp-unit-toggle');` | L274 |
+| `./app/static/room_dashboard.js` | `setupTemperatureToggle();` | L298 |
+| `./app/static/temperature_utils.js` | `updateTemperatureToggleUI();` | L78 |
+| `./app/static/temperature_utils.js` | `* Update the temperature toggle UI to reflect current state` | L90 |
+| `./app/static/temperature_utils.js` | `function updateTemperatureToggleUI() \{` | L92 |
+| `./app/static/temperature_utils.js` | `const toggle = document.getElementById("temp-unit-toggle");` | L93 |
+| `./app/static/temperature_utils.js` | `updateTemperatureToggleUI();` | L138 |
+| `./app/static/temperature_utils.js` | `const toggle = document.getElementById("temp-unit-toggle");` | L141 |
+| `./app/static/temperature_utils.js` | `setTemperatureUnit(toggle.checked);` | L144 |
+| `./app/static/temperature_utils.js` | `console.warn("Temperature toggle element not found - toggle functionality disabled");` | L158 |
+| `./app/static/temperature_utils.js` | `updateTemperatureToggleUI,` | L173 |
+
+
+</details>
+</tool-use>
+
+---
+
+
+
+---
+
+
+The toggle calls `refreshGridRows()`, which waits for the refresh interval. Updating it to refresh immediately when triggered by the toggle:
+
+
+---
+
+<tool-use data-tool-type="read" data-tool-name="read_file">
+<details><summary>Tool use: **read_file** • Read file: /Users/deg/Documents/basistech/temperature-bot/app/static/unit_speed.js</summary>
+
+</details>
+</tool-use>
+
+---
+
+<tool-use data-tool-type="read" data-tool-name="read_file">
+<details><summary>Tool use: **read_file** • Read file: /Users/deg/Documents/basistech/temperature-bot/app/static/temperature_utils.js</summary>
+
+</details>
+</tool-use>
+
+---
+
+
+
+---
+
+
+The issue: `refreshGridRows()` waits for the refresh interval, and `updateAllTemperatureDisplays()` only updates `.temp-display` elements, not the main page temperature cells. Adding an immediate update function that reformats existing temperatures without waiting for the API:
+
+
+---
+
+<tool-use data-tool-type="read" data-tool-name="read_file">
+<details><summary>Tool use: **read_file** • Read file: /Users/deg/Documents/basistech/temperature-bot/app/templates/index.html</summary>
+
+</details>
+</tool-use>
+
+---
+
+<tool-use data-tool-type="write" data-tool-name="search_replace">
+
+<details><summary>Tool use: **search_replace** • Edit file: /Users/deg/Documents/basistech/temperature-bot/app/static/temperature_utils.js</summary>
+
+**Chunk 1**
+Lines added: 27, lines removed: undefined
+
+```diff
+@@ -125,4 +125,31 @@
+      }
+    });
++ 
++   // Update main page temperature cells (temp-{device_id})
++   const tempCells = document.querySelectorAll('[id^="temp-"]');
++   tempCells.forEach((element) =&gt; {
++     // Extract temperature from existing innerHTML (format: "XX.X°C" or "XX.X°F")
++     const text = element.textContent || element.innerHTML;
++     // Try to extract the numeric value and age if present
++     const match = text.match(/([\d.]+)/);
++     if (match) {
++       // Try to get the original Celsius value from data attribute or parse current value
++       const currentValue = parseFloat(match[1]);
++       // If current value looks like Fahrenheit (&gt; 50), convert back to Celsius
++       let tempC = currentValue;
++       if (USE_FAHRENHEIT &amp;&amp; currentValue &gt; 50) {
++         // Likely already in Fahrenheit, convert back
++         tempC = fahrenheitToCelsius(currentValue);
++       } else if (!USE_FAHRENHEIT &amp;&amp; currentValue &lt; 50) {
++         // Likely in Celsius, keep as is
++         tempC = currentValue;
++       }
++       // Extract age if present
++       const ageMatch = text.match(/\(([^)]+)\)/);
++       const age = ageMatch ? ageMatch[1] : null;
++       // Update with new format
++       element.innerHTML = formatTemperature(tempC) + (age ? &#96; &lt;span class='age'&gt;(${age})&lt;/span&gt; &#96; : "");
++     }
++   });
+  
+    // Update weather displays
+```
+
+</details>
+
+</tool-use>
+
+---
+
+
+
+---
+
+
+Improving the solution: storing the original Celsius value in a data attribute and forcing an immediate refresh:
+
+
+---
+
+<tool-use data-tool-type="write" data-tool-name="search_replace">
+
+<details><summary>Tool use: **search_replace** • Edit file: /Users/deg/Documents/basistech/temperature-bot/app/static/unit_speed.js</summary>
+
+**Chunk 1**
+Lines added: 4, lines removed: 1
+
+```diff
+@@ -345,10 +345,13 @@
+              if (dev.temp10x) {
+                const cell = document.getElementById(&#96;temp-${dev.device_id}&#96;);
++               const tempC = dev.temp10x / 10;
++               // Store original Celsius value in data attribute for instant conversion
++               cell.setAttribute("data-temp-c", tempC.toString());
+                var myformat = Intl.NumberFormat("en-US", {
+                  minimumIntegerDigits: 2,
+                  minimumFractionDigits: 1,
+                });
+                cell.innerHTML =
+-                 TemperatureUtils.formatTemperature(dev.temp10x / 10) +
++                 TemperatureUtils.formatTemperature(tempC) +
+                  (dev.age ? &#96; &lt;span class='age'&gt;(${dev.age})&lt;/span&gt; &#96; : "");
+              }
+```
+
+</details>
+
+</tool-use>
+
+---
+
+<tool-use data-tool-type="write" data-tool-name="search_replace">
+
+<details><summary>Tool use: **search_replace** • Edit file: /Users/deg/Documents/basistech/temperature-bot/app/static/temperature_utils.js</summary>
+
+**Chunk 1**
+Lines added: 7, lines removed: 19
+
+```diff
+@@ -129,24 +129,12 @@
+    const tempCells = document.querySelectorAll('[id^="temp-"]');
+    tempCells.forEach((element) =&gt; {
+-     // Extract temperature from existing innerHTML (format: "XX.X°C" or "XX.X°F")
+-     const text = element.textContent || element.innerHTML;
+-     // Try to extract the numeric value and age if present
+-     const match = text.match(/([\d.]+)/);
+-     if (match) {
+-       // Try to get the original Celsius value from data attribute or parse current value
+-       const currentValue = parseFloat(match[1]);
+-       // If current value looks like Fahrenheit (&gt; 50), convert back to Celsius
+-       let tempC = currentValue;
+-       if (USE_FAHRENHEIT &amp;&amp; currentValue &gt; 50) {
+-         // Likely already in Fahrenheit, convert back
+-         tempC = fahrenheitToCelsius(currentValue);
+-       } else if (!USE_FAHRENHEIT &amp;&amp; currentValue &lt; 50) {
+-         // Likely in Celsius, keep as is
+-         tempC = currentValue;
+-       }
+-       // Extract age if present
+-       const ageMatch = text.match(/\(([^)]+)\)/);
++     // Get original Celsius value from data attribute
++     const tempC = parseFloat(element.getAttribute("data-temp-c"));
++     if (!isNaN(tempC)) {
++       // Extract age if present from current HTML
++       const currentHTML = element.innerHTML;
++       const ageMatch = currentHTML.match(/&lt;span class=['"]age['"]&gt;\(([^)]+)\)&lt;\/span&gt;/);
+        const age = ageMatch ? ageMatch[1] : null;
+-       // Update with new format
++       // Update with new format using stored Celsius value
+        element.innerHTML = formatTemperature(tempC) + (age ? &#96; &lt;span class='age'&gt;(${age})&lt;/span&gt; &#96; : "");
+      }
+```
+
+</details>
+
+</tool-use>
+
+---
+
+<tool-use data-tool-type="write" data-tool-name="search_replace">
+
+<details><summary>Tool use: **search_replace** • Edit file: /Users/deg/Documents/basistech/temperature-bot/app/static/temperature_utils.js</summary>
+
+**Chunk 1**
+Lines added: 3, lines removed: 4
+
+```diff
+@@ -165,8 +165,7 @@
+        }
+  
+-       // Trigger main dashboard refresh if unit_speed.js is loaded
+-       if (typeof window.refreshGridRows === "function") {
+-         window.refreshGridRows();
+-       }
++       // Immediately update all temperature displays (no API call needed)
++       // The main dashboard temperatures will be updated on next refresh cycle
++       // but we've already updated the display above
+      });
+    } else {
+```
+
+</details>
+
+</tool-use>
+
+---
+
+
+
+---
+
+
+
+
+
+---
+
+<tool-use data-tool-type="generic" data-tool-name="read_lints">
+<details>
+          <summary>Tool use: **read_lints** • Read lints for 2 files</summary>
+      
+Lint paths:
+
+- `app/static/temperature_utils.js`
+- `app/static/unit_speed.js`
+
+Lint results
+
+
+**No lint errors found**
+</details>
+</tool-use>
+
+---
+
+
+
+---
+
+
+Fixed the delay. When the temperature toggle changed, it called `refreshGridRows()`, which waits for the refresh interval (up to 10 seconds) before updating.
+
+**Changes made:**
+
+1. **Store original Celsius values**: Modified `unit_speed.js` to store the original Celsius temperature in a `data-temp-c` attribute when temperatures are displayed.
+
+2. **Immediate conversion**: Updated `updateAllTemperatureDisplays()` to read the stored Celsius values from the data attributes and immediately reformat all temperature displays without waiting for an API call.
+
+3. **Removed delayed refresh**: Removed the call to `refreshGridRows()` from the toggle handler, which was causing the 3-5 second delay.
+
+Temperature conversion should now be instant since it reformats existing values using the stored Celsius data, rather than waiting for a server refresh.
+
+---
+

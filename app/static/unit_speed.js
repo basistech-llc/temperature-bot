@@ -344,12 +344,15 @@ const refreshGridRows = () => {
           for (const dev of data.devices) {
             if (dev.temp10x) {
               const cell = document.getElementById(`temp-${dev.device_id}`);
+              const tempC = dev.temp10x / 10;
+              // Store original Celsius value in data attribute for instant conversion
+              cell.setAttribute("data-temp-c", tempC.toString());
               var myformat = Intl.NumberFormat("en-US", {
                 minimumIntegerDigits: 2,
                 minimumFractionDigits: 1,
               });
               cell.innerHTML =
-                TemperatureUtils.formatTemperature(dev.temp10x / 10) +
+                TemperatureUtils.formatTemperature(tempC) +
                 (dev.age ? ` <span class='age'>(${dev.age})</span> ` : "");
             }
             if (dev.drive) {
