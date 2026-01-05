@@ -434,8 +434,8 @@ def test_debug_hubitat_devices_endpoint(mock_get_all_devices, flask_test_client)
 @patch("app.routes_api.hubitat.get_all_devices")
 def test_debug_hubitat_devices_endpoint_error(mock_get_all_devices, flask_test_client):  # noqa: F811
     """Test the /api/v1/debug/hubitat_devices endpoint handles errors"""
-    # Mock error
-    mock_get_all_devices.side_effect = Exception("Hubitat connection error")
+    # Mock error - use RuntimeError which is caught by the handler
+    mock_get_all_devices.side_effect = RuntimeError("Hubitat connection error")
 
     response = flask_test_client.get("/api/v1/debug/hubitat_devices")
     assert response.status_code == 500
@@ -471,8 +471,8 @@ def test_debug_ae200_devices_endpoint(
 @patch("app.routes_api.ae200.get_devices")
 def test_debug_ae200_devices_endpoint_error(mock_get_devices, flask_test_client):  # noqa: F811
     """Test the /api/v1/debug/ae200_devices endpoint handles errors"""
-    # Mock error
-    mock_get_devices.side_effect = Exception("AE200 connection error")
+    # Mock error - use RuntimeError which is caught by the handler
+    mock_get_devices.side_effect = RuntimeError("AE200 connection error")
 
     response = flask_test_client.get("/api/v1/debug/ae200_devices")
     assert response.status_code == 500

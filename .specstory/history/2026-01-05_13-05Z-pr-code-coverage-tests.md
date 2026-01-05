@@ -1729,12 +1729,280 @@ Checking remaining lint errors and fixing straightforward ones:
 ```bash
 .venv/bin/python -m pylint --output-format=parseable --rcfile .pylintrc app/routes_api.py app/routes_web.py tests/test_endpoints.py tests/test_alerts.py 2>&1 | grep -E "\[W|\[C" | head -20
 ```
+
+```
+tests/test_alerts.py:100: [W0612(unused-variable), test_get_active_alerts_with_details] Unused variable 'device_id'
+tests/test_alerts.py:131: [W0612(unused-variable), test_get_alert_history_with_details] Unused variable 'device_id'
+tests/test_alerts.py:10: [C0411(wrong-import-order), ] third party import "helpers.data_factories.AlertTestData" should be placed before first party import "app.db" 
+
+```
+</details>
+</tool-use>
+
+---
+
+<tool-use data-tool-type="read" data-tool-name="read_file">
+<details><summary>Tool use: **read_file** • Read file: tests/test_alerts.py</summary>
+
 </details>
 </tool-use>
 
 ---
 
 
+
+---
+
+
+Fixing straightforward lint errors:
+
+
+---
+
+<tool-use data-tool-type="write" data-tool-name="search_replace">
+
+<details><summary>Tool use: **search_replace** • Edit file: tests/test_alerts.py</summary>
+
+**Chunk 1**
+Lines added: 2, lines removed: 1
+
+```diff
+@@ -7,6 +7,7 @@
+  import logging
+  
+- from app import db
+  from helpers.data_factories import AlertTestData
++ 
++ from app import db
+  
+  logger = logging.getLogger(__name__)
+```
+
+</details>
+
+</tool-use>
+
+---
+
+<tool-use data-tool-type="write" data-tool-name="search_replace">
+
+<details><summary>Tool use: **search_replace** • Edit file: tests/test_alerts.py</summary>
+
+**Chunk 1**
+Lines added: 1, lines removed: 1
+
+```diff
+@@ -99,5 +99,5 @@
+  
+      # Create device with alert using helper
+-     device_id = AlertTestData.create_device_with_alert(
++     AlertTestData.create_device_with_alert(
+          conn,
+          "Device 1",
+```
+
+</details>
+
+</tool-use>
+
+---
+
+<tool-use data-tool-type="write" data-tool-name="search_replace">
+
+<details><summary>Tool use: **search_replace** • Edit file: tests/test_alerts.py</summary>
+
+**Chunk 1**
+Lines added: 1, lines removed: 1
+
+```diff
+@@ -130,5 +130,5 @@
+  
+      # Create device with resolved alert using helper
+-     device_id = AlertTestData.create_device_with_alert(
++     AlertTestData.create_device_with_alert(
+          conn,
+          "Device 1",
+```
+
+</details>
+
+</tool-use>
+
+---
+
+<tool-use data-tool-type="shell" data-tool-name="run_terminal_cmd">
+<details><summary>Tool use: **run_terminal_cmd** • Run command: .venv/bin/python -m pylint --output-format=parseable --rcfile .pylintrc tests/test_alerts.py 2>&1 | grep -E "\[W|\[C"</summary>
+
+```bash
+.venv/bin/python -m pylint --output-format=parseable --rcfile .pylintrc tests/test_alerts.py 2>&1 | grep -E "\[W|\[C"
+```
+</details>
+</tool-use>
+
+---
+
+
+
+---
+
+
+Checking for other straightforward lint errors:
+
+
+---
+
+<tool-use data-tool-type="generic" data-tool-name="read_lints">
+<details>
+          <summary>Tool use: **read_lints** • Read lints for 1 file</summary>
+      
+Lint paths:
+
+- `tests/test_alerts.py`
+
+Lint results
+
+
+**No lint errors found**
+</details>
+</tool-use>
+
+---
+
+<tool-use data-tool-type="shell" data-tool-name="run_terminal_cmd">
+<details><summary>Tool use: **run_terminal_cmd** • Run command: .venv/bin/python -m pylint --output-format=parseable --rcfile .pylintrc tests/test_endpoints.py tests/test_routes.py 2>&1 | grep -E "\[W|\[C"</summary>
+
+```bash
+.venv/bin/python -m pylint --output-format=parseable --rcfile .pylintrc tests/test_endpoints.py tests/test_routes.py 2>&1 | grep -E "\[W|\[C"
+```
+</details>
+</tool-use>
+
+---
+
+
+
+---
+
+
+Checking for other straightforward lint errors in the test files:
+
+
+---
+
+<tool-use data-tool-type="shell" data-tool-name="run_terminal_cmd">
+<details><summary>Tool use: **run_terminal_cmd** • Run command: .venv/bin/python -m pylint --output-format=parseable --rcfile .pylintrc tests/ 2>&1 | grep -E "\[W0611|\[W0612|\[C0411" | head -10</summary>
+
+```bash
+.venv/bin/python -m pylint --output-format=parseable --rcfile .pylintrc tests/ 2>&1 | grep -E "\[W0611|\[W0612|\[C0411" | head -10
+```
+
+```
+tests/helpers/data_factories.py:153: [W0611(unused-import), AlertTestData.create_device_with_alert] Unused import sqlite3
+
+```
+</details>
+</tool-use>
+
+---
+
+
+
+---
+
+
+Fixing the unused import:
+
+
+---
+
+<tool-use data-tool-type="read" data-tool-name="read_file">
+<details><summary>Tool use: **read_file** • Read file: tests/helpers/data_factories.py</summary>
+
+</details>
+</tool-use>
+
+---
+
+<tool-use data-tool-type="read" data-tool-name="read_file">
+<details><summary>Tool use: **read_file** • Read file: tests/helpers/data_factories.py</summary>
+
+</details>
+</tool-use>
+
+---
+
+
+
+---
+
+
+
+
+
+---
+
+<tool-use data-tool-type="write" data-tool-name="search_replace">
+
+<details><summary>Tool use: **search_replace** • Edit file: tests/helpers/data_factories.py</summary>
+
+**Chunk 1**
+Lines added: undefined, lines removed: 1
+
+```diff
+@@ -151,5 +151,4 @@
+          """
+          import json
+-         import sqlite3
+  
+          cursor = conn.cursor()
+```
+
+</details>
+
+</tool-use>
+
+---
+
+<tool-use data-tool-type="generic" data-tool-name="read_lints">
+<details>
+          <summary>Tool use: **read_lints** • Read lints for 1 file</summary>
+      
+Lint paths:
+
+- `tests/helpers/data_factories.py`
+
+Lint results
+
+
+**No lint errors found**
+</details>
+</tool-use>
+
+---
+
+
+
+---
+
+
+Fixed the straightforward lint errors. Summary:
+
+## Fixed Linting Errors
+
+### `tests/test_alerts.py`
+1. Fixed import order: moved `helpers.data_factories.AlertTestData` before `app.db` (third-party imports before first-party)
+2. Removed unused `device_id` variable in `test_get_active_alerts_with_details` (line 100)
+3. Removed unused `device_id` variable in `test_get_alert_history_with_details` (line 131)
+
+### `tests/helpers/data_factories.py`
+1. Removed unused `sqlite3` import in `AlertTestData.create_device_with_alert` method
+
+All fixes are straightforward and safe:
+- No functional changes
+- No breaking changes
+- Only removed unused code and fixed import ordering
+
+The remaining lint warnings (protected access, too many arguments, etc.) would require more significant refactoring, so I left those for now. The straightforward, safe ones are fixed.
 
 ---
 
