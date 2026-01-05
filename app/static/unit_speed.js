@@ -9,7 +9,6 @@ const RUNNING_MINUTES = 10; // minutes to run before stopping
 const SHOW_REFRESH_COUNTDOWN = false;
 let lastRefreshTime = 0;
 
-
 // Refresh logic
 var start = Date.now();
 var forceRefresh = false;
@@ -34,9 +33,9 @@ function displayWeather(weatherInfo) {
   // Add weather content
   if (weatherInfo.current) {
     const current = weatherInfo.current;
-        const temp = current.temperature
-          ? `${TemperatureUtils.formatTemperature(current.temperature)} (Boston Logan Airport)`
-          : "N/A";
+    const temp = current.temperature
+      ? `${TemperatureUtils.formatTemperature(current.temperature)} (Boston Logan Airport)`
+      : "N/A";
     html += `<div><strong>Current:</strong> ${temp} `;
     if (current.icon) {
       html += ` <img src="${current.icon}" alt="weather icon" class="weather-icon">`;
@@ -48,12 +47,12 @@ function displayWeather(weatherInfo) {
   // Forecast
   if (weatherInfo.forecast && weatherInfo.forecast.length > 0) {
     html += `<div><strong>Forecast for CALA:</strong></div>`;
-        weatherInfo.forecast.forEach((period) => {
-          // Convert forecast temp from Fahrenheit to Celsius first, then apply unit preference
-          const tempF = parseFloat(period.temperature);
-          const tempC = TemperatureUtils.fahrenheitToCelsius(tempF);
-          const formattedTemp = TemperatureUtils.formatTemperature(tempC);
-          html += `<div>${period.time} ${formattedTemp} `;
+    weatherInfo.forecast.forEach((period) => {
+      // Convert forecast temp from Fahrenheit to Celsius first, then apply unit preference
+      const tempF = parseFloat(period.temperature);
+      const tempC = TemperatureUtils.fahrenheitToCelsius(tempF);
+      const formattedTemp = TemperatureUtils.formatTemperature(tempC);
+      html += `<div>${period.time} ${formattedTemp} `;
       if (period.icon) {
         html += ` <img src="${period.icon}" alt="weather icon" class="weather-icon">`;
       }
@@ -277,13 +276,26 @@ const refreshGridRows = () => {
               const tempC = dev.temp10x / 10;
               // Store original Celsius value in data attribute for instant conversion
               cell.setAttribute("data-temp-c", tempC.toString());
-              var myformat = Intl.NumberFormat("en-US", {
-                minimumIntegerDigits: 2,
-                minimumFractionDigits: 1,
-              });
-              cell.innerHTML =
-                TemperatureUtils.formatTemperature(tempC) +
-                (dev.age ? ` <span class='age'>(${dev.age})</span> ` : "");
+
+              // Calculate if temperature is stale (>= 5 minutes = 300 seconds)
+              const now = Math.floor(Date.now() / 1000);
+              const lastUpdate = (dev.logtime || 0) + (dev.duration || 0);
+              const ageSeconds = now - lastUpdate;
+              const isStale = ageSeconds >= 300; // 5 minutes
+
+              // Set title attribute for hover tooltip
+              if (dev.age) {
+                cell.setAttribute("title", `Last updated: ${dev.age} ago`);
+              }
+
+              // Apply color class based on staleness
+              cell.classList.remove("temp-stale");
+              if (isStale) {
+                cell.classList.add("temp-stale");
+              }
+
+              // Display temperature without age
+              cell.innerHTML = TemperatureUtils.formatTemperature(tempC);
             }
             if (dev.drive) {
               const slider = document.getElementById(
@@ -395,7 +407,7 @@ function updateRulesDisabledBadge(dev) {
     const dt = new Date(dev.disabled_until * 1000);
     const now = Math.floor(Date.now() / 1000);
     const hoursRemaining = Math.ceil((dev.disabled_until - now) / 3600);
-    const tooltipText = `Rules disabled until ${asctime(dt)} (${hoursRemaining} hour${hoursRemaining !== 1 ? 's' : ''})`;
+    const tooltipText = `Rules disabled until ${asctime(dt)} (${hoursRemaining} hour${hoursRemaining !== 1 ? "s" : ""})`;
     badge.textContent = "rules disabled";
     badge.setAttribute("title", tooltipText);
     badge.style.display = "inline";

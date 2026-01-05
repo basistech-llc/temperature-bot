@@ -2130,3 +2130,252 @@ The "Outside Air Exchange" section will now only show temperature-reporting devi
 
 ---
 
+_**User (2026-01-05 10:38Z)**_
+
+In both tables, we show elapsed time since last update under each temperature.
+This is cluttered.  Instead, show it only in a hover on the temperature.
+Also display the temperature as is (black) if the elapsed time is less than five minutes; gray if it is stale.
+
+
+---
+
+_**Agent (model default, mode Agent)**_
+
+
+
+---
+
+
+Updating the temperature display to show elapsed time only on hover and color-code by staleness. Checking the current implementation:
+
+
+---
+
+<tool-use data-tool-type="read" data-tool-name="read_file">
+<details><summary>Tool use: **read_file** • Read file: /Users/deg/Documents/basistech/temperature-bot/app/templates/index.html</summary>
+
+</details>
+</tool-use>
+
+---
+
+<tool-use data-tool-type="search" data-tool-name="grep">
+<details>
+<summary>Tool use: **grep** • Grep for "age|formatTemperature|temp-.*device_id" in "app/static/unit_speed.js" • 5 matches</summary>
+
+Output mode: content
+
+
+| File | Content | Line |
+|------|------|------|
+| `app/static/unit_speed.js` | `? `$\{TemperatureUtils.formatTemperature(current.temperature)\} (Boston Logan Airport)`` | L38 |
+| `app/static/unit_speed.js` | `const formattedTemp = TemperatureUtils.formatTemperature(tempC);` | L55 |
+| `app/static/unit_speed.js` | `const cell = document.getElementById(`temp-$\{dev.device_id\}`);` | L276 |
+| `app/static/unit_speed.js` | `TemperatureUtils.formatTemperature(tempC) +` | L285 |
+| `app/static/unit_speed.js` | `(dev.age ? ` <span class='age'>($\{dev.age\})</span> ` : "");` | L286 |
+
+
+</details>
+</tool-use>
+
+---
+
+<tool-use data-tool-type="read" data-tool-name="read_file">
+<details><summary>Tool use: **read_file** • Read file: /Users/deg/Documents/basistech/temperature-bot/app/static/unit_speed.js</summary>
+
+</details>
+</tool-use>
+
+---
+
+<tool-use data-tool-type="read" data-tool-name="read_file">
+<details><summary>Tool use: **read_file** • Read file: /Users/deg/Documents/basistech/temperature-bot/app/db.py</summary>
+
+</details>
+</tool-use>
+
+---
+
+
+
+---
+
+
+Checking how age is calculated and formatted:
+
+
+---
+
+<tool-use data-tool-type="search" data-tool-name="grep">
+<details>
+<summary>Tool use: **grep** • Grep for "github_style_duration|def.*duration" in "app/util.py" • 1 match</summary>
+
+Output mode: content
+
+
+| File | Content | Line |
+|------|------|------|
+| `app/util.py` | `def github_style_duration(past_time, now=None):` | L41 |
+
+
+</details>
+</tool-use>
+
+---
+
+<tool-use data-tool-type="read" data-tool-name="read_file">
+<details><summary>Tool use: **read_file** • Read file: /Users/deg/Documents/basistech/temperature-bot/app/static/unit_speed.js</summary>
+
+</details>
+</tool-use>
+
+---
+
+<tool-use data-tool-type="read" data-tool-name="read_file">
+<details><summary>Tool use: **read_file** • Read file: /Users/deg/Documents/basistech/temperature-bot/app/static/style.css</summary>
+
+</details>
+</tool-use>
+
+---
+
+
+
+---
+
+
+Updating the code to show age on hover and color-code by staleness:
+
+
+---
+
+<tool-use data-tool-type="read" data-tool-name="read_file">
+<details><summary>Tool use: **read_file** • Read file: /Users/deg/Documents/basistech/temperature-bot/app/util.py</summary>
+
+</details>
+</tool-use>
+
+---
+
+<tool-use data-tool-type="write" data-tool-name="search_replace">
+
+<details><summary>Tool use: **search_replace** • Edit file: /Users/deg/Documents/basistech/temperature-bot/app/static/unit_speed.js</summary>
+
+**Chunk 1**
+Lines added: 20, lines removed: 7
+
+```diff
+@@ -278,11 +278,24 @@
+                // Store original Celsius value in data attribute for instant conversion
+                cell.setAttribute("data-temp-c", tempC.toString());
+-               var myformat = Intl.NumberFormat("en-US", {
+-                 minimumIntegerDigits: 2,
+-                 minimumFractionDigits: 1,
+-               });
+-               cell.innerHTML =
+-                 TemperatureUtils.formatTemperature(tempC) +
+-                 (dev.age ? &#96; &lt;span class='age'&gt;(${dev.age})&lt;/span&gt; &#96; : "");
++               
++               // Calculate if temperature is stale (&gt;= 5 minutes = 300 seconds)
++               const now = Math.floor(Date.now() / 1000);
++               const lastUpdate = (dev.logtime || 0) + (dev.duration || 0);
++               const ageSeconds = now - lastUpdate;
++               const isStale = ageSeconds &gt;= 300; // 5 minutes
++               
++               // Set title attribute for hover tooltip
++               if (dev.age) {
++                 cell.setAttribute("title", &#96;Last updated: ${dev.age} ago&#96;);
++               }
++               
++               // Apply color class based on staleness
++               cell.classList.remove("temp-stale");
++               if (isStale) {
++                 cell.classList.add("temp-stale");
++               }
++               
++               // Display temperature without age
++               cell.innerHTML = TemperatureUtils.formatTemperature(tempC);
+              }
+              if (dev.drive) {
+```
+
+</details>
+
+</tool-use>
+
+---
+
+<tool-use data-tool-type="read" data-tool-name="read_file">
+<details><summary>Tool use: **read_file** • Read file: /Users/deg/Documents/basistech/temperature-bot/app/static/style.css</summary>
+
+</details>
+</tool-use>
+
+---
+
+<tool-use data-tool-type="write" data-tool-name="search_replace">
+
+<details><summary>Tool use: **search_replace** • Edit file: /Users/deg/Documents/basistech/temperature-bot/app/static/style.css</summary>
+
+Status: **loading**
+
+```css
+.age {
+    color: #aaa;
+}
+
+.temp-stale {
+    color: #999;
+}
+```
+
+</details>
+
+</tool-use>
+
+---
+
+
+
+---
+
+
+
+---
+
+
+
+---
+
+<tool-use data-tool-type="unknown" data-tool-name="grep">
+<details>
+<summary>Tool use: **grep**</summary>
+
+Status: **loading**
+
+
+</details>
+</tool-use>
+
+---
+
+
+
+---
+
+
+
+---
+
+
+
+---
+
+
+
+---
+
+
+
+---
+
