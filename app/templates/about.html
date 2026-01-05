@@ -1,10 +1,83 @@
-{% extends 'base.html' %} {% block title %} About {% endblock%} {% block body %}
+{% extends 'base.html' %}
+{% block title %} About {% endblock%}
+{% block head %}
+<style>
+  .about-content {
+    max-width: 800px;
+    padding: 0 1em;
+  }
+  .admin-toggle {
+    margin: 1em 0;
+  }
+  .admin-toggle-link {
+    color: #0078e7;
+    cursor: pointer;
+    text-decoration: underline;
+  }
+  .admin-toggle-link:hover {
+    color: #005bb5;
+  }
+  .admin-content {
+    display: none;
+    margin-top: 1em;
+    padding: 1em;
+    background-color: #f5f5f5;
+    border-left: 3px solid #0078e7;
+  }
+  .admin-content.show {
+    display: block;
+  }
+</style>
+<script>
+  function toggleAdminOptions() {
+    const content = document.getElementById('admin-options-content');
+    const link = document.getElementById('admin-toggle-link');
+    if (content.classList.contains('show')) {
+      content.classList.remove('show');
+      link.textContent = 'Show Admin Options';
+    } else {
+      content.classList.add('show');
+      link.textContent = 'Hide Admin Options';
+    }
+  }
+</script>
+{% endblock %}
+{% block body %}
 <div class="pure-g">
-  <div class="pure-u-1">
+  <div class="pure-u-1 about-content">
     <h1>About</h1>
     <p>
-      This project is a monitor and controller for the BasisTech HVAC system. It
-      is open source and available on
+      This application monitors and controls the BasisTech HVAC system, providing
+      real-time visibility and control over your heating, cooling, and air quality
+      systems
+    </p>
+     <p>
+      From the main dashboard, you can view current temperatures across all
+      rooms and adjust fan speeds for HVAC units. Room-specific dashboards offer
+      focused control for individual spaces like the Kitchen or Hickory room, showing
+      temperature sensors and allowing you to fine-tune the climate for each area.
+      </p>
+      The system also displays local air quality information and weather conditions
+      to help you make informed decisions about ventilation.
+    </p>
+    <div class="admin-toggle">
+      <a id="admin-toggle-link" class="admin-toggle-link" onclick="toggleAdminOptions(); return false;" href="#">Show Admin Options</a>
+      <div id="admin-options-content" class="admin-content">
+        <p>
+          The Admin section provides additional tools for managing and monitoring
+          the HVAC system:
+        </p>
+        <ul>
+          <li><strong>Chart</strong> - View historical temperature and device data in graphical format</li>
+          <li><strong>Alerts</strong> - Review system alerts and notifications from devices</li>
+          <li><strong>Rules</strong> - Configure automated rules that control devices based on time, air quality, and other conditions</li>
+          <li><strong>Today's Log</strong> - View detailed logs of all system activity for today</li>
+          <li><strong>All Devices</strong> - Browse and inspect status for all connected devices</li>
+        </ul>
+      </div>
+    </div>
+    <p>
+      This project is open source and available on
       <a
         href="https://github.com/basistech-llc/temperature-bot/"
         target="_blank"
