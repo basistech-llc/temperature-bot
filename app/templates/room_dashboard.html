@@ -45,11 +45,6 @@ body {
   flex: 1;
 }
 
-.temperature-toggle-container {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
 
 /* Shared card styles */
 .device-card, .sensors-card {
@@ -325,7 +320,7 @@ body {
 
 <div class="dashboard-header">
   <h1>{{ location }} HVAC Control</h1>
-  <div class="temperature-toggle-container">
+  <div class="temperature-toggle">
     <span class="temp-unit-label">°C</span>
     <div class="toggle-switch">
       <input type="checkbox" id="temp-unit-toggle" class="toggle-input">
