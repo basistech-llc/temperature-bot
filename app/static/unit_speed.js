@@ -14,6 +14,9 @@ var start = Date.now();
 var forceRefresh = false;
 const FAN_SPEEDS = [-1, 0, 1, 2, 3, 4];
 
+// Store weather data globally so it can be re-rendered when unit changes
+let currentWeatherData = null;
+
 ////////////////////////////////////////////////////////////////
 // Weather display functions
 function displayWeather(weatherInfo) {
@@ -61,6 +64,8 @@ function displayWeather(weatherInfo) {
     console.log("Added forecast to HTML");
   }
   weatherDiv.innerHTML = html;
+  // Store weather data for later re-rendering
+  currentWeatherData = weatherInfo;
 }
 
 ////////////////////////////////////////////////////////////////
@@ -430,8 +435,10 @@ function updateRulesDisabledBadge(dev) {
   }
 }
 
-// Make refreshGridRows available globally for temperature unit changes
+// Make refreshGridRows and displayWeather available globally for temperature unit changes
 window.refreshGridRows = refreshGridRows;
+window.displayWeather = displayWeather;
+window.getCurrentWeatherData = function() { return currentWeatherData; };
 
 window.addEventListener("DOMContentLoaded", function () {
   setupMatrixListenerss();

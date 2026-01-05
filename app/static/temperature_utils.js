@@ -141,7 +141,13 @@ function updateAllTemperatureDisplays() {
   });
 
   // Update weather displays
-  // This will be handled by the weather refresh cycle
+  // Re-render weather if it's available
+  if (typeof window.getCurrentWeatherData === "function") {
+    const weatherData = window.getCurrentWeatherData();
+    if (weatherData && typeof window.displayWeather === "function") {
+      window.displayWeather(weatherData);
+    }
+  }
 }
 
 /**
