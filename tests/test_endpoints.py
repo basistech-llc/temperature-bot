@@ -11,7 +11,7 @@ from unittest.mock import patch
 
 import pytest
 from conftest import flask_test_client, skip_on_github  # noqa: F401  # pylint: disable=unused-import
-from helpers.data_factories import DeviceTestData, AlertTestData
+from helpers.data_factories import DeviceTestData
 from helpers.mock_helpers import MockHelper
 
 from app import ae200

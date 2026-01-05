@@ -2,6 +2,7 @@
 API route handlers
 """
 
+import asyncio
 import logging
 from flask import Blueprint, request, jsonify
 from flask_pydantic import validate
@@ -10,6 +11,8 @@ from .constants import __version__
 from . import constants
 from . import db
 from . import rules_engine
+from . import hubitat
+from . import ae200
 from .utils.request_utils import parse_device_ids
 from .utils.db_utils import with_db_connection
 
@@ -160,13 +163,11 @@ def update_note(conn, body: NoteControl):
 @with_db_connection
 def debug_db_devices(conn):
     """Get all devices from database for debug page"""
-    import json
-
     try:
         device_data = db.get_device_status(conn)
         device_names = [dev.get("device_name", "Unknown") for dev in device_data]
         return jsonify({"names": device_names, "data": device_data})
-    except Exception as e:
+    except (ValueError, RuntimeError, OSError) as e:
         logger.warning("Failed to fetch all devices: %s", e)
         return jsonify({"error": str(e)}), 500
 
@@ -174,14 +175,11 @@ def debug_db_devices(conn):
 @api_v1.route("/debug/hubitat_devices")
 def debug_hubitat_devices():
     """Get all Hubitat devices for debug page"""
-    import json
-    from . import hubitat
-
     try:
         hubitat_devices = hubitat.get_all_devices()
         device_names = [dev.get("name", "Unknown") for dev in hubitat_devices]
         return jsonify({"names": device_names, "data": hubitat_devices})
-    except Exception as e:
+    except (ValueError, RuntimeError, OSError) as e:
         logger.warning("Failed to fetch Hubitat devices: %s", e)
         return jsonify({"error": str(e)}), 500
 
@@ -189,10 +187,6 @@ def debug_hubitat_devices():
 @api_v1.route("/debug/ae200_devices")
 def debug_ae200_devices():
     """Get all AE-200 devices for debug page"""
-    import json
-    import asyncio
-    from . import ae200
-
     try:
         ae200_devices = ae200.get_devices()
         device_names = [dev.get("name", "Unknown") for dev in ae200_devices]
@@ -225,6 +219,6 @@ def debug_ae200_devices():
         return jsonify(
             {"names": device_names, "devices": ae200_devices, "details": ae200_details}
         )
-    except Exception as e:
+    except (ValueError, RuntimeError, OSError) as e:
         logger.warning("Failed to fetch AE-200 devices: %s", e)
         return jsonify({"error": str(e)}), 500

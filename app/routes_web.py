@@ -5,8 +5,6 @@ Web route handlers
 import logging
 import datetime
 import time
-import json
-import asyncio
 from typing import List
 from flask import render_template, request, redirect, url_for
 
@@ -14,7 +12,6 @@ from .constants import __version__
 from . import db
 from . import rules_engine
 from . import hubitat
-from . import ae200
 from . import room_config
 from .utils.request_utils import parse_device_ids
 from .utils.db_utils import with_db_connection
@@ -206,7 +203,7 @@ def create_web_routes(app):
                 if "TemperatureMeasurement" in dev.get("capabilities", [])
                 and dev.get("name") in sensor_names
             ]
-        except Exception as e:
+        except (ValueError, RuntimeError, OSError) as e:
             logger.warning("Failed to fetch Hubitat sensors: %s", e)
             return []
 

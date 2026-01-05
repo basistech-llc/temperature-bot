@@ -150,7 +150,6 @@ class AlertTestData:
         :return: device_id
         """
         import json
-        import sqlite3
 
         cursor = conn.cursor()
         cursor.execute("INSERT INTO devices (device_name) VALUES (?)", (device_name,))
