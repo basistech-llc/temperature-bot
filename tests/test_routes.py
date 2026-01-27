@@ -57,3 +57,10 @@ def test_hickory_route(flask_test_client):  # noqa: F811
     response = flask_test_client.get("/hickory")
     assert response.status_code == 200
     assert b"Hickory" in response.data or b"room_dashboard" in response.data
+
+
+def test_weather_route(flask_test_client):  # noqa: F811
+    """Test the /weather route"""
+    response = flask_test_client.get("/weather")
+    assert response.status_code == 200
+    assert b"Local Weather" in response.data or b"AQI" in response.data

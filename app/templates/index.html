@@ -17,37 +17,30 @@
   <div class="pure-u-1">
     <div id="main-grid" class="maxwidth">
       <form>
-        <!-- one form, two tables. Table #1 = devices that have fans. Table #2 = devices that do not have fans -->
-        {% for table in [1, 2] %}
-          {% if table == 1 %}
-            <h2> Heating and Cooling </h2>
-            {% else %}
-            <h2> Air Quality </h2>
-          {% endif %}
-            <table class="pure-table">
-              <thead>
-                <tr>
-                  <th class="column-unit" rowspan="2">Unit</th>
-                  <th class="column-temp" rowspan="2">Temp</th>
-                  {% if table == 1  %}
-                  <th class="column-speed" colspan="6">Fan Speed</th>
-                  {% endif %}
-                  <th class="column-notes" rowspan="2">Notes</th>
-                </tr>
-                {% if table == 1 %}
-                <tr>
-                  <th class="column-speed column-speed-off">Off</th>
-                  <th class="column-speed column-speed-auto">auto</th>
-                  <th class="column-speed column-speed-low">1</th>
-                  <th class="column-speed column-speed-mid2">2</th>
-                  <th class="column-speed column-speed-mid1">3</th>
-                  <th class="column-speed column-speed-high">4</th>
-                </tr>
-                {% endif %}
-              </thead>
-              <tbody>
-                {% for device in devices %}
-                {% if (device.has_speed_control and table==1) or (not device.has_speed_control and device.temp10x and table==2) %}
+        <!-- Heating and Cooling: ERVs first, then FCUs -->
+        <h2>Heating and Cooling</h2>
+
+        <!-- Section 1: ERVs — Off, 1–4 (no auto) -->
+        <h3>Ventilation (ERVs)</h3>
+        <table class="pure-table">
+          <thead>
+            <tr>
+              <th class="column-unit" rowspan="2">Unit</th>
+              <th class="column-temp" rowspan="2">Temp</th>
+              <th class="column-speed" colspan="5">Fan Speed</th>
+              <th class="column-notes" rowspan="2">Notes</th>
+            </tr>
+            <tr>
+              <th class="column-speed column-speed-off">Off</th>
+              <th class="column-speed column-speed-low">Low</th>
+              <th class="column-speed column-speed-mid2">Med&#8209;Low</th>
+              <th class="column-speed column-speed-mid1">Med&#8209;High</th>
+              <th class="column-speed column-speed-high">High</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for device in devices %}
+            {% if device.has_speed_control and device.device_name.lower().startswith('erv') %}
                 <tr class="device-row" x-data-device-id="{{ device.device_id }}">
                   <td class="cell-unit">
                     {{ device.device_name }}<span class="rules-disabled-superscript" id="rules-disabled-{{ device.device_id }}" style="display: none;" title=""></span>
@@ -61,9 +54,6 @@
                   {% else %}
                   <td class="cell-temp cell-temp-na">n/a</td>
                   {% endif %}
-                  {% if device.has_speed_control %}
-                  {% set is_erv = device.device_name.lower().startswith('erv') %}
-                  <!-- Off button (always shown) -->
                   <td class="cell-speed cell-speed-off">
                     <input type="radio" name="fan_speed-{{ device.device_id }}"
                            value="0"
@@ -72,29 +62,75 @@
                            x-data-fan_speed="0"
                            title="Turn {{ device.device_name }} off">
                   </td>
-                  <!-- Auto button (only for non-ERV devices) -->
+                  {% for fan_speed in [1, 2, 3, 4] %}
+                  <td class="cell-speed cell-speed-{{ fan_speed if fan_speed >= 2 else 'low' }}">
+                    <input type="radio" name="fan_speed-{{ device.device_id }}"
+                           value="{{ fan_speed }}"
+                           id="radio-{{ device.device_id }}-{{ fan_speed }}"
+                           x-data-device-id="{{ device.device_id }}"
+                           x-data-fan_speed="{{ fan_speed }}"
+                           title="Set {{ device.device_name }} to speed {{ fan_speed }}">
+                  </td>
+                  {% endfor %}
+                  <td class="cell-notes">
+                    <span class="notes editable-notes" id="notes-{{ device.device_id }}" data-device-id="{{ device.device_id }}" title="Click to edit"></span>
+                  </td>
+                </tr>
+            {% endif %}
+            {% endfor %}
+          </tbody>
+        </table>
+
+        <!-- Section 2: FCUs (Heating and Cooling) — Off, auto, 2–4 -->
+        <h3>Rooms (FCUs)</h3>
+        <table class="pure-table">
+          <thead>
+            <tr>
+              <th class="column-unit" rowspan="2">Unit</th>
+              <th class="column-temp" rowspan="2">Temp</th>
+              <th class="column-speed" colspan="5">Fan Speed</th>
+              <th class="column-notes" rowspan="2">Notes</th>
+            </tr>
+            <tr>
+              <th class="column-speed column-speed-off">Off</th>
+              <th class="column-speed column-speed-auto">Auto</th>
+              <th class="column-speed column-speed-mid2">Low</th>
+              <th class="column-speed column-speed-mid1">Medium</th>
+              <th class="column-speed column-speed-high">High</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for device in devices %}
+            {% if device.has_speed_control and not device.device_name.lower().startswith('erv') %}
+                <tr class="device-row" x-data-device-id="{{ device.device_id }}">
+                  <td class="cell-unit">
+                    {{ device.device_name }}<span class="rules-disabled-superscript" id="rules-disabled-{{ device.device_id }}" style="display: none;" title=""></span>
+                    <span id="device-{{ device.device_id }}-notes"></span>
+                    <div class="temporal-links">
+                      <a href="/chart?device_ids={{ device.device_id }}" target="_blank">graph</a>
+                    </div>
+                  </td>
+                  {% if device.temp10x %}
+                  <td class="cell-temp" id="temp-{{ device.device_id }}">--</td>
+                  {% else %}
+                  <td class="cell-temp cell-temp-na">n/a</td>
+                  {% endif %}
+                  <td class="cell-speed cell-speed-off">
+                    <input type="radio" name="fan_speed-{{ device.device_id }}"
+                           value="0"
+                           id="radio-{{ device.device_id }}-0"
+                           x-data-device-id="{{ device.device_id }}"
+                           x-data-fan_speed="0"
+                           title="Turn {{ device.device_name }} off">
+                  </td>
                   <td class="cell-speed cell-speed-auto">
-                    {% if not is_erv %}
                     <input type="radio" name="fan_speed-{{ device.device_id }}"
                            value="-1"
                            id="radio-{{ device.device_id }}-auto"
                            x-data-device-id="{{ device.device_id }}"
                            x-data-fan_speed="-1"
                            title="Set {{ device.device_name }} to auto">
-                    {% endif %}
                   </td>
-                  <!-- Speed 1 button (only for ERV devices) -->
-                  <td class="cell-speed cell-speed-low">
-                    {% if is_erv %}
-                    <input type="radio" name="fan_speed-{{ device.device_id }}"
-                           value="1"
-                           id="radio-{{ device.device_id }}-1"
-                           x-data-device-id="{{ device.device_id }}"
-                           x-data-fan_speed="1"
-                           title="Set {{ device.device_name }} to speed 1">
-                    {% endif %}
-                  </td>
-                  <!-- Speeds 2, 3, 4 (always shown) -->
                   {% for fan_speed in [2, 3, 4] %}
                   <td class="cell-speed cell-speed-{{ fan_speed }}">
                     <input type="radio" name="fan_speed-{{ device.device_id }}"
@@ -105,16 +141,45 @@
                            title="Set {{ device.device_name }} to speed {{ fan_speed }}">
                   </td>
                   {% endfor %}
-                  {% endif %}<!-- devices with speed controls -->
                   <td class="cell-notes">
                     <span class="notes editable-notes" id="notes-{{ device.device_id }}" data-device-id="{{ device.device_id }}" title="Click to edit"></span>
                   </td>
-                </tr><!-- table row -->
-                {% endif %}
-                {% endfor %}<!-- device in devices -->
-              </tbody>
-            </table>
-        {% endfor %}<!-- for table in 1,2 -->
+                </tr>
+            {% endif %}
+            {% endfor %}
+          </tbody>
+        </table>
+
+        <!-- Section 3: Air Quality — devices without speed control that have temp -->
+        <h2>Air Quality</h2>
+        <table class="pure-table">
+          <thead>
+            <tr>
+              <th class="column-unit" rowspan="2">Unit</th>
+              <th class="column-temp" rowspan="2">Temp</th>
+              <th class="column-notes" rowspan="2">Notes</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for device in devices %}
+            {% if not device.has_speed_control and device.temp10x %}
+                <tr class="device-row" x-data-device-id="{{ device.device_id }}">
+                  <td class="cell-unit">
+                    {{ device.device_name }}<span class="rules-disabled-superscript" id="rules-disabled-{{ device.device_id }}" style="display: none;" title=""></span>
+                    <span id="device-{{ device.device_id }}-notes"></span>
+                    <div class="temporal-links">
+                      <a href="/chart?device_ids={{ device.device_id }}" target="_blank">graph</a>
+                    </div>
+                  </td>
+                  <td class="cell-temp" id="temp-{{ device.device_id }}">--</td>
+                  <td class="cell-notes">
+                    <span class="notes editable-notes" id="notes-{{ device.device_id }}" data-device-id="{{ device.device_id }}" title="Click to edit"></span>
+                  </td>
+                </tr>
+            {% endif %}
+            {% endfor %}
+          </tbody>
+        </table>
       </form>
     </div> <!-- main-grid -->
   </div>
