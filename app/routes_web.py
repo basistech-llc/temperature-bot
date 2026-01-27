@@ -132,6 +132,11 @@ def create_web_routes(app):
         devices = {dev["device_id"]: dev["device_name"] for dev in c.fetchall()}
         return render_template("alerts.html", devices=devices, current_page="alerts")
 
+    @app.route("/weather")
+    def weather():
+        """Weather page"""
+        return render_template("weather.html", current_page="weather")
+
     @app.route("/about")
     def about():
         """About page"""
