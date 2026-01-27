@@ -1,0 +1,31 @@
+{% extends 'base.html' %}
+{% block title %} Weather {% endblock %}
+
+{% block body %}
+<div class="pure-g"><!-- the start of the pure row -->
+  <div class="pure-u-1"><!-- across the entire row -->
+    <h1>Local Weather</h1>
+  </div>
+</div>
+
+<!-- Hidden main-grid container so shared JS can safely reference it -->
+<div id="main-grid" style="display: none;"></div>
+
+<div class="pure-g">
+  <div class="pure-u-1" id="aqi-weather">
+    <div id="aqi">
+      <div id="aqi-status">AQI <span id="aqi-value"></span> <span id="aqi-name"></span></div>
+    </div>
+    <div id="weather">
+      <div id="status"></div>
+      <div id="last-update"></div>
+      <div id="next-update"></div>
+    </div>
+    <div id="last-refresh"></div>
+  </div>
+</div>
+
+<script src="/static/unit_speed.js"></script>
+
+{% endblock %}
+

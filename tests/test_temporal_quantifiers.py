@@ -136,3 +136,33 @@ def test_chart_page_with_device_id(flask_test_client, test_database_conn_with_te
     assert "day" in content
     assert "week" in content
     assert "month" in content
+
+
+def test_index_layout_and_sections(flask_test_client):  # noqa: F811
+    """Index page should show split ERV/FCU sections and Air Quality."""
+    response = flask_test_client.get("/")
+    assert response.status_code == 200
+    content = response.data.decode("utf-8")
+    assert "Heating and Cooling" in content
+    assert "Ventilation (ERVs)" in content
+    assert "Rooms (FCUs)" in content
+    assert "Air Quality" in content
+
+
+def test_index_fcu_speeds_exclude_one(flask_test_client, test_database_conn_with_test_data):  # noqa: F811
+    """FCU rows expose Off, Auto, 2/3/4 speeds but not 1."""
+    _, device_id, _ = test_database_conn_with_test_data
+    response = flask_test_client.get("/")
+    assert response.status_code == 200
+    html = response.data.decode("utf-8")
+
+    # Off and Auto should be present
+    assert f'id="radio-{device_id}-0"' in html
+    assert f'id="radio-{device_id}-auto"' in html
+
+    # Speeds 2, 3, 4 should be present
+    for speed in (2, 3, 4):
+        assert f'id="radio-{device_id}-{speed}"' in html
+
+    # Speed 1 should not be present for this FCU
+    assert f'id="radio-{device_id}-1"' not in html
