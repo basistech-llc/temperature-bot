@@ -10,3 +10,1425 @@ Add coverage tests for any significant changes we've added since this branch div
 
 ---
 
+_**Agent (model default, mode Agent)**_
+
+<think><details><summary>Thought Process</summary>
+**Planning coverage tests**
+
+I need to run tests for new changes on the feature branch while following repository rules. They’ve mentioned adding coverage tests, which implies I can modify test files, even if it conflicts with the guardrail about only changing specified files. I’ll interpret this as permission for necessary updates to test files. I plan to examine the `git diff` from the main branch, using Shell commands, and gather tools for the implementation phase, focusing on existing tests.
+**Using Shell tools for testing**
+
+I need to utilize ReadLints on the edited test files. I plan to use Shell commands in parallel to gather relevant information from `git diff`, `git status`, and potentially `git log`. This will help me understand the context of the changes better. By running these commands, I can efficiently assess the current state of the repository and ensure I know what I’m working with before moving forward with the tests.</details></think>
+
+---
+
+First I’ll inspect how this branch diverged from `main`, then I’ll identify the new/changed behavior, map it to existing tests, and add or extend pytest function-style tests (no new helpers/fixtures) to cover those areas. I’ll keep changes limited to test files and run lints on any edited files.
+
+---
+
+<tool-use data-tool-type="shell" data-tool-name="run_terminal_command_v2">
+<details><summary>Tool use: **run_terminal_command_v2** • Run command: git status</summary>
+
+```bash
+git status
+```
+
+```
+On branch feature/28Jan26-cwh-requests
+nothing to commit, working tree clean
+
+```
+</details>
+</tool-use>
+
+---
+
+<tool-use data-tool-type="shell" data-tool-name="run_terminal_command_v2">
+<details><summary>Tool use: **run_terminal_command_v2** • Run command: git branch --show-current</summary>
+
+```bash
+git branch --show-current
+```
+
+```
+feature/28Jan26-cwh-requests
+
+```
+</details>
+</tool-use>
+
+---
+
+<tool-use data-tool-type="shell" data-tool-name="run_terminal_command_v2">
+<details><summary>Tool use: **run_terminal_command_v2** • Run command: git remote show origin | sed -n 's/.*HEAD branch: //p'</summary>
+
+```bash
+git remote show origin | sed -n 's/.*HEAD branch: //p'
+```
+
+```
+ssh: Could not resolve hostname github.com: -65563
+fatal: Could not read from remote repository.
+
+Please make sure you have the correct access rights
+and the repository exists.
+
+```
+</details>
+</tool-use>
+
+---
+
+<tool-use data-tool-type="shell" data-tool-name="run_terminal_command_v2">
+<details><summary>Tool use: **run_terminal_command_v2** • Run command: git log -5 --oneline</summary>
+
+```bash
+git log -5 --oneline
+```
+
+```
+d06907a Failed attempt (??) to narrow columns
+fb76c32 Add temperature setting for FCUs
+0863ed2 Show set temperatures too
+ec3f253 Notes about failed attempt to show room humidity
+fac248d Show copyright footer only on About page
+
+```
+</details>
+</tool-use>
+
+---
+
+<tool-use data-tool-type="shell" data-tool-name="run_terminal_command_v2">
+<details><summary>Tool use: **run_terminal_command_v2** • Run command: git diff --name-status origin/$(git remote show origin | sed -n 's/.*HEAD branch: //p')...HEAD</summary>
+
+```bash
+git diff --name-status origin/$(git remote show origin | sed -n 's/.*HEAD branch: //p')...HEAD
+```
+
+```
+ssh: Could not resolve hostname github.com: -65563
+fatal: Could not read from remote repository.
+
+Please make sure you have the correct access rights
+and the repository exists.
+fatal: ambiguous argument 'origin/...HEAD': unknown revision or path not in the working tree.
+Use '--' to separate paths from revisions, like this:
+'git &lt;command&gt; [&lt;revision&gt;...] -- [&lt;file&gt;...]'
+
+```
+</details>
+</tool-use>
+
+---
+
+<tool-use data-tool-type="shell" data-tool-name="run_terminal_command_v2">
+<details><summary>Tool use: **run_terminal_command_v2** • Run command: git for-each-ref --format='%(refname:short)' refs/heads | sed -n 's/^\(main\|master\)$/\1/p' | head -n 1</summary>
+
+```bash
+git for-each-ref --format='%(refname:short)' refs/heads | sed -n 's/^\(main\|master\)$/\1/p' | head -n 1
+```
+</details>
+</tool-use>
+
+---
+
+<tool-use data-tool-type="shell" data-tool-name="run_terminal_command_v2">
+<details><summary>Tool use: **run_terminal_command_v2** • Run command: git show-branch</summary>
+
+```bash
+git show-branch
+```
+
+```
+! [bugfix/fix-ci-tooling] Whoops, CI testing caught typo in simulator path
+ * [feature/28Jan26-cwh-requests] Failed attempt (??) to narrow columns
+  ! [feature/correct-fan-speeds] Fix Fan/ERV buttons to better match device characteristics
+   ! [main] Merge pull request #71 from basistech-llc/feature/reorg-pages
+    ! [tmp/cent-fahr-support] [WIP] Support C/F toggle in code
+     ! [tmp/deg-latest] Merge pull request #46 from basistech-llc/bugfix/fix-ci-tooling
+      ! [tmp/llm-generated-project-status] Auto-generated project-review docs.
+-------
+ *      [feature/28Jan26-cwh-requests] Failed attempt (??) to narrow columns
+ *      [feature/28Jan26-cwh-requests^] Add temperature setting for FCUs
+ *      [feature/28Jan26-cwh-requests~2] Show set temperatures too
+ *      [feature/28Jan26-cwh-requests~3] Notes about failed attempt to show room humidity
+ *      [feature/28Jan26-cwh-requests~4] Show copyright footer only on About page
+ *      [feature/28Jan26-cwh-requests~5] Adjust labels on main page, mostly for better fit
+ - -    [main] Merge pull request #71 from basistech-llc/feature/reorg-pages
+ * +    [main^2] Split ERV and FCU units into separate sections.
+ * +    [main^2^] Move weather section to dedicated Weather tab.
+ - -    [main^] Merge pull request #70 from basistech-llc/feature/cwh-requests
+ * +    [main^^2] (missed specstory file, updated async)
+ * +    [main^^2^] Fix failing test
+ * +    [main^^2~2] Some lint fixes
+ * +    [main^^2~3] Add some tests
+ * +    [main^^2~4] Add a bit of About info
+ * +    [main^^2~5] Enable immediate update of C/F in weather section too
+ * +    [main^^2~6] Update copyright
+ * +    [main^^2~7] Cleanup section headings on main page
+ * +    [main^^2~8] Promote /dbg/all_devices to a first-class page under Admin
+ * +    [main^^2~9] More user-friendly fan-speed controls
+ * +    [main^^2~10] Make temperature staleness display less blatant
+ * +    [main^^2~11] Only show temperature for devices that have temperature
+ * +    [main^^2~12] Rename device sections to match functions
+ * +    [main^^2~13] Move Today's Log to under Admin from main page
+ * +    [main^^2~14] Fix lag updating between F and C
+ * +    [main^^2~15] Cleanup C/F widget
+ * +    [main^^2~16] Move Charts, Alerts, and Rules under new Admin secondary menu
+ * +    [main^^2~17] Rename main menu item to BasisTech HVAC
+ - -    [main~2] Merge pull request #69 from basistech-llc/cwh-tasks
+ * +    [main~2^2] Commit SpecStory state for better collaborotion
+ * +    [main~2^2^] Rename Studio to Hickory
+ * +    [main~2^2~2] In room pages, replace the Motor toggle with an Off button
+ * +    [main~2^2~3] Replace Buttons page with Rooms dropdown
+ * +    [main~2^2~4] Combine minor pages
+ * +    [main~2^2~5] Update startup dev notes
+ - -    [main~3] Merge pull request #67 from basistech-llc/feature/improved-dbg-device-list
+ * +    [main~3^2] Add AE-200 data to debug page and improve UX
+ - -    [main~4] Merge pull request #66 from basistech-llc/bug-fix/suppress-frequent-schema-updates
+ * +    [main~4^2] Avoid rerunning schema setup on unchanged DB schema.
+ * +    [main~4^2^] Document local dev DB cloning and live-dev-web usage.
+ - -    [main~5] Merge pull request #64 from basistech-llc/feature/correct-fan-speeds
+ *++    [feature/correct-fan-speeds] Fix Fan/ERV buttons to better match device characteristics
+ ---    [main~6] Merge pull request #63 from basistech-llc/feature/update-buttons-tab
+ *++    [main~6^2] Retire old Buttons page into links to new tablet pages
+ ---    [main~7] Merge pull request #61 from basistech-llc/feature/editable-notes
+ *++    [main~7^2] Editable notes, and different space for "rules disabled" notice
+ ---    [main~8] Merge pull request #60 from basistech-llc/feature/support-aux-units
+ *++    [main~8^2] Nicer layout for temperature sensors on room pages
+ *++    [main~8^2^] Code cleanups
+ *++    [main~8^2~2] First pass at working kitchen/studio pages
+ *++    [main~8^2~3] Add /dbg/all_devices endpoint
+ *++    [main~8^2~4] Add routing for Hello World in Kitchen and Studio
+ *++    [main~8^2~5] AI augmentation of my memory as I get back to speed this month
+ ---    [main~9] Merge pull request #48 from basistech-llc/fix-macos-pipx
+ *++    [main~9^2] Update Makefile
+ *++    [main~9^2^] always install pipx as a command.
+ ---    [main~10] Merge pull request #59 from basistech-llc/tmp/notes
+ *++    [main~10^2] Add context notes, to ease restarting next month
+ ---    [main~11] Merge pull request #58 from basistech-llc/feature/long_durations_and_js_testing
+ *++    [main~11^2] Shows days in duration strings; try out JS testing
+ ---    [main~12] Merge pull request #57 from basistech-llc/bugfix/status_of_long_alerts
+ *++    [main~12^2] Update tests
+ *++    [main~12^2^] Try to show status details for all alerts. (partial fix of #56)
+ ---    [main~13] Merge pull request #54 from basistech-llc/feature/tests-of-alerting
+ *++    [main~13^2] Add tests for alerting code
+ *++    [main~13^2^] Auto-format code, so changes in next commit are not obscured
+ ---    [main~14] Merge pull request #53 from basistech-llc/feature/show-detailed-status
+ *++    [main~14^2] [#52] Show times with timezone and 24hr format
+ *++    [main~14^2^] Show device status (temperature, speed, etc.) on each alert row
+ ---    [main~15] Merge pull request #39 from basistech-llc/copilot/sort-sensors-alphabetically
+ *++    [main~15^2] Update tests/test_chart_functionality.py
+ *++    [main~15^2^] Make sensor sorting case-insensitive using localeCompare
+ *++    [main~15^2~2] Add test to verify sensors are sorted alphabetically
+ *++    [main~15^2~3] Initial plan
+ ---    [main~16] Merge pull request #41 from basistech-llc/copilot/set-up-copilot-instructions
+ *++    [main~16^2] Add Copilot instructions for repository
+ *++    [main~16^2^] Initial plan
+ ---    [main~17] Merge pull request #47 from basistech-llc/fix-macos-pipx
+ *++    [main~17^2] Update Makefile
+ *++    [main~9^2~2] cleaned up documentation a bit
+ --- -  [tmp/deg-latest] Merge pull request #46 from basistech-llc/bugfix/fix-ci-tooling
++*++ +  [bugfix/fix-ci-tooling] Whoops, CI testing caught typo in simulator path
++*++ +  [bugfix/fix-ci-tooling^] Fix installation to work on GitHub linux too, not just MacOS
+---- -  [tmp/deg-latest^] Merge pull request #45 from basistech-llc/feature/alert-gui
++*++ +  [tmp/deg-latest^^2] Colorize alert tables and remove extraneous Status column
++*++ +  [tmp/deg-latest^^2^] Show device names in dropdown list; not the internal ids
++*++ +  [tmp/deg-latest^^2~2] Fix bug of showing both tables when entering Alerts tab
++*++ +  [tmp/deg-latest^^2~3] Deemphasize filter warnings
++*++ +  [tmp/deg-latest^^2~4] Make alert columns wide enough to show dates
++*++ +  [tmp/deg-latest^^2~5] Small cleanups to Friday's LLM-driven code
++*++ +  [tmp/deg-latest~2] Whoops, missed a new file
++*++ +  [tmp/deg-latest~3] Basic alerting (time-critical commit)
++*++ +  [tmp/deg-latest~4] Auto-prettify the files we will touch, to avoid messy diffs later
++*++ +  [tmp/deg-latest~5] Update proto-notes
++*++ +  [tmp/deg-latest~6] add &#96;make live-dev-web&#96; and &#96;make live-dev-runner&#96;
++*++ +  [tmp/deg-latest~7] Highlight selected menu item
++*++ +  [tmp/deg-latest~8] Selection and minor action buttons should not have the same color
++*++ +  [tmp/deg-latest~9] Highlight selected date range button
++*++ +  [tmp/deg-latest~10] Show all sensors, disabling unused, to avoid page jumpiness
++*++ +  [tmp/deg-latest~11] Implement &#96;all&#96; button for charts
++*++ +  [tmp/deg-latest~12] Fix a couple of CSS typos
++*++ +  [tmp/deg-latest~13] Whoops, need to sync temperature chart labels with checkboxes
++*++ +  [tmp/deg-latest~14] Lock in prettier options
++*++ +  [tmp/deg-latest~15] Add buttons to select/unselect all sensors
++*++ +  [tmp/deg-latest~16] Add &#96;make deploy&#96;
++*++ +  [tmp/deg-latest~17] Update release notes
++*++ +  [tmp/deg-latest~18] Support C/F toggle of all temperatures
++*++ +  [tmp/deg-latest~19] Just apply prettier to these files
+    +   [tmp/cent-fahr-support] [WIP] Support C/F toggle in code
++*++++  [tmp/deg-latest~20] Add margins - Simple GUI change to test deployment
++*++++  [tmp/deg-latest~21] Update startup notes
++*++++  [tmp/deg-latest~22] Change needed for &#96;make test&#96; to work on my machine.
++*++++  [tmp/deg-latest~23] Correctly init db, even on new installation
++*++++  [tmp/deg-latest~24] Add &#96;make clean&#96; and &#96;make cleanall&#96;
++*++++  [tmp/deg-latest~25] Leverage poetry for cleaner startup on new machine
++*++++  [tmp/deg-latest~26] Update progress notes
++*++++  [tmp/deg-latest~27] Set deg1 service config to (mostly) match slg1, but with local db
++*++++  [tmp/deg-latest~28] Update slg1 systemctl config to match live version
++*++++  [tmp/deg-latest~29] Add trial deg1 service config file
++*++++  [tmp/deg-latest~30] Initial deg progress notes
+      + [tmp/llm-generated-project-status] Auto-generated project-review docs.
+------- [tmp/deg-latest~31] Merge pull request #17 from basistech-llc/aqi-chart
+
+```
+</details>
+</tool-use>
+
+---
+
+<tool-use data-tool-type="shell" data-tool-name="run_terminal_command_v2">
+<details><summary>Tool use: **run_terminal_command_v2** • Run command: git merge-base main HEAD</summary>
+
+```bash
+git merge-base main HEAD
+```
+
+```
+90c573ec52c1ef44c6cef305a314eba1d6d5570d
+
+```
+</details>
+</tool-use>
+
+---
+
+<tool-use data-tool-type="shell" data-tool-name="run_terminal_command_v2">
+<details><summary>Tool use: **run_terminal_command_v2** • Run command: git diff --name-status 90c573ec52c1ef44c6cef305a314eba1d6d5570d...HEAD</summary>
+
+```bash
+git diff --name-status 90c573ec52c1ef44c6cef305a314eba1d6d5570d...HEAD
+```
+
+```
+A	.specstory/history/2026-01-28_09-42Z-main-page-space-optimization.md
+A	.specstory/history/2026-01-28_09-55Z-main-page-humidity-display.md
+A	.specstory/history/2026-01-28_10-17Z-erv-and-fcu-set-temperature-display.md
+M	app/ae200.py
+M	app/db.py
+M	app/routes_api.py
+M	app/rules_engine.py
+M	app/static/temperature_utils.js
+M	app/static/unit_speed.js
+M	app/templates/base.html
+M	app/templates/index.html
+A	doc/humidity-investigation.md
+
+```
+</details>
+</tool-use>
+
+---
+
+<think><details><summary>Thought Process</summary>
+**Planning test coverage**
+
+I need to create tests for significant changes in ae200, db, routes_api, rules_engine, JS utils, and templates. However, I have to stick to the guardrail of only creating or modifying the files that were explicitly asked for. While they didn't specify which tests, they mentioned adding coverage tests broadly, so I interpret that as permission to adjust the test files. I'll review existing tests, especially in tests/test_endpoints.py, and then use Glob to identify relevant tests followed by reading changed app files. I’ll approach this in parallel for efficiency.</details></think>
+
+---
+
+I’ve identified which core files changed since this branch diverged from `main`. Next I’ll inspect those diffs and existing tests to decide where new or extended tests are needed.
+
+---
+
+<tool-use data-tool-type="generic" data-tool-name="glob_file_search">
+<details>
+<summary>Tool use: **glob_file_search** • Searched codebase "undefined" • **13** results in **1** directory</summary>
+
+Directory: **/Users/deg/Documents/basistech/temperature-bot** (13 files)
+
+| File |
+|------|
+| `tests/test_endpoints.py` |
+| `tests/test_temporal_quantifiers.py` |
+| `tests/test_routes.py` |
+| `tests/test_alerts.py` |
+| `tests/test_db.py` |
+| `tests/test_chart_functionality.py` |
+| `tests/test_runner.py` |
+| `tests/test_rules_disable.py` |
+| `tests/test_hubitat.py` |
+| `tests/test_browser_ux.py` |
+| `tests/test_bin_tools.py` |
+| `tests/test_aqi.py` |
+| `tests/test_ae200.py` |
+
+</details>
+</tool-use>
+
+---
+
+<tool-use data-tool-type="shell" data-tool-name="run_terminal_command_v2">
+<details><summary>Tool use: **run_terminal_command_v2** • Run command: git diff 90c573ec52c1ef44c6cef305a314eba1d6d5570d...HEAD app/ae200.py app/db.py app/routes_api.py app/rules_engine.py app/static/temperature_utils.js app/static/unit_speed.js app/templates/base.html app/templates/index.html</summary>
+
+```bash
+git diff 90c573ec52c1ef44c6cef305a314eba1d6d5570d...HEAD app/ae200.py app/db.py app/routes_api.py app/rules_engine.py app/static/temperature_utils.js app/static/unit_speed.js app/templates/base.html app/templates/index.html
+```
+
+```
+diff --git a/app/ae200.py b/app/ae200.py
+index 126d1d5..3606c4e 100644
+--- a/app/ae200.py
++++ b/app/ae200.py
+@@ -297,6 +297,17 @@ def set_fan_speed(ae200_device, speed):
+     d.send(ae200_device, {"FanSpeed": fan_speed})
+ 
+ 
++def set_set_temp(ae200_device, set_temp_c):
++    """Set the unit set temperature in Celsius."""
++    logger.info("set_set_temp(%s,%s)", ae200_device, set_temp_c)
++    if AE200_SIMULATOR:
++        simulated_devices[str(ae200_device)]["SetTemp"] = str(set_temp_c)
++        return
++    d = AE200Functions()
++    # AE-200 expects SetTemp as a string (e.g. "21.0")
++    d.send(ae200_device, {"SetTemp": str(set_temp_c)})
++
++
+ def get_device_info(device):
+     logger.info("get_device_info(%s)", device)
+     if AE200_SIMULATOR:
+diff --git a/app/db.py b/app/db.py
+index 9357b26..3993962 100644
+--- a/app/db.py
++++ b/app/db.py
+@@ -60,6 +60,16 @@ class NoteControl(BaseModel):
+     notes: str | None
+ 
+ 
++class SetTempControl(BaseModel):
++    """Pydantic model for set temperature update requests.
++
++    The value is always expressed in Celsius, regardless of UI units.
++    """
++
++    device_id: int
++    set_temp_c: float
++
++
+ def connect_db(db_path):
+     """Establishes a connection to the SQLite database."""
+     logger.debug("connect_db(%s)", db_path)
+diff --git a/app/routes_api.py b/app/routes_api.py
+index 8a80bb9..49d41ac 100644
+--- a/app/routes_api.py
++++ b/app/routes_api.py
+@@ -16,7 +16,7 @@ from . import ae200
+ from .utils.request_utils import parse_device_ids
+ from .utils.db_utils import with_db_connection
+ 
+-from .db import SpeedControl, DriveControl, NoteControl
++from .db import SpeedControl, DriveControl, NoteControl, SetTempControl
+ 
+ logger = logging.getLogger(__name__)
+ 
+@@ -66,6 +66,20 @@ def set_drive(conn, body: DriveControl):
+     return jsonify({"status": "ok", **ret})
+ 
+ 
++@api_v1.route("/set_temp", methods=["POST"])
++@validate()
++@with_db_connection
++def set_temp(conn, body: SetTempControl):
++    """Set the target temperature for a unit.
++
++    The request body must provide &#96;set_temp_c&#96; in Celsius; the UI is responsible
++    for converting from Fahrenheit if needed.
++    """
++    logger.debug("/set_temp: body=[%s]", body)
++    ret = rules_engine.set_body_set_temp(conn, body, request.remote_addr, "web")
++    return jsonify({"status": "ok", **ret})
++
++
+ @api_v1.route("/status")
+ @with_db_connection
+ def get_status(conn):
+diff --git a/app/rules_engine.py b/app/rules_engine.py
+index 2a1bb79..c81316e 100644
+--- a/app/rules_engine.py
++++ b/app/rules_engine.py
+@@ -13,7 +13,7 @@ import logging
+ from .paths import ROOT_DIR
+ from . import db
+ from . import ae200
+-from .db import SpeedControl,DriveControl
++from .db import SpeedControl, DriveControl, SetTempControl
+ 
+ logger = logging.getLogger(__name__)
+ 
+@@ -121,6 +121,47 @@ def set_body_drive(conn, body: SpeedControl, ipaddr, agent):
+     return {'unit':unit_id, 'temp':temp, 'device_id':body.device_id, 'drive':body.drive}
+ 
+ 
++def set_body_set_temp(conn, body: SetTempControl, ipaddr, agent):
++    """
++    Set the target temperature for a unit (in Celsius).
++    """
++
++    unit_id = db.get_ae200_unit(conn, body.device_id)
++
++    data = ae200.get_device_info(unit_id)
++    current_set_temp = data.get('SetTemp')
++    logger.info(
++        "set_body_set_temp body=[%s] ipaddr=%s agent=%s. current_set_temp=%s",
++        body,
++        ipaddr,
++        agent,
++        current_set_temp,
++    )
++
++    # Record change in changelog if the value is actually changing
++    try:
++        current_value_str = str(current_set_temp) if current_set_temp is not None else ""
++        new_value_str = str(body.set_temp_c)
++        if current_value_str != new_value_str:
++            db.insert_changelog(
++                conn,
++                ipaddr=ipaddr,
++                device_id=body.device_id,
++                ae200_device_id=unit_id,
++                current_values=current_value_str,
++                new_value=new_value_str,
++                agent=agent,
++            )
++            ae200.set_set_temp(unit_id, body.set_temp_c)
++            data = ae200.get_device_info(unit_id)
++    except Exception as exc:  # pragma: no cover - defensive logging
++        logger.exception("Error while setting set temperature: %s", exc)
++
++    temp = data.get('InletTemp', None)
++    db.insert_devlog_entry(conn, device_id=body.device_id, temp=temp, statusdict=data)
++    return {'unit': unit_id, 'temp': temp, 'device_id': body.device_id, 'set_temp_c': body.set_temp_c}
++
++
+ def rules_results(conn, when=None, aqi=50):
+     """Reports what would happen if the rules were run at &#96;when&#96; with a specific AQI"""
+     logger.debug("when=%s",when)
+diff --git a/app/static/temperature_utils.js b/app/static/temperature_utils.js
+index 53a92cb..d440562 100644
+--- a/app/static/temperature_utils.js
++++ b/app/static/temperature_utils.js
+@@ -125,7 +125,7 @@ function updateAllTemperatureDisplays() {
+     }
+   });
+ 
+-  // Update main page temperature cells (temp-{device_id})
++  // Update main page current temperature cells (temp-{device_id})
+   const tempCells = document.querySelectorAll('[id^="temp-"]');
+   tempCells.forEach((element) =&gt; {
+     // Get original Celsius value from data attribute
+@@ -140,6 +140,15 @@ function updateAllTemperatureDisplays() {
+     }
+   });
+ 
++  // Update main page set temperature displays (settemp-display-{device_id})
++  const setTempDisplays = document.querySelectorAll(".settemp-display");
++  setTempDisplays.forEach((element) =&gt; {
++    const tempC = parseFloat(element.getAttribute("data-temp-c"));
++    if (!isNaN(tempC)) {
++      element.textContent = formatTemperature(tempC);
++    }
++  });
++
+   // Update weather displays
+   // Re-render weather if it's available
+   if (typeof window.getCurrentWeatherData === "function") {
+diff --git a/app/static/unit_speed.js b/app/static/unit_speed.js
+index b2835e8..25479b7 100644
+--- a/app/static/unit_speed.js
++++ b/app/static/unit_speed.js
+@@ -173,6 +173,9 @@ function setupMatrixListenerss() {
+ 
+   // Add event listeners for editable notes
+   setupEditableNotes();
++
++  // Add event listeners for set temperature controls
++  setupSetTempControls();
+ }
+ 
+ /**
+@@ -200,6 +203,90 @@ function setupEditableNotes() {
+   });
+ }
+ 
++/**
++ * Initialize set temperature controls using compact up/down buttons.
++ * Buttons operate in the currently selected UI unit but send Celsius to backend.
++ */
++function setupSetTempControls() {
++  document.querySelectorAll(".settemp-arrow").forEach((button) =&gt; {
++    button.addEventListener("click", function () {
++      const deviceId = parseInt(this.getAttribute("data-device-id"));
++      const delta = parseFloat(this.getAttribute("data-delta") || "0");
++      const display = document.getElementById(
++        &#96;settemp-display-${deviceId}&#96;,
++      );
++      if (!display) {
++        return;
++      }
++
++      const currentCAttr = display.getAttribute("data-temp-c");
++      let currentC = currentCAttr ? parseFloat(currentCAttr) : NaN;
++
++      // If we do not have a current value yet, initialize from a reasonable default (e.g., 21°C)
++      if (Number.isNaN(currentC)) {
++        currentC = 21.0;
++      }
++
++      // Work in UI units for the step, then convert back to Celsius
++      const useFahrenheit = TemperatureUtils.getTemperatureUnitPreference();
++      let currentUI = currentC;
++      if (useFahrenheit) {
++        currentUI = TemperatureUtils.celsiusToFahrenheit(currentC);
++      }
++
++      let newUI = currentUI + delta;
++
++      // Clamp to a reasonable range in UI units
++      const minUI = useFahrenheit ? 50 : 10; // ~10°C / 50°F
++      const maxUI = useFahrenheit ? 86 : 30; // ~30°C / 86°F
++      if (newUI &lt; minUI) {
++        newUI = minUI;
++      } else if (newUI &gt; maxUI) {
++        newUI = maxUI;
++      }
++
++      let newC = newUI;
++      if (useFahrenheit) {
++        newC = TemperatureUtils.fahrenheitToCelsius(newUI);
++      }
++
++      // Round to a single decimal in Celsius
++      newC = Math.round(newC * 10) / 10;
++
++      // Optimistically update UI
++      display.setAttribute("data-temp-c", newC.toString());
++      display.textContent = TemperatureUtils.formatTemperature(newC);
++
++      // Send to backend in Celsius
++      setDeviceSetTemp(deviceId, newC);
++    });
++  });
++}
++
++/**
++ * Call backend API to set device set temperature in Celsius.
++ * @param {number} deviceId
++ * @param {number} setTempC
++ */
++async function setDeviceSetTemp(deviceId, setTempC) {
++  try {
++    const response = await fetch("/api/v1/set_temp", {
++      method: "POST",
++      headers: { "Content-Type": "application/json" },
++      body: JSON.stringify({ device_id: deviceId, set_temp_c: setTempC }),
++    });
++    const result = await response.json();
++    if (DEBUG) {
++      console.log("Set temp result:", result);
++    }
++    // Force data refresh to pick up canonical values from AE-200
++    forceRefresh = true;
++  } catch (e) {
++    console.error("Failed to set temperature:", e);
++    alert("Error setting temperature.");
++  }
++}
++
+ /**
+  * Create an input element for editing notes.
+  * @param {string} value - Initial input value
+@@ -305,6 +392,46 @@ const refreshGridRows = () =&gt; {
+               // Display temperature without age
+               cell.innerHTML = TemperatureUtils.formatTemperature(tempC);
+             }
++
++            // Update set temperature (from AE-200 status) where available
++            const setTempCell = document.getElementById(
++              &#96;settemp-${dev.device_id}&#96;,
++            );
++            const setTempDisplay = document.getElementById(
++              &#96;settemp-display-${dev.device_id}&#96;,
++            );
++
++            if (setTempCell &amp;&amp; setTempDisplay) {
++              const status = dev.status || {};
++              const rawSetTemp = status.SetTemp;
++
++              if (rawSetTemp !== undefined &amp;&amp; rawSetTemp !== "") {
++                const setTempValue = parseFloat(rawSetTemp);
++                if (!Number.isNaN(setTempValue)) {
++                  // AE-200 SetTemp is reported in Celsius
++                  const setTempC = setTempValue;
++                  // Store Celsius value for UI conversions and adjustments
++                  setTempCell.setAttribute(
++                    "data-temp-c",
++                    setTempC.toString(),
++                  );
++                  setTempDisplay.setAttribute(
++                    "data-temp-c",
++                    setTempC.toString(),
++                  );
++                  setTempDisplay.textContent =
++                    TemperatureUtils.formatTemperature(setTempC);
++                } else {
++                  setTempCell.removeAttribute("data-temp-c");
++                  setTempDisplay.removeAttribute("data-temp-c");
++                  setTempDisplay.textContent = "--";
++                }
++              } else {
++                setTempCell.removeAttribute("data-temp-c");
++                setTempDisplay.removeAttribute("data-temp-c");
++                setTempDisplay.textContent = "--";
++              }
++            }
+             // Update radio button selection based on drive and speed state
+             const isOff = dev.drive === "Off" || dev.drive === 0 || !dev.drive;
+             const currentSpeed = dev.fan_speed || dev.speed;
+diff --git a/app/templates/base.html b/app/templates/base.html
+index 08f7ec4..3d63bb9 100644
+--- a/app/templates/base.html
++++ b/app/templates/base.html
+@@ -78,7 +78,7 @@
+ 
+   {% block body %}
+   {% endblock %}
+-  {% if not only %}
++  {% if current_page == 'about' %}
+   &lt;footer class="pure-u-1 footer"&gt;
+     &lt;p&gt;
+       © 2025-6 BasisTech LLC.
+diff --git a/app/templates/index.html b/app/templates/index.html
+index a4923da..ec562ea 100644
+--- a/app/templates/index.html
++++ b/app/templates/index.html
+@@ -7,21 +7,11 @@
+ {% endblock %}
+ 
+ {% block body %}
+-&lt;div class="pure-g"&gt;&lt;!-- the start of the pure row --&gt;
+-  &lt;div class="pure-u-1"&gt;&lt;!-- across the entire row --&gt;
+-  &lt;h1&gt;1070 Broadway&lt;/h1&gt;
+-  &lt;/div&gt;
+-&lt;/div&gt;
+-
+ &lt;div class="pure-g" &gt;
+   &lt;div class="pure-u-1"&gt;
+     &lt;div id="main-grid" class="maxwidth"&gt;
+       &lt;form&gt;
+-        &lt;!-- Heating and Cooling: ERVs first, then FCUs --&gt;
+-        &lt;h2&gt;Heating and Cooling&lt;/h2&gt;
+-
+-        &lt;!-- Section 1: ERVs — Off, 1–4 (no auto) --&gt;
+-        &lt;h3&gt;Ventilation (ERVs)&lt;/h3&gt;
++        &lt;h2&gt;Energy Recovery Ventilation (ERVs)&lt;/h2&gt;
+         &lt;table class="pure-table"&gt;
+           &lt;thead&gt;
+             &lt;tr&gt;
+@@ -81,13 +71,13 @@
+           &lt;/tbody&gt;
+         &lt;/table&gt;
+ 
+-        &lt;!-- Section 2: FCUs (Heating and Cooling) — Off, auto, 2–4 --&gt;
+-        &lt;h3&gt;Rooms (FCUs)&lt;/h3&gt;
++        &lt;h2&gt;Heating and Cooling - Fan Control Units (FCUs)&lt;/h2&gt;
+         &lt;table class="pure-table"&gt;
+           &lt;thead&gt;
+             &lt;tr&gt;
+               &lt;th class="column-unit" rowspan="2"&gt;Unit&lt;/th&gt;
+               &lt;th class="column-temp" rowspan="2"&gt;Temp&lt;/th&gt;
++              &lt;th class="column-temp" rowspan="2"&gt;Set Temp&lt;/th&gt;
+               &lt;th class="column-speed" colspan="5"&gt;Fan Speed&lt;/th&gt;
+               &lt;th class="column-notes" rowspan="2"&gt;Notes&lt;/th&gt;
+             &lt;/tr&gt;
+@@ -95,7 +85,7 @@
+               &lt;th class="column-speed column-speed-off"&gt;Off&lt;/th&gt;
+               &lt;th class="column-speed column-speed-auto"&gt;Auto&lt;/th&gt;
+               &lt;th class="column-speed column-speed-mid2"&gt;Low&lt;/th&gt;
+-              &lt;th class="column-speed column-speed-mid1"&gt;Medium&lt;/th&gt;
++              &lt;th class="column-speed column-speed-mid1"&gt;Med&lt;/th&gt;
+               &lt;th class="column-speed column-speed-high"&gt;High&lt;/th&gt;
+             &lt;/tr&gt;
+           &lt;/thead&gt;
+@@ -115,6 +105,28 @@
+                   {% else %}
+                   &lt;td class="cell-temp cell-temp-na"&gt;n/a&lt;/td&gt;
+                   {% endif %}
++                  &lt;td class="cell-temp" id="settemp-{{ device.device_id }}"&gt;
++                    &lt;span class="settemp-container"
++                          style="display: flex; align-items: center; justify-content: flex-end; gap: 4px;"&gt;
++                      &lt;span class="settemp-display"
++                            id="settemp-display-{{ device.device_id }}"
++                            data-device-id="{{ device.device_id }}"
++                            style="min-width: 3.5em; text-align: right; display: inline-block;"&gt;--&lt;/span&gt;
++                      &lt;span class="settemp-arrow-column"
++                            style="display: flex; flex-direction: column; gap: 1px;"&gt;
++                        &lt;button type="button"
++                                class="settemp-arrow"
++                                data-device-id="{{ device.device_id }}"
++                                data-delta="0.5"
++                                style="padding: 0; font-size: 0.6em; line-height: 1; display: inline-block; background: transparent; border: none; cursor: pointer;"&gt;▲&lt;/button&gt;
++                        &lt;button type="button"
++                                class="settemp-arrow"
++                                data-device-id="{{ device.device_id }}"
++                                data-delta="-0.5"
++                                style="padding: 0; font-size: 0.6em; line-height: 1; display: inline-block; background: transparent; border: none; cursor: pointer;"&gt;▼&lt;/button&gt;
++                      &lt;/span&gt;
++                    &lt;/span&gt;
++                  &lt;/td&gt;
+                   &lt;td class="cell-speed cell-speed-off"&gt;
+                     &lt;input type="radio" name="fan_speed-{{ device.device_id }}"
+                            value="0"
+
+```
+</details>
+</tool-use>
+
+---
+
+<tool-use data-tool-type="read" data-tool-name="read_file_v2">
+<details><summary>Tool use: **read_file_v2** • Read file: /Users/deg/Documents/basistech/temperature-bot/tests/test_endpoints.py</summary>
+
+</details>
+</tool-use>
+
+---
+
+<tool-use data-tool-type="generic" data-tool-name="glob_file_search">
+<details>
+<summary>Tool use: **glob_file_search** • Searched codebase "undefined" • **32** results in **1** directory</summary>
+
+Directory: **/Users/deg/Documents/basistech/temperature-bot** (32 files)
+
+| File |
+|------|
+| `tests/test_endpoints.py` |
+| `tests/test_temporal_quantifiers.py` |
+| `tests/test_routes.py` |
+| `tests/test_alerts.py` |
+| `tests/test_db.py` |
+| `tests/test_chart_functionality.py` |
+| `lib/ctools/tests/ziptest.py` |
+| `lib/ctools/tests/xls_convert_test.py` |
+| `lib/ctools/tests/tytable_test.py` |
+| `lib/ctools/tests/tydoc_test.py` |
+| `lib/ctools/tests/tydoc_np_test.py` |
+| `lib/ctools/tests/s3_test.py` |
+| `lib/ctools/tests/pdf_tools_test.py` |
+| `lib/ctools/tests/latex_tools_test.py` |
+| `lib/ctools/tests/hierarchical_configparser_test.py` |
+| `lib/ctools/tests/gzfile_test.py` |
+| `lib/ctools/tests/env_test.py` |
+| `lib/ctools/tests/cspark_test.py` |
+| `lib/ctools/tests/clogging_test.py` |
+| `lib/ctools/schema/tests/variable_test.py` |
+| `lib/ctools/schema/tests/table_test.py` |
+| `lib/ctools/schema/tests/schema_test.py` |
+| `lib/ctools/schema/tests/recode_test.py` |
+| `lib/ctools/schema/tests/range_test.py` |
+| `tests/test_runner.py` |
+| `tests/test_rules_disable.py` |
+| `tests/test_hubitat.py` |
+| `tests/test_browser_ux.py` |
+| `tests/test_bin_tools.py` |
+| `tests/test_aqi.py` |
+| `tests/test_ae200.py` |
+| `tests/conftest.py` |
+
+</details>
+</tool-use>
+
+---
+
+I see the new set-temperature plumbing and template/JS changes; next I’ll add focused tests around the new API and rules behavior, and (if feasible) some JS/UX coverage that matches your existing patterns. I’ll keep test additions minimal but meaningful and aligned with your current test style.
+
+---
+
+<tool-use data-tool-type="read" data-tool-name="read_file_v2">
+<details><summary>Tool use: **read_file_v2** • Read file: /Users/deg/Documents/basistech/temperature-bot/tests/test_ae200.py</summary>
+
+</details>
+</tool-use>
+
+---
+
+<tool-use data-tool-type="read" data-tool-name="read_file_v2">
+<details><summary>Tool use: **read_file_v2** • Read file: /Users/deg/Documents/basistech/temperature-bot/app/rules_engine.py</summary>
+
+</details>
+</tool-use>
+
+---
+
+<tool-use data-tool-type="read" data-tool-name="read_file_v2">
+<details><summary>Tool use: **read_file_v2** • Read file: /Users/deg/Documents/basistech/temperature-bot/app/routes_api.py</summary>
+
+</details>
+</tool-use>
+
+---
+
+<tool-use data-tool-type="read" data-tool-name="read_file_v2">
+<details><summary>Tool use: **read_file_v2** • Read file: /Users/deg/Documents/basistech/temperature-bot/app/db.py</summary>
+
+</details>
+</tool-use>
+
+---
+
+<think><details><summary>Thought Process</summary>
+**Planning test structure**
+
+I need to create tests for the new `set_temp` plumbing and related behaviors, focusing mostly on Python. There's already an endpoint test for `set_fan_speed`, so I can add similar tests for `/api/v1/set_temp`. I’ll need to verify that when `set_temp` changes, it writes to the changelog and devlog, and calls `ae200.set_set_temp`. If there's no change, I want to ensure it skips some steps. I should include tests for both scenarios without modifying non-test files. I'll likely place the tests in `tests/test_endpoints.py` or `tests/test_routes.py`.</details></think>
+
+---
+
+<tool-use data-tool-type="read" data-tool-name="read_file_v2">
+<details><summary>Tool use: **read_file_v2** • Read file: /Users/deg/Documents/basistech/temperature-bot/tests/test_routes.py</summary>
+
+</details>
+</tool-use>
+
+---
+
+<think><details><summary>Thought Process</summary>
+**Inspecting AE200 simulator logic**
+
+I noticed in `ae200.py` the code uses `simulated_devices[str(ae200_device)]["SetTemp"]` to set the temperature. I want to check how `simulated_devices` is initialized because that's crucial for the testing process. Our main concern is ensuring the API response and the changelog update. I'll test the `set_set_temp`, and check if `get_device_info` reflects the new value we previously set. The expected response should be a status of 200 and relevant temperature data. I'll also look at the development log for records of temperature changes.
+**Reviewing changelog and tests**
+
+I'm looking into the changelog process and how it's managed with `db.insert_changelog`. It seems they only log a change when the new temperature differs from the current one, which is simpler than the fan speed setup. I think I'll just record the initial changelog count for the device and verify it increases by one when a new temperature is set. I'll need DB helper queries for that. I see there's also testing for `SetTempControl`, and we might add a test for invalid body responses. Lastly, I should check the UI tests in `test_browser_ux.py`, but I might not need to dive deeper into it.</details></think>
+
+---
+
+<tool-use data-tool-type="read" data-tool-name="read_file_v2">
+<details><summary>Tool use: **read_file_v2** • Read file: /Users/deg/Documents/basistech/temperature-bot/tests/test_browser_ux.py</summary>
+
+</details>
+</tool-use>
+
+---
+
+<think><details><summary>Thought Process</summary>
+**Considering testing coverage**
+
+I think the browser tests are already robust, but there's a possibility to extend them for the set-temp UI, which could be complex. The key change involves a new API route and a rules function in addition to the JavaScript needed for setting the temperature. So, I should plan to add coverage tests for significant changes since the branch diverged from main. I’ll implement new tests in `tests/test_endpoints.py` to cover the `/api/v1/set_temp` functionality and behavior. I might review existing tests in `test_rules_disable.py`.</details></think>
+
+---
+
+<tool-use data-tool-type="read" data-tool-name="read_file_v2">
+<details><summary>Tool use: **read_file_v2** • Read file: /Users/deg/Documents/basistech/temperature-bot/tests/test_rules_disable.py</summary>
+
+</details>
+</tool-use>
+
+---
+
+<think><details><summary>Thought Process</summary>
+**Planning test additions**
+
+I’m thinking about how to add tests for `rules_engine.set_body_set_temp` and `routes_api`. The strategy involves going to `tests/test_endpoints.py`, where I can place a new parameterized test called `test_set_temp_endpoint` right after `test_set_fan_speed_endpoint`. It makes sense to use the `BROADWAY_SOUTH` constant again for this. I want to ensure things are thorough, so I’ll aim to make these tests really solid!
+**Creating the temperature test**
+
+I'm working on a pseudo-code for a parameterized test that checks the temperature setting functionality at an endpoint. It includes different scenarios: when the starting temperature is the same as the target, and when it differs. I need to set up the database connection and device identification, involving updating a test device called Broadway. After the payload is sent through the `/api/v1/set_temp` endpoint, I'll make assertions to ensure the response is as expected and validate the changelog count based on the temperature change. So, I'll ensure everything's cohesive and correct!
+**Finalizing the test details**
+
+I need to be cautious with the AE200 calls in the test. Even if the starting temperature is equal to the target, I still want to ensure I check the device info and read the previous temperature. It should reflect 'start_set_temp' rather than any changed value. 
+
+I’ll set up a database connection to retrieve the devlog count after the operation. It’s essential to confirm that a new entry was created and that the changelog increment aligns with what I'm expecting. Oh! And we also need to ensure pytest is imported at the top—just a small detail to keep things tidy!
+**Addressing test considerations**
+
+I need to be cautious with how `ae200.set_set_temp` behaves when the starting temperature equals the target. In this case, the changelog shouldn’t increment, and I won’t call `set_set_temp`. It’s tricky because I can’t easily determine if the call was made without mocking, but I can check the changelog increment in the database. Additionally, I should use a distinct device name, like 'Broadway SetTemp Test', to avoid conflicts with other tests that could share device identifiers. This way, I can ensure accuracy in my assertions for changelog counts.
+**Ensuring coverage and testing template changes**
+
+I should avoid relying on the `ae200` module's AE200_SIMULATOR status since its behavior is assumed to be default. Now, regarding template changes, I can add a small test in `tests/test_routes.py` to confirm that the footer only appears on the about page. 
+
+I’ll check for the presence of '© 2025-6 BasisTech LLC.' in the HTML responses of `/` and `/about`. To keep things straightforward, I can search for the unique substring "BasisTech LLC". This will help confirm the template change without delving into `base.html`. 
+
+Additionally, I’ll consider the JS temperature utilities but won't prioritize editing their heavy tests right now. My plan is to modify `test_endpoints.py` and `test_routes.py` based on the instructions.</details></think>
+
+---
+
+I’ll add a new API-level test for `/api/v1/set_temp` that also exercises the new `rules_engine.set_body_set_temp`, and a small route test to assert the footer now only appears on the About page. Then I’ll run linters on the edited test files to keep everything clean.
+
+---
+
+<tool-use data-tool-type="write" data-tool-name="edit_file_v2">
+
+<details><summary>Tool use: **edit_file_v2** • Edit file: /Users/deg/Documents/basistech/temperature-bot/tests/test_endpoints.py</summary>
+
+</details>
+
+</tool-use>
+
+---
+
+<tool-use data-tool-type="write" data-tool-name="edit_file_v2">
+
+<details><summary>Tool use: **edit_file_v2** • Edit file: /Users/deg/Documents/basistech/temperature-bot/tests/test_routes.py</summary>
+
+</details>
+
+</tool-use>
+
+---
+
+<tool-use data-tool-type="unknown" data-tool-name="read_lints">
+<details>
+<summary>Tool use: **read_lints**</summary>
+
+
+Parameters:
+
+```json
+{
+  "paths": [
+    "tests/test_endpoints.py",
+    "tests/test_routes.py"
+  ]
+}
+```
+Result:
+
+```json
+{
+  "linterErrorsByFile": [
+    {
+      "relativeWorkspacePath": "tests/test_endpoints.py",
+      "errors": [
+        {
+          "message": "Redefinition of unused &#96;flask_test_client&#96; from line 13",
+          "range": {
+            "startPosition": {
+              "line": 406,
+              "column": 5
+            },
+            "endPosition": {
+              "line": 406,
+              "column": 22
+            }
+          },
+          "source": "Ruff",
+          "severity": "DIAGNOSTIC_SEVERITY_WARNING"
+        },
+        {
+          "message": "Redefinition of unused &#96;flask_test_client&#96; from line 13",
+          "range": {
+            "startPosition": {
+              "line": 366,
+              "column": 5
+            },
+            "endPosition": {
+              "line": 366,
+              "column": 22
+            }
+          },
+          "source": "Ruff",
+          "severity": "DIAGNOSTIC_SEVERITY_WARNING"
+        },
+        {
+          "message": "Redefinition of unused &#96;flask_test_client&#96; from line 13",
+          "range": {
+            "startPosition": {
+              "line": 529,
+              "column": 39
+            },
+            "endPosition": {
+              "line": 529,
+              "column": 56
+            }
+          },
+          "source": "Ruff",
+          "severity": "DIAGNOSTIC_SEVERITY_WARNING"
+        },
+        {
+          "message": "Redefinition of unused &#96;flask_test_client&#96; from line 13",
+          "range": {
+            "startPosition": {
+              "line": 154,
+              "column": 5
+            },
+            "endPosition": {
+              "line": 154,
+              "column": 22
+            }
+          },
+          "source": "Ruff",
+          "severity": "DIAGNOSTIC_SEVERITY_WARNING"
+        },
+        {
+          "message": "Redefinition of unused &#96;flask_test_client&#96; from line 13",
+          "range": {
+            "startPosition": {
+              "line": 317,
+              "column": 5
+            },
+            "endPosition": {
+              "line": 317,
+              "column": 22
+            }
+          },
+          "source": "Ruff",
+          "severity": "DIAGNOSTIC_SEVERITY_WARNING"
+        },
+        {
+          "message": "Redefinition of unused &#96;flask_test_client&#96; from line 13",
+          "range": {
+            "startPosition": {
+              "line": 121,
+              "column": 49
+            },
+            "endPosition": {
+              "line": 121,
+              "column": 66
+            }
+          },
+          "source": "Ruff",
+          "severity": "DIAGNOSTIC_SEVERITY_WARNING"
+        },
+        {
+          "message": "Redefinition of unused &#96;flask_test_client&#96; from line 13",
+          "range": {
+            "startPosition": {
+              "line": 236,
+              "column": 5
+            },
+            "endPosition": {
+              "line": 236,
+              "column": 22
+            }
+          },
+          "source": "Ruff",
+          "severity": "DIAGNOSTIC_SEVERITY_WARNING"
+        }
+      ]
+    },
+    {
+      "relativeWorkspacePath": "tests/test_routes.py"
+    }
+  ]
+}
+```
+Status: **completed**
+
+
+</details>
+</tool-use>
+
+---
+
+<think><details><summary>Thought Process</summary>
+**Reviewing test coverage**
+
+I see that the lint warnings were already there, and the new test adds another warning due to the use of `flask_test_client`. That's acceptable since the instructions say to fix only if it's easy, but it would require changing the import style across the file, which doesn’t seem worth it right now. We've completed our changes, and the user requested coverage tests for significant changes, which we added for `set_temp` and the footer. However, we didn't add JS/browser coverage since it wasn't requested.</details></think>
+
+---
+
+### What I added
+
+- **API coverage for new set-temperature plumbing**  
+  - Added `test_set_temp_endpoint` in `tests/test_endpoints.py` to exercise the new `/api/v1/set_temp` route and `rules_engine.set_body_set_temp`:
+    - Creates a dedicated device linked to the AE-200 simulator.
+    - Initializes a starting set temperature via `ae200.set_set_temp`.
+    - Calls `/api/v1/set_temp` with `device_id` and `set_temp_c`.
+    - Asserts HTTP 200, `status == "ok"`, correct `device_id`, `unit`, and `set_temp_c`.
+    - Verifies the AE-200 simulator reports the latest set temperature.
+    - Verifies one `devlog` row is added per call.
+    - Parameterizes two cases to cover both branches of your new rules logic:
+      - Same temperature: no new `changelog` entry.
+      - Different temperature: exactly one new `changelog` entry.
+
+- **Template behavior for footer change**  
+  - Added `test_footer_only_on_about` in `tests/test_routes.py`:
+    - Confirms `/about` returns 200 and includes `BasisTech LLC` (the footer text).
+    - Confirms `/` returns 200 and does **not** include `BasisTech LLC`, matching the new `base.html` condition that shows the footer only on the About page.
+
+No application files were modified—only the two existing test files.
+
+---
+
+_**User**_
+
+CI testing failed:
+
+
+
+---
+
+_**Agent (model default, mode Agent)**_
+
+<think><details><summary>Thought Process</summary>
+**Inspecting test failures**
+
+I need to parse the text from a screenshot that shows a failure in the test_index_layout_and_sections. It's expecting to find "Rooms (FCUs)" in the content, but instead, it returned full HTML without that string—probably because I changed the headings. This specific test is likely in tests/test_browser_ux.py or another related tests file. I’ll need to inspect that test file further using Read.</details></think>
+
+---
+
+<tool-use data-tool-type="read" data-tool-name="read_file_v2">
+<details><summary>Tool use: **read_file_v2** • Read file: /Users/deg/Documents/basistech/temperature-bot/tests/test_browser_ux.py</summary>
+
+</details>
+</tool-use>
+
+---
+
+<think><details><summary>Thought Process</summary>
+**Analyzing test failures**
+
+I see that the failure screenshot mentions the tests in test_temporal_quantifiers.py are failing, but the main issue seems to be with test_index_layout_and_sections, which is probably in another file. I definitely need to read through these files to understand what's going on. It’s clear there’s some detail I’m missing, so diving into the code will hopefully shed some light on these failures.</details></think>
+
+---
+
+<tool-use data-tool-type="unknown" data-tool-name="ripgrep_raw_search">
+<details>
+<summary>Tool use: **ripgrep_raw_search**</summary>
+
+
+Parameters:
+
+```json
+{
+  "pattern": "test_index_layout_and_sections",
+  "path": "/Users/deg/Documents/basistech/temperature-bot",
+  "glob": "tests/*.py",
+  "outputMode": "content",
+  "caseInsensitive": false
+}
+```
+Result:
+
+```json
+{
+  "success": {
+    "pattern": "test_index_layout_and_sections",
+    "path": "/Users/deg/Documents/basistech/temperature-bot",
+    "outputMode": "content",
+    "workspaceResults": {
+      "/Users/deg/Documents/basistech/temperature-bot": {
+        "content": {
+          "matches": [
+            {
+              "file": "./tests/test_temporal_quantifiers.py",
+              "matches": [
+                {
+                  "lineNumber": 141,
+                  "content": "def test_index_layout_and_sections(flask_test_client):  # noqa: F811"
+                }
+              ]
+            }
+          ],
+          "totalLines": 1,
+          "totalMatchedLines": 1
+        }
+      }
+    }
+  }
+}
+```
+Status: **completed**
+
+
+</details>
+</tool-use>
+
+---
+
+<tool-use data-tool-type="read" data-tool-name="read_file_v2">
+<details><summary>Tool use: **read_file_v2** • Read file: /Users/deg/Documents/basistech/temperature-bot/tests/test_temporal_quantifiers.py</summary>
+
+</details>
+</tool-use>
+
+---
+
+<think><details><summary>Thought Process</summary>
+**Updating HTML structure**
+
+I’ve changed the headings in the index.html file to reflect "Energy Recovery Ventilation (ERVs)" and "Heating and Cooling - Fan Control Units (FCUs)," while removing the top "Heating and Cooling" h2. There’s also a new Set Temp column, but it looks like the test_index_layout_and_sections still expects the older labels. I need to update the assertions to match the new content while ensuring I verify both split sections and the Air Quality section text. I should check the index.html file to confirm the new headings.</details></think>
+
+---
+
+<tool-use data-tool-type="read" data-tool-name="read_file_v2">
+<details><summary>Tool use: **read_file_v2** • Read file: /Users/deg/Documents/basistech/temperature-bot/app/templates/index.html</summary>
+
+</details>
+</tool-use>
+
+---
+
+<think><details><summary>Thought Process</summary>
+**Updating index layout**
+
+I need to make some updates to the test_index_layout_and_sections. The index page should display separate sections for Energy Recovery Ventilation (ERVs), Fan Control Units (FCUs), and Air Quality. I think I'll label the ERV and FCU sections clearly. For Air Quality, maybe I should use an h2 heading that's lower down. It's important to confirm this layout to make sure everything is organized well!</details></think>
+
+---
+
+<tool-use data-tool-type="unknown" data-tool-name="ripgrep_raw_search">
+<details>
+<summary>Tool use: **ripgrep_raw_search**</summary>
+
+
+Parameters:
+
+```json
+{
+  "pattern": "Air Quality",
+  "path": "/Users/deg/Documents/basistech/temperature-bot/app/templates/index.html",
+  "outputMode": "content",
+  "caseInsensitive": false
+}
+```
+Result:
+
+```json
+{
+  "success": {
+    "pattern": "Air Quality",
+    "path": "/Users/deg/Documents/basistech/temperature-bot/app/templates/index.html",
+    "outputMode": "content",
+    "workspaceResults": {
+      "/Users/deg/Documents/basistech/temperature-bot": {
+        "content": {
+          "matches": [
+            {
+              "file": "app/templates/index.html",
+              "matches": [
+                {
+                  "lineNumber": 165,
+                  "content": "        &lt;!-- Section 3: Air Quality — devices without speed control that have temp --&gt;"
+                },
+                {
+                  "lineNumber": 166,
+                  "content": "        &lt;h2&gt;Air Quality&lt;/h2&gt;"
+                }
+              ]
+            }
+          ],
+          "totalLines": 2,
+          "totalMatchedLines": 2
+        }
+      }
+    }
+  }
+}
+```
+Status: **completed**
+
+
+</details>
+</tool-use>
+
+---
+
+<tool-use data-tool-type="read" data-tool-name="read_file_v2">
+<details><summary>Tool use: **read_file_v2** • Read file: /Users/deg/Documents/basistech/temperature-bot/app/templates/index.html</summary>
+
+</details>
+</tool-use>
+
+---
+
+<think><details><summary>Thought Process</summary>
+**Adjusting test assertions**
+
+I need to update the test: I'll remove the "Heating and Cooling" general header and specify the exact headings instead. I'm also thinking about including coverage for the Set Temp column while splitting the ERV and FCU sections, as well as the Air Quality section. The new assertions in tests/test_temporal_quantifiers.py should read: "Energy Recovery Ventilation (ERVs)", "Heating and Cooling - Fan Control Units (FCUs)", and "Air Quality". I could keep a "Heating and Cooling" substring, as it’s included in the new heading.
+**Updating assertion changes**
+
+The first assertion is fine as it is. I only need to change the others: "Ventilation (ERVs)" should become "Energy Recovery Ventilation (ERVs)" and "Rooms (FCUs)" should be updated to "Fan Control Units (FCUs)" for full clarity. To ensure robustness, I need to check for the substrings "Energy Recovery Ventilation (ERVs)" and "Fan Control Units (FCUs)" in the code. I’ll update assertions 147 and 148 accordingly, and I noticed a related AssertionError in line 148 due to 'Rooms (FCUs)' not being present in the HTML, so I’ll create a patch.</details></think>
+
+---
+
+<tool-use data-tool-type="write" data-tool-name="edit_file_v2">
+
+<details><summary>Tool use: **edit_file_v2** • Edit file: /Users/deg/Documents/basistech/temperature-bot/tests/test_temporal_quantifiers.py</summary>
+
+</details>
+
+</tool-use>
+
+---
+
+<tool-use data-tool-type="unknown" data-tool-name="read_lints">
+<details>
+<summary>Tool use: **read_lints**</summary>
+
+
+Parameters:
+
+```json
+{
+  "paths": [
+    "tests/test_temporal_quantifiers.py"
+  ]
+}
+```
+Result:
+
+```json
+{
+  "linterErrorsByFile": [
+    {
+      "relativeWorkspacePath": "tests/test_temporal_quantifiers.py"
+    }
+  ]
+}
+```
+Status: **completed**
+
+
+</details>
+</tool-use>
+
+---
+
+### Fix
+
+- **Updated broken test to match new index layout text**
+  - In `tests/test_temporal_quantifiers.py`, `test_index_layout_and_sections` now asserts:
+    - `"Heating and Cooling"` is present (substring of the FCU header).
+    - `"Energy Recovery Ventilation (ERVs)"` is present for the ERV section.
+    - `"Fan Control Units (FCUs)"` is present for the FCU section.
+    - `"Air Quality"` remains required.
+  - This aligns the expectations with the new headings in `index.html` while preserving the original intent (verifying split ERV/FCU sections and an Air Quality section).
+
+---
+
+_**User**_
+
+That would probably pas, but is not quite right. "Heating and Cooling" used to be a separate header.
+Align these checks more with the current headers.  But, don't be so strict that future minor wording checks will break the tests.
+
+---
+
+_**Agent (model default, mode Agent)**_
+
+<think><details><summary>Thought Process</summary>
+**Adjusting test layout**
+
+I'm looking to adjust the `test_index_layout_and_sections` to better align with the actual headers found in `index.html`. For example, I see headers like "Energy Recovery Ventilation (ERVs)" and "Heating and Cooling - Fan Control Units (FCUs)". The user prefers checks that aren't overly strict, so maybe I should check for the presence of substrings like "Energy Recovery Ventilation" and "Fan Control Units" without needing the exact wording. I'll consider accepting either phrasing as the requirements have changed.
+**Refining header checks**
+
+I’m considering how to assert checks against headers in the content. Maybe I should check for any of these phrases: "Heating and Cooling - Fan Control Units", "Heating and Cooling", or "Fan Control Units," but that might be too strict. The user wants these checks aligned with current headers without breaking on minor wording changes. 
+
+I think I can check for "Energy Recovery Ventilation," then look for the presence of either "Fan Control Units" or "FCUs." For heating/cooling, I could use substring checks in the context. It might be best to ensure at least three `<h2>` headings match some approximate text, though that adds complexity.
+**Improving assertions**
+
+I'm thinking of simplifying my checks by using a regex-like approach to validate headers. I can assert the content contains "Heating" and "Cooling," as well as either "Fan Control Units" or "(FCUs)." That way, any rephrasing in the headers should still pass.
+
+So I’ll modify the assertions like this: I'll check for "Energy Recovery Ventilation," keep "Fan Control Units" or "(FCUs)," and also ensure "Air Quality" is mentioned. This approach seems more robust. 
+
+Next, I'll need to update the tests file and apply the patch for `test_temporal_quantifiers` while adjusting those assertions. I think I’m all set!</details></think>
+
+---
+
+<tool-use data-tool-type="write" data-tool-name="edit_file_v2">
+
+<details><summary>Tool use: **edit_file_v2** • Edit file: /Users/deg/Documents/basistech/temperature-bot/tests/test_temporal_quantifiers.py</summary>
+
+</details>
+
+</tool-use>
+
+---
+
