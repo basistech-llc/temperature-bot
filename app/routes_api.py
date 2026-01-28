@@ -16,7 +16,7 @@ from . import ae200
 from .utils.request_utils import parse_device_ids
 from .utils.db_utils import with_db_connection
 
-from .db import SpeedControl, DriveControl, NoteControl
+from .db import SpeedControl, DriveControl, NoteControl, SetTempControl
 
 logger = logging.getLogger(__name__)
 
@@ -63,6 +63,20 @@ def set_drive(conn, body: DriveControl):
         agent=request.headers.get("User-Agent"),
         comment=f"rules for disabled for {constants.RULES_DISABLE_SECONDS / 60} minutes",
     )
+    return jsonify({"status": "ok", **ret})
+
+
+@api_v1.route("/set_temp", methods=["POST"])
+@validate()
+@with_db_connection
+def set_temp(conn, body: SetTempControl):
+    """Set the target temperature for a unit.
+
+    The request body must provide `set_temp_c` in Celsius; the UI is responsible
+    for converting from Fahrenheit if needed.
+    """
+    logger.debug("/set_temp: body=[%s]", body)
+    ret = rules_engine.set_body_set_temp(conn, body, request.remote_addr, "web")
     return jsonify({"status": "ok", **ret})
 
 

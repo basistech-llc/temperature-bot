@@ -13,7 +13,7 @@ import logging
 from .paths import ROOT_DIR
 from . import db
 from . import ae200
-from .db import SpeedControl,DriveControl
+from .db import SpeedControl, DriveControl, SetTempControl
 
 logger = logging.getLogger(__name__)
 
@@ -119,6 +119,47 @@ def set_body_drive(conn, body: SpeedControl, ipaddr, agent):
     temp = data.get('InletTemp', None)
     db.insert_devlog_entry(conn, device_id=body.device_id, temp=temp, statusdict=data)
     return {'unit':unit_id, 'temp':temp, 'device_id':body.device_id, 'drive':body.drive}
+
+
+def set_body_set_temp(conn, body: SetTempControl, ipaddr, agent):
+    """
+    Set the target temperature for a unit (in Celsius).
+    """
+
+    unit_id = db.get_ae200_unit(conn, body.device_id)
+
+    data = ae200.get_device_info(unit_id)
+    current_set_temp = data.get('SetTemp')
+    logger.info(
+        "set_body_set_temp body=[%s] ipaddr=%s agent=%s. current_set_temp=%s",
+        body,
+        ipaddr,
+        agent,
+        current_set_temp,
+    )
+
+    # Record change in changelog if the value is actually changing
+    try:
+        current_value_str = str(current_set_temp) if current_set_temp is not None else ""
+        new_value_str = str(body.set_temp_c)
+        if current_value_str != new_value_str:
+            db.insert_changelog(
+                conn,
+                ipaddr=ipaddr,
+                device_id=body.device_id,
+                ae200_device_id=unit_id,
+                current_values=current_value_str,
+                new_value=new_value_str,
+                agent=agent,
+            )
+            ae200.set_set_temp(unit_id, body.set_temp_c)
+            data = ae200.get_device_info(unit_id)
+    except Exception as exc:  # pragma: no cover - defensive logging
+        logger.exception("Error while setting set temperature: %s", exc)
+
+    temp = data.get('InletTemp', None)
+    db.insert_devlog_entry(conn, device_id=body.device_id, temp=temp, statusdict=data)
+    return {'unit': unit_id, 'temp': temp, 'device_id': body.device_id, 'set_temp_c': body.set_temp_c}
 
 
 def rules_results(conn, when=None, aqi=50):

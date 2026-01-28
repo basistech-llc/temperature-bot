@@ -17,7 +17,6 @@
             <tr>
               <th class="column-unit" rowspan="2">Unit</th>
               <th class="column-temp" rowspan="2">Temp</th>
-              <th class="column-temp" rowspan="2">Set Temp</th>
               <th class="column-speed" colspan="5">Fan Speed</th>
               <th class="column-notes" rowspan="2">Notes</th>
             </tr>
@@ -45,7 +44,6 @@
                   {% else %}
                   <td class="cell-temp cell-temp-na">n/a</td>
                   {% endif %}
-                  <td class="cell-temp" id="settemp-{{ device.device_id }}">--</td>
                   <td class="cell-speed cell-speed-off">
                     <input type="radio" name="fan_speed-{{ device.device_id }}"
                            value="0"
@@ -107,7 +105,28 @@
                   {% else %}
                   <td class="cell-temp cell-temp-na">n/a</td>
                   {% endif %}
-                  <td class="cell-temp" id="settemp-{{ device.device_id }}">--</td>
+                  <td class="cell-temp" id="settemp-{{ device.device_id }}">
+                    <span class="settemp-container"
+                          style="display: flex; align-items: center; justify-content: flex-end; gap: 4px;">
+                      <span class="settemp-display"
+                            id="settemp-display-{{ device.device_id }}"
+                            data-device-id="{{ device.device_id }}"
+                            style="min-width: 3.5em; text-align: right; display: inline-block;">--</span>
+                      <span class="settemp-arrow-column"
+                            style="display: flex; flex-direction: column; gap: 1px;">
+                        <button type="button"
+                                class="settemp-arrow"
+                                data-device-id="{{ device.device_id }}"
+                                data-delta="0.5"
+                                style="padding: 0; font-size: 0.6em; line-height: 1; display: inline-block; background: transparent; border: none; cursor: pointer;">▲</button>
+                        <button type="button"
+                                class="settemp-arrow"
+                                data-device-id="{{ device.device_id }}"
+                                data-delta="-0.5"
+                                style="padding: 0; font-size: 0.6em; line-height: 1; display: inline-block; background: transparent; border: none; cursor: pointer;">▼</button>
+                      </span>
+                    </span>
+                  </td>
                   <td class="cell-speed cell-speed-off">
                     <input type="radio" name="fan_speed-{{ device.device_id }}"
                            value="0"

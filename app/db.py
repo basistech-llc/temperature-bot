@@ -60,6 +60,16 @@ class NoteControl(BaseModel):
     notes: str | None
 
 
+class SetTempControl(BaseModel):
+    """Pydantic model for set temperature update requests.
+
+    The value is always expressed in Celsius, regardless of UI units.
+    """
+
+    device_id: int
+    set_temp_c: float
+
+
 def connect_db(db_path):
     """Establishes a connection to the SQLite database."""
     logger.debug("connect_db(%s)", db_path)

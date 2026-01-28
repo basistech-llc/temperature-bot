@@ -173,6 +173,9 @@ function setupMatrixListenerss() {
 
   // Add event listeners for editable notes
   setupEditableNotes();
+
+  // Add event listeners for set temperature controls
+  setupSetTempControls();
 }
 
 /**
@@ -198,6 +201,90 @@ function setupEditableNotes() {
       setupNoteInputHandlers(input, this, deviceId, currentText);
     });
   });
+}
+
+/**
+ * Initialize set temperature controls using compact up/down buttons.
+ * Buttons operate in the currently selected UI unit but send Celsius to backend.
+ */
+function setupSetTempControls() {
+  document.querySelectorAll(".settemp-arrow").forEach((button) => {
+    button.addEventListener("click", function () {
+      const deviceId = parseInt(this.getAttribute("data-device-id"));
+      const delta = parseFloat(this.getAttribute("data-delta") || "0");
+      const display = document.getElementById(
+        `settemp-display-${deviceId}`,
+      );
+      if (!display) {
+        return;
+      }
+
+      const currentCAttr = display.getAttribute("data-temp-c");
+      let currentC = currentCAttr ? parseFloat(currentCAttr) : NaN;
+
+      // If we do not have a current value yet, initialize from a reasonable default (e.g., 21°C)
+      if (Number.isNaN(currentC)) {
+        currentC = 21.0;
+      }
+
+      // Work in UI units for the step, then convert back to Celsius
+      const useFahrenheit = TemperatureUtils.getTemperatureUnitPreference();
+      let currentUI = currentC;
+      if (useFahrenheit) {
+        currentUI = TemperatureUtils.celsiusToFahrenheit(currentC);
+      }
+
+      let newUI = currentUI + delta;
+
+      // Clamp to a reasonable range in UI units
+      const minUI = useFahrenheit ? 50 : 10; // ~10°C / 50°F
+      const maxUI = useFahrenheit ? 86 : 30; // ~30°C / 86°F
+      if (newUI < minUI) {
+        newUI = minUI;
+      } else if (newUI > maxUI) {
+        newUI = maxUI;
+      }
+
+      let newC = newUI;
+      if (useFahrenheit) {
+        newC = TemperatureUtils.fahrenheitToCelsius(newUI);
+      }
+
+      // Round to a single decimal in Celsius
+      newC = Math.round(newC * 10) / 10;
+
+      // Optimistically update UI
+      display.setAttribute("data-temp-c", newC.toString());
+      display.textContent = TemperatureUtils.formatTemperature(newC);
+
+      // Send to backend in Celsius
+      setDeviceSetTemp(deviceId, newC);
+    });
+  });
+}
+
+/**
+ * Call backend API to set device set temperature in Celsius.
+ * @param {number} deviceId
+ * @param {number} setTempC
+ */
+async function setDeviceSetTemp(deviceId, setTempC) {
+  try {
+    const response = await fetch("/api/v1/set_temp", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ device_id: deviceId, set_temp_c: setTempC }),
+    });
+    const result = await response.json();
+    if (DEBUG) {
+      console.log("Set temp result:", result);
+    }
+    // Force data refresh to pick up canonical values from AE-200
+    forceRefresh = true;
+  } catch (e) {
+    console.error("Failed to set temperature:", e);
+    alert("Error setting temperature.");
+  }
 }
 
 /**
@@ -310,7 +397,11 @@ const refreshGridRows = () => {
             const setTempCell = document.getElementById(
               `settemp-${dev.device_id}`,
             );
-            if (setTempCell) {
+            const setTempDisplay = document.getElementById(
+              `settemp-display-${dev.device_id}`,
+            );
+
+            if (setTempCell && setTempDisplay) {
               const status = dev.status || {};
               const rawSetTemp = status.SetTemp;
 
@@ -319,19 +410,26 @@ const refreshGridRows = () => {
                 if (!Number.isNaN(setTempValue)) {
                   // AE-200 SetTemp is reported in Celsius
                   const setTempC = setTempValue;
+                  // Store Celsius value for UI conversions and adjustments
                   setTempCell.setAttribute(
                     "data-temp-c",
                     setTempC.toString(),
                   );
-                  setTempCell.textContent =
+                  setTempDisplay.setAttribute(
+                    "data-temp-c",
+                    setTempC.toString(),
+                  );
+                  setTempDisplay.textContent =
                     TemperatureUtils.formatTemperature(setTempC);
                 } else {
-                  setTempCell.textContent = "--";
                   setTempCell.removeAttribute("data-temp-c");
+                  setTempDisplay.removeAttribute("data-temp-c");
+                  setTempDisplay.textContent = "--";
                 }
               } else {
-                setTempCell.textContent = "--";
                 setTempCell.removeAttribute("data-temp-c");
+                setTempDisplay.removeAttribute("data-temp-c");
+                setTempDisplay.textContent = "--";
               }
             }
             // Update radio button selection based on drive and speed state
