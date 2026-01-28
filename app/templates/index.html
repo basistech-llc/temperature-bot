@@ -7,21 +7,11 @@
 {% endblock %}
 
 {% block body %}
-<div class="pure-g"><!-- the start of the pure row -->
-  <div class="pure-u-1"><!-- across the entire row -->
-  <h1>1070 Broadway</h1>
-  </div>
-</div>
-
 <div class="pure-g" >
   <div class="pure-u-1">
     <div id="main-grid" class="maxwidth">
       <form>
-        <!-- Heating and Cooling: ERVs first, then FCUs -->
-        <h2>Heating and Cooling</h2>
-
-        <!-- Section 1: ERVs — Off, 1–4 (no auto) -->
-        <h3>Ventilation (ERVs)</h3>
+        <h2>Energy Recovery Ventilation (ERVs)</h2>
         <table class="pure-table">
           <thead>
             <tr>
@@ -81,8 +71,7 @@
           </tbody>
         </table>
 
-        <!-- Section 2: FCUs (Heating and Cooling) — Off, auto, 2–4 -->
-        <h3>Rooms (FCUs)</h3>
+        <h2>Heating and Cooling - Fan Control Units (FCUs)</h2>
         <table class="pure-table">
           <thead>
             <tr>
@@ -95,7 +84,7 @@
               <th class="column-speed column-speed-off">Off</th>
               <th class="column-speed column-speed-auto">Auto</th>
               <th class="column-speed column-speed-mid2">Low</th>
-              <th class="column-speed column-speed-mid1">Medium</th>
+              <th class="column-speed column-speed-mid1">Med</th>
               <th class="column-speed column-speed-high">High</th>
             </tr>
           </thead>
