@@ -1,0 +1,44 @@
+## HVAC humidity investigation (AE-200 + main page)
+
+- **Goal**: Determine whether we can show per-unit humidity (alongside temperature) on the main unit-speed page for both ERVs and FCUs.
+- **Backend data path**:
+  - AE-200 status is stored as JSON in `devlog.status_json`.
+  - `db.fetch_last_status_fixed()` parses `status_json` into a Python dict on each row.
+  - `db.get_device_status()` adds AE-200-derived fields (`drive`, `fan_speed`, `has_speed_control`) by calling `ae200.extract_drive_and_fan_speed(status)`, and returns this list to the app.
+  - `/api/v1/status` (`routes_api.get_status`) returns `{"devices": device_data}` where each `device` includes `status` and fields like `temp10x`, `drive`, and `fan_speed`.
+- **Frontend consumption**:
+  - `index.html` uses `devices` passed from `routes_web.read_index` to render ERV and FCU tables.
+  - `unit_speed.js` periodically calls `/api/v1/status` and updates:
+    - Temperature cells from `dev.temp10x` (via `TemperatureUtils.formatTemperature`).
+    - Fan-speed radio buttons from `dev.drive` and `dev.fan_speed`.
+    - Notes and "rules disabled" badges from `dev.notes` and `dev.disabled_until`.
+- **Humidity fields available in status JSON**:
+  - AE-200 protocol and captured payloads include keys such as:
+    - `SetHumidity`
+    - `InletHumidity`
+    - `RoomHumidity`
+  - Example device record from `app/test_data/ae200_get_device_10.json`:
+    - `"SetHumidity": "0"`
+    - `"InletHumidity": "0"`
+    - `"RoomHumidity": ""`
+- **Live database inspection**:
+  - We used the copied production DB at `var-copy/db/temperature-bot.db`.
+  - Query (via `sqlite3` in a sandboxed Python script):
+    - Selected `json_extract(status_json, '$.RoomHumidity')`, `InletHumidity`, and `SetHumidity` from `devlog`.
+    - Filtered for any values that were **non-null, non-empty, and not `"0"`**.
+  - Result:
+    - The query returned **no rows**: in the live-copied DB, these humidity fields are always `""` or `"0"` in the stored status JSON.
+- **Implications for the UI**:
+  - The plumbing from AE-200 → `devlog.status_json` → `get_device_status()` → `/api/v1/status` → `unit_speed.js` works and exposes humidity-related keys if they ever become non-zero.
+  - However, with current real data, **AE-200 is not providing usable humidity readings** per unit:
+    - `RoomHumidity` is empty.
+    - `InletHumidity` and `SetHumidity` are `"0"`.
+  - Any humidity column in the main ERV/FCU tables today would:
+    - Either show `0%` everywhere, or
+    - Require special-casing to hide or label these values, since they are not meaningful.
+- **Decision for now**:
+  - We rolled back the experimental humidity column on the main page to avoid displaying misleading information.
+  - If future AE-200 firmware or configuration starts populating humidity fields with real values, we can:
+    - Reintroduce a humidity column alongside temperature, reading from `status.RoomHumidity` / `InletHumidity` / `SetHumidity`.
+    - Optionally add UI logic to gray out or hide entries where humidity is missing or obviously bogus.
+

@@ -7,21 +7,11 @@
 {% endblock %}
 
 {% block body %}
-<div class="pure-g"><!-- the start of the pure row -->
-  <div class="pure-u-1"><!-- across the entire row -->
-  <h1>1070 Broadway</h1>
-  </div>
-</div>
-
 <div class="pure-g" >
   <div class="pure-u-1">
     <div id="main-grid" class="maxwidth">
       <form>
-        <!-- Heating and Cooling: ERVs first, then FCUs -->
-        <h2>Heating and Cooling</h2>
-
-        <!-- Section 1: ERVs — Off, 1–4 (no auto) -->
-        <h3>Ventilation (ERVs)</h3>
+        <h2>Energy Recovery Ventilation (ERVs)</h2>
         <table class="pure-table">
           <thead>
             <tr>
@@ -81,13 +71,13 @@
           </tbody>
         </table>
 
-        <!-- Section 2: FCUs (Heating and Cooling) — Off, auto, 2–4 -->
-        <h3>Rooms (FCUs)</h3>
+        <h2>Heating and Cooling - Fan Control Units (FCUs)</h2>
         <table class="pure-table">
           <thead>
             <tr>
               <th class="column-unit" rowspan="2">Unit</th>
               <th class="column-temp" rowspan="2">Temp</th>
+              <th class="column-temp" rowspan="2">Set Temp</th>
               <th class="column-speed" colspan="5">Fan Speed</th>
               <th class="column-notes" rowspan="2">Notes</th>
             </tr>
@@ -95,7 +85,7 @@
               <th class="column-speed column-speed-off">Off</th>
               <th class="column-speed column-speed-auto">Auto</th>
               <th class="column-speed column-speed-mid2">Low</th>
-              <th class="column-speed column-speed-mid1">Medium</th>
+              <th class="column-speed column-speed-mid1">Med</th>
               <th class="column-speed column-speed-high">High</th>
             </tr>
           </thead>
@@ -115,6 +105,28 @@
                   {% else %}
                   <td class="cell-temp cell-temp-na">n/a</td>
                   {% endif %}
+                  <td class="cell-temp" id="settemp-{{ device.device_id }}">
+                    <span class="settemp-container"
+                          style="display: flex; align-items: center; justify-content: flex-end; gap: 4px;">
+                      <span class="settemp-display"
+                            id="settemp-display-{{ device.device_id }}"
+                            data-device-id="{{ device.device_id }}"
+                            style="min-width: 3.5em; text-align: right; display: inline-block;">--</span>
+                      <span class="settemp-arrow-column"
+                            style="display: flex; flex-direction: column; gap: 1px;">
+                        <button type="button"
+                                class="settemp-arrow"
+                                data-device-id="{{ device.device_id }}"
+                                data-delta="0.5"
+                                style="padding: 0; font-size: 0.6em; line-height: 1; display: inline-block; background: transparent; border: none; cursor: pointer;">▲</button>
+                        <button type="button"
+                                class="settemp-arrow"
+                                data-device-id="{{ device.device_id }}"
+                                data-delta="-0.5"
+                                style="padding: 0; font-size: 0.6em; line-height: 1; display: inline-block; background: transparent; border: none; cursor: pointer;">▼</button>
+                      </span>
+                    </span>
+                  </td>
                   <td class="cell-speed cell-speed-off">
                     <input type="radio" name="fan_speed-{{ device.device_id }}"
                            value="0"

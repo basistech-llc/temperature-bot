@@ -125,7 +125,7 @@ function updateAllTemperatureDisplays() {
     }
   });
 
-  // Update main page temperature cells (temp-{device_id})
+  // Update main page current temperature cells (temp-{device_id})
   const tempCells = document.querySelectorAll('[id^="temp-"]');
   tempCells.forEach((element) => {
     // Get original Celsius value from data attribute
@@ -137,6 +137,15 @@ function updateAllTemperatureDisplays() {
       const age = ageMatch ? ageMatch[1] : null;
       // Update with new format using stored Celsius value
       element.innerHTML = formatTemperature(tempC) + (age ? ` <span class='age'>(${age})</span> ` : "");
+    }
+  });
+
+  // Update main page set temperature displays (settemp-display-{device_id})
+  const setTempDisplays = document.querySelectorAll(".settemp-display");
+  setTempDisplays.forEach((element) => {
+    const tempC = parseFloat(element.getAttribute("data-temp-c"));
+    if (!isNaN(tempC)) {
+      element.textContent = formatTemperature(tempC);
     }
   });
 

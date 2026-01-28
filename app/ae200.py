@@ -297,6 +297,17 @@ def set_fan_speed(ae200_device, speed):
     d.send(ae200_device, {"FanSpeed": fan_speed})
 
 
+def set_set_temp(ae200_device, set_temp_c):
+    """Set the unit set temperature in Celsius."""
+    logger.info("set_set_temp(%s,%s)", ae200_device, set_temp_c)
+    if AE200_SIMULATOR:
+        simulated_devices[str(ae200_device)]["SetTemp"] = str(set_temp_c)
+        return
+    d = AE200Functions()
+    # AE-200 expects SetTemp as a string (e.g. "21.0")
+    d.send(ae200_device, {"SetTemp": str(set_temp_c)})
+
+
 def get_device_info(device):
     logger.info("get_device_info(%s)", device)
     if AE200_SIMULATOR:
