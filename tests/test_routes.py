@@ -31,6 +31,19 @@ def test_about_route(flask_test_client):  # noqa: F811
     assert b"About" in response.data
 
 
+def test_footer_only_on_about(flask_test_client):  # noqa: F811
+    """Footer should appear on About page but not on the main dashboard."""
+    # About page should contain the site footer
+    about_response = flask_test_client.get("/about")
+    assert about_response.status_code == 200
+    assert b"BasisTech LLC" in about_response.data
+
+    # Main page should not contain the footer text anymore
+    index_response = flask_test_client.get("/")
+    assert index_response.status_code == 200
+    assert b"BasisTech LLC" not in index_response.data
+
+
 def test_privacy_route(flask_test_client):  # noqa: F811
     """Test the /privacy route redirects to /about"""
     response = flask_test_client.get("/privacy", follow_redirects=False)

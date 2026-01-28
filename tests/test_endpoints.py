@@ -225,6 +225,86 @@ def test_set_fan_speed_endpoint(
         test_conn_verify.close()
 
 
+@pytest.mark.parametrize(
+    "start_set_temp,target_set_temp,expected_changelog_delta",
+    [
+        (21.0, 21.0, 0),  # Same temperature - should not create changelog entry
+        (21.0, 22.0, 1),  # Different temperature - should create one changelog entry
+    ],
+)
+def test_set_temp_endpoint(
+    flask_test_client, start_set_temp, target_set_temp, expected_changelog_delta
+):  # noqa: F811
+    # Link a dedicated device to the AE-200 simulator unit
+    ae200_unit_id = BROADWAY_SOUTH
+
+    conn = sqlite3.connect(os.environ["TEST_DB_NAME"])
+    conn.row_factory = sqlite3.Row
+    device_id = db.get_or_create_device_id(conn, "Broadway SetTemp Test")
+
+    cursor = conn.cursor()
+    cursor.execute(
+        "UPDATE devices SET ae200_device_id=? WHERE device_id=?",
+        (ae200_unit_id, device_id),
+    )
+    conn.commit()
+
+    # Initialize simulator with a starting set temperature
+    ae200.set_set_temp(ae200_unit_id, start_set_temp)
+
+    # Capture changelog and devlog counts before the call
+    cursor.execute(
+        "SELECT COUNT(*) AS n FROM changelog WHERE device_id=?", (device_id,)
+    )
+    before_changelog = cursor.fetchone()["n"]
+
+    cursor.execute(
+        "SELECT COUNT(*) AS n FROM devlog WHERE device_id=?", (device_id,)
+    )
+    before_devlog = cursor.fetchone()["n"]
+    conn.close()
+
+    # Call the /set_temp endpoint
+    response = flask_test_client.post(
+        "/api/v1/set_temp",
+        json={"device_id": device_id, "set_temp_c": target_set_temp},
+    )
+    assert response.status_code == 200
+    response_json = response.json
+    assert response_json["status"] == "ok"
+    assert response_json["device_id"] == device_id
+    assert str(response_json["unit"]) == str(ae200_unit_id)
+    assert response_json["set_temp_c"] == pytest.approx(target_set_temp)
+
+    # Verify simulator state reflects the canonical set temperature
+    device_info = ae200.get_device_info(ae200_unit_id)
+    current_set_temp_raw = device_info.get("SetTemp")
+    # Simulator stores SetTemp as a string; convert to float for comparison
+    if current_set_temp_raw is not None and current_set_temp_raw != "":
+        current_set_temp = float(current_set_temp_raw)
+        # After the endpoint, the simulator should report the latest requested temperature
+        assert current_set_temp == pytest.approx(target_set_temp)
+
+    # Re-open connection to check database effects
+    verify_conn = sqlite3.connect(os.environ["TEST_DB_NAME"])
+    verify_conn.row_factory = sqlite3.Row
+    verify_cursor = verify_conn.cursor()
+
+    verify_cursor.execute(
+        "SELECT COUNT(*) AS n FROM devlog WHERE device_id=?", (device_id,)
+    )
+    after_devlog = verify_cursor.fetchone()["n"]
+    assert after_devlog == before_devlog + 1
+
+    verify_cursor.execute(
+        "SELECT COUNT(*) AS n FROM changelog WHERE device_id=?", (device_id,)
+    )
+    after_changelog = verify_cursor.fetchone()["n"]
+    assert after_changelog == before_changelog + expected_changelog_delta
+
+    verify_conn.close()
+
+
 def test_alerts_active_endpoint(flask_test_client):  # noqa: F811
     """Test the /api/v1/alerts/active endpoint"""
     response = flask_test_client.get("/api/v1/alerts/active")
