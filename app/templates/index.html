@@ -17,6 +17,7 @@
             <tr>
               <th class="column-unit" rowspan="2">Unit</th>
               <th class="column-temp" rowspan="2">Temp</th>
+              <th class="column-temp" rowspan="2">Set Temp</th>
               <th class="column-speed" colspan="5">Fan Speed</th>
               <th class="column-notes" rowspan="2">Notes</th>
             </tr>
@@ -44,6 +45,7 @@
                   {% else %}
                   <td class="cell-temp cell-temp-na">n/a</td>
                   {% endif %}
+                  <td class="cell-temp" id="settemp-{{ device.device_id }}">--</td>
                   <td class="cell-speed cell-speed-off">
                     <input type="radio" name="fan_speed-{{ device.device_id }}"
                            value="0"
@@ -77,6 +79,7 @@
             <tr>
               <th class="column-unit" rowspan="2">Unit</th>
               <th class="column-temp" rowspan="2">Temp</th>
+              <th class="column-temp" rowspan="2">Set Temp</th>
               <th class="column-speed" colspan="5">Fan Speed</th>
               <th class="column-notes" rowspan="2">Notes</th>
             </tr>
@@ -104,6 +107,7 @@
                   {% else %}
                   <td class="cell-temp cell-temp-na">n/a</td>
                   {% endif %}
+                  <td class="cell-temp" id="settemp-{{ device.device_id }}">--</td>
                   <td class="cell-speed cell-speed-off">
                     <input type="radio" name="fan_speed-{{ device.device_id }}"
                            value="0"

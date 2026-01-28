@@ -305,6 +305,35 @@ const refreshGridRows = () => {
               // Display temperature without age
               cell.innerHTML = TemperatureUtils.formatTemperature(tempC);
             }
+
+            // Update set temperature (from AE-200 status) where available
+            const setTempCell = document.getElementById(
+              `settemp-${dev.device_id}`,
+            );
+            if (setTempCell) {
+              const status = dev.status || {};
+              const rawSetTemp = status.SetTemp;
+
+              if (rawSetTemp !== undefined && rawSetTemp !== "") {
+                const setTempValue = parseFloat(rawSetTemp);
+                if (!Number.isNaN(setTempValue)) {
+                  // AE-200 SetTemp is reported in Celsius
+                  const setTempC = setTempValue;
+                  setTempCell.setAttribute(
+                    "data-temp-c",
+                    setTempC.toString(),
+                  );
+                  setTempCell.textContent =
+                    TemperatureUtils.formatTemperature(setTempC);
+                } else {
+                  setTempCell.textContent = "--";
+                  setTempCell.removeAttribute("data-temp-c");
+                }
+              } else {
+                setTempCell.textContent = "--";
+                setTempCell.removeAttribute("data-temp-c");
+              }
+            }
             // Update radio button selection based on drive and speed state
             const isOff = dev.drive === "Off" || dev.drive === 0 || !dev.drive;
             const currentSpeed = dev.fan_speed || dev.speed;
