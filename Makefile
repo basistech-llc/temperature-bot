@@ -102,7 +102,7 @@ check-types: $(REQ)
 ## Dynamic Analysis
 pytest: $(REQ)
 	make pylint
-	$(PYTHON) -m pytest . -v --cov=. --cov-report=xml --cov-report=html --log-cli-level=DEBUG --log-file-level=DEBUG
+	$(PYTHON) -m pytest . -v --cov=. --cov-report=xml --cov-report=html --log-cli-level=WARNING --log-file-level=DEBUG
 	@echo coverage report in htmlcov/
 test-js:
 	@echo "Running JavaScript unit tests..."

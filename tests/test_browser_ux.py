@@ -2,6 +2,7 @@
 End-to-end browser test for fan speed controls.
 NOTE: AQI (air quality index) is not being tested in this file and can be ignored for now.
 """
+
 import os
 import time
 import logging
@@ -24,10 +25,11 @@ from app.main import app
 
 logger = logging.getLogger(__name__)
 
-TEST_TEMP=32
+TEST_TEMP = 32
 
 # Set this flag to True to enable AQI testing, False to disable
 TEST_AQI = False
+
 
 def wait_for_server(url: str, timeout: float = 20.0) -> None:
     deadline = time.time() + timeout
@@ -43,14 +45,15 @@ def wait_for_server(url: str, timeout: float = 20.0) -> None:
 
 # pylint: disable=too-many-arguments, disable=too-many-positional-arguments, disable=too-many-statements
 SKIP_BROWSER_TEST = "SKIP_BROWSER_TEST" in os.environ
-@pytest.mark.skipif(SKIP_BROWSER_TEST,reason='SKIP_BROWSER_TEST is set')
+
+
+@pytest.mark.skipif(SKIP_BROWSER_TEST, reason="SKIP_BROWSER_TEST is set")
 @skip_on_github
 @patch("app.weather.get_weather_data")
 @patch("app.airquality.get_aqi")
 def test_browser_fan_speed_controls(
-        mock_get_airquality,
-        mock_get_weather_data,
-        test_database_conn_with_test_data ): # noqa: F811
+    mock_get_airquality, mock_get_weather_data, test_database_conn_with_test_data
+):  # noqa: F811
     """
     End-to-end test that:
     1. Clicks fan speed 0 for Broadway Test and verifies database and UI updates
@@ -74,22 +77,21 @@ def test_browser_fan_speed_controls(
         temp=24.0,
         statusdict=initial_status,
         logtime=current_time,
-        force=True
+        force=True,
     )
     # Add a second device without speed control
     TestDataFactory.create_device_with_status(
-        test_conn,
-        "No Speed Device",
-        DeviceTestData.get_no_speed_status(),
-        current_time
+        test_conn, "No Speed Device", DeviceTestData.get_no_speed_status(), current_time
     )
 
     # Set up weather mocks
-    MockHelper.setup_weather_mocks(mock_get_airquality, mock_get_weather_data, 45, TEST_TEMP)
+    MockHelper.setup_weather_mocks(
+        mock_get_airquality, mock_get_weather_data, 45, TEST_TEMP
+    )
 
     # Start the Flask app in a separate thread
     def run_app():
-        app.run(host='127.0.0.1', port=5001, debug=False, use_reloader=False)
+        app.run(host="127.0.0.1", port=5001, debug=False, use_reloader=False)
 
     # pylint: disable=duplicate-code
     server_thread = threading.Thread(target=run_app, daemon=True)
@@ -105,17 +107,19 @@ def test_browser_fan_speed_controls(
             page = browser.new_page()
 
             # Navigate to the application
-            page.goto('http://127.0.0.1:5001/')
+            page.goto("http://127.0.0.1:5001/")
 
             # Create helper for browser operations
-            helper = BrowserTestHelper(page, os.environ['TEST_DB_NAME'])
+            helper = BrowserTestHelper(page, os.environ["TEST_DB_NAME"])
 
             # Wait for the grid to load
             helper.wait_for_grid_to_load()
 
             # Verify that Broadway Test has speed radio buttons
             for speed in [1, 2, 3, 4]:
-                radio = page.locator(f'#radio-{helper.get_broadway_south_device_id()}-{speed}')
+                radio = page.locator(
+                    f"#radio-{helper.get_broadway_south_device_id()}-{speed}"
+                )
                 expect(radio).to_be_visible()
 
             # Verify that No Speed Device does not have any radio buttons
@@ -125,7 +129,7 @@ def test_browser_fan_speed_controls(
                 expect(radio).not_to_be_visible()
 
             # Test 1: Click fan speed 1 (LOW) since UI has speeds [-1,1,2,3,4]
-            logger.info("Testing fan speed 1 (LOW)")
+            # logger.info("Testing fan speed 1 (LOW)")
 
             # Set up simulator for speed 1
             ae200.set_fan_speed(BROADWAY_SOUTH, 1)
@@ -151,7 +155,7 @@ def test_browser_fan_speed_controls(
             # mock_get_device_info.assert_called_with(BROADWAY_SOUTH)
 
             # Test 2: Click fan speed 4 (HIGH)
-            logger.info("Testing fan speed 4 (HIGH)")
+            # logger.info("Testing fan speed 4 (HIGH)")
 
             # Set up simulator for speed 4
             ae200.set_fan_speed(BROADWAY_SOUTH, 4)
@@ -177,7 +181,7 @@ def test_browser_fan_speed_controls(
             # mock_get_device_info.assert_called_with(BROADWAY_SOUTH)
 
             # Test 3: Click fan speed 2 (MID2)
-            logger.info("Testing fan speed 2 (MID2)")
+            # logger.info("Testing fan speed 2 (MID2)")
 
             # Set up simulator for speed 2
             ae200.set_fan_speed(BROADWAY_SOUTH, 2)
@@ -203,23 +207,22 @@ def test_browser_fan_speed_controls(
 
             # Verify simulator state was updated correctly
             device_info = ae200.get_device_info(BROADWAY_SOUTH)
-            assert device_info['FanSpeed'] == "MID2"
+            assert device_info["FanSpeed"] == "MID2"
 
             browser.close()
         finally:
             # Clean up - the server thread will be terminated when the process ends
             pass
 
+
 # pylint: disable=unused-argument
-@pytest.mark.skipif(os.getenv("SKIP_BROWSER_TEST"),reason='SKIP_BROWSER_TEST is set')
+@pytest.mark.skipif(os.getenv("SKIP_BROWSER_TEST"), reason="SKIP_BROWSER_TEST is set")
 @skip_on_github
 @patch("app.weather.get_weather_data")
 @patch("app.airquality.get_aqi")
 def test_browser_page_loads_correctly(
-    mock_get_airquality,
-    mock_get_weather_data,
-    test_database_conn_with_test_data):  # noqa: F811
-
+    mock_get_airquality, mock_get_weather_data, test_database_conn_with_test_data
+):  # noqa: F811
     """Test that the browser page loads correctly with all elements"""
 
     # Set up test database using new helpers
@@ -231,19 +234,23 @@ def test_browser_page_loads_correctly(
     # Add initial devlog entry for Broadway Test so it appears in status API
     current_time = int(time.time())
     initial_status = DeviceTestData.get_initial_status()
-    db.insert_devlog_entry( test_conn,
-                            device_id=device_id,
-                            temp=24.0,
-                            statusdict=initial_status,
-                            logtime=current_time,
-                            force=True )
+    db.insert_devlog_entry(
+        test_conn,
+        device_id=device_id,
+        temp=24.0,
+        statusdict=initial_status,
+        logtime=current_time,
+        force=True,
+    )
 
     # Set up weather mocks
-    MockHelper.setup_weather_mocks(mock_get_airquality, mock_get_weather_data, 45, TEST_TEMP)
+    MockHelper.setup_weather_mocks(
+        mock_get_airquality, mock_get_weather_data, 45, TEST_TEMP
+    )
 
     # Start the Flask app in a separate thread
     def run_app():
-        app.run(host='127.0.0.1', port=5002, debug=False, use_reloader=False)
+        app.run(host="127.0.0.1", port=5002, debug=False, use_reloader=False)
 
     # pylint: disable=duplicate-code
     server_thread = threading.Thread(target=run_app, daemon=True)
@@ -258,7 +265,7 @@ def test_browser_page_loads_correctly(
             page = browser.new_page()
 
             # Navigate to the application
-            page.goto('http://127.0.0.1:5002/')
+            page.goto("http://127.0.0.1:5002/")
 
             # Verify page title
             expect(page).to_have_title("Unit Speed Control")
@@ -267,36 +274,36 @@ def test_browser_page_loads_correctly(
             expect(page.locator("h1")).to_contain_text("1070 Broadway")
 
             # Wait for the grid to load
-            page.wait_for_selector('table.pure-table', timeout=10000)
+            page.wait_for_selector("table.pure-table", timeout=10000)
 
             # Verify Broadway Test row exists
             broadway_row = page.locator('tr:has-text("Broadway Test")')
             expect(broadway_row).to_be_visible()
 
             # Verify fan speed radio buttons exist for Broadway Test
-            helper = BrowserTestHelper(page, os.environ['TEST_DB_NAME'])
+            helper = BrowserTestHelper(page, os.environ["TEST_DB_NAME"])
             device_id = helper.get_broadway_south_device_id()
 
             for speed in [1, 2, 3, 4]:
-                radio = page.locator(f'#radio-{device_id}-{speed}')
+                radio = page.locator(f"#radio-{device_id}-{speed}")
                 expect(radio).to_be_visible()
-                expect(radio).to_have_attribute('type', 'radio')
+                expect(radio).to_have_attribute("type", "radio")
                 expect(radio).to_have_value(str(speed))
 
             # Verify AQI section exists
-            expect(page.locator('#aqi')).to_be_visible()
+            expect(page.locator("#aqi")).to_be_visible()
             if TEST_AQI:
-                expect(page.locator('#aqi-value')).to_contain_text("45")
-                expect(page.locator('#aqi-name')).to_contain_text("Good")
+                expect(page.locator("#aqi-value")).to_contain_text("45")
+                expect(page.locator("#aqi-name")).to_contain_text("Good")
 
             # Verify weather section exists
-            logger.debug("page.locator #weather=%s",page.locator('#weather').inner_text())
-            expect(page.locator('#weather')).to_be_visible()
-            expect(page.locator('#weather')).to_contain_text(str(TEST_TEMP))
-            expect(page.locator('#weather')).to_contain_text("Sunny")
+            # logger.debug("page.locator #weather=%s",page.locator('#weather').inner_text())
+            expect(page.locator("#weather")).to_be_visible()
+            expect(page.locator("#weather")).to_contain_text(str(TEST_TEMP))
+            expect(page.locator("#weather")).to_contain_text("Sunny")
 
             # Verify log table exists
-            expect(page.locator('#log-table')).to_be_visible() # pylint: disable=duplicate-code
+            expect(page.locator("#log-table")).to_be_visible()  # pylint: disable=duplicate-code
 
             # pylint: disable=duplicate-code
             browser.close()
@@ -305,14 +312,13 @@ def test_browser_page_loads_correctly(
             pass
 
 
-@pytest.mark.skipif(os.getenv("SKIP_BROWSER_TEST"),reason='SKIP_BROWSER_TEST is set')
+@pytest.mark.skipif(os.getenv("SKIP_BROWSER_TEST"), reason="SKIP_BROWSER_TEST is set")
 @skip_on_github
 @patch("app.weather.get_weather_data")
 @patch("app.airquality.get_aqi")
 def test_browser_temperature_display(
-    mock_get_airquality,
-    mock_get_weather_data,
-    test_database_conn_with_test_data):  # noqa: F811
+    mock_get_airquality, mock_get_weather_data, test_database_conn_with_test_data
+):  # noqa: F811
     """
     Comprehensive test for temperature display functionality:
     1. Tests that temporal buttons (day, week, month) work correctly
@@ -320,15 +326,17 @@ def test_browser_temperature_display(
     3. Tests with temporal test data (1 hour, 26 hours, 200 hours, 2000 hours ago)
     """
 
-    device_id       = test_database_conn_with_test_data[1]
+    device_id = test_database_conn_with_test_data[1]
     expected_counts = test_database_conn_with_test_data[2]
 
     # Mock weather and AQI data using new mock helper
-    MockHelper.setup_weather_mocks(mock_get_airquality, mock_get_weather_data, 45, TEST_TEMP)
+    MockHelper.setup_weather_mocks(
+        mock_get_airquality, mock_get_weather_data, 45, TEST_TEMP
+    )
 
     # Start the Flask app in a separate thread
     def run_app():
-        app.run(host='127.0.0.1', port=5003, debug=False, use_reloader=False)
+        app.run(host="127.0.0.1", port=5003, debug=False, use_reloader=False)
 
     server_thread = threading.Thread(target=run_app, daemon=True)
     server_thread.start()
@@ -342,81 +350,81 @@ def test_browser_temperature_display(
             page = browser.new_page()
 
             # Navigate to the chart page for the specific device
-            page.goto(f'http://127.0.0.1:5003/chart?device_id={device_id}')
+            page.goto(f"http://127.0.0.1:5003/chart?device_id={device_id}")
 
             # Wait for the chart to load
-            helper = TemperatureTestHelper(page, os.environ['TEST_DB_NAME'])
+            helper = TemperatureTestHelper(page, os.environ["TEST_DB_NAME"])
             page.wait_for_load_state("networkidle", timeout=30_000)
-            page.wait_for_selector('#main', timeout=10000)
-            page.wait_for_selector('#record-count', timeout=10000)
+            page.wait_for_selector("#main", timeout=10000)
+            page.wait_for_selector("#record-count", timeout=10000)
 
             # Test initial load (should show all records)
-            logger.info("Testing initial load")
+            # logger.info("Testing initial load")
             helper.verify_record_count(expected_counts["all"])
 
             # Test day button (should show 2 records: 1 hour + 26 hours)
-            logger.info("Testing day button")
-            helper.click_temporal_button('day')
+            # logger.info("Testing day button")
+            helper.click_temporal_button("day")
             helper.verify_record_count(expected_counts["day"])
 
             # Test week button (should show 3 records: 1 hour + 26 hours + 200 hours)
-            logger.info("Testing week button")
-            helper.click_temporal_button('week')
+            # logger.info("Testing week button")
+            helper.click_temporal_button("week")
             helper.verify_record_count(expected_counts["week"])
 
             # Test month button (should show all 4 records)
-            logger.info("Testing month button")
-            helper.click_temporal_button('month')
+            # logger.info("Testing month button")
+            helper.click_temporal_button("month")
             helper.verify_record_count(expected_counts["month"])
 
             # Test day button again to ensure it still works
-            logger.info("Testing day button again")
-            helper.click_temporal_button('day')
+            # logger.info("Testing day button again")
+            helper.click_temporal_button("day")
             helper.verify_record_count(expected_counts["day"])
 
             # Verify all temporal buttons are present and clickable
-            expect(page.locator('#dayBtn')).to_be_visible()
-            expect(page.locator('#weekBtn')).to_be_visible()
-            expect(page.locator('#monthBtn')).to_be_visible()
+            expect(page.locator("#dayBtn")).to_be_visible()
+            expect(page.locator("#weekBtn")).to_be_visible()
+            expect(page.locator("#monthBtn")).to_be_visible()
 
             # Verify chart container is present and loaded
-            expect(page.locator('#main')).to_be_visible()
+            expect(page.locator("#main")).to_be_visible()
 
             # Verify record count element is present and shows data
-            record_count_element = page.locator('#record-count')
+            record_count_element = page.locator("#record-count")
             expect(record_count_element).to_be_visible()
             expect(record_count_element).to_contain_text("Records loaded:")
 
             browser.close()
         except PWTimeoutError as e:
-            logger.error("❌ Timeout error %s on %s",e,page.url)
+            logger.error("❌ Timeout error %s on %s", e, page.url)
             ts = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
             fname_html = Path(f"debug_page_{ts}.html")
             fname_png = Path(f"debug_page_{ts}.png")
 
             fname_html.write_text(page.content(), encoding="utf-8")
-            logger.error("   HTML dump: %s",fname_html.resolve())
+            logger.error("   HTML dump: %s", fname_html.resolve())
 
             page.screenshot(path=str(fname_png), full_page=True)
-            logger.error("   Screenshot: %s",fname_png.resolve())
+            logger.error("   Screenshot: %s", fname_png.resolve())
             raise
         finally:
             # Clean up
             pass
 
 
-@pytest.mark.skipif(os.getenv("SKIP_BROWSER_TEST"),reason='SKIP_BROWSER_TEST is set')
+@pytest.mark.skipif(os.getenv("SKIP_BROWSER_TEST"), reason="SKIP_BROWSER_TEST is set")
 @skip_on_github
-def test_chart_page_no_dom_errors(test_database_conn_with_test_data): # noqa: F811
+def test_chart_page_no_dom_errors(test_database_conn_with_test_data):  # noqa: F811
     """
     This test requires the Flask server to be running at http://localhost:8000.
     It checks for DOM errors (like NotFoundError) in the chart page JavaScript.
     """
     # Start the Flask app in a separate thread
 
-    logger.info("running with test database and test client %s",test_database_conn_with_test_data)
+    # logger.info("running with test database and test client %s",test_database_conn_with_test_data)
     def run_app():
-        app.run(host='127.0.0.1', port=5004, debug=False, use_reloader=False)
+        app.run(host="127.0.0.1", port=5004, debug=False, use_reloader=False)
 
     server_thread = threading.Thread(target=run_app, daemon=True)
     server_thread.start()
@@ -430,7 +438,9 @@ def test_chart_page_no_dom_errors(test_database_conn_with_test_data): # noqa: F8
         errors = []
 
         # Listen for console errors
-        page.on("console", lambda msg: errors.append(msg) if msg.type == "error" else None)
+        page.on(
+            "console", lambda msg: errors.append(msg) if msg.type == "error" else None
+        )
 
         # Go to the chart page
         page.goto("http://localhost:5004/chart")
@@ -443,7 +453,9 @@ def test_chart_page_no_dom_errors(test_database_conn_with_test_data): # noqa: F8
 
         # Check for NotFoundError in console errors
         error_texts = [msg.text for msg in errors]
-        assert not any("NotFoundError" in text for text in error_texts), f"Console errors: {error_texts}"
+        assert not any("NotFoundError" in text for text in error_texts), (
+            f"Console errors: {error_texts}"
+        )
 
         browser.close()
 
@@ -470,7 +482,9 @@ def test_chart_exclusion_set_persists_after_clear_all_and_range_change(
         page = browser.new_page()
         try:
             # Load chart without device_ids so we get the full sensor list and checkboxes
-            page.goto("http://127.0.0.1:5005/chart", wait_until="networkidle", timeout=30_000)
+            page.goto(
+                "http://127.0.0.1:5005/chart", wait_until="networkidle", timeout=30_000
+            )
             page.wait_for_selector("#clearAllBtn", timeout=10_000)
             page.wait_for_selector("#weekBtn", timeout=5_000)
             # Wait for at least one checkbox (created after temp data loads)
@@ -478,7 +492,9 @@ def test_chart_exclusion_set_persists_after_clear_all_and_range_change(
 
             checkboxes = page.locator("#checkboxes input[type=checkbox]")
             initial_count = checkboxes.count()
-            assert initial_count >= 1, "need at least one sensor with data to test exclusion"
+            assert initial_count >= 1, (
+                "need at least one sensor with data to test exclusion"
+            )
 
             # Clear All: all sensors go into exclusion set, all checkboxes unchecked
             page.locator("#clearAllBtn").click()
@@ -493,7 +509,9 @@ def test_chart_exclusion_set_persists_after_clear_all_and_range_change(
             checkboxes_after = page.locator("#checkboxes input[type=checkbox]")
             n_after = checkboxes_after.count()
             assert n_after >= 1, "expected checkboxes after range change"
-            checked_after = sum(1 for i in range(n_after) if checkboxes_after.nth(i).is_checked())
+            checked_after = sum(
+                1 for i in range(n_after) if checkboxes_after.nth(i).is_checked()
+            )
             assert checked_after == 0, (
                 "after Clear All then range change, no checkbox should be checked (exclusions persist); "
                 f"got {checked_after} checked"
@@ -523,7 +541,9 @@ def test_chart_select_all_clears_exclusions_then_range_shows_all(
         browser = p.chromium.launch(headless=True)
         page = browser.new_page()
         try:
-            page.goto("http://127.0.0.1:5006/chart", wait_until="networkidle", timeout=30_000)
+            page.goto(
+                "http://127.0.0.1:5006/chart", wait_until="networkidle", timeout=30_000
+            )
             page.wait_for_selector("#clearAllBtn", timeout=10_000)
             page.wait_for_selector("#selectAllBtn", timeout=5_000)
             page.wait_for_selector("#checkboxes input[type=checkbox]", timeout=15_000)
@@ -536,7 +556,9 @@ def test_chart_select_all_clears_exclusions_then_range_shows_all(
             page.locator("#selectAllBtn").click()
             page.wait_for_timeout(300)
 
-            checkboxes = page.locator("#checkboxes input[type=checkbox]:not([disabled])")
+            checkboxes = page.locator(
+                "#checkboxes input[type=checkbox]:not([disabled])"
+            )
             n_enabled = checkboxes.count()
             assert n_enabled >= 1, "need at least one enabled checkbox"
             for i in range(n_enabled):
@@ -546,10 +568,14 @@ def test_chart_select_all_clears_exclusions_then_range_shows_all(
             page.locator("#weekBtn").click()
             page.wait_for_timeout(2_000)
 
-            checkboxes_after = page.locator("#checkboxes input[type=checkbox]:not([disabled])")
+            checkboxes_after = page.locator(
+                "#checkboxes input[type=checkbox]:not([disabled])"
+            )
             n_after = checkboxes_after.count()
             assert n_after >= 1, "expected enabled checkboxes after range change"
-            checked_after = sum(1 for i in range(n_after) if checkboxes_after.nth(i).is_checked())
+            checked_after = sum(
+                1 for i in range(n_after) if checkboxes_after.nth(i).is_checked()
+            )
             assert checked_after == n_after, (
                 "after Select All then range change, all enabled checkboxes should be checked; "
                 f"got {checked_after}/{n_after} checked"

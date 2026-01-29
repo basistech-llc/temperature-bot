@@ -1,26 +1,29 @@
 """
 test_chart_functionality.py
 """
+
 import json
 import logging
 
 logger = logging.getLogger(__name__)
 
+
 def test_status_api_endpoint_for_devices(flask_test_client):  # noqa: F811 # pylint: disable=unused-argument
     """Test that the /api/v1/status endpoint returns all devices"""
-    response = flask_test_client.get('/api/v1/status')
+    response = flask_test_client.get("/api/v1/status")
     assert response.status_code == 200
 
     data = json.loads(response.data)
-    assert 'devices' in data
-    assert isinstance(data['devices'], list)
+    assert "devices" in data
+    assert isinstance(data["devices"], list)
 
     # Check that each device has required fields
-    for device in data['devices']:
-        assert 'device_id' in device
-        assert 'device_name' in device
-        assert isinstance(device['device_id'], int)
-        assert isinstance(device['device_name'], str)
+    for device in data["devices"]:
+        assert "device_id" in device
+        assert "device_name" in device
+        assert isinstance(device["device_id"], int)
+        assert isinstance(device["device_name"], str)
+
 
 def test_chart_page_with_specific_devices(flask_test_client):  # noqa: F811 # pylint: disable=unused-argument
     """Test that the chart page loads with specific devices"""
@@ -28,7 +31,7 @@ def test_chart_page_with_specific_devices(flask_test_client):  # noqa: F811 # py
     assert response.status_code == 200
 
     content = response.data.decode("utf-8")
-    logger.info("content=%s", content)
+    logger.info("content=%s...", content[:50])
 
 
 def test_temperature_chart_page_has_exclusion_controls(flask_test_client):  # noqa: F811
@@ -57,25 +60,26 @@ def test_chart_aqi_page_loads(flask_test_client):  # noqa: F811
     assert "all" in content
 
 
-def test_temperature_api_with_multiple_devices(flask_test_client): # noqa: F811 # pylint: disable=unused-argument
+def test_temperature_api_with_multiple_devices(flask_test_client):  # noqa: F811 # pylint: disable=unused-argument
     """Test that the temperature API works with multiple device IDs"""
-    response = flask_test_client.get('/api/v1/temperature?device_ids=1,2')
+    response = flask_test_client.get("/api/v1/temperature?device_ids=1,2")
     assert response.status_code == 200
 
     data = json.loads(response.data)
-    assert 'series' in data
-    assert isinstance(data['series'], list)
+    assert "series" in data
+    assert isinstance(data["series"], list)
 
 
-def test_status_api_devices_sorted_alphabetically(flask_test_client): # noqa: F811 # pylint: disable=unused-argument
+def test_status_api_devices_sorted_alphabetically(flask_test_client):  # noqa: F811 # pylint: disable=unused-argument
     """Test that devices in the /api/v1/status endpoint are sorted alphabetically"""
-    response = flask_test_client.get('/api/v1/status')
+    response = flask_test_client.get("/api/v1/status")
     assert response.status_code == 200
 
     data = json.loads(response.data)
-    assert 'devices' in data
-    device_names = [device['device_name'] for device in data['devices']]
+    assert "devices" in data
+    device_names = [device["device_name"] for device in data["devices"]]
     # Check that device names are sorted alphabetically
     sorted_device_names = sorted(device_names)
-    assert device_names == sorted_device_names, \
+    assert device_names == sorted_device_names, (
         f"Devices are not sorted alphabetically. Got: {device_names}, Expected: {sorted_device_names}"
+    )
