@@ -29,6 +29,19 @@ def create_web_routes(app):
         # Get device data for the template
         device_data = db.get_device_status(conn)
 
+        # Enrich with Hubitat label for display (Air Quality section: label visible, name in title)
+        name_to_label = {}
+        try:
+            hubitat_devices = hubitat.get_all_devices()
+            name_to_label = {
+                dev["name"]: (dev.get("label") or dev["name"])
+                for dev in hubitat_devices
+            }
+        except (ValueError, RuntimeError, OSError):
+            pass
+        for d in device_data:
+            d["device_label"] = name_to_label.get(d["device_name"], d["device_name"])
+
         # Add current timestamp for temporal links
         now = int(time.time())
 
@@ -115,11 +128,18 @@ def create_web_routes(app):
 
     @app.route("/chart")
     def show_chart():
-        """Chart page"""
+        """Temperature chart page"""
         device_ids = parse_device_ids()
 
         return render_template(
             "chart.html", device_ids=device_ids, current_page="chart"
+        )
+
+    @app.route("/chart_aqi")
+    def show_chart_aqi():
+        """Air Quality chart page"""
+        return render_template(
+            "chart_aqi.html", current_page="chart_aqi"
         )
 
     @app.route("/alerts")

@@ -177,7 +177,7 @@
             {% if not device.has_speed_control and device.temp10x %}
                 <tr class="device-row" x-data-device-id="{{ device.device_id }}">
                   <td class="cell-unit">
-                    {{ device.device_name }}<span class="rules-disabled-superscript" id="rules-disabled-{{ device.device_id }}" style="display: none;" title=""></span>
+                    <span title="{{ device.device_name }}">{{ device.device_label }}</span><span class="rules-disabled-superscript" id="rules-disabled-{{ device.device_id }}" style="display: none;" title=""></span>
                     <span id="device-{{ device.device_id }}-notes"></span>
                     <div class="temporal-links">
                       <a href="/chart?device_ids={{ device.device_id }}" target="_blank">graph</a>
