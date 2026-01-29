@@ -597,8 +597,11 @@ def test_debug_ae200_devices_endpoint(
     mock_get_devices.return_value = [
         {"name": "Test AE200 Device", "id": "10"}
     ]
-    # Mock the async runner to return the details directly
-    mock_run_async.return_value = {"10": {"Drive": "ON", "FanSpeed": "LOW"}}
+    # Mock the async runner: close the coroutine to avoid "coroutine was never awaited"
+    def _mock_run_async(coro):
+        coro.close()
+        return {"10": {"Drive": "ON", "FanSpeed": "LOW"}}
+    mock_run_async.side_effect = _mock_run_async
 
     response = flask_test_client.get("/api/v1/debug/ae200_devices")
     assert response.status_code == 200
