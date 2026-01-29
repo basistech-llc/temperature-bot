@@ -16,6 +16,7 @@ from helpers.mock_helpers import MockHelper
 
 from app import ae200
 from app import db
+from app import rules_engine
 from app.constants import __version__
 
 logger = logging.getLogger(__name__)
@@ -621,3 +622,26 @@ def test_debug_ae200_devices_endpoint_error(mock_get_devices, flask_test_client)
     assert response.status_code == 500
     response_json = response.json
     assert "error" in response_json
+
+
+def test_disable_rules_api_enable_and_disable(
+    flask_test_client, test_database_conn_with_test_data
+):  # noqa: F811
+    """disable-rules API enables (seconds=0) and disables (seconds=N) rules; DB state matches (replaces Playwright rules test)."""
+    conn = test_database_conn_with_test_data[0]
+    client = flask_test_client
+
+    # Enable rules
+    r = client.get("/api/v1/disable-rules?seconds=0")
+    assert r.status_code == 200
+    assert rules_engine.all_rules_disabled_until(conn) == 0
+
+    # Disable for 1 hour
+    r = client.get("/api/v1/disable-rules?seconds=3600")
+    assert r.status_code == 200
+    disabled_until = rules_engine.all_rules_disabled_until(conn)
+    assert disabled_until != 0
+    min_expected = int(time.time()) + 50 * 60  # at least ~50 minutes from now
+    assert disabled_until >= min_expected, (
+        f"rules should be disabled until at least {min_expected}, got {disabled_until}"
+    )
