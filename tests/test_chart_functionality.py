@@ -31,6 +31,18 @@ def test_chart_page_with_specific_devices(flask_test_client):  # noqa: F811 # py
     logger.info("content=%s", content)
 
 
+def test_temperature_chart_page_has_exclusion_controls(flask_test_client):  # noqa: F811
+    """Temperature chart page has Select All / Clear All and chart_support.js for exclusion-set behavior."""
+    response = flask_test_client.get("/chart")
+    assert response.status_code == 200
+    content = response.data.decode("utf-8")
+    assert "Select All" in content
+    assert "Clear All" in content
+    assert "chart_support.js" in content
+    assert 'id="checkboxes"' in content
+    assert 'id="temp-chart"' in content
+
+
 def test_chart_aqi_page_loads(flask_test_client):  # noqa: F811
     """Air Quality Chart page loads with AQI chart and temporal controls."""
     response = flask_test_client.get("/chart_aqi")
