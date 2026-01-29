@@ -771,12 +771,13 @@ function setupCheckboxControls() {
 }
 
 function reloadData() {
-  // Reload both charts’ data with the shared range
+  // Reload chart(s) data with the shared range (AQI only when #aqi-chart present)
   console.log("reloadData");
-  Promise.all([loadTempData(), loadAirQualityData()]).then(() => {
-    // When both updated, keep crosshair synced
-    // try { echarts.connect([tempChart  aqiChart ]); } catch(_) {}
-  });
+  const promises = [loadTempData()];
+  if (aqiChart) {
+    promises.push(loadAirQualityData());
+  }
+  Promise.all(promises).then(() => {});
 }
 
 // ===============================
@@ -790,8 +791,11 @@ document.addEventListener("DOMContentLoaded", async function () {
   setTimePrevDays(7); // Initialize to 1 week of date
   setTemporalButtonSelection("weekBtn"); // Set week button as selected by default to match initial 7-day range
 
-  aqiChart = echarts.init(document.getElementById("aqi-chart")); // aqi chart
-  tempChart = echarts.init(document.getElementById("temp-chart")); // // Temperature chart
+  const aqiEl = document.getElementById("aqi-chart");
+  if (aqiEl) {
+    aqiChart = echarts.init(aqiEl);
+  }
+  tempChart = echarts.init(document.getElementById("temp-chart"));
 
   console.log("aqiChart=", aqiChart, "tempChart=", tempChart);
 
@@ -800,6 +804,4 @@ document.addEventListener("DOMContentLoaded", async function () {
   setupCheckboxControls();
 
   reloadData();
-  // Load both charts then set
-  loadTempData();
 });

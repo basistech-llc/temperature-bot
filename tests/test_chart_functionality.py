@@ -22,14 +22,27 @@ def test_status_api_endpoint_for_devices(flask_test_client):  # noqa: F811 # pyl
         assert isinstance(device['device_id'], int)
         assert isinstance(device['device_name'], str)
 
-def test_chart_page_with_specific_devices(flask_test_client): # noqa: F811 # pylint: disable=unused-argument
+def test_chart_page_with_specific_devices(flask_test_client):  # noqa: F811 # pylint: disable=unused-argument
     """Test that the chart page loads with specific devices"""
-    response = flask_test_client.get('/chart?device_ids=1,2')
+    response = flask_test_client.get("/chart?device_ids=1,2")
     assert response.status_code == 200
 
-    content = response.data.decode('utf-8')
-    # Should test this
-    logger.info("content=%s",content)
+    content = response.data.decode("utf-8")
+    logger.info("content=%s", content)
+
+
+def test_chart_aqi_page_loads(flask_test_client):  # noqa: F811
+    """Air Quality Chart page loads with AQI chart and temporal controls."""
+    response = flask_test_client.get("/chart_aqi")
+    assert response.status_code == 200
+    content = response.data.decode("utf-8")
+    assert "Air Quality Chart" in content
+    assert 'id="aqi-chart"' in content
+    assert "chart_aqi_support.js" in content
+    assert "day" in content
+    assert "week" in content
+    assert "month" in content
+    assert "all" in content
 
 
 def test_temperature_api_with_multiple_devices(flask_test_client): # noqa: F811 # pylint: disable=unused-argument

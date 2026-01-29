@@ -128,11 +128,18 @@ def create_web_routes(app):
 
     @app.route("/chart")
     def show_chart():
-        """Chart page"""
+        """Temperature chart page"""
         device_ids = parse_device_ids()
 
         return render_template(
             "chart.html", device_ids=device_ids, current_page="chart"
+        )
+
+    @app.route("/chart_aqi")
+    def show_chart_aqi():
+        """Air Quality chart page"""
+        return render_template(
+            "chart_aqi.html", current_page="chart_aqi"
         )
 
     @app.route("/alerts")
