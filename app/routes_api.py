@@ -10,6 +10,7 @@ from flask_pydantic import validate
 from .constants import __version__
 from . import constants
 from . import db
+from . import db_alerts
 from . import rules_engine
 from . import hubitat
 from . import ae200
@@ -151,7 +152,7 @@ def alerts_active(conn):
     """Get all active alerts"""
     device_id = request.args.get("device_id", type=int)
     include_details = request.args.get("include_details", "false").lower() == "true"
-    alerts = db.get_active_alerts(conn, device_id, include_details)
+    alerts = db_alerts.get_active_alerts(conn, device_id, include_details)
     return jsonify(alerts)
 
 
@@ -162,7 +163,7 @@ def alerts_history(conn):
     device_id = request.args.get("device_id", type=int)
     limit = request.args.get("limit", type=int, default=100)
     include_details = request.args.get("include_details", "false").lower() == "true"
-    alerts = db.get_alert_history(conn, device_id, limit, include_details)
+    alerts = db_alerts.get_alert_history(conn, device_id, limit, include_details)
     return jsonify(alerts)
 
 

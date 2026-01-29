@@ -10,6 +10,7 @@ from flask import render_template, request, redirect, url_for
 
 from .constants import __version__
 from . import db
+from . import db_alerts
 from . import rules_engine
 from . import hubitat
 from . import room_config
@@ -108,7 +109,7 @@ def create_web_routes(app):
     def device_log(conn, device_id):
         """Device log page"""
         log_data = db.get_device_log(conn, int(device_id))
-        alerts = db.get_alerts_for_device(conn, int(device_id))
+        alerts = db_alerts.get_alerts_for_device(conn, int(device_id))
         return render_template(
             "device_log.html",
             device=log_data["device"],

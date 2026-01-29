@@ -2210,3 +2210,926 @@ _**User**_
 
 ---
 
+_**Agent (model default, mode Agent)**_
+
+<think><details><summary>Thought Process</summary>
+
+The user is asking about the correct location for Cursor rules. They're saying best practice is to have rules under `.cursor/rules` (plural) - so likely a directory `.cursor/rules/` with rule files in it, rather than a single file `.cursor/rules.mdc`.
+
+I will check what I created and what the standard is. I created `.cursor/rules.mdc`. The user says "under .cursor/rules" - that could mean:
+1. A directory `.cursor/rules/` containing one or more rule files (e.g. `.cursor/rules/no-suppress-linters.mdc`)
+2. Or a file at `.cursor/rules` (no extension)
+
+I'll move the content to `.cursor/rules/` as a directory with a rule file inside it. Common patterns I've seen: `.cursor/rules/` directory with `.mdc` files inside. So I'll create `.cursor/rules/no-suppress-linters.mdc` or similar, and delete `.cursor/rules.mdc`.
+</details></think>
+
+---
+
+
+Moving the rule into `.cursor/rules/` and removing the single-file rule.
+
+
+---
+
+<tool-use data-tool-type="read" data-tool-name="read_file_v2">
+<details><summary>Tool use: **read_file_v2** • Read file: /Users/deg/Documents/basistech/temperature-bot/.cursor/rules.mdc</summary>
+
+</details>
+</tool-use>
+
+---
+
+<tool-use data-tool-type="unknown" data-tool-name="list_dir_v2">
+<details>
+<summary>Tool use: **list_dir_v2**</summary>
+
+
+Parameters:
+
+```json
+{
+  "targetDirectory": "/Users/deg/Documents/basistech/temperature-bot/.cursor"
+}
+```
+Result:
+
+```json
+{
+  "directoryTreeRoot": {
+    "absPath": "/Users/deg/Documents/basistech/temperature-bot/.cursor",
+    "childrenFiles": [
+      {
+        "name": "rules.mdc"
+      }
+    ],
+    "childrenWereProcessed": true
+  }
+}
+```
+Status: **completed**
+
+
+</details>
+</tool-use>
+
+---
+
+<think><details><summary>Thought Process</summary>
+
+I'll create `.cursor/rules/` directory with a rule file (e.g. `no-suppress.mdc` or `linter-suppressions.mdc`) containing the same content, then delete `.cursor/rules.mdc`.
+</details></think>
+
+---
+
+
+
+
+
+---
+
+<tool-use data-tool-type="write" data-tool-name="edit_file_v2">
+
+<details><summary>Tool use: **edit_file_v2** • Edit file: /Users/deg/Documents/basistech/temperature-bot/.cursor/rules/no-suppress-linters.mdc</summary>
+
+</details>
+
+</tool-use>
+
+---
+
+<tool-use data-tool-type="write" data-tool-name="delete_file">
+<details><summary>Tool use: **delete_file**</summary>
+
+Explanation: undefined
+
+
+</details>
+</tool-use>
+
+---
+
+<think><details><summary>Thought Process</summary>
+
+Done. The rule is now under `.cursor/rules/no-suppress-linters.mdc`. I dropped the "Cursor rules" heading since it's now inside the rules directory.
+</details></think>
+
+---
+
+
+Update is done. The rule now lives under `.cursor/rules/` as:
+
+- **`.cursor/rules/no-suppress-linters.mdc`** – same “no suppressions without approval” rule
+
+The old single file `.cursor/rules.mdc` has been removed. You can add more rule files in `.cursor/rules/` as needed.
+
+---
+
+_**User**_
+
+I choose your Option B. Split the module cleanly.
+
+---
+
+_**Agent (model default, mode Agent)**_
+
+<think><details><summary>Thought Process</summary>
+
+The user wants me to split app/db.py to fix the too-many-lines pylint error (1049/1000). I need to:
+
+1. Decide how to split db.py cleanly - move a coherent chunk of code to a new module
+2. Ensure the new module is imported by db.py and that existing callers (which use `from app import db` or `db.foo()`) continue to work
+
+Strategy:
+- Option 1: Move Pydantic models to db_models.py - that's only ~30 lines, not enough (we need to remove 50+ lines)
+- Option 2: Move a large block of related functions to a new module (e.g. db_queries.py or db_alerts.py) and have db.py import from it and re-export so all existing `db.foo()` calls still work
+
+Looking at the structure from my earlier grep:
+- Lines 53-81: Pydantic models (SpeedControl, DriveControl, NoteControl, SetTempControl) - ~30 lines
+- Many functions from 84 onward
+
+If I move the models to app/db_models.py, I save ~30 lines. db.py would still be 1020 lines. I need to move at least 50 more lines.
+
+Better approach: Move a substantial, cohesive set of functions. Good candidates:
+1. **Alert-related functions** (format_alert_type_display, extract_relevant_status_fields, get_alert_device_status, insert_or_update_alert, get_active_alerts, get_alert_history, get_alerts_for_device) - roughly lines 482-760, ~280 lines. That would leave db.py at ~770 lines.
+2. **Query/read functions** - get_temperature_series, get_device_status, get_changelog, get_device_log, get_last_aqi, get_aqi_series, get_db_aqi, get_aqi_and_weather_data, insert_into_aqi - these are used by routes and need to stay accessible as db.xxx
+
+The key constraint: everything that's currently `db.something()` must still be `db.something()` after the split, or we'd have to change many call sites. So the clean approach is:
+- Create app/db_alerts.py (or app/db_queries.py) with a chunk of functions
+- In app/db.py: `from app.db_alerts import (format_alert_type_display, extract_relevant_status_fields, ...)` and re-export them (or `from app import db_alerts; format_alert_type_display = db_alerts.format_alert_type_display` etc.)
+
+Actually in Python, if we do in db.py:
+```python
+from app.db_alerts import (
+    format_alert_type_display,
+    extract_relevant_status_fields,
+    get_alert_device_status,
+    insert_or_update_alert,
+    get_active_alerts,
+    get_alert_history,
+    get_alerts_for_device,
+)
+```
+Then those names are in db's namespace and `db.format_alert_type_display` still works. So we need to:
+1. Create app/db_alerts.py with the alert-related functions and their dependencies (they might need conn, db.get_or_create_device_id, etc. - so there could be circular imports). I will check dependencies.
+
+Actually many of those alert functions use conn, cursor, and maybe other db functions like get_or_create_device_id. If db_alerts imports from db, and db imports from db_alerts, we get a circular import. So the split must be such that the new module doesn't need to import from db (or we put shared helpers in a third module).
+
+Looking at the alert functions:
+- format_alert_type_display(alert_type) - no db dependency, just a dict
+- extract_relevant_status_fields(status_json) - no db dependency
+- get_alert_device_status(conn, device_id, alert_start_time) - uses conn only
+- insert_or_update_alert(conn, device_id, alert_type, alert_value, logtime=None) - uses conn
+- get_active_alerts(conn, ...) - uses conn, and get_alert_device_status, extract_relevant_status_fields
+- get_alert_history(conn, ...) - similar
+- get_alerts_for_device(conn, device_id) - uses conn
+
+So the alert functions mainly need conn and each other. They don't need get_or_create_device_id or other db functions. So I can put them in db_alerts.py; db_alerts.py would only need to import things like logging, json, and the shared constants/types. I will check - get_alert_device_status does SQL and uses conn. get_active_alerts calls get_alert_device_status and extract_relevant_status_fields. So db_alerts.py can have all of these and only need conn passed in. No need to import from db. Good.
+
+But wait - get_active_alerts and get_alert_history might call get_alert_device_status which is in the same file. So the new file db_alerts.py will contain:
+- format_alert_type_display
+- extract_relevant_status_fields  
+- get_alert_device_status
+- insert_or_update_alert
+- get_active_alerts
+- get_alert_history
+- get_alerts_for_device
+
+These functions might reference things from db like insert_devlog_entry? I will check insert_or_update_alert - it just does SQL with conn. get_alert_device_status - just SQL. So no dependency on other db functions. Good.
+
+I need to check what each function needs from the db module:
+- format_alert_type_display - just a dict mapping, no import from db
+- extract_relevant_status_fields - uses json.loads, status_json - no db
+- get_alert_device_status - conn, cursor - no db
+- insert_or_update_alert - conn - no db
+- get_active_alerts - calls get_alert_device_status, extract_relevant_status_fields - need to check if it uses anything else from db
+- get_alert_history - same
+- get_alerts_for_device - conn only
+
+I will read the actual implementations to see dependencies and also see the exact line ranges so I can cut correctly.
+</details></think>
+
+---
+
+
+Splitting `app/db.py` by moving a cohesive block into a new module. Analyzing structure and dependencies to choose the split.
+
+
+---
+
+<tool-use data-tool-type="read" data-tool-name="read_file_v2">
+<details><summary>Tool use: **read_file_v2** • Read file: /Users/deg/Documents/basistech/temperature-bot/app/db.py</summary>
+
+</details>
+</tool-use>
+
+---
+
+<tool-use data-tool-type="read" data-tool-name="read_file_v2">
+<details><summary>Tool use: **read_file_v2** • Read file: /Users/deg/Documents/basistech/temperature-bot/app/db.py</summary>
+
+</details>
+</tool-use>
+
+---
+
+<tool-use data-tool-type="unknown" data-tool-name="ripgrep_raw_search">
+<details>
+<summary>Tool use: **ripgrep_raw_search**</summary>
+
+
+Parameters:
+
+```json
+{
+  "pattern": "^from \\. |^from app\\.|^import ",
+  "path": "/Users/deg/Documents/basistech/temperature-bot/app/db.py",
+  "caseInsensitive": false
+}
+```
+Result:
+
+```json
+{
+  "success": {
+    "pattern": "^from \\. |^from app\\.|^import ",
+    "path": "/Users/deg/Documents/basistech/temperature-bot/app/db.py",
+    "outputMode": "content",
+    "workspaceResults": {
+      "/Users/deg/Documents/basistech/temperature-bot": {
+        "content": {
+          "matches": [
+            {
+              "file": "app/db.py",
+              "matches": [
+                {
+                  "lineNumber": 8,
+                  "content": "import sqlite3"
+                },
+                {
+                  "lineNumber": 9,
+                  "content": "import time  # For logtime timestamps"
+                },
+                {
+                  "lineNumber": 10,
+                  "content": "import logging"
+                },
+                {
+                  "lineNumber": 11,
+                  "content": "import json"
+                },
+                {
+                  "lineNumber": 12,
+                  "content": "import math"
+                },
+                {
+                  "lineNumber": 13,
+                  "content": "import os"
+                },
+                {
+                  "lineNumber": 14,
+                  "content": "import sys"
+                },
+                {
+                  "lineNumber": 24,
+                  "content": "from . import ae200"
+                },
+                {
+                  "lineNumber": 25,
+                  "content": "from . import airquality"
+                },
+                {
+                  "lineNumber": 26,
+                  "content": "from . import weather"
+                }
+              ]
+            }
+          ],
+          "totalLines": 10,
+          "totalMatchedLines": 10
+        }
+      }
+    }
+  }
+}
+```
+Status: **completed**
+
+
+</details>
+</tool-use>
+
+---
+
+<think><details><summary>Thought Process</summary>
+
+I see the structure. The alert block is lines 480-800 (format_alert_type_display through get_alerts_for_device). That's ~320 lines. The alert functions only use: conn, time, json, logging - no imports from db. So I can create app/db_alerts.py with:
+- import json, time, logging
+- format_alert_type_display, extract_relevant_status_fields, get_alert_device_status, insert_or_update_alert, get_active_alerts, get_alert_history, get_alerts_for_device
+
+Then in db.py I'll add:
+from app.db_alerts import (
+    format_alert_type_display,
+    extract_relevant_status_fields,
+    get_alert_device_status,
+    insert_or_update_alert,
+    get_active_alerts,
+    get_alert_history,
+    get_alerts_for_device,
+)
+
+And remove those function definitions from db.py. That should remove ~320 lines from db.py, bringing it to ~730 lines. Under 1000. Good.
+
+I need to check: who imports these from db? routes_api, routes_web, rules_engine, tests, etc. They all do `from app import db` and then `db.get_active_alerts(conn)` etc. So as long as db.py re-exports these (by importing from db_alerts and having them in its namespace), all callers will still work. Good.
+
+I will also check - db.py uses insert_or_update_alert in rules_engine? I will check - rules_engine might call db.insert_or_update_alert. So rules_engine does `from app import db` and db.insert_or_update_alert. So db must export it. Our plan does that. Good.
+
+Creating db_alerts.py with the exact code from db.py (lines 480-800), with proper module docstring and imports. Then removing that block from db.py and adding the import.
+</details></think>
+
+---
+
+
+Checking callers of the alert functions and the exact line range to extract:
+
+
+---
+
+<tool-use data-tool-type="unknown" data-tool-name="ripgrep_raw_search">
+<details>
+<summary>Tool use: **ripgrep_raw_search**</summary>
+
+
+Parameters:
+
+```json
+{
+  "pattern": "db\\.(format_alert_type_display|extract_relevant_status_fields|get_alert_device_status|insert_or_update_alert|get_active_alerts|get_alert_history|get_alerts_for_device)",
+  "path": "/Users/deg/Documents/basistech/temperature-bot",
+  "glob": "*.py",
+  "caseInsensitive": false
+}
+```
+Result:
+
+```json
+{
+  "success": {
+    "pattern": "db\\.(format_alert_type_display|extract_relevant_status_fields|get_alert_device_status|insert_or_update_alert|get_active_alerts|get_alert_history|get_alerts_for_device)",
+    "path": "/Users/deg/Documents/basistech/temperature-bot",
+    "outputMode": "content",
+    "workspaceResults": {
+      "/Users/deg/Documents/basistech/temperature-bot": {
+        "content": {
+          "matches": [
+            {
+              "file": "./tests/test_alerts.py",
+              "matches": [
+                {
+                  "lineNumber": 18,
+                  "content": "    assert db.format_alert_type_display(\"ErrorSign\") == \"Error\""
+                },
+                {
+                  "lineNumber": 19,
+                  "content": "    assert db.format_alert_type_display(\"FilterSign\") == \"Filter warning\""
+                },
+                {
+                  "lineNumber": 20,
+                  "content": "    assert db.format_alert_type_display(\"CheckWater\") == \"Water issue\""
+                },
+                {
+                  "lineNumber": 23,
+                  "content": "    assert db.format_alert_type_display(\"UnknownType\") == \"UnknownType\""
+                },
+                {
+                  "lineNumber": 38,
+                  "content": "    result = db.extract_relevant_status_fields(status_json)"
+                },
+                {
+                  "lineNumber": 50,
+                  "content": "    assert db.extract_relevant_status_fields(None) is None"
+                },
+                {
+                  "lineNumber": 51,
+                  "content": "    assert db.extract_relevant_status_fields(\"\") is None"
+                },
+                {
+                  "lineNumber": 52,
+                  "content": "    assert db.extract_relevant_status_fields(\"{invalid json\") is None"
+                },
+                {
+                  "lineNumber": 73,
+                  "content": "    result = db.get_alert_device_status(conn, device_id, 1050)"
+                },
+                {
+                  "lineNumber": 89,
+                  "content": "    result = db.get_alert_device_status(conn, device_id, 1000)"
+                },
+                {
+                  "lineNumber": 114,
+                  "content": "    alerts = db.get_active_alerts(conn, include_details=False)"
+                },
+                {
+                  "lineNumber": 119,
+                  "content": "    alerts = db.get_active_alerts(conn, include_details=True)"
+                },
+                {
+                  "lineNumber": 147,
+                  "content": "    alerts = db.get_alert_history(conn, include_details=True)"
+                },
+                {
+                  "lineNumber": 165,
+                  "content": "    db.insert_or_update_alert(conn, device_id, \"ErrorSign\", \"ON\", now)"
+                },
+                {
+                  "lineNumber": 176,
+                  "content": "    db.insert_or_update_alert(conn, device_id, \"ErrorSign\", \"OFF\", end_time)"
+                },
+                {
+                  "lineNumber": 197,
+                  "content": "    db.insert_or_update_alert(conn, device_id, \"ErrorSign\", \"ON\", now)"
+                },
+                {
+                  "lineNumber": 198,
+                  "content": "    db.insert_or_update_alert(conn, device_id, \"ErrorSign\", \"ON\", now + 10)"
+                },
+                {
+                  "lineNumber": 239,
+                  "content": "    alerts = db.get_alerts_for_device(conn, device_id1)"
+                }
+              ]
+            },
+            {
+              "file": "./app/routes_web.py",
+              "matches": [
+                {
+                  "lineNumber": 111,
+                  "content": "        alerts = db.get_alerts_for_device(conn, int(device_id))"
+                }
+              ]
+            },
+            {
+              "file": "./app/routes_api.py",
+              "matches": [
+                {
+                  "lineNumber": 154,
+                  "content": "    alerts = db.get_active_alerts(conn, device_id, include_details)"
+                },
+                {
+                  "lineNumber": 165,
+                  "content": "    alerts = db.get_alert_history(conn, device_id, limit, include_details)"
+                }
+              ]
+            },
+            {
+              "file": "./bin/runner.py",
+              "matches": [
+                {
+                  "lineNumber": 63,
+                  "content": "            db.insert_or_update_alert("
+                }
+              ]
+            }
+          ],
+          "totalLines": 22,
+          "totalMatchedLines": 22
+        }
+      }
+    }
+  }
+}
+```
+Status: **completed**
+
+
+</details>
+</tool-use>
+
+---
+
+<tool-use data-tool-type="read" data-tool-name="read_file_v2">
+<details><summary>Tool use: **read_file_v2** • Read file: /Users/deg/Documents/basistech/temperature-bot/app/db.py</summary>
+
+</details>
+</tool-use>
+
+---
+
+<think><details><summary>Thought Process</summary>
+
+All callers use `db.function_name(...)`. So I need to:
+1. Create app/db_alerts.py with the alert functions (lines 480-800 from db.py) - with imports json, time, logging
+2. In app/db.py remove that block and add: from app.db_alerts import (format_alert_type_display, extract_relevant_status_fields, get_alert_device_status, insert_or_update_alert, get_active_alerts, get_alert_history, get_alerts_for_device)
+
+I'll read the exact text from db.py for lines 480-801 (the full alert section including the ## Alerts header through get_alerts_for_device return).
+</details></think>
+
+---
+
+
+Creating `app/db_alerts.py` and updating `app/db.py`.
+
+
+---
+
+<tool-use data-tool-type="task" data-tool-name="todo_write">
+<details><summary>Tool use: **todo_write** • Todo List</summary>
+
+- [-] Create app/db_alerts.py with alert functions
+- [ ] Remove alert block from db.py and re-export from db_alerts
+
+</details>
+</tool-use>
+
+---
+
+<tool-use data-tool-type="read" data-tool-name="read_file_v2">
+<details><summary>Tool use: **read_file_v2** • Read file: /Users/deg/Documents/basistech/temperature-bot/app/db.py</summary>
+
+</details>
+</tool-use>
+
+---
+
+<think><details><summary>Thought Process</summary>
+
+I have the full alert block (lines 480-800). I'll create app/db_alerts.py with:
+- Module docstring
+- Imports: json, time, logging
+- All 7 functions
+
+Then in db.py I'll remove lines 480-801 (the ## Alerts block through the blank line before ## Rules) and add:
+from app.db_alerts import (
+    format_alert_type_display,
+    extract_relevant_status_fields,
+    get_alert_device_status,
+    insert_or_update_alert,
+    get_active_alerts,
+    get_alert_history,
+    get_alerts_for_device,
+)
+
+I'll do the removal by replacing the entire block with the import.
+</details></think>
+
+---
+
+
+
+
+
+---
+
+<tool-use data-tool-type="write" data-tool-name="edit_file_v2">
+
+<details><summary>Tool use: **edit_file_v2** • Edit file: /Users/deg/Documents/basistech/temperature-bot/app/db_alerts.py</summary>
+
+</details>
+
+</tool-use>
+
+---
+
+<think><details><summary>Thought Process</summary>
+
+Now I need to remove the alert block from db.py and add the import. I'll replace the entire block from "################################################################\n## Alerts" through "    return alerts\n\n\n################################################################\n## Rules" with the import.
+</details></think>
+
+---
+
+
+
+
+
+---
+
+<tool-use data-tool-type="write" data-tool-name="edit_file_v2">
+
+<details><summary>Tool use: **edit_file_v2** • Edit file: /Users/deg/Documents/basistech/temperature-bot/app/db.py</summary>
+
+</details>
+
+</tool-use>
+
+---
+
+<think><details><summary>Thought Process</summary>
+
+Good. Now I need to fix the import order - in db.py we have `from app.db_alerts import ...` which is a relative import to the app package. But db.py is inside app, so it should be `from .db_alerts import ...` to stay consistent with the other app imports (from .constants, from .paths, etc.). I will check - db.py uses `from .constants import ...` and `from . import ae200`. So for internal app modules we use `.db_alerts`. I will fix that.
+</details></think>
+
+---
+
+
+Using a relative import in `app/db.py`: `from .db_alerts import ...`
+
+
+---
+
+<tool-use data-tool-type="write" data-tool-name="edit_file_v2">
+
+<details><summary>Tool use: **edit_file_v2** • Edit file: /Users/deg/Documents/basistech/temperature-bot/app/db.py</summary>
+
+</details>
+
+</tool-use>
+
+---
+
+<tool-use data-tool-type="task" data-tool-name="todo_write">
+<details><summary>Tool use: **todo_write** • Todo List</summary>
+
+- [x] Create app/db_alerts.py with alert functions
+- [x] Remove alert block from db.py and re-export from db_alerts
+
+</details>
+</tool-use>
+
+---
+
+Cancelled
+
+---
+
+_**User**_
+
+That needs some cleanup still
+
+```
+$ make pylint
+poetry run ruff check --fix app | etc/ruff-reformat.bash
+
+No file/folder found for package temperature-bot
+.venv/bin/python -m pylint --output-format=parseable --rcfile .pylintrc --fail-under=9.5 --verbose app tests *.py
+Using config file .pylintrc
+************* Module app.db
+app/db.py:482: [C0413(wrong-import-position), ] Import "from .db_alerts import format_alert_type_display, extract_relevant_status_fields, get_active_alerts, get_alert_device_status, get_alert_history, get_alerts_for_device, insert_or_update_alert" should be placed at the top of the module
+app/db.py:482: [W0611(unused-import), ] Unused format_alert_type_display imported from db_alerts
+app/db.py:482: [W0611(unused-import), ] Unused extract_relevant_status_fields imported from db_alerts
+app/db.py:482: [W0611(unused-import), ] Unused get_active_alerts imported from db_alerts
+app/db.py:482: [W0611(unused-import), ] Unused get_alert_device_status imported from db_alerts
+app/db.py:482: [W0611(unused-import), ] Unused get_alert_history imported from db_alerts
+app/db.py:482: [W0611(unused-import), ] Unused get_alerts_for_device imported from db_alerts
+app/db.py:482: [W0611(unused-import), ] Unused insert_or_update_alert imported from db_alerts
+
+-------------------------------------------------------------------------------------------------------------
+Your code has been rated at 9.97/10 (previous run: 10.00/10, -0.02)
+Checked 40 files, skipped 0 files/modules
+```
+
+---
+
+_**Agent (model default, mode Agent)**_
+
+<think><details><summary>Thought Process</summary>
+
+The user has two issues:
+1. **Wrong import position (C0413)** - The import from db_alerts is in the middle of the file (after the ## Alerts section). It should be at the top of the module with the other imports.
+2. **Unused imports (W0611)** - Pylint thinks the re-exported names are "unused" because they're only being re-exported for external callers (e.g. `db.get_active_alerts`). In Python, when you do `from app.db_alerts import get_active_alerts`, that name is now in db's namespace, so `db.get_active_alerts` works. Pylint doesn't understand that we're re-exporting for the package's public API.
+
+Fix:
+1. Move the import to the top of db.py (with the other imports). Use `from .db_alerts import ...` and place it after the other local imports (after `from . import ae200` etc.).
+2. For the "unused" warning - the names ARE used: they become attributes of the db module so that `db.get_active_alerts` works. Pylint doesn't recognize re-exports as "use". We have a few options:
+   - Add them to __all__ in db.py so pylint knows they're part of the public API (some linters respect __all__ for unused-import).
+   - Use a different pattern: `from app import db_alerts` and then in the module we'd need to assign or expose them. Actually the cleanest for re-exports is to have them at top level so they're "used" as part of the module namespace. Pylint still flags them as unused because nothing in db.py itself references those names.
+   - We could reference them in __all__: `__all__ = [..., 'format_alert_type_display', ...]` - that might satisfy pylint if it considers __all__ as "use".
+   - Or we could do explicit re-exports: after the import, we don't need to do anything else for the API to work; the issue is purely pylint. The standard way to silence "unused re-export" without a disable is to use __all__. I will check - in pylint, if you have __all__ and the name is in __all__, does it still complain? I'm not sure. I will try moving the import to the top first - that fixes C0413. For W0611, the standard approach for re-exports is to put the names in __all__. I'll add an __all__ to db.py that includes these names; that way they're "used" in __all__ and pylint may not flag them. Actually in pylint, "unused-import" means the imported name is never referenced in the module. Referencing in __all__ might count as a reference. I will try:
+   - Move import to top
+   - Add __all__ listing these names (if db.py doesn't have __all__ yet we need to add one that includes everything we want to export - that could be large). Alternatively we could use a dummy reference like `_ = (format_alert_type_display, ...)` but that's ugly. The cleanest is __all__. I will check if db.py has __all__.
+</details></think>
+
+---
+
+
+Moving the `db_alerts` import to the top of `app/db.py` and fixing the re-export so pylint doesn't report unused imports.
+
+
+---
+
+<tool-use data-tool-type="read" data-tool-name="read_file_v2">
+<details><summary>Tool use: **read_file_v2** • Read file: /Users/deg/Documents/basistech/temperature-bot/app/db.py</summary>
+
+</details>
+</tool-use>
+
+---
+
+<tool-use data-tool-type="read" data-tool-name="read_file_v2">
+<details><summary>Tool use: **read_file_v2** • Read file: /Users/deg/Documents/basistech/temperature-bot/app/db.py</summary>
+
+</details>
+</tool-use>
+
+---
+
+<think><details><summary>Thought Process</summary>
+
+I need to:
+1. Move the import from line 482-491 to the top of the module (with the other from . imports).
+2. Fix the "unused import" - pylint thinks they're unused because nothing in db.py references those names. They are used as the public API of the db module (callers do db.get_active_alerts etc.). The standard way to mark re-exports is __all__. I'll add __all__ to db.py that includes these alert function names. Then pylint might still say they're unused (because __all__ is just a list of strings, not a reference to the names). So actually the only way to make pylint happy without a disable is to have the names "used" somewhere. One option: reference them in __all__ - but that's string names, so pylint might not count that. I will check - in pylint, unused-import is triggered when the imported name is never used in the module. So if we have __all__ = ['get_active_alerts', ...], the variable get_active_alerts is still never referenced in the code. So __all__ won't fix W0611.
+
+The cleanest fix that doesn't use a disable: don't re-export from db. Have callers import from app.db_alerts when they need alert functions. That would require changing:
+- tests/test_alerts.py - from app import db -> also from app.db_alerts import ...
+- app/routes_web.py - db.get_alerts_for_device -> need to import from db_alerts
+- app/routes_api.py - db.get_active_alerts, db.get_alert_history -> from db_alerts
+- bin/runner.py - db.insert_or_update_alert -> from db_alerts
+
+So we'd have callers use `from app import db, db_alerts` and then `db_alerts.get_active_alerts(conn)` etc. That way db.py doesn't need to import and re-export at all. The split would be "clean" - alert callers use db_alerts, rest use db. I will do that:
+1. Remove the import block from db.py entirely (and the ## Alerts comment block).
+2. Update all call sites to import from app.db_alerts for the alert functions.
+
+That way:
+- db.py has no wrong-import-position and no unused-import
+- Callers explicitly use db_alerts for alert operations
+
+I will find all call sites again and update them.
+</details></think>
+
+---
+
+
+Moving the import to the top and fixing re-exports. Pylint treats re-exports as unused. Having callers import from `app.db_alerts` for alert APIs so `db` doesn't re-export.
+
+
+---
+
+<tool-use data-tool-type="unknown" data-tool-name="ripgrep_raw_search">
+<details>
+<summary>Tool use: **ripgrep_raw_search**</summary>
+
+
+Parameters:
+
+```json
+{
+  "pattern": "db\\.(format_alert_type_display|extract_relevant_status_fields|get_alert_device_status|insert_or_update_alert|get_active_alerts|get_alert_history|get_alerts_for_device)",
+  "path": "/Users/deg/Documents/basistech/temperature-bot",
+  "glob": "*.py",
+  "caseInsensitive": false
+}
+```
+Result:
+
+```json
+{
+  "success": {
+    "pattern": "db\\.(format_alert_type_display|extract_relevant_status_fields|get_alert_device_status|insert_or_update_alert|get_active_alerts|get_alert_history|get_alerts_for_device)",
+    "path": "/Users/deg/Documents/basistech/temperature-bot",
+    "outputMode": "content",
+    "workspaceResults": {
+      "/Users/deg/Documents/basistech/temperature-bot": {
+        "content": {
+          "matches": [
+            {
+              "file": "./tests/test_alerts.py",
+              "matches": [
+                {
+                  "lineNumber": 18,
+                  "content": "    assert db.format_alert_type_display(\"ErrorSign\") == \"Error\""
+                },
+                {
+                  "lineNumber": 19,
+                  "content": "    assert db.format_alert_type_display(\"FilterSign\") == \"Filter warning\""
+                },
+                {
+                  "lineNumber": 20,
+                  "content": "    assert db.format_alert_type_display(\"CheckWater\") == \"Water issue\""
+                },
+                {
+                  "lineNumber": 23,
+                  "content": "    assert db.format_alert_type_display(\"UnknownType\") == \"UnknownType\""
+                },
+                {
+                  "lineNumber": 38,
+                  "content": "    result = db.extract_relevant_status_fields(status_json)"
+                },
+                {
+                  "lineNumber": 50,
+                  "content": "    assert db.extract_relevant_status_fields(None) is None"
+                },
+                {
+                  "lineNumber": 51,
+                  "content": "    assert db.extract_relevant_status_fields(\"\") is None"
+                },
+                {
+                  "lineNumber": 52,
+                  "content": "    assert db.extract_relevant_status_fields(\"{invalid json\") is None"
+                },
+                {
+                  "lineNumber": 73,
+                  "content": "    result = db.get_alert_device_status(conn, device_id, 1050)"
+                },
+                {
+                  "lineNumber": 89,
+                  "content": "    result = db.get_alert_device_status(conn, device_id, 1000)"
+                },
+                {
+                  "lineNumber": 114,
+                  "content": "    alerts = db.get_active_alerts(conn, include_details=False)"
+                },
+                {
+                  "lineNumber": 119,
+                  "content": "    alerts = db.get_active_alerts(conn, include_details=True)"
+                },
+                {
+                  "lineNumber": 147,
+                  "content": "    alerts = db.get_alert_history(conn, include_details=True)"
+                },
+                {
+                  "lineNumber": 165,
+                  "content": "    db.insert_or_update_alert(conn, device_id, \"ErrorSign\", \"ON\", now)"
+                },
+                {
+                  "lineNumber": 176,
+                  "content": "    db.insert_or_update_alert(conn, device_id, \"ErrorSign\", \"OFF\", end_time)"
+                },
+                {
+                  "lineNumber": 197,
+                  "content": "    db.insert_or_update_alert(conn, device_id, \"ErrorSign\", \"ON\", now)"
+                },
+                {
+                  "lineNumber": 198,
+                  "content": "    db.insert_or_update_alert(conn, device_id, \"ErrorSign\", \"ON\", now + 10)"
+                },
+                {
+                  "lineNumber": 239,
+                  "content": "    alerts = db.get_alerts_for_device(conn, device_id1)"
+                }
+              ]
+            },
+            {
+              "file": "./app/routes_web.py",
+              "matches": [
+                {
+                  "lineNumber": 111,
+                  "content": "        alerts = db.get_alerts_for_device(conn, int(device_id))"
+                }
+              ]
+            },
+            {
+              "file": "./app/routes_api.py",
+              "matches": [
+                {
+                  "lineNumber": 154,
+                  "content": "    alerts = db.get_active_alerts(conn, device_id, include_details)"
+                },
+                {
+                  "lineNumber": 165,
+                  "content": "    alerts = db.get_alert_history(conn, device_id, limit, include_details)"
+                }
+              ]
+            },
+            {
+              "file": "./bin/runner.py",
+              "matches": [
+                {
+                  "lineNumber": 63,
+                  "content": "            db.insert_or_update_alert("
+                }
+              ]
+            }
+          ],
+          "totalLines": 22,
+          "totalMatchedLines": 22
+        }
+      }
+    }
+  }
+}
+```
+Status: **completed**
+
+
+</details>
+</tool-use>
+
+---
+
+<think><details><summary>Thought Process</summary>
+
+Two approaches:
+A) Move import to top + add __all__ - but __all__ doesn't make the names "used" for pylint, so we'd still get W0611.
+B) Remove re-export from db; have all callers import from app.db_alerts. Then db.py stays clean.
+
+I'll do B: remove the import from db.py, and update tests/test_alerts.py, app/routes_web.py, app/routes_api.py, bin/runner.py to use db_alerts for alert functions.
+</details></think>
+
+---
+
+
+Removing the re-export from `db.py` and updating callers to import from `app.db_alerts`.
+
+
+---
+
+<tool-use data-tool-type="write" data-tool-name="edit_file_v2">
+
+<details><summary>Tool use: **edit_file_v2** • Edit file: /Users/deg/Documents/basistech/temperature-bot/app/db.py</summary>
+
+Status: **loading**
+
+</details>
+
+</tool-use>
+
+---
+
