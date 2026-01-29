@@ -386,7 +386,7 @@ body {
     <div class="sensor-tile">
       <div class="sensor-header">
         <div>
-          <div class="sensor-name">{{ sensor.name }}</div>
+          <div class="sensor-name" title="{{ sensor.name }}">{{ sensor.label or sensor.name }}</div>
           <div class="sensor-room">{{ sensor.room or 'N/A' }}</div>
         </div>
       </div>

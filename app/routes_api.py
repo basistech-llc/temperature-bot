@@ -105,6 +105,18 @@ def get_temperature(conn):
     if device_ids is None and request.args.get("device_ids"):
         return jsonify({"error": "Invalid device_ids format"}), 400
     series = db.get_temperature_series(conn, device_ids)
+    # Use Hubitat label for series display name when available
+    name_to_label = {}
+    try:
+        hubitat_devices = hubitat.get_all_devices()
+        name_to_label = {
+            dev["name"]: (dev.get("label") or dev["name"])
+            for dev in hubitat_devices
+        }
+    except (ValueError, RuntimeError, OSError):
+        pass
+    for s in series:
+        s["name"] = name_to_label.get(s["name"], s["name"])
     return jsonify({"series": series})
 
 
@@ -179,7 +191,23 @@ def debug_db_devices(conn):
     """Get all devices from database for debug page"""
     try:
         device_data = db.get_device_status(conn)
-        device_names = [dev.get("device_name", "Unknown") for dev in device_data]
+        # Enrich names with Hubitat label in parens when available (same as Hubitat section)
+        name_to_label = {}
+        try:
+            hubitat_devices = hubitat.get_all_devices()
+            name_to_label = {
+                dev["name"]: (dev.get("label") or dev["name"])
+                for dev in hubitat_devices
+            }
+        except (ValueError, RuntimeError, OSError):
+            pass
+        device_names = []
+        for dev in device_data:
+            name = dev.get("device_name", "Unknown")
+            if name in name_to_label:
+                device_names.append(name + " (" + name_to_label[name] + ")")
+            else:
+                device_names.append(name)
         return jsonify({"names": device_names, "data": device_data})
     except (ValueError, RuntimeError, OSError) as e:
         logger.warning("Failed to fetch all devices: %s", e)
@@ -191,7 +219,12 @@ def debug_hubitat_devices():
     """Get all Hubitat devices for debug page"""
     try:
         hubitat_devices = hubitat.get_all_devices()
-        device_names = [dev.get("name", "Unknown") for dev in hubitat_devices]
+        device_names = [
+            (dev.get("name", "Unknown") + " (" + dev.get("label", "") + ")")
+            if dev.get("label")
+            else dev.get("name", "Unknown")
+            for dev in hubitat_devices
+        ]
         return jsonify({"names": device_names, "data": hubitat_devices})
     except (ValueError, RuntimeError, OSError) as e:
         logger.warning("Failed to fetch Hubitat devices: %s", e)
