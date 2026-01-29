@@ -80,44 +80,36 @@ class BrowserTestHelper:
         # Wait for at least one device row to be present
         self.page.wait_for_selector("tr:has(td)", timeout=10000)
 
-    def find_broadway_south_row(self):
-        """Find the Broadway Test row in the table"""
-        # Look for a row containing "Broadway Test"
-        return self.page.locator('tr:has-text("Broadway Test")')
+    def find_broadway_south_row(self, device_name: str = "Broadway Test"):
+        """Find the device row in the table (default Broadway Test)."""
+        return self.page.locator("tr:has-text(\"" + device_name + "\")")
 
-    def get_fan_speed_radio(self, speed: int):
-        """Get the radio button for a specific fan speed for Broadway Test"""
-        # Find the Broadway Test row and get the radio button for the specified speed
-        row = self.find_broadway_south_row()
-        # logger.debug("row=%s", row)
-        assert row is not None
-        # The radio button ID format is radio-{device_id}-{speed}
-        # We need to find the device_id first
-        device_id = self.get_broadway_south_device_id()
+    def get_fan_speed_radio(self, speed: int, device_name: str = "Broadway Test"):
+        """Get the radio button for a specific fan speed for the given device."""
+        device_id = self.get_broadway_south_device_id(device_name)
         return self.page.locator(f"#radio-{device_id}-{speed}")
 
-    def get_broadway_south_device_id(self) -> int:
-        """Get the device ID for Broadway Test from the database"""
-
+    def get_broadway_south_device_id(self, device_name: str = "Broadway Test") -> int:
+        """Get the device ID for the given name from the database (default Broadway Test)."""
         conn = sqlite3.connect(self.test_db_name)
         conn.row_factory = sqlite3.Row
-        device_id = db.get_or_create_device_id(conn, "Broadway Test")
+        device_id = db.get_or_create_device_id(conn, device_name)
         conn.close()
         return device_id
 
-    def click_fan_speed(self, speed: int):
-        """Click on a fan speed radio button for Broadway Test"""
-        radio = self.get_fan_speed_radio(speed)
+    def click_fan_speed(self, speed: int, device_name: str = "Broadway Test"):
+        """Click on a fan speed radio button for the given device."""
+        radio = self.get_fan_speed_radio(speed, device_name)
         radio.click()
 
-    def verify_radio_selected(self, speed: int):
-        """Verify that the specified fan speed radio button is selected"""
-        radio = self.get_fan_speed_radio(speed)
+    def verify_radio_selected(self, speed: int, device_name: str = "Broadway Test"):
+        """Verify that the specified fan speed radio button is selected."""
+        radio = self.get_fan_speed_radio(speed, device_name)
         expect(radio).to_be_checked()
 
-    def verify_radio_not_selected(self, speed: int):
-        """Verify that the specified fan speed radio button is not selected"""
-        radio = self.get_fan_speed_radio(speed)
+    def verify_radio_not_selected(self, speed: int, device_name: str = "Broadway Test"):
+        """Verify that the specified fan speed radio button is not selected."""
+        radio = self.get_fan_speed_radio(speed, device_name)
         expect(radio).not_to_be_checked()
 
     def verify_database_speed(self, expected_fan_speed: int):
@@ -141,22 +133,26 @@ class TemperatureTestHelper:
 
     def wait_for_chart_to_load(self):
         """Wait for the chart page to load and be visible"""
-        # Wait for the main chart container
-        self.page.wait_for_selector("#main", timeout=10000)
-        # Wait for the record count to appear
+        # Wait for the chart controls and record count (chart.html has #controls, #temp-chart, #record-count)
+        self.page.wait_for_selector("#controls", timeout=10000)
         self.page.wait_for_selector("#record-count", timeout=10000)
 
     def get_record_count(self) -> int:
         """Get the current record count from the page"""
         record_count_element = self.page.locator("#record-count")
         text = record_count_element.text_content()
-        # Extract number from "Records loaded: X"
-        count = int(text.split(": ")[1])
+        # Extract number from "Total temperature datapoints: X"
+        count = int(text.split(": ")[1].strip())
         return count
 
     def click_temporal_button(self, button_name: str):
-        """Click a temporal button (day, week, month)"""
-        button_map = {"day": "#dayBtn", "week": "#weekBtn", "month": "#monthBtn"}
+        """Click a temporal button (day, week, month, all)"""
+        button_map = {
+            "day": "#dayBtn",
+            "week": "#weekBtn",
+            "month": "#monthBtn",
+            "all": "#allBtn",
+        }
         button_selector = button_map.get(button_name)
         if not button_selector:
             raise ValueError(f"Unknown button: {button_name}")

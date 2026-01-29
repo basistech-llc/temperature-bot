@@ -42,6 +42,18 @@ class TestDataFactory:
         return device_id
 
     @staticmethod
+    def create_erv_broadway_device(conn, ae200_device_id: int = 10) -> int:
+        """Create ERV Broadway Test device for testing (appears in ERV table with radios 0-4)."""
+        device_id = db.get_or_create_device_id(conn, "ERV Broadway Test")
+        c = conn.cursor()
+        c.execute(
+            "UPDATE devices set ae200_device_id=? where device_id=?",
+            (ae200_device_id, device_id),
+        )
+        conn.commit()
+        return device_id
+
+    @staticmethod
     def create_device_with_status(
         conn,
         device_name: str,

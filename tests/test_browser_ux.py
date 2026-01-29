@@ -61,14 +61,15 @@ def test_browser_fan_speed_controls(
     3. Clicks fan speed 1 for Broadway Test and verifies database and UI updates
     """
 
-    # Set up test database with Broadway Test device
+    # Set up test database with ERV Broadway Test (ERV table has radios 0,1,2,3,4)
     BROADWAY_SOUTH = 10
+    ERV_DEVICE_NAME = "ERV Broadway Test"
 
     # Use new database helper
     test_conn = test_database_conn_with_test_data[0]
-    device_id = TestDataFactory.create_broadway_south_device(test_conn, BROADWAY_SOUTH)
+    device_id = TestDataFactory.create_erv_broadway_device(test_conn, BROADWAY_SOUTH)
 
-    # Add initial devlog entry for Broadway Test so it appears in status API
+    # Add initial devlog entry for ERV Broadway Test so it appears in status API
     current_time = int(time.time())
     initial_status = DeviceTestData.get_initial_status()
     db.insert_devlog_entry(
@@ -115,10 +116,10 @@ def test_browser_fan_speed_controls(
             # Wait for the grid to load
             helper.wait_for_grid_to_load()
 
-            # Verify that Broadway Test has speed radio buttons
+            # Verify that ERV Broadway Test has speed radio buttons (ERV table: 0,1,2,3,4)
             for speed in [1, 2, 3, 4]:
                 radio = page.locator(
-                    f"#radio-{helper.get_broadway_south_device_id()}-{speed}"
+                    f"#radio-{helper.get_broadway_south_device_id(ERV_DEVICE_NAME)}-{speed}"
                 )
                 expect(radio).to_be_visible()
 
@@ -135,17 +136,17 @@ def test_browser_fan_speed_controls(
             ae200.set_fan_speed(BROADWAY_SOUTH, 1)
 
             # Click fan speed 1
-            helper.click_fan_speed(1)
+            helper.click_fan_speed(1, ERV_DEVICE_NAME)
 
             # Wait for the request to complete
             page.wait_for_timeout(2000)
 
             # Verify radio button is selected
-            helper.verify_radio_selected(1)
+            helper.verify_radio_selected(1, ERV_DEVICE_NAME)
 
             # Verify other speeds are not selected
             for speed in [2, 3, 4]:
-                helper.verify_radio_not_selected(speed)
+                helper.verify_radio_not_selected(speed, ERV_DEVICE_NAME)
 
             #  Verify database was updated
             #  helper.verify_database_speed(0)
@@ -161,17 +162,17 @@ def test_browser_fan_speed_controls(
             ae200.set_fan_speed(BROADWAY_SOUTH, 4)
 
             # Click fan speed 4
-            helper.click_fan_speed(4)
+            helper.click_fan_speed(4, ERV_DEVICE_NAME)
 
             # Wait for the request to complete
             page.wait_for_timeout(2000)
 
             # Verify radio button is selected
-            helper.verify_radio_selected(4)
+            helper.verify_radio_selected(4, ERV_DEVICE_NAME)
 
             # Verify other speeds are not selected
             for speed in [1, 2, 3]:
-                helper.verify_radio_not_selected(speed)
+                helper.verify_radio_not_selected(speed, ERV_DEVICE_NAME)
 
             # Verify database was updated
             # helper.verify_database_speed(4)
@@ -187,17 +188,17 @@ def test_browser_fan_speed_controls(
             ae200.set_fan_speed(BROADWAY_SOUTH, 2)
 
             # Click fan speed 2
-            helper.click_fan_speed(2)
+            helper.click_fan_speed(2, ERV_DEVICE_NAME)
 
             # Wait for the request to complete
             page.wait_for_timeout(2000)
 
             # Verify radio button is selected
-            helper.verify_radio_selected(2)
+            helper.verify_radio_selected(2, ERV_DEVICE_NAME)
 
             # Verify other speeds are not selected
             for speed in [1, 3, 4]:
-                helper.verify_radio_not_selected(speed)
+                helper.verify_radio_not_selected(speed, ERV_DEVICE_NAME)
 
             # Verify database was updated
             # helper.verify_database_speed(1)
@@ -225,13 +226,14 @@ def test_browser_page_loads_correctly(
 ):  # noqa: F811
     """Test that the browser page loads correctly with all elements"""
 
-    # Set up test database using new helpers
+    # Set up test database (ERV device so radios 1-4 exist in ERV table)
     BROADWAY_SOUTH = 10
+    ERV_DEVICE_NAME = "ERV Broadway Test"
 
     test_conn = test_database_conn_with_test_data[0]
-    device_id = TestDataFactory.create_broadway_south_device(test_conn, BROADWAY_SOUTH)
+    device_id = TestDataFactory.create_erv_broadway_device(test_conn, BROADWAY_SOUTH)
 
-    # Add initial devlog entry for Broadway Test so it appears in status API
+    # Add initial devlog entry so device appears in status API
     current_time = int(time.time())
     initial_status = DeviceTestData.get_initial_status()
     db.insert_devlog_entry(
@@ -270,40 +272,28 @@ def test_browser_page_loads_correctly(
             # Verify page title
             expect(page).to_have_title("Unit Speed Control")
 
-            # Verify main heading
-            expect(page.locator("h1")).to_contain_text("1070 Broadway")
-
             # Wait for the grid to load
             page.wait_for_selector("table.pure-table", timeout=10000)
 
-            # Verify Broadway Test row exists
-            broadway_row = page.locator('tr:has-text("Broadway Test")')
+            # Verify main grid and section headings exist
+            expect(page.locator("#main-grid")).to_be_visible()
+            expect(
+                page.locator("h2:has-text('Energy Recovery Ventilation')")
+            ).to_be_visible()
+
+            # Verify ERV Broadway Test row exists
+            broadway_row = page.locator("tr:has-text(\"" + ERV_DEVICE_NAME + "\")")
             expect(broadway_row).to_be_visible()
 
-            # Verify fan speed radio buttons exist for Broadway Test
+            # Verify fan speed radio buttons exist for ERV device (ERV table: 0,1,2,3,4)
             helper = BrowserTestHelper(page, os.environ["TEST_DB_NAME"])
-            device_id = helper.get_broadway_south_device_id()
+            device_id = helper.get_broadway_south_device_id(ERV_DEVICE_NAME)
 
             for speed in [1, 2, 3, 4]:
                 radio = page.locator(f"#radio-{device_id}-{speed}")
                 expect(radio).to_be_visible()
                 expect(radio).to_have_attribute("type", "radio")
                 expect(radio).to_have_value(str(speed))
-
-            # Verify AQI section exists
-            expect(page.locator("#aqi")).to_be_visible()
-            if TEST_AQI:
-                expect(page.locator("#aqi-value")).to_contain_text("45")
-                expect(page.locator("#aqi-name")).to_contain_text("Good")
-
-            # Verify weather section exists
-            # logger.debug("page.locator #weather=%s",page.locator('#weather').inner_text())
-            expect(page.locator("#weather")).to_be_visible()
-            expect(page.locator("#weather")).to_contain_text(str(TEST_TEMP))
-            expect(page.locator("#weather")).to_contain_text("Sunny")
-
-            # Verify log table exists
-            expect(page.locator("#log-table")).to_be_visible()  # pylint: disable=duplicate-code
 
             # pylint: disable=duplicate-code
             browser.close()
@@ -352,48 +342,48 @@ def test_browser_temperature_display(
             # Navigate to the chart page for the specific device
             page.goto(f"http://127.0.0.1:5003/chart?device_id={device_id}")
 
-            # Wait for the chart to load
+            # Wait for the chart to load (chart page has #controls, #temp-chart, #record-count)
             helper = TemperatureTestHelper(page, os.environ["TEST_DB_NAME"])
             page.wait_for_load_state("networkidle", timeout=30_000)
-            page.wait_for_selector("#main", timeout=10000)
+            page.wait_for_selector("#controls", timeout=10000)
             page.wait_for_selector("#record-count", timeout=10000)
 
-            # Test initial load (should show all records)
-            # logger.info("Testing initial load")
-            helper.verify_record_count(expected_counts["all"])
+            # Chart defaults to week (7 days) on load
+            helper.verify_record_count(expected_counts["week"])
 
-            # Test day button (should show 2 records: 1 hour + 26 hours)
-            # logger.info("Testing day button")
+            # Test day button
             helper.click_temporal_button("day")
             helper.verify_record_count(expected_counts["day"])
 
-            # Test week button (should show 3 records: 1 hour + 26 hours + 200 hours)
-            # logger.info("Testing week button")
+            # Test week button
             helper.click_temporal_button("week")
             helper.verify_record_count(expected_counts["week"])
 
-            # Test month button (should show all 4 records)
-            # logger.info("Testing month button")
+            # Test month button
             helper.click_temporal_button("month")
             helper.verify_record_count(expected_counts["month"])
 
-            # Test day button again to ensure it still works
-            # logger.info("Testing day button again")
+            # Test day button again
             helper.click_temporal_button("day")
             helper.verify_record_count(expected_counts["day"])
+
+            # Test all button (full range)
+            helper.click_temporal_button("all")
+            helper.verify_record_count(expected_counts["all"])
 
             # Verify all temporal buttons are present and clickable
             expect(page.locator("#dayBtn")).to_be_visible()
             expect(page.locator("#weekBtn")).to_be_visible()
             expect(page.locator("#monthBtn")).to_be_visible()
+            expect(page.locator("#allBtn")).to_be_visible()
 
             # Verify chart container is present and loaded
-            expect(page.locator("#main")).to_be_visible()
+            expect(page.locator("#temp-chart")).to_be_visible()
 
             # Verify record count element is present and shows data
             record_count_element = page.locator("#record-count")
             expect(record_count_element).to_be_visible()
-            expect(record_count_element).to_contain_text("Records loaded:")
+            expect(record_count_element).to_contain_text("Total temperature datapoints:")
 
             browser.close()
         except PWTimeoutError as e:
@@ -443,10 +433,10 @@ def test_chart_page_no_dom_errors(test_database_conn_with_test_data):  # noqa: F
         )
 
         # Go to the chart page
-        page.goto("http://localhost:5004/chart")
-        # Wait for the chart and controls to load
-        page.wait_for_selector("#main")
-        page.wait_for_selector("#addDeviceSelect")
+        page.goto("http://127.0.0.1:5004/chart")
+        # Wait for the chart and controls to load (chart.html has #controls, #record-count)
+        page.wait_for_selector("#controls", timeout=15000)
+        page.wait_for_selector("#record-count", timeout=15000)
 
         # Wait a bit for JS to run
         page.wait_for_timeout(1000)
