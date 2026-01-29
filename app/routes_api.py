@@ -10,6 +10,7 @@ from flask_pydantic import validate
 from .constants import __version__
 from . import constants
 from . import db
+from . import db_alerts
 from . import rules_engine
 from . import hubitat
 from . import ae200
@@ -106,15 +107,7 @@ def get_temperature(conn):
         return jsonify({"error": "Invalid device_ids format"}), 400
     series = db.get_temperature_series(conn, device_ids)
     # Use Hubitat label for series display name when available
-    name_to_label = {}
-    try:
-        hubitat_devices = hubitat.get_all_devices()
-        name_to_label = {
-            dev["name"]: (dev.get("label") or dev["name"])
-            for dev in hubitat_devices
-        }
-    except (ValueError, RuntimeError, OSError):
-        pass
+    name_to_label = hubitat.get_name_to_label()
     for s in series:
         s["name"] = name_to_label.get(s["name"], s["name"])
     return jsonify({"series": series})
@@ -159,7 +152,7 @@ def alerts_active(conn):
     """Get all active alerts"""
     device_id = request.args.get("device_id", type=int)
     include_details = request.args.get("include_details", "false").lower() == "true"
-    alerts = db.get_active_alerts(conn, device_id, include_details)
+    alerts = db_alerts.get_active_alerts(conn, device_id, include_details)
     return jsonify(alerts)
 
 
@@ -170,7 +163,7 @@ def alerts_history(conn):
     device_id = request.args.get("device_id", type=int)
     limit = request.args.get("limit", type=int, default=100)
     include_details = request.args.get("include_details", "false").lower() == "true"
-    alerts = db.get_alert_history(conn, device_id, limit, include_details)
+    alerts = db_alerts.get_alert_history(conn, device_id, limit, include_details)
     return jsonify(alerts)
 
 
@@ -192,15 +185,7 @@ def debug_db_devices(conn):
     try:
         device_data = db.get_device_status(conn)
         # Enrich names with Hubitat label in parens when available (same as Hubitat section)
-        name_to_label = {}
-        try:
-            hubitat_devices = hubitat.get_all_devices()
-            name_to_label = {
-                dev["name"]: (dev.get("label") or dev["name"])
-                for dev in hubitat_devices
-            }
-        except (ValueError, RuntimeError, OSError):
-            pass
+        name_to_label = hubitat.get_name_to_label()
         device_names = []
         for dev in device_data:
             name = dev.get("device_name", "Unknown")

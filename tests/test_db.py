@@ -80,7 +80,7 @@ def test_get_db_connection_applies_schema_once_per_mtime(monkeypatch):
     """setup_database should be called once for a given schema mtime."""
 
     # Ensure we start from a clean cached state
-    db._SCHEMA_MTIME = None
+    db.reset_schema_mtime_cache()
 
     # Provide a DB_PATH so get_db_connection can resolve a path
     monkeypatch.setenv(db.DB_PATH, "/tmp/test.db")
@@ -109,7 +109,7 @@ def test_get_db_connection_applies_schema_once_per_mtime(monkeypatch):
 def test_get_db_connection_reapplies_schema_on_mtime_change(monkeypatch):
     """setup_database should be called again when schema mtime changes."""
 
-    db._SCHEMA_MTIME = None
+    db.reset_schema_mtime_cache()
     monkeypatch.setenv(db.DB_PATH, "/tmp/test.db")
 
     fake_conn = types.SimpleNamespace()
@@ -124,7 +124,7 @@ def test_get_db_connection_reapplies_schema_on_mtime_change(monkeypatch):
 
     mtimes = [123.0, 456.0]
 
-    def fake_getmtime(path):
+    def fake_getmtime(_path):
         # Pop from the front so successive calls see different mtimes
         return mtimes.pop(0) if mtimes else 456.0
 
@@ -136,4 +136,4 @@ def test_get_db_connection_reapplies_schema_on_mtime_change(monkeypatch):
     # Once for each distinct mtime value
     assert len(calls) == 2
     # Final cached mtime should reflect the latest value
-    assert db._SCHEMA_MTIME == 456.0
+    assert db.get_schema_mtime() == 456.0

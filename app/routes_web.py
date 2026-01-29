@@ -10,6 +10,7 @@ from flask import render_template, request, redirect, url_for
 
 from .constants import __version__
 from . import db
+from . import db_alerts
 from . import rules_engine
 from . import hubitat
 from . import room_config
@@ -30,15 +31,7 @@ def create_web_routes(app):
         device_data = db.get_device_status(conn)
 
         # Enrich with Hubitat label for display (Air Quality section: label visible, name in title)
-        name_to_label = {}
-        try:
-            hubitat_devices = hubitat.get_all_devices()
-            name_to_label = {
-                dev["name"]: (dev.get("label") or dev["name"])
-                for dev in hubitat_devices
-            }
-        except (ValueError, RuntimeError, OSError):
-            pass
+        name_to_label = hubitat.get_name_to_label()
         for d in device_data:
             d["device_label"] = name_to_label.get(d["device_name"], d["device_name"])
 
@@ -116,7 +109,7 @@ def create_web_routes(app):
     def device_log(conn, device_id):
         """Device log page"""
         log_data = db.get_device_log(conn, int(device_id))
-        alerts = db.get_alerts_for_device(conn, int(device_id))
+        alerts = db_alerts.get_alerts_for_device(conn, int(device_id))
         return render_template(
             "device_log.html",
             device=log_data["device"],

@@ -6,21 +6,21 @@ import json
 import time
 import logging
 
-from helpers.data_factories import AlertTestData
+from helpers.data_factories import AlertTestData, alert_spec
 
-from app import db
+from app import db_alerts
 
 logger = logging.getLogger(__name__)
 
 
 def test_format_alert_type_display():
     """Test formatting alert types to user-friendly display names"""
-    assert db.format_alert_type_display("ErrorSign") == "Error"
-    assert db.format_alert_type_display("FilterSign") == "Filter warning"
-    assert db.format_alert_type_display("CheckWater") == "Water issue"
+    assert db_alerts.format_alert_type_display("ErrorSign") == "Error"
+    assert db_alerts.format_alert_type_display("FilterSign") == "Filter warning"
+    assert db_alerts.format_alert_type_display("CheckWater") == "Water issue"
 
     # Test unknown types are returned as-is
-    assert db.format_alert_type_display("UnknownType") == "UnknownType"
+    assert db_alerts.format_alert_type_display("UnknownType") == "UnknownType"
 
 
 def test_extract_relevant_status_fields_valid():
@@ -35,7 +35,7 @@ def test_extract_relevant_status_fields_valid():
         }
     )
 
-    result = db.extract_relevant_status_fields(status_json)
+    result = db_alerts.extract_relevant_status_fields(status_json)
 
     assert result is not None
     assert result["mode"] == "AUTO"
@@ -47,9 +47,9 @@ def test_extract_relevant_status_fields_valid():
 
 def test_extract_relevant_status_fields_invalid():
     """Test extracting status fields from invalid/None input"""
-    assert db.extract_relevant_status_fields(None) is None
-    assert db.extract_relevant_status_fields("") is None
-    assert db.extract_relevant_status_fields("{invalid json") is None
+    assert db_alerts.extract_relevant_status_fields(None) is None
+    assert db_alerts.extract_relevant_status_fields("") is None
+    assert db_alerts.extract_relevant_status_fields("{invalid json") is None
 
 
 def test_get_alert_device_status_rle_encoding(test_database_conn):
@@ -70,7 +70,7 @@ def test_get_alert_device_status_rle_encoding(test_database_conn):
     conn.commit()
 
     # Alert at time 1050 (within the 1000-1100 range)
-    result = db.get_alert_device_status(conn, device_id, 1050)
+    result = db_alerts.get_alert_device_status(conn, device_id, 1050)
 
     assert result is not None
     assert result == (status_json, 1000)
@@ -86,7 +86,7 @@ def test_get_alert_device_status_not_found(test_database_conn):
 
     conn.commit()
 
-    result = db.get_alert_device_status(conn, device_id, 1000)
+    result = db_alerts.get_alert_device_status(conn, device_id, 1000)
     assert result == (None, None)
 
 
@@ -101,20 +101,22 @@ def test_get_active_alerts_with_details(test_database_conn):
     AlertTestData.create_device_with_alert(
         conn,
         "Device 1",
-        "ErrorSign",
-        {"Mode": "AUTO", "Drive": "ON", "FanSpeed": "MEDIUM", "InletTemp": "23.5"},
-        alert_time,
-        alert_value="ON",
-        end_time=None
+        alert_spec(
+            "ErrorSign",
+            {"Mode": "AUTO", "Drive": "ON", "FanSpeed": "MEDIUM", "InletTemp": "23.5"},
+            alert_time,
+            alert_value="ON",
+            end_time=None,
+        ),
     )
 
     # Request without details
-    alerts = db.get_active_alerts(conn, include_details=False)
+    alerts = db_alerts.get_active_alerts(conn, include_details=False)
     assert len(alerts) == 1
     assert "details" not in alerts[0]
 
     # Request with details
-    alerts = db.get_active_alerts(conn, include_details=True)
+    alerts = db_alerts.get_active_alerts(conn, include_details=True)
     assert len(alerts) == 1
     assert "details" in alerts[0]
     assert alerts[0]["details"]["mode"] == "AUTO"
@@ -132,15 +134,17 @@ def test_get_alert_history_with_details(test_database_conn):
     AlertTestData.create_device_with_alert(
         conn,
         "Device 1",
-        "ErrorSign",
-        {"Mode": "AUTO", "Drive": "ON", "FanSpeed": "HIGH"},
-        alert_start,
-        alert_value="ON",
-        end_time=now - 500
+        alert_spec(
+            "ErrorSign",
+            {"Mode": "AUTO", "Drive": "ON", "FanSpeed": "HIGH"},
+            alert_start,
+            alert_value="ON",
+            end_time=now - 500,
+        ),
     )
 
     # Request with details
-    alerts = db.get_alert_history(conn, include_details=True)
+    alerts = db_alerts.get_alert_history(conn, include_details=True)
     assert len(alerts) == 1
     assert "details" in alerts[0]
     assert alerts[0]["details"]["mode"] == "AUTO"
@@ -158,7 +162,7 @@ def test_insert_or_update_alert_create_and_close(test_database_conn):
     now = int(time.time())
 
     # Create alert
-    db.insert_or_update_alert(conn, device_id, "ErrorSign", "ON", now)
+    db_alerts.insert_or_update_alert(conn, device_id, "ErrorSign", "ON", now)
 
     # Verify alert was created
     cursor.execute("SELECT * FROM alerts WHERE device_id=?", (device_id,))
@@ -169,7 +173,7 @@ def test_insert_or_update_alert_create_and_close(test_database_conn):
 
     # Close it with OFF value
     end_time = now + 100
-    db.insert_or_update_alert(conn, device_id, "ErrorSign", "OFF", end_time)
+    db_alerts.insert_or_update_alert(conn, device_id, "ErrorSign", "OFF", end_time)
 
     # Verify alert was closed
     cursor.execute("SELECT * FROM alerts WHERE device_id=?", (device_id,))
@@ -190,8 +194,8 @@ def test_insert_or_update_alert_no_duplicate(test_database_conn):
     now = int(time.time())
 
     # Insert alert with same value twice
-    db.insert_or_update_alert(conn, device_id, "ErrorSign", "ON", now)
-    db.insert_or_update_alert(conn, device_id, "ErrorSign", "ON", now + 10)
+    db_alerts.insert_or_update_alert(conn, device_id, "ErrorSign", "ON", now)
+    db_alerts.insert_or_update_alert(conn, device_id, "ErrorSign", "ON", now + 10)
 
     # Verify only one alert was created
     cursor.execute("SELECT * FROM alerts WHERE device_id=?", (device_id,))
@@ -232,7 +236,7 @@ def test_get_alerts_for_device(test_database_conn):
     conn.commit()
 
     # Get alerts for device 1 only
-    alerts = db.get_alerts_for_device(conn, device_id1)
+    alerts = db_alerts.get_alerts_for_device(conn, device_id1)
 
     assert len(alerts) == 2
     # Should be sorted by start_time DESC, so most recent first

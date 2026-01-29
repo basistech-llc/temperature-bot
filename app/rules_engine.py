@@ -154,7 +154,7 @@ def set_body_set_temp(conn, body: SetTempControl, ipaddr, agent):
             )
             ae200.set_set_temp(unit_id, body.set_temp_c)
             data = ae200.get_device_info(unit_id)
-    except Exception as exc:  # pragma: no cover - defensive logging
+    except (OSError, ValueError, RuntimeError) as exc:  # pragma: no cover - defensive
         logger.exception("Error while setting set temperature: %s", exc)
 
     temp = data.get('InletTemp', None)

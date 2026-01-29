@@ -22,6 +22,7 @@ from app.rules_engine import rules_results, run_rules, all_rules_disabled_until
 from app import airquality
 from app import ae200
 from app import db
+from app import db_alerts
 from app import hubitat
 from app import rules_engine
 
@@ -60,7 +61,7 @@ def process_device_alert_data(conn, dev, data):
     # Extract alert fields
     for alert_type in ["ErrorSign", "FilterSign", "CheckWater"]:
         if alert_type in data:
-            db.insert_or_update_alert(
+            db_alerts.insert_or_update_alert(
                 conn,
                 device_id=device_id,
                 alert_type=alert_type,

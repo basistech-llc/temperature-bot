@@ -2,9 +2,28 @@
 Test data factories for creating consistent test data.
 """
 
+import json
 import time
 from typing import Dict, Any, Optional
 from app import db
+
+
+def alert_spec(
+    alert_type: str,
+    status_json: Dict[str, Any],
+    alert_start_time: int,
+    alert_value: str = "ON",
+    end_time: Optional[int] = None,
+) -> Dict[str, Any]:
+    """Build a dict suitable for create_device_with_alert(conn, device_name, spec)."""
+    out: Dict[str, Any] = {
+        "alert_type": alert_type,
+        "status_json": status_json,
+        "alert_start_time": alert_start_time,
+        "alert_value": alert_value,
+        "end_time": end_time,
+    }
+    return out
 
 
 class TestDataFactory:
@@ -14,6 +33,18 @@ class TestDataFactory:
     def create_broadway_south_device(conn, ae200_device_id: int = 10) -> int:
         """Create Broadway Test device for testing."""
         device_id = db.get_or_create_device_id(conn, "Broadway Test")
+        c = conn.cursor()
+        c.execute(
+            "UPDATE devices set ae200_device_id=? where device_id=?",
+            (ae200_device_id, device_id),
+        )
+        conn.commit()
+        return device_id
+
+    @staticmethod
+    def create_erv_broadway_device(conn, ae200_device_id: int = 10) -> int:
+        """Create ERV Broadway Test device for testing (appears in ERV table with radios 0-4)."""
+        device_id = db.get_or_create_device_id(conn, "ERV Broadway Test")
         c = conn.cursor()
         c.execute(
             "UPDATE devices set ae200_device_id=? where device_id=?",
@@ -128,28 +159,29 @@ class AlertTestData:
     """Test data specifically for alert testing."""
 
     @staticmethod
+    def alert_types() -> list:
+        """Return supported alert type names."""
+        return ["ErrorSign", "FilterSign", "CheckWater"]
+
+    @staticmethod
     def create_device_with_alert(
         conn,
         device_name: str,
-        alert_type: str,
-        status_json: Dict[str, Any],
-        alert_start_time: int,
-        alert_value: str = "ON",
-        end_time: Optional[int] = None,
+        spec: Dict[str, Any],
     ) -> int:
         """
         Create a device with a status entry and an associated alert.
 
         :param conn: Database connection
         :param device_name: Name for the device
-        :param alert_type: Type of alert (ErrorSign, FilterSign, CheckWater)
-        :param status_json: Status data to store in devlog
-        :param alert_start_time: When the alert started
-        :param alert_value: Alert value (ON or OFF)
-        :param end_time: When the alert ended (None for active alerts)
+        :param spec: Dict with alert_type, status_json, alert_start_time, and optionally alert_value ("ON"), end_time (None)
         :return: device_id
         """
-        import json
+        alert_type = spec["alert_type"]
+        status_json = spec["status_json"]
+        alert_start_time = spec["alert_start_time"]
+        alert_value = spec.get("alert_value", "ON")
+        end_time = spec.get("end_time")
 
         cursor = conn.cursor()
         cursor.execute("INSERT INTO devices (device_name) VALUES (?)", (device_name,))

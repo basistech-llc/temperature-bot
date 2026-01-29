@@ -137,6 +137,42 @@ def test_temperature_api_with_start_and_end(
     assert "series" in data
 
 
+def test_temperature_api_record_counts_for_temporal_ranges(
+    flask_test_client, test_database_conn_with_test_data
+):  # noqa: F811
+    """Temperature API returns correct datapoint counts for day/week/month/all (replaces Playwright temporal test)."""
+    _, device_id, expected_counts = test_database_conn_with_test_data
+    now = int(time.time())
+    day_sec = 24 * 3600
+    week_sec = 7 * 86400
+    month_sec = 30 * 86400
+
+    for range_name, start_delta, end_delta in [
+        ("day", day_sec, 0),
+        ("week", week_sec, 0),
+        ("month", month_sec, 0),
+    ]:
+        start_ts = now - start_delta
+        end_ts = now - end_delta
+        response = flask_test_client.get(
+            f"/api/v1/temperature?device_id={device_id}&start={start_ts}&end={end_ts}"
+        )
+        assert response.status_code == 200, range_name
+        data = response.json
+        total = sum(len(s["data"]) for s in data["series"])
+        assert total == expected_counts[range_name], (
+            f"range={range_name} expected={expected_counts[range_name]} got={total}"
+        )
+
+    response = flask_test_client.get(f"/api/v1/temperature?device_id={device_id}")
+    assert response.status_code == 200
+    data = response.json
+    total = sum(len(s["data"]) for s in data["series"])
+    assert total == expected_counts["all"], (
+        f"range=all expected={expected_counts['all']} got={total}"
+    )
+
+
 def test_chart_page_with_device_id(
     flask_test_client, test_database_conn_with_test_data
 ):  # noqa: F811
@@ -160,6 +196,15 @@ def test_index_layout_and_sections(flask_test_client):  # noqa: F811
     assert "Energy Recovery Ventilation" in content
     assert ("Fan Control Units" in content) or ("(FCUs)" in content)
     assert "Air Quality" in content
+
+
+def test_index_page_has_title_and_main_grid(flask_test_client):  # noqa: F811
+    """Index page has correct title and main grid container (replaces Playwright page-load check)."""
+    response = flask_test_client.get("/")
+    assert response.status_code == 200
+    content = response.data.decode("utf-8")
+    assert "Unit Speed Control" in content
+    assert 'id="main-grid"' in content
 
 
 def test_index_fcu_speeds_exclude_one(
