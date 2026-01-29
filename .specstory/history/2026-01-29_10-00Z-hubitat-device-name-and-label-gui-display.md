@@ -4056,7 +4056,209 @@ So "All Devices / Device Names" could mean:
 1. The main heading "All Devices" and the first "Device Names" list (database) - those are DB device names, we don't have Hubitat label there unless we enrich from Hubitat.
 2. Or they might be referring to the Hubitat "Device Names" list - which I already changed to name (label).
 
-I'll assume they mean the **database** Device Names list (the first section). So the q</details></think>
+I'll assume they mean the **database** Device Names list (the first section). So the question is: in the first section "All Devices (from Database)" -> "Device Names", can we show the label in parenthesis for devices that match a Hubitat device?
+
+That would require: when we return db_devices, we have device_name from the DB. We could fetch Hubitat, build name->label, and for each DB device if we have a Hubitat match we could format the name as "name (label)" in the names list. So the "names" array in the db_devices response would become e.g. ["Device A (Label A)", "Device B"] when we have a Hubitat label for Device A.
+
+That's straightforward: same pattern as elsewhere - call hubitat.get_all_devices(), build name_to_label, then when building device_names for the response, use name + " (" + label + ")" when label exists else name.
+
+I will check the current db_devices endpoint.
+</details></think>
+
+---
+
+
+Checking the All Devices page: we already show "name (label)" for the Hubitat Device Names list. Checking whether you mean the Database "Device Names" list and whether we can add labels there.
+
+
+---
+
+<tool-use data-tool-type="read" data-tool-name="read_file_v2">
+<details><summary>Tool use: **read_file_v2** • Read file: /Users/deg/Documents/basistech/temperature-bot/app/templates/debug_all_devices.html</summary>
+
+</details>
+</tool-use>
+
+---
+
+<tool-use data-tool-type="read" data-tool-name="read_file_v2">
+<details><summary>Tool use: **read_file_v2** • Read file: /Users/deg/Documents/basistech/temperature-bot/app/routes_api.py</summary>
+
+</details>
+</tool-use>
+
+---
+
+<think><details><summary>Thought Process</summary>
+
+So there are two "Device Names" lists on the All Devices page:
+
+1. **Database** (section "All Devices (from Database)" → "Device Names"): currently `device_names = [dev.get("device_name", "Unknown") for dev in device_data]` — just the DB device_name.
+
+2. **Hubitat** (section "Hubitat Devices" → "Device Names"): I already changed this to "name (label)" when label exists.
+
+The user asked: "would it be straightforward or ugly to also do this (show the label in parenthesis for the Hubitat devices) in the All Devices / Device Names list?"
+
+So they want the **Database** Device Names list to also show the label in parenthesis when the device matches a Hubitat device. That way when you look at "All Devices (from Database) → Device Names" you'd see e.g. "Lobby Sensor on Somerville Broadway (Lobby Sensor)" for DB devices that have a Hubitat match.
+
+Implementation: In debug_db_devices, after getting device_data, fetch Hubitat devices (try/except), build name_to_label, then:
+device_names = [dev.get("device_name", "Unknown") + " (" + name_to_label[dev["device_name"]] + ")" if dev.get("device_name") in name_to_label else dev.get("device_name", "Unknown") for dev in device_data]
+
+Or: for each dev, display_name = device_name; if device_name in name_to_label: display_name = device_name + " (" + name_to_label[device_name] + ")"; device_names.append(display_name).
+
+That's straightforward - same pattern we used elsewhere. I'll implement it.
+</details></think>
+
+---
+
+
+Adding Hubitat labels to the Database "Device Names" list. The Hubitat section already shows "name (label)". Enriching the Database Device Names list with Hubitat labels when a DB device matches a Hubitat device.
+
+
+---
+
+<tool-use data-tool-type="write" data-tool-name="edit_file_v2">
+
+<details><summary>Tool use: **edit_file_v2** • Edit file: /Users/deg/Documents/basistech/temperature-bot/app/routes_api.py</summary>
+
+</details>
+
+</tool-use>
+
+---
+
+<think><details><summary>Thought Process</summary>
+
+Done. I should check if any test asserts on the db_devices "names" format - if a test expects exact device names without the label, it might break.
+</details></think>
+
+---
+
+
+Checking whether tests assert on the db_devices names format:
+
+
+---
+
+<tool-use data-tool-type="unknown" data-tool-name="ripgrep_raw_search">
+<details>
+<summary>Tool use: **ripgrep_raw_search**</summary>
+
+
+Parameters:
+
+```json
+{
+  "pattern": "db_devices|debug/db_devices",
+  "path": "/Users/deg/Documents/basistech/temperature-bot/tests",
+  "caseInsensitive": false
+}
+```
+Result:
+
+```json
+{
+  "success": {
+    "pattern": "db_devices|debug/db_devices",
+    "path": "/Users/deg/Documents/basistech/temperature-bot/tests",
+    "outputMode": "content",
+    "workspaceResults": {
+      "/Users/deg/Documents/basistech/temperature-bot": {
+        "content": {
+          "matches": [
+            {
+              "file": "tests/test_endpoints.py",
+              "matches": [
+                {
+                  "lineNumber": 472,
+                  "content": "def test_debug_db_devices_endpoint(flask_test_client, test_database_conn_with_test_data):  # noqa: F811"
+                },
+                {
+                  "lineNumber": 473,
+                  "content": "    \"\"\"Test the /api/v1/debug/db_devices endpoint\"\"\""
+                },
+                {
+                  "lineNumber": 485,
+                  "content": "    response = flask_test_client.get(\"/api/v1/debug/db_devices\")"
+                }
+              ]
+            }
+          ],
+          "totalLines": 3,
+          "totalMatchedLines": 3
+        }
+      }
+    }
+  }
+}
+```
+Status: **completed**
+
+
+</details>
+</tool-use>
+
+---
+
+<think><details><summary>Thought Process</summary>
+
+I will read that test to see what it asserts about names.
+</details></think>
+
+---
+
+
+
+
+
+---
+
+<tool-use data-tool-type="read" data-tool-name="read_file_v2">
+<details><summary>Tool use: **read_file_v2** • Read file: /Users/deg/Documents/basistech/temperature-bot/tests/test_endpoints.py</summary>
+
+</details>
+</tool-use>
+
+---
+
+<think><details><summary>Thought Process</summary>
+
+The db_devices test doesn't assert on the exact content of names - it just checks that "names" is a list with length > 0. So the test will still pass. The test uses a device named "Test Device Name" - if Hubitat is not mocked in that test, we'll call the real hubitat.get_all_devices() which might fail or return something. Actually in test_debug_db_devices_endpoint there's no patch - so when we call hubitat.get_all_devices() we might get a real call (or it might be mocked at app level). Either way we wrap in try/except so if it fails we just get name_to_label = {} and names stay as device_name only. So we're good.
+</details></think>
+
+---
+
+
+The db_devices test only checks that `names` is a non-empty list, so it still passes. If Hubitat isn’t available in tests, we keep `name_to_label = {}` and the list stays as plain device names.
+
+**Summary:** The **Database** “Device Names” list on the All Devices page now uses the same pattern: for each DB device, if its `device_name` matches a Hubitat device, the displayed name is `"name (label)"`; otherwise it’s just the DB name. Same Hubitat lookup and try/except as elsewhere, so it’s consistent and not hacky.
+
+---
+
+_**User**_
+
+What coverage tests, if any, are worthwhile adding for this change?
+
+---
+
+_**Agent (model default, mode Agent)**_
+
+<think><details><summary>Thought Process</summary>
+
+The user is asking about what coverage tests would be worthwhile for "this change" - meaning the changes we made around Hubitat name vs label display:
+
+1. Main page Air Quality: show label with name in hover title (device_label from Hubitat)
+2. Room dashboards: show sensor.label or sensor.name with title=sensor.name
+3. Chart page: temperature series API returns label for series name when Hubitat has it
+4. All Devices: Hubitat device names list shows "name (label)"; DB device names list shows "name (label)" when Hubitat match
+
+So the backend logic we added is:
+- routes_web.py read_index: enrich device_data with device_label from Hubitat name_to_label
+- routes_api.py get_temperature: enrich series names with Hubitat label
+- routes_api.py debug_hubitat_devices: device_names as "name (label)" when label present
+- routes_api.py debug_db_devices: device_names as "name (label)" when Hubitat match
+
+Tests that would be wo</details></think>
 
 ---
 

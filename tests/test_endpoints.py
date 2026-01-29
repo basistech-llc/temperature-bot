@@ -494,6 +494,29 @@ def test_debug_db_devices_endpoint(flask_test_client, test_database_conn_with_te
 
 
 @patch("app.routes_api.hubitat.get_all_devices")
+def test_debug_db_devices_enriches_names_with_hubitat_label(
+    mock_get_all_devices, flask_test_client, test_database_conn_with_test_data
+):  # noqa: F811
+    """Database device names list shows 'name (label)' when Hubitat has a matching device."""
+    conn = test_database_conn_with_test_data[0]
+    device_id = test_database_conn_with_test_data[1]
+    cursor = conn.cursor()
+    cursor.execute(
+        "UPDATE devices SET device_name = ? WHERE device_id = ?",
+        ("Test Device Name", device_id),
+    )
+    conn.commit()
+
+    mock_get_all_devices.return_value = [
+        {"name": "Test Device Name", "label": "Short Label", "id": "x", "capabilities": []}
+    ]
+    response = flask_test_client.get("/api/v1/debug/db_devices")
+    assert response.status_code == 200
+    names = response.json["names"]
+    assert "Test Device Name (Short Label)" in names
+
+
+@patch("app.routes_api.hubitat.get_all_devices")
 def test_debug_hubitat_devices_endpoint(mock_get_all_devices, flask_test_client):  # noqa: F811
     """Test the /api/v1/debug/hubitat_devices endpoint"""
     # Mock Hubitat devices
@@ -509,6 +532,46 @@ def test_debug_hubitat_devices_endpoint(mock_get_all_devices, flask_test_client)
     assert isinstance(response_json["names"], list)
     assert isinstance(response_json["data"], list)
     assert "Test Hubitat Device" in response_json["names"]
+
+
+@patch("app.routes_api.hubitat.get_all_devices")
+def test_debug_hubitat_devices_shows_name_and_label_when_label_present(
+    mock_get_all_devices, flask_test_client
+):  # noqa: F811
+    """Hubitat device names list shows 'name (label)' when device has a label."""
+    mock_get_all_devices.return_value = [
+        {
+            "name": "Lobby Sensor on Somerville Broadway",
+            "label": "Lobby Sensor",
+            "id": "abc",
+            "capabilities": ["TemperatureMeasurement"],
+        }
+    ]
+    response = flask_test_client.get("/api/v1/debug/hubitat_devices")
+    assert response.status_code == 200
+    names = response.json["names"]
+    assert "Lobby Sensor on Somerville Broadway (Lobby Sensor)" in names
+
+
+@patch("app.routes_api.hubitat.get_all_devices")
+def test_temperature_api_series_uses_hubitat_label_when_available(
+    mock_get_all_devices, flask_test_client, test_database_conn_with_test_data
+):  # noqa: F811
+    """Temperature series API uses Hubitat label as display name when Hubitat has a match."""
+    device_id = test_database_conn_with_test_data[1]
+    mock_get_all_devices.return_value = [
+        {
+            "name": "Broadway Test",
+            "label": "Broadway",
+            "id": "y",
+            "capabilities": ["TemperatureMeasurement"],
+        }
+    ]
+    response = flask_test_client.get("/api/v1/temperature?device_id=" + str(device_id))
+    assert response.status_code == 200
+    series = response.json.get("series", [])
+    series_names = [s["name"] for s in series]
+    assert "Broadway" in series_names
 
 
 @patch("app.routes_api.hubitat.get_all_devices")
