@@ -7072,3 +7072,928 @@ The only new test left is **`test_chart_aqi_page_loads`**, which checks that the
 
 ---
 
+_**User**_
+
+On the Temperature Chart page, changing the date range changes the list of selected sensors to include only those that have data during the range.
+
+This is good.
+
+But, the problem is that the user might have unselected some sensors in order to focus attention on just the others.  His intent is lost when we restore all the sensors that have data.
+
+Don't change code yet. Let's discuss the best UX to support both of these needs.
+
+---
+
+_**Agent (model default, mode Agent)**_
+
+<think><details><summary>Thought Process</summary>
+
+The user is describing a UX conflict on the Temperature Chart page:
+
+1. **Current behavior**: When the user changes the date range (day/week/month/all or the date pickers), the checkbox list is rebuilt to show only sensors that have data in the new range—and the checkboxes are set to "checked" for all sensors that have data. So any sensors the user had deliberately *unchecked* to focus on a subset get re-checked.
+
+2. **User's need**: The user might have unchecked some sensors to reduce visual clutter and focus on just a few. When they change the date range, they don't want that selection to be reset; they want their previous choices (which sensors to show) to be preserved.
+
+3. **Other need**: It's still useful to know which sensors have data in the current range (e.g. disabling or visually distinguishing sensors with no data so the user doesn't wonder why a line is missing).
+
+So we need a UX that:
+- Preserves the user's checkbox selections (which sensors they want to see) when the date range changes.
+- Still reflects which sensors have data in the new range (e.g. disable or gray out sensors with no data, or show them but with no line).
+
+I will think through options to discuss:
+
+**Option A: Preserve selections across range changes**
+- When the date range changes, rebuild the list of sensors (so we still show only sensors that exist in the system / in the dropdown), but *restore each checkbox state from the previous state* when a sensor was present. For sensors that are new in the list (e.g. we now have data for a sensor that didn't have data before), we could either default to checked or unchecked (e.g. default new-to-the-list to checked so they appear, or default to unchecked to avoid surprising the user with new lines). So:
+  - Keep a client-side map: sensorName -> checked (true/false).
+  - On range change, we get new tempData (list of series with data). We build checkboxes for all sensors (from allSensors), and for each checkbox we set checked = savedState[sensorName] if we have it, else (e.g. true if this sensor has data in the new range, so "sensors with data start checked" for first load only).
+  - Result: User unchecks A and B. Changes range. A and B stay unchecked. Other sensors stay as they were. Sensors that newly have data could start checked or unchecked (design choice).
+
+**Option B: Two-tier model — "sensors with data" vs "user selection"**
+- Always show the full list of sensors (or the list of sensors that have data in the current range). Sensors with no data in the range are disabled (grayed out) and unchecked; they can't be checked. Sensors with data can be checked or unchecked. When the range changes, we don't change the checked state of any sensor that still has data; for sensors that now have no data we uncheck and disable them. For sensors that newly have data we could leave them unchecked (preserving "user had not selected them") or check them (so new data appears). This is similar to A but with a clear rule for "sensors that lose data" (uncheck and disable).
+
+**Option C: Remember "user selection" separately from "has data"**
+- We maintain a set of "sensors the user has explicitly chosen to show" (e.g. added to a "visible" set when they check, removed when they uncheck). When we rebuild after a range change, a sensor is checked if and only if it's in the user's visible set AND it has data in the current range. So if the user had unchecked A, A stays unchecked even if it has data. If a sensor has no data in the new range, it's disabled and unchecked (and we could remove it from the visible set or leave it there for when they change range again). So the rule is: checked = in visible set AND has data; we never auto-add to visible set when range changes.
+
+**Option D: Don't rebuild checkboxes on range change; only update data**
+- Keep the same set of checkboxes (all sensors) and don't add/remove or reset them when the range changes. Only refetch the temperature data and update the chart. So the checkbox list is fixed (e.g. all sensors from the initial load), and when you change the range the lines just update (or disappear if no data). The downside: sensors that have no data in the new range would still be in the list and could be checked—the chart would show nothing for them. So we'd still want to disable checkboxes for sensors with no data in the current range. That's similar to B/C.
+
+I'll outline options for the user to consider, with pros/cons.
+</details></think>
+
+---
+
+
+Here’s a concise way to frame the tradeoff and some concrete UX options.
+
+**The tension**
+- **Need 1:** After a range change, the list should reflect “who has data in this range” (so we can disable or gray out sensors with no data).
+- **Need 2:** The user’s *choices* (which sensors are checked) should not be reset when the range changes.
+
+So the real question is: **what rule do we use for checkbox state when the range changes?**
+
+---
+
+**Option 1: Remember user selection; apply it after every range change**
+
+- Keep a client-side “user selection” (e.g. a set of sensor names the user has explicitly checked).
+- When the range changes:
+  - Rebuild the list from the new response (so the set of sensors and “has data in range” stay correct).
+  - For each sensor: **checked** = it’s in the user’s selection **and** it has data in the current range; **disabled** = no data in the current range.
+- New sensors (first time they have data in this range) can be either:
+  - **Checked by default** – “show everything that has data until I hide it,” or  
+  - **Unchecked by default** – “only show what I’ve already chosen,” fewer surprises.
+
+**Pros:** Selection is stable across range changes; list still reflects current range.  
+**Cons:** Need to define behavior for “sensor had data, now it doesn’t” (uncheck + disable is natural).
+
+---
+
+**Option 2: Only “reset” when there is no prior selection**
+
+- Treat “first load” or “user has never toggled anything” differently from “user has made choices.”
+- If the user has *never* changed a checkbox, then on range change you can keep the current “all sensors with data checked” behavior.
+- Once they’ve unchecked (or checked) anything, **from then on** use Option 1: persist that selection across range changes.
+
+**Pros:** First-time and “show me everything” behavior stays simple; power users get stable selection.  
+**Cons:** Slightly more logic and a clear definition of “user has made a choice” (e.g. any checkbox change in this page session).
+
+---
+
+**Option 3: Explicit “Apply selection to this range” vs “Keep my selection”**
+
+- Add two modes or buttons, e.g.:
+  - **“Fit to range”** (or “Show all with data”): current behavior – list = sensors with data, all checked.
+  - **“Keep my selection”**: when range changes, only refresh the data; keep the same checkboxes and checked state (sensors with no data in range are disabled but stay “conceptually” selected so they reappear when they have data again).
+- Default could be “Keep my selection” so we don’t overwrite the user’s intent.
+
+**Pros:** User can choose.  
+**Cons:** More UI and mental model; might be overkill if Option 1 is enough.
+
+---
+
+**Recommendation**
+
+Option 1 (or 2, which is Option 1 with a special case for “no user interaction yet”) is likely the best balance:
+
+- **Persist “selected” set** across range changes.
+- **Checked** = in that set and has data in current range; **disabled** = no data in current range.
+- Decide policy for “sensor newly has data in this range”: checked by default vs unchecked by default.
+
+If you say which you prefer for “newly appearing” sensors (checked vs unchecked) and whether you want the “only reset when user has never touched checkboxes” behavior, we can narrow it down to one concrete rule set before touching code.
+
+---
+
+_**User**_
+
+Options 1 and 2 seem close to correct. Option 3 seems wrong.
+
+There is one subtlety that you seem to have neglected.  The default is to select and show all the sensors that have data.  So the typical user action is to *unselect* a sensor, not to select one.
+
+Reconsider the strategy details, bearing this in mind.
+
+---
+
+_**Agent (model default, mode Agent)**_
+
+<think><details><summary>Thought Process</summary>
+
+The user is making an important point about the default and the typical action:
+
+- **Default:** All sensors that have data are selected (checked) and shown.
+- **Typical user action:** The user *unchecks* sensors to reduce clutter and focus. They rarely go from "nothing shown" to "check this one."
+
+So the mental model is:
+- "Selected set" starts as "all sensors with data" (implicit—we don't need to track anything until the user acts).
+- When the user **unchecks** a sensor, we're saying "exclude this from my view." That's the intent we must preserve.
+- When the user **checks** a sensor (that was unchecked), we're saying "include this again."
+
+So the "user selection" we persist should be thought of as:
+- Either: "set of sensors the user wants to see" (and we add/remove as they check/uncheck), or
+- Or: "set of sensors the user has explicitly *excluded*" (hidden set).
+
+The **exclusion set** might be more natural given the default:
+- Default: no exclusions → show all with data.
+- User unchecks Sensor A → A goes into the exclusion set.
+- User checks Sensor A again → A leaves the exclusion set.
+- On range change: we get new "sensors with data." Show checkboxes for all of them. Checked = not in exclusion set. So by default (empty exclusion set), everyone is checked. If user had excluded A and B, after range change A and B stay unchecked, everyone else stays checked.
+
+That's symmetric and clean. We only need to persist "exclusion set" (or equivalently "inclusion set" = all with data minus exclusion set). The exclusion set is the smaller set in the typical workflow.
+
+**Subtlety with "sensors that newly have data":**
+- Sensor C had no data in the previous range, so it wasn't in the list (or was disabled/unchecked). Now the range changes and C has data. Should C be checked or unchecked?
+- If we use an **exclusion set**: we've never had a user action about C. C is not in the exclusion set. So C should be **checked** (show it). That matches "default is show all with data."
+- If we use an **inclusion set** (sensors user wants to see): we'd have to say "new sensors with data—add to inclusion set or not?" If we add them, we get "show all with data" for new ones. If we don't add them, new sensors would be unchecked, which would be surprising (user changes range and suddenly a sensor with data is hidden with no action).
+
+So **exclusion set** is the right mental model:
+- Default: exclusion set is empty → all sensors with data are checked.
+- User unchecks A → add A to exclusion set.
+- User checks A (when it was unchecked) → remove A from exclusion set.
+- On range change: for each sensor with data, checked = not in exclusion set. Sensors with no data in range: we don't show them as checkable (or we show them disabled and unchecked). We do *not* add them to the exclusion set—so when the user later changes range and that sensor has data again, it will be checked (default).
+- New sensor D appears (has data in new range, didn't in old): D is not in exclusion set → checked. Good.
+
+**What about a sensor that had data, user excluded it, then range changes and it has no data in the new range?**
+- Sensor A was unchecked (in exclusion set). Range change: A has no data in new range. We don't show A in the list (or show it disabled). Do we keep A in the exclusion set? Yes. So when the user changes range again and A has data, A stays unchecked. That preserves "user didn't want to see A."
+
+**What about "user has never toggled" (Option 2)?**
+- If we use exclusion set, we don't need a special "first load" case. On first load, exclusion set is empty → all checked. When they change range without having touched anything, exclusion set is still empty → all with data checked. So Option 1 with exclusion set already gives us the right default and no need for "reset when no prior selection" — the default *is* "show all," and we only add to exclusion set when they uncheck. So Option 2's "only reset when no prior selection" isn't needed; the exclusion-set approach is simpler and handles it.
+
+I will also consider: when we rebuild the checkbox list, we have "sensors with data" (from API). We also have "all sensors" from the initial load (allSensors). Currently we only show checkboxes for sensors that have data. So after a range change, the list might shrink (fewer sensors have data in a narrow range) or grow (more sensors have data in a wider range). For each sensor in the new list:
+- checked = not in exclusion set.
+- If a sensor drops out of the list (no data in new range), we don't remove it from the exclusion set—so when it comes back, it stays excluded.
+
+One more edge: **user checks a sensor that had no data** (e.g. we show it disabled). Then range changes and now it has data. We'd show it checked (not in exclusion set) … but wait, if it was disabled we might not have allowed checking. So "sensors with no data" are disabled. When range changes and they get data, they appear checked (not in exclusion set). Good.
+
+I'll write this up clearly for the user.
+</details></think>
+
+---
+
+
+Given the default is “all sensors with data are shown” and the main action is *unchecking* to reduce clutter, the strategy fits better if we model **exclusions** instead of “selected set.”
+
+---
+
+**Use an exclusion set**
+
+- **Default:** No exclusions → every sensor that has data in the current range is checked and shown.
+- **User unchecks Sensor A** → add A to the **exclusion set** (“don’t show this one”).
+- **User checks Sensor A again** → remove A from the exclusion set.
+
+So we only persist “sensors the user has chosen to hide,” not “sensors the user has chosen to show.”
+
+---
+
+**On range change**
+
+1. Rebuild the list from the new response (only sensors that have data in the new range, or all sensors with “has data” reflected).
+2. For each sensor that **has data** in the new range:  
+   **checked** = not in the exclusion set.  
+   So by default (empty exclusion set) they’re all checked; any sensor the user had unchecked stays unchecked.
+3. Sensors that **have no data** in the new range: show them disabled and unchecked (or omit them). Do **not** add them to the exclusion set. If the range changes again and they have data, they come back **checked** (default “show all with data”).
+4. **New sensor in range:** e.g. Sensor D has data in the new range but wasn’t in the previous list. D is not in the exclusion set → show D **checked**. So “newly appearing” sensors follow the default: show them.
+
+---
+
+**Why this matches the typical action**
+
+- Typical flow: “I see everything → I uncheck a few to focus.”  
+  That only adds entries to the exclusion set. Range changes don’t clear it, so focus is preserved.
+- Less common: “I unchecked too much → I check one back.”  
+  That removes one from the exclusion set. Also preserved across range changes.
+- No need for a special “has the user ever touched the checkboxes?” rule: empty exclusion set = default “show all with data”; any uncheck narrows the set we persist.
+
+---
+
+**Summary**
+
+- **Persist:** exclusion set (names of sensors the user has unchecked).
+- **On range change:**  
+  - Has data in new range → checked iff not in exclusion set;  
+  - No data in new range → disabled/unchecked, not added to exclusion set;  
+  - New in list (first time with data in this range) → checked (not in exclusion set).
+- **Default:** empty exclusion set = show all sensors that have data.
+
+That keeps the default and the “uncheck to focus” workflow correct without Option 3’s extra UI.
+
+---
+
+_**User**_
+
+Yes.
+And, to be clear, no need to persist across page reloads, right?
+
+---
+
+_**Agent (model default, mode Agent)**_
+
+<think><details><summary>Thought Process</summary>
+
+The user is confirming:
+1. Implement the exclusion-set strategy we discussed.
+2. Clarifying: no need to persist across page reloads.
+
+So we only need to keep the exclusion set in memory (JavaScript) for the lifetime of the page. When the user navigates away or refreshes, we start fresh with an empty exclusion set → "show all with data" again. No localStorage, no URL params, no server-side session.
+
+I'll implement this in chart_support.js:
+1. Add a variable for the exclusion set (e.g. excludedSensorNames = new Set()).
+2. When the user unchecks a sensor, add it to the set; when they check it, remove it from the set.
+3. In createAllSensorCheckboxes (or wherever we rebuild the checkbox list after loading temp data), when setting checked state: checked = hasData && !excludedSensorNames.has(sensorName). And when creating the checkbox, add change listener that updates the exclusion set (if unchecked, add; if checked, remove) and then updateTempChart().
+4. When we're filtering by device_ids (currentDeviceIds.length > 0), we might not show checkboxes at all - need to check current behavior. If we don't show checkboxes in that mode, we don't need to maintain exclusion set for that mode, or we could ignore it when in device_ids mode.
+
+I will read the current chart_support.js to see exactly where checkboxes are created and how they're wired.
+</details></think>
+
+---
+
+
+Keeping the exclusion set in memory for the page session only — no localStorage or URL params. Implementing it.
+
+
+---
+
+<tool-use data-tool-type="read" data-tool-name="read_file_v2">
+<details><summary>Tool use: **read_file_v2** • Read file: /Users/deg/Documents/basistech/temperature-bot/app/static/chart_support.js</summary>
+
+</details>
+</tool-use>
+
+---
+
+<tool-use data-tool-type="read" data-tool-name="read_file_v2">
+<details><summary>Tool use: **read_file_v2** • Read file: /Users/deg/Documents/basistech/temperature-bot/app/static/chart_support.js</summary>
+
+</details>
+</tool-use>
+
+---
+
+<tool-use data-tool-type="read" data-tool-name="read_file_v2">
+<details><summary>Tool use: **read_file_v2** • Read file: /Users/deg/Documents/basistech/temperature-bot/app/static/chart_support.js</summary>
+
+</details>
+</tool-use>
+
+---
+
+<think><details><summary>Thought Process</summary>
+
+I need to:
+
+1. Add `excludedSensorNames = new Set()` near the top with other state.
+
+2. In `createAllSensorCheckboxes()`:
+   - For each sensor with data: `checked = !excludedSensorNames.has(sensorName)` (instead of `checked = hasData`).
+   - For each sensor without data: still disabled, unchecked. Don't add/remove from exclusion set here.
+   - When the user changes a checkbox, we need to update the exclusion set. So the change listener: when checkbox is unchecked, add sensorName to excludedSensorNames; when checked, remove. Then updateTempChart(). So I need to change the listener from just `updateTempChart` to a function that updates the exclusion set then calls updateTempChart. And we need to pass sensorName - we have it in the loop as sensorName. So:
+   ```
+   checkbox.addEventListener("change", () => {
+     if (checkbox.checked) {
+       excludedSensorNames.delete(sensorName);
+     } else {
+       excludedSensorNames.add(sensorName);
+     }
+     updateTempChart();
+   });
+   ```
+
+3. When we're in device_ids mode (currentDeviceIds.length > 0), we don't call createAllSensorCheckboxes - we don't show the checkboxes. So the exclusion set is only relevant when we're showing "all sensors" and the checkbox list. When the user first loads with device_ids, there are no checkboxes. When they load without device_ids, we create checkboxes. So we're good.
+
+4. Double-check: allSensors order. We iterate allSensors.forEach((sensorName, index)) and create checkbox with id checkbox-${index}. Then in updateTempChart we do checkboxes.forEach((cb, i) => { const sensorName = allSensors[i]; ...}). So the checkbox order matches allSensors by index. Good.
+
+I will implement.
+</details></think>
+
+---
+
+
+Implementing the exclusion set: adding the variable and updating checkbox creation and the change handler.
+
+
+---
+
+<tool-use data-tool-type="write" data-tool-name="edit_file_v2">
+
+<details><summary>Tool use: **edit_file_v2** • Edit file: /Users/deg/Documents/basistech/temperature-bot/app/static/chart_support.js</summary>
+
+</details>
+
+</tool-use>
+
+---
+
+<tool-use data-tool-type="write" data-tool-name="edit_file_v2">
+
+<details><summary>Tool use: **edit_file_v2** • Edit file: /Users/deg/Documents/basistech/temperature-bot/app/static/chart_support.js</summary>
+
+</details>
+
+</tool-use>
+
+---
+
+<think><details><summary>Thought Process</summary>
+
+Done. The exclusion set is only in memory; no persistence. When the user unchecks a sensor we add it to excludedSensorNames; when they check it we remove it. When we rebuild checkboxes after a range change, we set checked = hasData && !excludedSensorNames.has(sensorName). Sensors with no data stay disabled and unchecked; we don't add them to the exclusion set, so when they get data again they'll be checked.
+</details></think>
+
+---
+
+
+Summary of changes:
+
+**1. Exclusion set (session-only)**  
+- Added `excludedSensorNames = new Set()` at the top with the other state.  
+- It’s only used while the page is open; nothing is stored in localStorage or the URL.
+
+**2. Checkbox state when rebuilding**  
+- When creating checkboxes (after load or range change), a sensor is **checked** if it has data **and** is not in `excludedSensorNames`.  
+- Sensors with no data in the current range stay disabled and unchecked; they are not added to `excludedSensorNames`.
+
+**3. Checkbox change handler**  
+- On **uncheck**: add that sensor’s name to `excludedSensorNames`.  
+- On **check**: remove it from `excludedSensorNames`.  
+- Then call `updateTempChart()` as before.
+
+Result: changing the date range rebuilds the list and “has data” state, but any sensor the user had unchecked stays unchecked. New sensors (first time they have data in the range) are checked by default. Reloading the page clears `excludedSensorNames` and restores “show all with data.”
+
+---
+
+_**User**_
+
+Missed one bit...
+When the user presses Select All, to re-enable showing all sensors, or Clear All to erase them all, this should clear the exclusions list.
+
+---
+
+_**Agent (model default, mode Agent)**_
+
+<think><details><summary>Thought Process</summary>
+
+The user wants: when the user clicks "Select All" (check all sensors) or "Clear All" (uncheck all sensors), we should also clear the excludedSensorNames set. That way:
+- Select All: check all checkboxes AND clear the exclusion set, so future range changes will show all sensors.
+- Clear All: uncheck all checkboxes AND clear the exclusion set... wait, if we clear the exclusion set and uncheck all, then on next range change we'd rebuild with checked = hasData && !excludedSensorNames.has(sensorName) = hasData && true = hasData, so all would be checked again. So "Clear All" would mean "hide all for now" but the exclusion set would be empty, so when they change range they'd get all checked again. That might be what the user wants: "Clear All" = uncheck everything for now, but don't persist that as "user excluded these" — so next range change shows all again. So yes, clear the exclusion set on both.
+
+I need to find where Select All and Clear All are wired in chart_support.js and add excludedSensorNames.clear() there, then update the checkboxes (and the chart).
+</details></think>
+
+---
+
+
+
+
+
+---
+
+<tool-use data-tool-type="unknown" data-tool-name="ripgrep_raw_search">
+<details>
+<summary>Tool use: **ripgrep_raw_search**</summary>
+
+
+Parameters:
+
+```json
+{
+  "pattern": "selectAllBtn|clearAllBtn|Select All|Clear All",
+  "path": "/Users/deg/Documents/basistech/temperature-bot/app/static/chart_support.js",
+  "contextAfter": 8,
+  "caseInsensitive": false
+}
+```
+Result:
+
+```json
+{
+  "success": {
+    "pattern": "selectAllBtn|clearAllBtn|Select All|Clear All",
+    "path": "/Users/deg/Documents/basistech/temperature-bot/app/static/chart_support.js",
+    "outputMode": "content",
+    "workspaceResults": {
+      "/Users/deg/Documents/basistech/temperature-bot": {
+        "content": {
+          "matches": [
+            {
+              "file": "app/static/chart_support.js",
+              "matches": [
+                {
+                  "lineNumber": 752,
+                  "content": "// Checkbox Controls (Select All/Clear All)"
+                },
+                {
+                  "lineNumber": 753,
+                  "content": "// ===============================",
+                  "isContextLine": true
+                },
+                {
+                  "lineNumber": 754,
+                  "content": "function setupCheckboxControls() {",
+                  "isContextLine": true
+                },
+                {
+                  "lineNumber": 755,
+                  "content": "  const selectAllBtn = document.getElementById(\"selectAllBtn\");"
+                },
+                {
+                  "lineNumber": 756,
+                  "content": "  const clearAllBtn = document.getElementById(\"clearAllBtn\");"
+                },
+                {
+                  "lineNumber": 757,
+                  "isContextLine": true
+                },
+                {
+                  "lineNumber": 758,
+                  "content": "  if (selectAllBtn) {"
+                },
+                {
+                  "lineNumber": 759,
+                  "content": "    selectAllBtn.addEventListener(\"click\", function () {"
+                },
+                {
+                  "lineNumber": 760,
+                  "content": "      const checkboxes = document.querySelectorAll(",
+                  "isContextLine": true
+                },
+                {
+                  "lineNumber": 761,
+                  "content": "        \"#checkboxes input[type=checkbox]\",",
+                  "isContextLine": true
+                },
+                {
+                  "lineNumber": 762,
+                  "content": "      );",
+                  "isContextLine": true
+                },
+                {
+                  "lineNumber": 763,
+                  "content": "      checkboxes.forEach((checkbox) =&gt; {",
+                  "isContextLine": true
+                },
+                {
+                  "lineNumber": 764,
+                  "content": "        checkbox.checked = true;",
+                  "isContextLine": true
+                },
+                {
+                  "lineNumber": 765,
+                  "content": "      });",
+                  "isContextLine": true
+                },
+                {
+                  "lineNumber": 766,
+                  "content": "      updateTempChart();",
+                  "isContextLine": true
+                },
+                {
+                  "lineNumber": 767,
+                  "content": "    });",
+                  "isContextLine": true
+                },
+                {
+                  "lineNumber": 770,
+                  "content": "  if (clearAllBtn) {"
+                },
+                {
+                  "lineNumber": 771,
+                  "content": "    clearAllBtn.addEventListener(\"click\", function () {"
+                },
+                {
+                  "lineNumber": 772,
+                  "content": "      const checkboxes = document.querySelectorAll(",
+                  "isContextLine": true
+                },
+                {
+                  "lineNumber": 773,
+                  "content": "        \"#checkboxes input[type=checkbox]\",",
+                  "isContextLine": true
+                },
+                {
+                  "lineNumber": 774,
+                  "content": "      );",
+                  "isContextLine": true
+                },
+                {
+                  "lineNumber": 775,
+                  "content": "      checkboxes.forEach((checkbox) =&gt; {",
+                  "isContextLine": true
+                },
+                {
+                  "lineNumber": 776,
+                  "content": "        checkbox.checked = false;",
+                  "isContextLine": true
+                },
+                {
+                  "lineNumber": 777,
+                  "content": "      });",
+                  "isContextLine": true
+                },
+                {
+                  "lineNumber": 778,
+                  "content": "      updateTempChart();",
+                  "isContextLine": true
+                },
+                {
+                  "lineNumber": 779,
+                  "content": "    });",
+                  "isContextLine": true
+                }
+              ]
+            }
+          ],
+          "totalLines": 26,
+          "totalMatchedLines": 7
+        }
+      }
+    }
+  }
+}
+```
+Status: **completed**
+
+
+</details>
+</tool-use>
+
+---
+
+<think><details><summary>Thought Process</summary>
+
+I need to add excludedSensorNames.clear() in both the Select All and Clear All handlers, before updating the checkboxes and chart.
+</details></think>
+
+---
+
+
+
+
+
+---
+
+<tool-use data-tool-type="write" data-tool-name="edit_file_v2">
+
+<details><summary>Tool use: **edit_file_v2** • Edit file: /Users/deg/Documents/basistech/temperature-bot/app/static/chart_support.js</summary>
+
+</details>
+
+</tool-use>
+
+---
+
+<think><details><summary>Thought Process</summary>
+
+Done. Now Select All clears the exclusion set and checks all (so "show all" is restored and future range changes will show all). Clear All clears the exclusion set and unchecks all (so for now nothing is shown, but future range changes will show all by default again).
+</details></think>
+
+---
+
+
+Update applied. Both **Select All** and **Clear All** now call `excludedSensorNames.clear()` before updating the checkboxes and chart. So:
+
+- **Select All:** Clears the exclusion set and checks every (enabled) sensor, so “show all” is restored and later range changes keep showing all.
+- **Clear All:** Clears the exclusion set and unchecks everything, so the chart is empty for now, but the next range change will again default to “show all with data.”
+
+---
+
+_**User**_
+
+Oops, one more subtlety. Let's think about this together before writing code.
+
+If the user does Clear All, and then selects justs a few sensors, he will want that set to persist when he change date range. But, the current code has nothing in the exclusion set in this situation.
+
+---
+
+_**Agent (model default, mode Agent)**_
+
+<think><details><summary>Thought Process</summary>
+
+The user is pointing out a subtlety:
+
+**Scenario:**
+1. User clicks "Clear All" → all checkboxes unchecked, exclusion set cleared.
+2. User then manually checks just a few sensors (e.g. Sensor A and B) → they want to see only A and B.
+3. User changes date range.
+4. **Current behavior:** We rebuild checkboxes. For each sensor with data: `checked = hasData && !excludedSensorNames.has(sensorName)`. Since the exclusion set is empty, **every** sensor with data gets checked. So the user's intent ("show only A and B") is lost.
+
+So the issue is: we're only tracking *exclusions* (sensors the user unchecked). When the user does "Clear All" and then checks a few, we're not tracking that they *included* only those few. We have no record of which sensors they wanted.
+
+**Two mental models:**
+
+1. **Exclusion set only:** "Show all with data, except these." Default = empty = show all. User unchecks A → A excluded. Problem: "Clear All" then "check A, B" gives us no exclusions, so we can't distinguish "show all" from "show only A and B."
+
+2. **Inclusion set (or "selected" set):** "Show only these sensors." But then default would be "all with data" = we'd need to treat "no inclusion set" as "all with data." When user unchecks A, we'd need to... remove A from inclusion set? So inclusion set = sensors to show. Default = empty means "show all with data." When user checks a sensor, add to set; when unchecks, remove. On range change: checked = hasData && (inclusionSet.isEmpty || inclusionSet.has(sensorName)). So if the set is empty, show all with data. If the set is non-empty, show only those in the set (that have data). Then:
+   - "Select All" → clear inclusion set (so "show all") and check all.
+   - "Clear All" → we could either clear inclusion set (then checking a few would add only those to inclusion set) or... If we clear inclusion set on Clear All, then after "Clear All" + "check A, B", inclusion set = {A, B}. On range change, only A and B (with data) checked. Good!
+
+So the fix might be: **track both** or **switch to an inclusion-set model when the user has explicitly selected a subset**.
+
+Actually, I will think again.
+
+**Option A: Inclusion set instead of exclusion set**
+- `includedSensorNames` = set of sensors the user wants to show. **Empty means "show all with data"** (default).
+- When user checks a sensor: add to includedSensorNames.
+- When user unchecks a sensor: remove from includedSensorNames.
+- Checked = hasData && (includedSensorNames.size === 0 || includedSensorNames.has(sensorName)).
+- "Select All" → clear includedSensorNames (so default "show all") and check all checkboxes.
+- "Clear All" → clear includedSensorNames and uncheck all. Then when user checks A and B, we add A and B to includedSensorNames. On range change, only A and B checked. Good!
+
+But wait, what about the default? On first load we have no inclusion set. We want "all with data" checked. So checked = hasData when set is empty. Good.
+
+When user *unchecks* one sensor (typical case): we remove it from includedSensorNames. So now includedSensorNames = all-with-data minus one. So we need to add every "has data" sensor to the set when we first build, then when they uncheck we remove. So on first load, we'd need to populate includedSensorNames with... nothing? Because "empty = show all." So when they uncheck A, we add... we can't "remove A from all." We'd have to have "inclusion set = undefined or empty means show all; non-empty means show only these." So when user unchecks A, we need to set inclusion set = all with data minus A. So we'd have to compute "all with data" and then remove A. So inclusion set = (all sensors with data) \ {excluded}. So we're back to exclusion set! The only difference is "Clear All" then "check A, B": with exclusion set we have nothing; with inclusion set we'd have {A, B}. So the fix is: **when the user explicitly checks a sensor after having unchecked state, we're in "inclusion mode"** — we need to track which sensors are included, not excluded.
+
+So one approach: **track both**.
+- **excludedSensorNames:** sensors the user has unchecked (when we're in "show all minus these" mode).
+- **includedSensorNames:** when non-empty, "show only these" (user did Clear All then selected some). When empty, we use exclusion set for "show all minus these."
+
+Rules:
+- If includedSensorNames.size > 0: checked = hasData && includedSensorNames.has(sensorName). (Ignore exclusion set.)
+- Else: checked = hasData && !excludedSensorNames.has(sensorName).
+
+When user checks a sensor:
+- If we're in inclusion mode (includedSensorNames non-empty): add to includedSensorNames.
+- Else: remove from excludedSensorNames.
+
+When user unchecks a sensor:
+- If we're in inclusion mode: remove from includedSensorNames. If includedSensorNames becomes empty, we could switch to exclusion mode (but we don't have an exclusion set populated). So when in inclusion mode and they uncheck, we remove from included. When they uncheck the last one, included is empty — then we're in "show all" mode with nothing checked. Next range change would show all checked (included empty, exclusion empty). OK.
+- Else (exclusion mode): add to excludedSensorNames.
+
+"Select All": clear both sets, check all. → Back to default "show all."
+"Clear All": clear both sets, uncheck all. → Now if they check A and B, we need to be in "inclusion mode" with {A, B}. So when they check A (first check after Clear All), we need to add A to includedSensorNames. So we add to included when they check. When do we add? Only when they check. So after Clear All, included is empty. They check A → add A to included. They check B → add B to included. So included = {A, B}. On range change, checked = hasData && included.has(sensorName). So only A and B. Good. So we need: when user checks a sensor, add to includedSensorNames (and maybe we don't use exclusion set when included is non-empty?). When user unchecks, remove from includedSensorNames if we're in inclusion mode; else add to excludedSensorNames.
+
+So the logic could be:
+- **Inclusion mode:** includedSensorNames is non-empty. Show only sensors in this set (that have data). When user checks a sensor, add to set. When user unchecks, remove from set.
+- **Exclusion mode:** includedSensorNames is empty. Show all with data except excludedSensorNames. When user unchecks, add to excluded. When user checks, remove from excluded.
+
+"Select All": clear both, check all. → Exclusion mode, exclusion empty = show all.
+"Clear All": clear both, uncheck all. → Both empty. Next time user checks, we need to go to inclusion mode. So when they check the first sensor after that, we add to included. So we always "add to included when they check" — but then in exclusion mode when they check (re-adding a previously unchecked sensor), we'd add to included? That would switch us to inclusion mode with one sensor. That's wrong. We want: in exclusion mode, when they check, we remove from excluded. So:
+- When user **checks** a sensor: if inclusion mode (included non-empty), add to included. Else (exclusion mode), remove from excluded.
+- When user **unchecks** a sensor: if inclusion mode, remove from included. Else, add to excluded.
+
+When do we enter inclusion mode? Only when they do "Clear All" and then check some. So initially both sets empty = exclusion mode (show all). After "Clear All", both empty. They check A. We need to add A to included. So we add to included. Now included = {A}. So we're in inclusion mode. So "when user checks: if included non-empty add to included; else remove from excluded." So when they check A after Clear All, included was empty so we'd "remove from excluded" — but A wasn't in excluded. So we'd do nothing. So we need a different rule.
+
+**Clearer rule:** 
+- **Inclusion mode:** includedSensorNames non-empty. Meaning: "user has chosen to show only these." Enter this mode when: user does "Clear All" then checks at least one. So after Clear All, when they check the first sensor, we set includedSensorNames = {that sensor}. So when they check and we're in exclusion mode (both empty) and we're not "removing from excluded" (since it wasn't excluded), we need to add to included. So the rule could be: when user **checks** a sensor, if excludedSensorNames.has(sensorName) then remove from excluded. Else (sensor wasn't excluded) — could be we're in "show all" and they didn't change anything, or we're after Clear All and they're building a list. So we can't distinguish. Alternative: when user **checks** a sensor, always add to included. When user **unchecks**, remove from included (if in included) and add to excluded (so we track it). Then we have both sets. And: checked = hasData && (includedSensorNames.has(sensorName) || (includedSensorNames.size === 0 && !excludedSensorNames.has(sensorName))). So: show if (included set is non-empty and sensor is in it) OR (included set is empty and sensor is not excluded). So "Select All": clear both, check all. "Clear All": clear both, uncheck all. Now after Clear All, included is empty, excluded is empty. So checked = hasData && !excluded = hasData. So all would be checked! That's wrong. After Clear All we unchecked all, so we want checked = false for all. So we need the checkboxes to stay unchecked. So after Clear All we have all checkboxes unchecked, both sets empty. So on next range change, we'd set checked = hasData (since both empty). So we'd check all again. So we need: after Clear All, we're in a state where "inclusion mode with empty set" means show none? So maybe: inclusion set empty and exclusion set empty → default "show all" (for range change). But then when we render after Clear All, we've set all checkboxes to unchecked. So the *current* view is "show none." So we need a third state: "user chose to show none" (all unchecked) vs "show all" (all checked). So we could have: **inclusionMode: boolean.** When true, we're in "show only included set" (included set may be non-empty). When false, we're in "show all except excluded." After "Select All", inclusionMode = false, excluded = empty. After "Clear All", we could set inclusionMode = true, included = empty → meaning "show only these" and the set is empty so show none. Then when they check A, add A to included. So checked = hasData && (inclusionMode ? included.has(sensorName) : !excluded.has(sensorName)). So after Clear All we set inclusionMode = true, included = empty. So checked = hasData && false = false. Good. On range change we rebuild with same logic. When do we switch to exclusion mode? When they do "Select All" → inclusionMode = false, clear excluded (and included). So we're in "show all." When they uncheck one sensor → we're still in exclusion mode, add to excluded. When they then do "Clear All" and check a few → we set inclusionMode = true, included = {those}. So we need: "Clear All" sets inclusionMode = true, included = empty. "Select All" sets inclusionMode = false, excluded = empty, included = empty. When in inclusion mode and user checks, add to included. When in inclusion mode and user unchecks, remove from included. When in exclusion mode and user unchecks, add to excluded. When in exclusion mode and user checks, remove from excluded. That works!
+
+I will summarize for the user and then we can implement.
+</details></think>
+
+---
+
+
+Here’s the situation in terms of state and modes.
+
+**What’s going wrong**
+
+We only track **exclusions** (“don’t show these”). So:
+
+- “Clear All” → exclusion set is empty.
+- User then checks only A and B.
+- We never record “show only A and B”; we only ever remove from the exclusion set when they check.
+- On range change we use: `checked = hasData && !excluded.has(sensor)`. With empty exclusion set, every sensor with data becomes checked, and the “only A and B” choice is lost.
+
+So we need a way to represent “user chose to show only this subset” (Clear All → then pick a few) vs “user chose to show all except these” (default → then uncheck some).
+
+**Two modes**
+
+1. **Exclusion mode (default)**  
+   - Meaning: “Show all sensors that have data, except the ones I unchecked.”  
+   - State: exclusion set only (or inclusion set empty, see below).  
+   - `checked = hasData && !excluded.has(sensorName)`.  
+   - Enter when: page load, or “Select All” (show everything again).
+
+2. **Inclusion mode**  
+   - Meaning: “Show only the sensors I selected” (e.g. after Clear All + “just A and B”).  
+   - State: inclusion set non-empty.  
+   - `checked = hasData && included.has(sensorName)`.  
+   - Enter when: “Clear All” (we switch into “show only these” with an empty set = show none), then user checks A, B, … and we add those to the inclusion set.
+
+**Rules**
+
+- **Checked state when rebuilding (e.g. after range change):**  
+  - If **inclusion mode** (inclusion set non-empty):  
+    `checked = hasData && included.has(sensorName)`.  
+  - Else **exclusion mode**:  
+    `checked = hasData && !excluded.has(sensorName)`.
+
+- **User checks a sensor:**  
+  - Inclusion mode → add to inclusion set.  
+  - Exclusion mode → remove from exclusion set.
+
+- **User unchecks a sensor:**  
+  - Inclusion mode → remove from inclusion set.  
+  - Exclusion mode → add to exclusion set.
+
+- **“Select All”:**  
+  - Switch to exclusion mode: clear inclusion set, clear exclusion set, check all (enabled) checkboxes.  
+  - So “show all” is restored and persists across range changes.
+
+- **“Clear All”:**  
+  - Switch to inclusion mode with empty set: clear exclusion set, set inclusion set to empty, uncheck all.  
+  - So “show none” for now; when they check A and B, we add only A and B to the inclusion set, and that “only A and B” persists across range changes.
+
+**Implementation detail**
+
+We can represent “mode” implicitly:
+
+- **inclusion set non-empty** → inclusion mode (show only those).  
+- **inclusion set empty** → exclusion mode (show all except excluded).
+
+So we only need two sets in memory (session-only, no persistence):
+
+- `excludedSensorNames` (as now).
+- `includedSensorNames` (new).
+
+“Select All” clears both sets (and checks all). “Clear All” clears both sets (and unchecks all); the next time they check a sensor, we add to `includedSensorNames` and from then on we’re in inclusion mode until they hit “Select All” again.
+
+If this matches how you want it to behave, we can wire it into the checkbox creation, change handlers, and Select All / Clear All handlers next.
+
+---
+
+_**User**_
+
+There may be a simpler approach.  Analyze what happens if we just change the current code so that the user clicking Clear All adds all sensors to the exclusion set.
+
+---
+
+_**Agent (model default, mode Agent)**_
+
+<think><details><summary>Thought Process</summary>
+
+The user is suggesting a simpler approach: instead of introducing inclusion mode and includedSensorNames, just change "Clear All" so that it adds all (currently available) sensors to the exclusion set, rather than clearing the exclusion set.
+
+I will trace through:
+
+**Current "Clear All" behavior:** Clear excludedSensorNames, then uncheck all checkboxes. So exclusion set is empty. On next range change, checked = hasData && !excluded.has(sensor) = hasData for everyone → all checked.
+
+**Proposed "Clear All" behavior:** Add all sensors (that have data in the current range) to the exclusion set, then uncheck all checkboxes. So after Clear All, excludedSensorNames = {every sensor that currently has data}. On next range change, we rebuild checkboxes. For each sensor with data: checked = hasData && !excluded.has(sensorName). So every sensor with data is in the exclusion set → checked = false for all. So the chart stays empty. Good.
+
+**Now: user checks just A and B after Clear All.** When they check A, we remove A from excludedSensorNames. When they check B, we remove B from excludedSensorNames. So excludedSensorNames = {all others}. On range change: checked = hasData && !excluded.has(sensor). So only A and B are not in the exclusion set → only A and B checked. So the user's "show only A and B" is preserved! We didn't need inclusion mode at all. We just needed "Clear All" to mean "exclude everyone (who has data right now)" instead of "clear the exclusion set."
+
+**Edge case: range change after Clear All + check A, B.** We have excluded = {everyone except A, B} (all sensors that had data at the time, minus A and B). But wait, when they clicked Clear All we added "all sensors" to the exclusion set. Which "all sensors"? The ones that have data in the current range at that moment — i.e. availableSensors at the time of Clear All. So we'd do excludedSensorNames = new Set(availableSensors) or add all from allSensors that have data. So we add every sensor name that currently has data. Then when they check A, we remove A. When they check B, we remove B. So excluded = (all with data at Clear All time) \ {A, B}. On range change, the set of "sensors with data" might change (different sensors might have data in the new range). For any sensor with data in the new range: checked = !excluded.has(sensorName). So:
+- A, B: not in excluded → checked. Good.
+- C had data at Clear All time, still has data in new range: C is in excluded → unchecked. Good.
+- D had no data at Clear All time, has data in new range: D might not be in excluded (we only added "sensors that had data at Clear All time"). So D might not be in excluded. So D would be checked! So a sensor that "appears" in the new range (didn't have data before, has data now) would show up as checked. Is that good or bad? The user did "Clear All" then "show A, B". So their intent is "show only A and B." So we'd want D to be unchecked (excluded). So we need: when we do "Clear All", we add to the exclusion set *all sensors* (from allSensors), not just "sensors that have data right now." That way, any sensor that later gets data in a new range is still in the exclusion set, so it stays unchecked. So "Clear All" = add every sensor in allSensors to excludedSensorNames. Then when they check A and B, we remove A and B. So excluded = allSensors \ {A, B}. On range change: checked = hasData && !excluded.has(sensorName). So only A and B (that have data) are checked. And if D is a new sensor that appears with data in the new range, D is in allSensors (we load all sensors from status), so D is in excluded → unchecked. Perfect.
+
+**Select All:** Clear exclusion set, check all. So "show all" again. Same as now. Good.
+
+**Summary of the simpler approach:**
+- "Clear All": Instead of clearing the exclusion set, *add* all sensor names (from allSensors) to the exclusion set. Then uncheck all checkboxes. So we're in a state "everyone excluded." When the user then checks A and B, we remove A and B from the exclusion set, so only A and B are shown. On range change, that persists.
+- "Select All": Clear exclusion set (as now), check all. Unchanged.
+- No inclusion set, no mode flag. Just one change: Clear All populates the exclusion set with everyone instead of clearing it.
+
+I'll implement that.
+</details></think>
+
+---
+
+
+Tracing the simpler approach:
+
+- Clear All: add every sensor (from `allSensors`) to `excludedSensorNames`, then uncheck all.
+- User checks A and B → we remove A and B from `excludedSensorNames`.
+- On range change: `checked = hasData && !excluded.has(sensorName)` → only A and B checked. Intent preserved.
+- Select All: clear `excludedSensorNames`, check all — unchanged.
+- New sensor D that gets data in a new range: if we added all of `allSensors` on Clear All, D is in `excluded` → stays unchecked. If we only added "sensors with data at Clear All time," D might not be in `excluded` and would appear checked; so we should add all of `allSensors` on Clear All.
+
+Implementing: Clear All adds every name in `allSensors` to `excludedSensorNames` (not just those with data).
+
+
+---
+
+<tool-use data-tool-type="write" data-tool-name="edit_file_v2">
+
+<details><summary>Tool use: **edit_file_v2** • Edit file: /Users/deg/Documents/basistech/temperature-bot/app/static/chart_support.js</summary>
+
+</details>
+
+</tool-use>
+
+---
+
+<think><details><summary>Thought Process</summary>
+
+Done. No inclusion set, no mode. Clear All now adds every sensor in allSensors to the exclusion set. So after Clear All + check A and B, excluded = allSensors \ {A, B}, and on range change only A and B (with data) are checked.
+</details></think>
+
+---
+
+
+Change is in place.
+
+**Behavior now:**
+- **Clear All:** Add every name in `allSensors` to `excludedSensorNames`, then uncheck all checkboxes.
+- User then checks A and B → A and B are removed from `excludedSensorNames`.
+- On range change, `checked = hasData && !excluded.has(sensorName)` → only A and B stay checked.
+- **Select All:** Still clears `excludedSensorNames` and checks all (unchanged).
+
+No second set or mode flag; only Clear All’s behavior changed from “clear exclusions” to “exclude everyone.”
+
+---
+
+_**User**_
+
+This doesn't seem to work.
+I'm showing a Month range, and press Clear All.  The chart empties as expected.
+Then I click Week.  The chart now fills with all the active sensors selected.
+
+---
+
+_**Agent (model default, mode Agent)**_
+
+<think><details><summary>Thought Process</summary>
+
+The user is saying that when they:
+1. Show Month range
+2. Press Clear All → chart empties (expected)
+3. Click Week → the chart fills with all active sensors selected (unexpected)
+
+So when they change the date range (from Month to Week), the checkboxes are being rebuilt and somehow all sensors are getting checked again instead of preserving the "all excluded" state.
+
+I will think about the flow:
+1. User has Month range. They press Clear All. We do: allSensors.forEach(name => excludedSensorNames.add(name)), then uncheck all checkboxes. So excludedSensorNames now contains every sensor. The checkboxes are all unchecked.
+2. User clicks Week. That triggers setTemporalButtonSelection("weekBtn") and setTimePrevDays(7), which calls setPickersFromRange(), which calls reloadData().
+3. reloadData() does: promises = [loadTempData()]; if (aqiChart) promises.push(loadAirQualityData()); Promise.all(promises).
+4. loadTempData() fetches with the new date range (week). When the response comes back, it does: tempData = json.series; if (currentDeviceIds.length == 0) { createAllSensorCheckboxes(); } updateTempRecordCount(); updateTempChart();
+5. So createAllSensorCheckboxes() is called. In that function we rebuild the checkboxes. For each sensor: checkbox.checked = hasData && !excludedSensorNames.has(sensorName). So if excludedSensorNames has all sensors, then !excludedSensorNames.has(sensorName) is false for every sensor. So every checkbox should be unchecked. So the checkboxes should stay unchecked...
+
+Unless! Maybe the issue is that when we're in "device_ids" mode vs "all sensors" mode? I will check - when do we call createAllSensorCheckboxes? Only when currentDeviceIds.length == 0. So we're showing the full list. And we iterate allSensors.forEach((sensorName, index) => ...). So we're using allSensors. And we set checkbox.checked = hasData && !excludedSensorNames.has(sensorName). So if excludedSensorNames has every sensor from allSensors, then for every sensor, excludedSensorNames.has(sensorName) is true, so !excludedSensorNames.has(sensorName) is false, so checkbox.checked = false. So all should be unchecked.
+
+Oh wait! Maybe the issue is that when we do Clear All, we're adding allSensors to the exclusion set. But allSensors is the list of sensor *names* from the status API (device_name). And when we rebuild checkboxes after the Week range load, we're iterating allSensors and checking availableSensors.has(sensorName) where availableSensors = tempData.map(series => series.name). So the names should match - they're both device names. So that should be fine.
+
+Unless - is there a timing/order issue? When we click Week:
+1. reloadData() is called
+2. loadTempData() is called (async)
+3. Meanwhile, does something else run that clears excludedSensorNames? Like setPickersFromRange? I will look at the order of operations again.
+
+Actually, I will look at setTimePrevDays and setPickersFromRange. When we click Week:
+- setTemporalButtonSelection("weekBtn") 
+- setTimePrevDays(7) 
+- setTimePrevDays does: currentEnd = now, currentStart = currentEnd - 7*24*60*60, then setPickersFromRange()
+- setPickersFromRange sets the date picker values and calls reloadData()
+
+
+- reloadData() calls loadTempData() (and maybe loadAirQualityData)
+- loadTempData() fetches, then in the .then(): tempData = json.series, createAllSensorCheckboxes(), updateTempRecordCount(), updateTempChart()
+
+So createAllSensorCheckboxes is definitely called with the new tempData. And at that point excludedSensorNames should still have all the sensors from when the user clicked Clear All. So the checkboxes should be created with checked = hasData && !excludedSensorNames.has(sensorName) = true && false = false for all...
+
+Unless! Maybe allSensors is different after the range change? No, allSensors is loaded once at page load from loadAllSensors() (STATUS_ENDPOINT). It's not reloaded when we change the date range. So allSensors is the same.
+
+Oh! I think I might see it. When we do Clear All, we do:
+allSensors.forEach((name) => excludedSensorNames.add(name));
+
+But what if allSensors is empty or not yet loaded at the time the user clicks Clear All? Unlikely if they're viewing a Month range and have data...
+
+Or - maybe the issue is that the *names* in tempData (series.name) are different from the names in allSensors? We're now using Hubitat labels for the series name in the API response (we changed that earlier - the temperature series API returns label as the display name). So tempData has series with name = label (e.g. "Broadway") while allSensors comes from the status API and might have device_name which could be the Hubitat *name* (e.g. "Broadway Sensor Center on Somerville Broadway"). So when we create checkboxes we iterate allSensors (device names) but the availableSensors set is built from tempData.map(series => series.name) which are *labels*. So hasData = availableSensors.has(sensorName) would be false for everything (because sensorName from allSensors is the long name, and availableSensors has labels). So we'd have hasData = false for all sensors when we're using labels in the API! So all checkboxes would be disabled and unchecked. That would be a different bug.
+
+Actually wait, I will re-read the checkbox creation. We have:
+allSensors = from status API, device names (device_name from DB/status)
+availableSensors = new Set(tempData.map(series => series.name)) = series names from temperature API = we changed those to labels!
+
+So when we iterate allSensors.forEach((sensorName, index) => ...), sensorName is the device_name (e.g. "Broadway Sensor Center..."). And hasData = availableSensors.has(sensorName). But availableSensors has labels ("Broadway"). So hasData would be false for every sensor because the names don't match! So actually the checkboxes would all be disabled (no data). So the chart would show nothing not because of exclusions but because we're not matching. That might have been a pre-existing bug after we introduced labels in the temperature API...
+
+I will check. In createAllSensorCheckboxes we have:
+- allSensors from loadAllSensors() - that's from /api/v1/status which returns devices with device_name (from DB). So device_name is the DB name, which typically matches Hubitat *name*.
+- tempData from get_temperature_series - we modified that to return series with name = Hubitat label when available. So series.name can be label (e.g. "Broadway") not the device_name (e.g. "Broadway Sensor Center on Somerville Broadway").
+
+So there's a mismatch: allSensors has device names (name), tempData has labels. So availableSensors = Set of labels. And we're checking availableSensors.has(sensorName) where sensorName is from allSensors (names). So hasData is never true (unless name equals label by chance). So we'd have all checkboxes disabled. That would mean when the user selects Week, all checkboxes would be disabled and unchecked - so the chart would be empty. But the user said "the chart now fills with all the active sensors selected". So they're seeing the opposite - all sensors selected and chart full. So the mismatch (name vs label) would cause disabled checkboxes, not checked. So maybe in their environment name and label are the same? Or the status API returns something that matches the series names?
+
+I will re-read the user message. "The chart now fills with all the active sensors selected." So after clicking Week, the chart shows all sensors (all checked). So the checkboxes are being recreated with checked = true for all with data. That means either:
+1. excludedSensorNames is empty when createAllSensorCheckboxes runs (so we're not excluding anyone), or
+2. The logic is wrong.
+
+If excludedSensorNames had all sensors, we'd get checked = hasData && !excluded.has(sensorName) = false for everyone. So the chart would stay empty. So the only way to get "all active sensors selected" is if excludedSensorNames is empty when we rebuild. So something is clearing excludedSensorNames between Clear All and the rebuild. What could clear it? Only Select All and Clear All (we changed Clear All to add, not clear). So we're not explicitly clearing. Unless - does reloadData or loadTempData or something in the chain clear the exclusion set? I will search the code... We only have excludedSensorNames.clear() in Select All and Clear All (and we changed Clear All to add). So we're not clearing it.
+
+Unless - when we call createAllSensorCheckboxes(), we're rebuilding the DOM - we remove all existing checkbox items and create new ones. So the checkboxes are new. And we set checkbox.checked = hasData && !excludedSensorNames.has(sensorName). So at the moment we create the checkboxes, what is excludedSensorNames? It should still have all the sensors from when they clicked Clear All. So either:
+A) excludedSensorNames is being cleared somewhere we didn't find,
+B) excludedSensorNames has different keys than sensorName (e.g. we're adding labels but sensorName is device name, so when we check excludedSensorNames.has(sensorName) it's false because we added "Broadway" but sensorName is "Broadway Sensor Center..."),
+C) Something else.
+
+If B: When we do Clear All we do allSensors.forEach(name => excludedSensorNames.add(name)). So we're adding names from allSensors (device names). So excludedSensorNames = Set of device names. When we rebuild, we iterate allSensors.forEach((sensorName, index) => ...) so sensorName is device name. So excludedSensorNames.has(sensorName) should be true for every sensor. So we'd get checked = hasData && false = false. So all unchecked. Unless hasData is false for all (because of the name/label mismatch), then we'd have disabled and unchecked. So we wouldn't get "all selected."
+
+So the only way to get "all selected" is if excludedSensorNames.has(sensorName) is false for all sensors when we rebuild. That means either excludedSensorNames is empty, or the names we added don't match the sensorNames we're checking. So maybe when we add to excludedSensorNames we're adding one set of names (e.g. from allSensors at Clear All time), but when we rebuild the order or content of allSensors might be different? Or maybe the checkbox creation uses a different list? I will look at createAllSensorCheckboxes again. We iterate allSensors.forEach((sensorName, index) => ...). So we're using the same allSensors. And we add allSensors to excluded when we Clear All. So the names should match.
+
+Oh! I wonder if the issue is that createAllSensorCheckboxes is only called when currentDeviceIds.length == 0. So when we're showing "all sensors" view. But when we load temp data, we get back series with name = label (from our API change). So tempData has [{ name: "Broadway", data: [...] }, ...]. So availableSensors = Set(["Broadway", ...]) = labels. And allSensors = [device names from status] = e.g. ["Broadway Sensor Center on Somerville Broadway", ...]. So when we do the forEach, hasData = availableSensors.has(sensorName). So hasData = availableSensors.has("Broadway Sensor Center...") = false because availableSensors has "Broadway". So every sensor would have hasData = false! So we'd create checkboxes that are all disabled and unchecked. So the chart would be empty and the checkboxes would all be greyed out. That would be one bug (name vs label mismatch in the checkbox list). But the user said the chart *fills* with all sensors. So in their case, maybe the status API returns the same names as the series names? Like maybe they're using device_name that matches the label? Or maybe the status API was also updated to return labels? I will check - we didn't change the status API. So status returns device_name from the DB. And get_device_status returns device_name. So the dropdown and allSensors use device_name (DB name). And the temperature series API returns series with name = Hubitat label when available. So there's definitely a mismatch. So when createAllSensorCheckboxes runs, availableSensors has labels, allSensors has device names. So hasData would be false for all. So we'd have all checkboxes disabled. So the chart would show no series (because we only add series that are checked and have data). So the chart would be empty. So the user would see: after clicking Week, chart empty, all checkboxes disabled. That's not what they said - they said chart fills with all active sensors selected. So either in their setup names match labels, or I'm wrong about something.
+
+I will assume the n</details></think>
+
+---
+

@@ -10,6 +10,10 @@ let currentDeviceIds = []; // current devices to load. [] means load them all
 let allDevices = []; // all available devices for dropdown
 let allSensors = []; // dynamically loaded list of all available sensors
 let selectedTemporalButton = null; // currently selected temporal button
+/** Sensors the user has unchecked (excluded). Persisted only for page session; default = show all with data. */
+let excludedSensorNames = new Set();
+/** When true, checkbox state is being set by code (Clear All / rebuild); do not update exclusion set in change handler. */
+let programmaticCheckboxUpdate = false;
 const TEMP_ENDPOINT = "/api/v1/temperature";
 const AQI_ENDPOINT = "/api/v1/air_quality";
 const STATUS_ENDPOINT = "/api/v1/status";
@@ -202,12 +206,13 @@ function createAllSensorCheckboxes() {
   // Create a map of available sensor names for quick lookup
   const availableSensors = new Set(tempData.map((series) => series.name));
 
+  programmaticCheckboxUpdate = true;
   allSensors.forEach((sensorName, index) => {
     const id = `checkbox-${index}`;
     const wrapper = document.createElement("div");
     wrapper.className = "checkbox-item";
 
-    // Add disabled class if sensor has no data
+    // Add disabled class if sensor has no data in current range
     const hasData = availableSensors.has(sensorName);
     if (!hasData) {
       wrapper.classList.add("disabled");
@@ -216,8 +221,9 @@ function createAllSensorCheckboxes() {
     const checkbox = document.createElement("input");
     checkbox.type = "checkbox";
     checkbox.id = id;
-    checkbox.checked = hasData; // Only check sensors that have data
-    checkbox.disabled = !hasData; // Disable sensors without data
+    // Checked = has data and user has not excluded this sensor (exclusion set is session-only)
+    checkbox.checked = hasData && !excludedSensorNames.has(sensorName);
+    checkbox.disabled = !hasData; // Disable sensors without data in this range
 
     const label = document.createElement("label");
     label.htmlFor = id;
@@ -233,11 +239,21 @@ function createAllSensorCheckboxes() {
       hasData,
     );
 
-    checkbox.addEventListener("change", updateTempChart);
+    checkbox.addEventListener("change", () => {
+      if (programmaticCheckboxUpdate) return;
+      if (checkbox.checked) {
+        excludedSensorNames.delete(sensorName);
+      } else {
+        excludedSensorNames.add(sensorName);
+      }
+      updateTempChart();
+    });
     wrapper.appendChild(checkbox);
     wrapper.appendChild(label);
     checkboxItemsWrapper.appendChild(wrapper);
   });
+
+  programmaticCheckboxUpdate = false;
 
   // Insert checkbox items at the beginning (buttons are at the end)
   checkboxContainer.insertBefore(
@@ -747,6 +763,7 @@ function setupCheckboxControls() {
 
   if (selectAllBtn) {
     selectAllBtn.addEventListener("click", function () {
+      excludedSensorNames.clear();
       const checkboxes = document.querySelectorAll(
         "#checkboxes input[type=checkbox]",
       );
@@ -759,12 +776,16 @@ function setupCheckboxControls() {
 
   if (clearAllBtn) {
     clearAllBtn.addEventListener("click", function () {
+      // Exclude all sensors so that when user then checks a few, that set persists across range change
+      allSensors.forEach((name) => excludedSensorNames.add(name));
+      programmaticCheckboxUpdate = true;
       const checkboxes = document.querySelectorAll(
         "#checkboxes input[type=checkbox]",
       );
       checkboxes.forEach((checkbox) => {
         checkbox.checked = false;
       });
+      programmaticCheckboxUpdate = false;
       updateTempChart();
     });
   }
