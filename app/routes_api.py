@@ -106,15 +106,7 @@ def get_temperature(conn):
         return jsonify({"error": "Invalid device_ids format"}), 400
     series = db.get_temperature_series(conn, device_ids)
     # Use Hubitat label for series display name when available
-    name_to_label = {}
-    try:
-        hubitat_devices = hubitat.get_all_devices()
-        name_to_label = {
-            dev["name"]: (dev.get("label") or dev["name"])
-            for dev in hubitat_devices
-        }
-    except (ValueError, RuntimeError, OSError):
-        pass
+    name_to_label = hubitat.get_name_to_label()
     for s in series:
         s["name"] = name_to_label.get(s["name"], s["name"])
     return jsonify({"series": series})
@@ -192,15 +184,7 @@ def debug_db_devices(conn):
     try:
         device_data = db.get_device_status(conn)
         # Enrich names with Hubitat label in parens when available (same as Hubitat section)
-        name_to_label = {}
-        try:
-            hubitat_devices = hubitat.get_all_devices()
-            name_to_label = {
-                dev["name"]: (dev.get("label") or dev["name"])
-                for dev in hubitat_devices
-            }
-        except (ValueError, RuntimeError, OSError):
-            pass
+        name_to_label = hubitat.get_name_to_label()
         device_names = []
         for dev in device_data:
             name = dev.get("device_name", "Unknown")

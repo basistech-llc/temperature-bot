@@ -39,6 +39,17 @@ MAX_DURATION = 3600  # don't extend more than an hour
 _SCHEMA_MTIME: float | None = None
 
 
+def reset_schema_mtime_cache() -> None:
+    """Reset the schema mtime cache. For use by tests only."""
+    global _SCHEMA_MTIME  # pylint: disable=global-statement
+    _SCHEMA_MTIME = None
+
+
+def get_schema_mtime() -> float | None:
+    """Return the cached schema mtime. For use by tests only."""
+    return _SCHEMA_MTIME
+
+
 class SpeedControl(BaseModel):
     """Pydantic model for speed control requests."""
 

@@ -30,15 +30,7 @@ def create_web_routes(app):
         device_data = db.get_device_status(conn)
 
         # Enrich with Hubitat label for display (Air Quality section: label visible, name in title)
-        name_to_label = {}
-        try:
-            hubitat_devices = hubitat.get_all_devices()
-            name_to_label = {
-                dev["name"]: (dev.get("label") or dev["name"])
-                for dev in hubitat_devices
-            }
-        except (ValueError, RuntimeError, OSError):
-            pass
+        name_to_label = hubitat.get_name_to_label()
         for d in device_data:
             d["device_label"] = name_to_label.get(d["device_name"], d["device_name"])
 

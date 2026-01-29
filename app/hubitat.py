@@ -40,6 +40,21 @@ def get_all_devices():
             dev['name'] = dev['name'].replace(OFFLINE,'')
     return data
 
+
+def get_name_to_label():
+    """Return a mapping of device name -> display label from Hubitat. Empty dict on error."""
+    name_to_label = {}
+    try:
+        devices = get_all_devices()
+        name_to_label = {
+            dev["name"]: (dev.get("label") or dev["name"])
+            for dev in devices
+        }
+    except (ValueError, RuntimeError, OSError):
+        pass
+    return name_to_label
+
+
 if __name__=="__main__":
     """A little test program"""
     devs = get_all_devices()

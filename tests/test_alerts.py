@@ -6,7 +6,7 @@ import json
 import time
 import logging
 
-from helpers.data_factories import AlertTestData
+from helpers.data_factories import AlertTestData, alert_spec
 
 from app import db
 
@@ -101,11 +101,13 @@ def test_get_active_alerts_with_details(test_database_conn):
     AlertTestData.create_device_with_alert(
         conn,
         "Device 1",
-        "ErrorSign",
-        {"Mode": "AUTO", "Drive": "ON", "FanSpeed": "MEDIUM", "InletTemp": "23.5"},
-        alert_time,
-        alert_value="ON",
-        end_time=None
+        alert_spec(
+            "ErrorSign",
+            {"Mode": "AUTO", "Drive": "ON", "FanSpeed": "MEDIUM", "InletTemp": "23.5"},
+            alert_time,
+            alert_value="ON",
+            end_time=None,
+        ),
     )
 
     # Request without details
@@ -132,11 +134,13 @@ def test_get_alert_history_with_details(test_database_conn):
     AlertTestData.create_device_with_alert(
         conn,
         "Device 1",
-        "ErrorSign",
-        {"Mode": "AUTO", "Drive": "ON", "FanSpeed": "HIGH"},
-        alert_start,
-        alert_value="ON",
-        end_time=now - 500
+        alert_spec(
+            "ErrorSign",
+            {"Mode": "AUTO", "Drive": "ON", "FanSpeed": "HIGH"},
+            alert_start,
+            alert_value="ON",
+            end_time=now - 500,
+        ),
     )
 
     # Request with details

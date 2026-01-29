@@ -35,7 +35,7 @@ def wait_for_server(url: str, timeout: float = 20.0) -> None:
         try:
             if requests.get(url, timeout=0.5).ok:
                 return
-        except Exception:
+        except requests.RequestException:
             pass
         time.sleep(0.1)
     raise RuntimeError(f"Backend not healthy at {url} within {timeout}s")
@@ -496,7 +496,7 @@ def test_chart_exclusion_set_persists_after_clear_all_and_range_change(
             checked_after = sum(1 for i in range(n_after) if checkboxes_after.nth(i).is_checked())
             assert checked_after == 0, (
                 "after Clear All then range change, no checkbox should be checked (exclusions persist); "
-                "got %d checked" % checked_after
+                f"got {checked_after} checked"
             )
         finally:
             browser.close()
@@ -552,7 +552,7 @@ def test_chart_select_all_clears_exclusions_then_range_shows_all(
             checked_after = sum(1 for i in range(n_after) if checkboxes_after.nth(i).is_checked())
             assert checked_after == n_after, (
                 "after Select All then range change, all enabled checkboxes should be checked; "
-                "got %d/%d checked" % (checked_after, n_after)
+                f"got {checked_after}/{n_after} checked"
             )
         finally:
             browser.close()
