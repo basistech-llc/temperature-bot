@@ -1,0 +1,3 @@
+# Linter and checker suppressions
+
+Do not add or use linter/checker suppressions (e.g. `# pylint: disable=...`, `# noqa`, `# type: ignore`) unless the human developer has explicitly discussed the case and approved the suppression. Prefer fixing the underlying issue (refactor, narrow exceptions, split modules, adjust config) instead of suppressing.
