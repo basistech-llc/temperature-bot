@@ -7,42 +7,42 @@
         "sensors": [
             {
                 "sensorType": "radonShortTermAvg",
-                "value": 111.0,
+                "value": 666.0,
                 "unit": "bq"
             },
             {
                 "sensorType": "humidity",
-                "value": 23.0,
+                "value": 66.0,
                 "unit": "pct"
             },
             {
                 "sensorType": "temp",
-                "value": 23.2,
+                "value": 66.6,
                 "unit": "c"
             },
             {
                 "sensorType": "co2",
-                "value": 583.0,
+                "value": 666.0,
                 "unit": "ppm"
             },
             {
                 "sensorType": "voc",
-                "value": 330.0,
+                "value": 666.0,
                 "unit": "ppb"
             },
             {
                 "sensorType": "pressure",
-                "value": 1019.3,
+                "value": 6666.3,
                 "unit": "mbar"
             },
             {
                 "sensorType": "pm25",
-                "value": 2.0,
+                "value": 6.6,
                 "unit": "mgpc"
             },
             {
                 "sensorType": "pm1",
-                "value": 2.0,
+                "value": 6.6,
                 "unit": "mgpc"
             }
         ]

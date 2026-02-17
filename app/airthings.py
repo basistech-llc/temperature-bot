@@ -8,6 +8,7 @@ import requests
 import logging
 import json
 import requests  # type: ignore
+from pathlib import Path
 from collections import defaultdict
 from app.util import get_config, get_secret
 from app.paths import TIMEOUT_SECONDS
@@ -21,6 +22,8 @@ TIMEOUT=5
 
 CLIENT_ID     = get_secret("airthings","client_id")
 CLIENT_SECRET = get_secret("airthings","client_secret")
+AIRTHINGS_SIMULATOR = os.getenv('AIRTHINGS_SIMULATOR')
+AIRTHINGS_SAMPLE_FILE     = Path(__file__).parent.parent / 'etc' / 'airthings_sample.json'
 
 def get_access_token(client_id, client_secret):
     """
@@ -83,6 +86,10 @@ def get_temperature_from_device(device):
 
 # Get an access token
 def read_airthings_now():
+    if AIRTHINGS_SIMULATOR:
+        with AIRTHINGS_SAMPLE_FILE.open() as f:
+            return json.load(f)
+
     access_token = get_access_token(CLIENT_ID, CLIENT_SECRET)
     accountId = get_account(access_token)
 

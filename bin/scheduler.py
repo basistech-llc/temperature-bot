@@ -1,5 +1,6 @@
 """
-Runs every minute to implement rules.
+I think that this program is no longer used and should be deleted.
+
 """
 import datetime
 from pprint import pprint
