@@ -4,13 +4,9 @@ Interface to the airthings api
 
 import os
 import json
-import requests
-import logging
-import json
-import requests  # type: ignore
 from pathlib import Path
-from collections import defaultdict
-from app.util import get_config, get_secret
+import requests
+from app.util import get_secret
 from app.paths import TIMEOUT_SECONDS
 
 
@@ -18,11 +14,12 @@ TOKEN_URL = "https://accounts-api.airthings.com/v1/token"
 ACCOUNTS_URL = "https://consumer-api.airthings.com/v1/accounts"
 DEVICES_URL = "https://consumer-api.airthings.com/v1/accounts/{accountId}/devices"
 SENSORS_URL = "https://consumer-api.airthings.com/v1/accounts/{accountId}/sensors?{sn_param}"
-TIMEOUT=5
 
 AIRTHINGS_SIMULATOR = os.getenv('AIRTHINGS_SIMULATOR')
 if AIRTHINGS_SIMULATOR:
     AIRTHINGS_SAMPLE_FILE     = Path(__file__).parent.parent / 'etc' / 'airthings_sample.json'
+    CLIENT_ID     = None
+    CLIENT_SECRET = None
 else:
     CLIENT_ID     = get_secret("airthings","client_id")
     CLIENT_SECRET = get_secret("airthings","client_secret")
@@ -37,7 +34,7 @@ def get_access_token(client_id, client_secret):
         'client_secret': client_secret,
         'scope': 'read:device:current_values'
     }
-    response = requests.post(TOKEN_URL, data=payload, timeout=TIMEOUT)
+    response = requests.post(TOKEN_URL, data=payload, timeout=TIMEOUT_SECONDS)
     response.raise_for_status()
     return response.json().get('access_token')
 
@@ -48,7 +45,7 @@ def get_account(access_token):
     headers = {
         'Authorization': f'Bearer {access_token}'
     }
-    response = requests.get(ACCOUNTS_URL, headers=headers, timeout=TIMEOUT)
+    response = requests.get(ACCOUNTS_URL, headers=headers, timeout=TIMEOUT_SECONDS)
     response.raise_for_status()
     return response.json()['accounts'][0]['id']
 
@@ -59,7 +56,7 @@ def get_devices(access_token,accountId):
     headers = {
         'Authorization': f'Bearer {access_token}'
     }
-    response = requests.get(DEVICES_URL.format(accountId=accountId), headers=headers, timeout=TIMEOUT)
+    response = requests.get(DEVICES_URL.format(accountId=accountId), headers=headers, timeout=TIMEOUT_SECONDS)
     return response.json().get('devices', [])
 
 def get_sensors(access_token,accountId,sn_array):
@@ -71,7 +68,7 @@ def get_sensors(access_token,accountId,sn_array):
     }
 
     url = SENSORS_URL.format(accountId=accountId,sn_param="&".join([f"sn={_}" for _ in sn_array]))
-    response = requests.get(url, headers=headers, timeout=TIMEOUT)
+    response = requests.get(url, headers=headers, timeout=TIMEOUT_SECONDS)
     response.raise_for_status()
 
     r = response.json().get("results")
