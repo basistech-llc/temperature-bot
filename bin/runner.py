@@ -1,5 +1,7 @@
 """
-Runs every minute to get temperature and fan speeds
+Runs every minute by cron.
+ - gets temperature and writes to database
+ - runs rules engine
 """
 
 import sys
@@ -13,7 +15,6 @@ from os.path import dirname, abspath
 import tabulate  # type: ignore
 import requests
 
-
 # runner is first to run so it needs to add . to the path
 sys.path.append(dirname(dirname(abspath(__file__))))
 
@@ -21,6 +22,7 @@ from app.paths import ETC_DIR
 from app.rules_engine import rules_results, run_rules, all_rules_disabled_until
 from app import airquality
 from app import ae200
+from app import airthings
 from app import db
 from app import db_alerts
 from app import hubitat
@@ -79,6 +81,18 @@ def update_from_hubitat(conn):
         return
     for item in temps:
         db.insert_devlog_entry(conn, device_name=item["name"], temp=item["temperature"])
+
+def update_from_airthings(conn):
+    logtime = time.time()
+    data = airthings.read_airthings_now()
+    for dev in data:
+        sensors = {sensor['sensorType']:{'value':sensor['value'],'unit':sensor['unit']} for sensor in dev['sensors']}
+        name = "Airthings "+dev['name']
+        temp = sensors['temp']['value']
+        if conn is None:
+            print("name=",name,"temp=",temp,'status',sensors)
+            continue
+        db.insert_devlog_entry(conn, device_name=name, temp=temp, statusdict=sensors, logtime=logtime)
 
 
 def update_aqi(conn):
@@ -302,10 +316,9 @@ def setup_parser():
     parser.add_argument("--report", help="report on the database", action="store_true")
     parser.add_argument("--syslog", help="log to syslog", action="store_true")
     parser.add_argument("--daily", help="Run the daily cleanup", action="store_true")
-    parser.add_argument(
-        "--rules", choices=["test", "run", "prune"], help="Just run the rules engine"
-    )
+    parser.add_argument("--rules", choices=["test", "run", "prune"], help="Just run the rules engine" )
     parser.add_argument("--aqi", help="Save AQI to database", action="store_true")
+    parser.add_argument("--airthings", help="debug the airthings", action="store_true")
     clogging.add_argument(parser)
     return parser
 
@@ -321,10 +334,13 @@ def main():
         log_format=clogging.LOG_FORMAT,
         syslog_format=clogging.YEAR + " " + clogging.SYSLOG_FORMAT,
     )
+    if args.airthings:
+        update_from_airthings(None)
+        sys.exit(0)
+
     conn = db.get_db_connection()
     if args.report:
         report(conn)
-
     if args.csv:
         load_csv(conn, args.csv, args.csv_after, unsafe=args.unsafe)
     elif args.aqi:
@@ -346,6 +362,7 @@ def main():
         clock.lock_script()
         update_from_ae200(conn)
         update_from_hubitat(conn)
+        update_from_airthings(conn)
         rules_engine.prune_rules(conn)
         if rules_engine.all_rules_disabled_until(conn) >= time.time():
             logger.info("all rules disabled")

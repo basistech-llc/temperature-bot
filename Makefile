@@ -173,7 +173,7 @@ cleanall: clean
 ## Run on the server (slg1.basistech.net).
 deploy:
 	@if [ "$$(hostname)" = "slg1" ]; then \
-		cd /home/air/temperature-bot && git pull; \
+		cd /home/air/temperature-bot && git pull && poetry install ; \
 	else \
 		echo "Deploy skipped: not running on slg1 (current hostname: $$(hostname))"; \
 	fi

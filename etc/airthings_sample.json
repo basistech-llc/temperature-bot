@@ -1,0 +1,338 @@
+[
+    {
+        "serialNumber": "2960092756",
+        "home": "BasisTech",
+        "name": "Dungeon",
+        "type": "VIEW_PLUS",
+        "sensors": [
+            {
+                "sensorType": "radonShortTermAvg",
+                "value": 666.0,
+                "unit": "bq"
+            },
+            {
+                "sensorType": "humidity",
+                "value": 66.0,
+                "unit": "pct"
+            },
+            {
+                "sensorType": "temp",
+                "value": 66.6,
+                "unit": "c"
+            },
+            {
+                "sensorType": "co2",
+                "value": 666.0,
+                "unit": "ppm"
+            },
+            {
+                "sensorType": "voc",
+                "value": 666.0,
+                "unit": "ppb"
+            },
+            {
+                "sensorType": "pressure",
+                "value": 6666.3,
+                "unit": "mbar"
+            },
+            {
+                "sensorType": "pm25",
+                "value": 6.6,
+                "unit": "mgpc"
+            },
+            {
+                "sensorType": "pm1",
+                "value": 6.6,
+                "unit": "mgpc"
+            }
+        ]
+    },
+    {
+        "serialNumber": "2960158453",
+        "home": "BasisTech",
+        "name": "Garage 1",
+        "type": "VIEW_PLUS",
+        "sensors": [
+            {
+                "sensorType": "radonShortTermAvg",
+                "value": 50.0,
+                "unit": "bq"
+            },
+            {
+                "sensorType": "humidity",
+                "value": 25.0,
+                "unit": "pct"
+            },
+            {
+                "sensorType": "temp",
+                "value": 20.5,
+                "unit": "c"
+            },
+            {
+                "sensorType": "co2",
+                "value": 520.0,
+                "unit": "ppm"
+            },
+            {
+                "sensorType": "voc",
+                "value": 490.0,
+                "unit": "ppb"
+            },
+            {
+                "sensorType": "pressure",
+                "value": 1019.5,
+                "unit": "mbar"
+            },
+            {
+                "sensorType": "pm25",
+                "value": 5.0,
+                "unit": "mgpc"
+            },
+            {
+                "sensorType": "pm1",
+                "value": 5.0,
+                "unit": "mgpc"
+            }
+        ]
+    },
+    {
+        "serialNumber": "2960091404",
+        "home": "BasisTech",
+        "name": "Greenhouse",
+        "type": "VIEW_PLUS",
+        "sensors": [
+            {
+                "sensorType": "radonShortTermAvg",
+                "value": 86.0,
+                "unit": "bq"
+            },
+            {
+                "sensorType": "humidity",
+                "value": 30.0,
+                "unit": "pct"
+            },
+            {
+                "sensorType": "temp",
+                "value": 22.6,
+                "unit": "c"
+            },
+            {
+                "sensorType": "co2",
+                "value": 606.0,
+                "unit": "ppm"
+            },
+            {
+                "sensorType": "voc",
+                "value": 331.0,
+                "unit": "ppb"
+            },
+            {
+                "sensorType": "pressure",
+                "value": 1019.2,
+                "unit": "mbar"
+            },
+            {
+                "sensorType": "pm25",
+                "value": 4.0,
+                "unit": "mgpc"
+            },
+            {
+                "sensorType": "pm1",
+                "value": 4.0,
+                "unit": "mgpc"
+            }
+        ]
+    },
+    {
+        "serialNumber": "2960087271",
+        "home": "BasisTech",
+        "name": "Broadway",
+        "type": "VIEW_PLUS",
+        "sensors": [
+            {
+                "sensorType": "radonShortTermAvg",
+                "value": 45.0,
+                "unit": "bq"
+            },
+            {
+                "sensorType": "humidity",
+                "value": 53.0,
+                "unit": "pct"
+            },
+            {
+                "sensorType": "temp",
+                "value": 21.6,
+                "unit": "c"
+            },
+            {
+                "sensorType": "co2",
+                "value": 564.0,
+                "unit": "ppm"
+            },
+            {
+                "sensorType": "voc",
+                "value": 125.0,
+                "unit": "ppb"
+            },
+            {
+                "sensorType": "pressure",
+                "value": 1024.9,
+                "unit": "mbar"
+            },
+            {
+                "sensorType": "pm25",
+                "value": 2.0,
+                "unit": "mgpc"
+            },
+            {
+                "sensorType": "pm1",
+                "value": 2.0,
+                "unit": "mgpc"
+            }
+        ]
+    },
+    {
+        "serialNumber": "2960087450",
+        "home": "BasisTech",
+        "name": "Bamboo",
+        "type": "VIEW_PLUS",
+        "sensors": [
+            {
+                "sensorType": "radonShortTermAvg",
+                "value": 57.0,
+                "unit": "bq"
+            },
+            {
+                "sensorType": "humidity",
+                "value": 31.0,
+                "unit": "pct"
+            },
+            {
+                "sensorType": "temp",
+                "value": 21.1,
+                "unit": "c"
+            },
+            {
+                "sensorType": "co2",
+                "value": 639.0,
+                "unit": "ppm"
+            },
+            {
+                "sensorType": "voc",
+                "value": 427.0,
+                "unit": "ppb"
+            },
+            {
+                "sensorType": "pressure",
+                "value": 1018.9,
+                "unit": "mbar"
+            },
+            {
+                "sensorType": "pm25",
+                "value": 8.0,
+                "unit": "mgpc"
+            },
+            {
+                "sensorType": "pm1",
+                "value": 5.0,
+                "unit": "mgpc"
+            }
+        ]
+    },
+    {
+        "serialNumber": "2960158462",
+        "home": "BasisTech",
+        "name": "Garage 2",
+        "type": "VIEW_PLUS",
+        "sensors": [
+            {
+                "sensorType": "radonShortTermAvg",
+                "value": 68.0,
+                "unit": "bq"
+            },
+            {
+                "sensorType": "humidity",
+                "value": 21.0,
+                "unit": "pct"
+            },
+            {
+                "sensorType": "temp",
+                "value": 23.7,
+                "unit": "c"
+            },
+            {
+                "sensorType": "co2",
+                "value": 556.0,
+                "unit": "ppm"
+            },
+            {
+                "sensorType": "voc",
+                "value": 408.0,
+                "unit": "ppb"
+            },
+            {
+                "sensorType": "pressure",
+                "value": 1019.3,
+                "unit": "mbar"
+            },
+            {
+                "sensorType": "pm25",
+                "value": 8.0,
+                "unit": "mgpc"
+            },
+            {
+                "sensorType": "pm1",
+                "value": 8.0,
+                "unit": "mgpc"
+            }
+        ]
+    },
+    {
+        "serialNumber": "2960098051",
+        "home": "BasisTech",
+        "name": "Area 51",
+        "type": "VIEW_PLUS",
+        "sensors": [
+            {
+                "sensorType": "radonShortTermAvg",
+                "value": 47.0,
+                "unit": "bq"
+            },
+            {
+                "sensorType": "humidity",
+                "value": 26.0,
+                "unit": "pct"
+            },
+            {
+                "sensorType": "temp",
+                "value": 23.8,
+                "unit": "c"
+            },
+            {
+                "sensorType": "co2",
+                "value": 585.0,
+                "unit": "ppm"
+            },
+            {
+                "sensorType": "voc",
+                "value": 273.0,
+                "unit": "ppb"
+            },
+            {
+                "sensorType": "pressure",
+                "value": 1019.1,
+                "unit": "mbar"
+            },
+            {
+                "sensorType": "pm25",
+                "value": 1.0,
+                "unit": "mgpc"
+            },
+            {
+                "sensorType": "pm1",
+                "value": 1.0,
+                "unit": "mgpc"
+            }
+        ]
+    }
+]

@@ -1,5 +1,6 @@
 """
 Rules for BasisTech HVAC robot.
+Edit this file to change the rules!
 """
 # ruff: noqa
 # pylint: disable=global-statement, invalid-name, missing-function-docstring, unused-variable, undefined-variable, name-defined

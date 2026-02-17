@@ -336,7 +336,7 @@ def insert_devlog_entry(
     :param conn: database connection
     :param device_id: the device_id
     :param device_name: the device (if device_id is not provided)
-    :param temp10x: (Temperature in C) * 10
+    :param temp: Temperature in C
     :param statusdict: If provided, a dictionary that will be written to the database as status_json (but not if extending)
     :param logtime: The time_t of the log. If not provided, it's now!
     :param force: If True, forces a new entry.
