@@ -1,0 +1,40 @@
+{% extends 'base.html' %}
+{% block title %} Air Quality {% endblock %}
+
+{% block body %}
+<div class="pure-g"><!-- the start of the pure row -->
+  <div class="pure-u-1"><!-- across the entire row -->
+    <h1>Local Weather</h1>
+  </div>
+</div>
+
+<!-- Hidden main-grid container so shared JS can safely reference it -->
+<div id="main-grid" style="display: none;"></div>
+
+<div class="pure-g">
+  <div class="pure-u-1" id="aqi-weather">
+    <div id="aqi">
+      <div id="aqi-status">AQI <span id="aqi-value"></span> <span id="aqi-name"></span></div>
+    </div>
+    <div id="last-refresh"></div>
+  </div>
+</div>
+
+<pre>
+Clean this up...
+
+{% for row in airmon %}
+  {{ row.device_name }}
+{% if row.status and row.status.co2 %}
+{{ row.status.co2.value }} {{row.status.ppm.value}} {{row.status.humidity.value }} {{row.status.pm1.value}} {{row.status.pm25.value}} {{row.status.pressure.value}} {{row.status.radonShortTermAvg.value}} {{row.status.temp.value}} {{row.status.voc.value}}
+{% endif %}
+
+{% if row.status and row.status.aqi %}
+{{ row.status.aqi.value }} {{ row.status.aqi.color }} {{ row.status.aqi.color_name }}
+{% endif %}
+
+
+{% endfor %}
+</pre>
+
+{% endblock %}
