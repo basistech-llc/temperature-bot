@@ -20,8 +20,9 @@
 # AE200_SIMULATOR - set to 1 for `make local-dev` -
 
 
-DB_PATH ?= var/db/temperature-bot.db
-DEV_DB   ?= var/db/temperature-bot.db
+export DB_PATH ?= var/db/temperature-bot.db
+export DEV_DB   ?= var/db/temperature-bot.db
+
 REQ := .venv/pyvenv.cfg
 PYTHON := .venv/bin/python
 TEMPLATE_DIR := app/templates
@@ -71,7 +72,7 @@ local-dev: $(REQ)
 
 # Run the web backend locally, querying the hardware (assumes VPN or running in CALA)
 live-dev-web: $(REQ)
-	FLASK_DEBUG=True $(PYTHON) run_local.py
+	FLASK_DEBUG=True poetry run flask --app app.main:app run --port 8000
 
 # Run the data collection agent and rules runner locally, querying the hardware (assumes VPN or running in CALA)
 live-dev-runner: $(REQ)

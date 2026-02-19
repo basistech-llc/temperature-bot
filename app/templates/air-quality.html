@@ -4,7 +4,7 @@
 {% block body %}
 <div class="pure-g"><!-- the start of the pure row -->
   <div class="pure-u-1"><!-- across the entire row -->
-    <h1>Local Weather</h1>
+    <h1>Air Quality Indoor and Outdoor</h1>
   </div>
 </div>
 
@@ -20,21 +20,35 @@
   </div>
 </div>
 
-<pre>
-Clean this up...
+<h1>Indoor</h1>
 
-{% for row in airmon %}
-  {{ row.device_name }}
-{% if row.status and row.status.co2 %}
-{{ row.status.co2.value }} {{row.status.ppm.value}} {{row.status.humidity.value }} {{row.status.pm1.value}} {{row.status.pm25.value}} {{row.status.pressure.value}} {{row.status.radonShortTermAvg.value}} {{row.status.temp.value}} {{row.status.voc.value}}
-{% endif %}
+<table>
+  <thead>
+  <tr><th>Name</ht><th>CO2</th><th>humidity</th><th>pm1</th><th>pm25</th><th>pressure</ht><th>radon</th><th>temp</th><th>voc</th></tr>
+  </thead>
+  <tbody>
+    {% for row in airmon %}
+      {% if row.status and row.status.co2 %}
+    <tr><th>{{ row.device_name }}</th>
+      <th>{{ row.status.co2.value }}</th> <th>{{row.status.humidity.value }}</th> <th>{{row.status.pm1.value}}</th> <th>{{row.status.pm25.value}}</th> <th>{{row.status.pressure.value}}</th> <th>{{row.status.radonShortTermAvg.value}}</th> <th>{{row.status.temp.value}}</th> <th>{{row.status.voc.value}}</th></tr>
+    {% endif %}
+    {% endfor %}
+  </tbody>
+</table>
 
+<h1>Outdoor</h1>
+
+<table>
+  <thead>
+  <tr><th>Name</ht><th>AQI</th></tr>
+  </thead>
+  <tbody>
+    {% for row in airmon %}
 {% if row.status and row.status.aqi %}
-{{ row.status.aqi.value }} {{ row.status.aqi.color }} {{ row.status.aqi.color_name }}
-{% endif %}
-
-
-{% endfor %}
-</pre>
+    <tr><th>{{ row.device_name }}</th><th style='color:{{row.status.aqi.color}}'>{{row.status.aqi.color_name}} {{row.status.aqi.value}}</th></tr>
+    {% endif %}
+    {% endfor %}
+  </tbody>
+</table>
 
 {% endblock %}
