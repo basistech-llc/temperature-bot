@@ -738,8 +738,9 @@ def get_aqi_and_weather_data(conn) -> dict:
 
 def get_all_device_aqi(conn) -> List[dict]:
     """
-    :return: array of dicts where each has device_id, device_name, aqi (dict of aqi values)
+    :return: list of dicts where each has device_id, device_name, and status;
+             status["aqi"] is a dict of AQI values (same structure as get_db_aqi())
     """
-    statuses = fetch_last_status_fixed(conn, flag=AIR_MON_DEVICES)
-    statuses.append({"device_id":0, "device_name":"Outdoor Air Quality","status":{"aqi":get_db_aqi(conn)}})
+    statuses = fetch_last_status_fixed(conn, where="b.aqi_mon = 1")
+    statuses.append({"device_id": 0, "device_name": "Outdoor Air Quality", "status": {"aqi": get_db_aqi(conn)}})
     return statuses
