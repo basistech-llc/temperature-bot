@@ -124,6 +124,44 @@ def get_db_connection():
         else:
             db_path = os.environ[DB_PATH]
         conn = connect_db(db_path)
+
+        # Ensure the database schema is applied for fresh/empty DBs
+        # and optionally when the schema file is newer than the DB file.
+        needs_schema = False
+
+        try:
+            cursor = conn.execute(
+                "SELECT name FROM sqlite_master "
+                "WHERE type='table' AND name NOT LIKE 'sqlite_%';"
+            )
+            existing_tables = [row[0] for row in cursor.fetchall()]
+            if not existing_tables:
+                # Fresh database with no user tables.
+                needs_schema = True
+        except sqlite3.Error:
+            # If we cannot introspect the schema, fall back to applying it.
+            needs_schema = True
+
+        if not needs_schema:
+            # Best-effort mtime-based schema auto-apply for existing DBs.
+            try:
+                schema_mtime = os.path.getmtime(SCHEMA_FILE_PATH)
+                db_mtime = os.path.getmtime(db_path)
+            except OSError:
+                schema_mtime = None
+                db_mtime = None
+
+            if schema_mtime is not None and db_mtime is not None:
+                if schema_mtime > db_mtime:
+                    needs_schema = True
+
+        if needs_schema:
+            logger.info(
+                "Applying database schema from '%s' to '%s'",
+                SCHEMA_FILE_PATH,
+                db_path,
+            )
+            setup_database(conn, SCHEMA_FILE_PATH)
         return conn
     except KeyError as e:
         logger.exception("KeyError: %s", e)
