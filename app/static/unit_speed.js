@@ -1,4 +1,13 @@
-// interactivity for unit speed grid
+/* interactivity for unit speed grid
+ * provides:
+ * displayWeather()
+ * setDrive()
+ * setFanSpeed()
+ * asctime()
+ * updateNote()
+ * setupMatrixListenerss()
+ * loadWeatherAndStartRefresh()
+ */
 
 console.log("unit_speed.js loaded");
 

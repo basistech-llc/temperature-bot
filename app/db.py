@@ -3,6 +3,22 @@ Centralized database operations to sqlite3 database.
 Specialized to temperature bot.
 Location is specified by environment variable DB_PATH.
 Default location is $ROOT_DIR/temperature-bot.db  (largely for development and testing)
+
+Key concepts:
+- For each device, we have:
+  - a numeric ID - device_id - we prefer to refer to device by ID
+  - a unique name
+
+- For the device log, we have for each device:
+  - logtime - the time_t when the log was made last
+  - duration - the number of seconds for which it was good
+  - temp10x  - an integer with 10x the C temperature
+  - status_json - TEXT - if present, a JSON dictionary of all status values (air quality for air quality monitors)
+
+- Air Quality is stored two places:
+  - Indoor Air Quality - status_json (right now we don't clearly indicate which devices these are)
+  - aqi - outdoor air quality
+
 """
 
 import sqlite3
@@ -100,6 +116,7 @@ def get_db_connection():
     """
     Returns a new SQLite connection for each request.
     The connection should be closed by the caller when done.
+    Note: We no longer wipe the production database if the schema file's mtime is recent
     """
     try:
         # Use test database if in testing environment
@@ -108,19 +125,6 @@ def get_db_connection():
         else:
             db_path = os.environ[DB_PATH]
         conn = connect_db(db_path)
-
-        # Apply schema changes automatically, but only when the schema file
-        # has actually changed on disk. This preserves the Poorman migration
-        # convenience while avoiding running the full schema on every request.
-        # [TODO] This poorman hack should be replaced with real migration management. This lacks
-        # rollback and relies on schema.sql not doing anything destructive to an existing DB
-        global _SCHEMA_MTIME  # pylint: disable=global-statement
-        current_mtime = os.path.getmtime(SCHEMA_FILE_PATH)
-
-        if _SCHEMA_MTIME is None or current_mtime != _SCHEMA_MTIME:
-            setup_database(conn, SCHEMA_FILE_PATH)
-            _SCHEMA_MTIME = current_mtime
-
         return conn
     except KeyError as e:
         logger.exception("KeyError: %s", e)
@@ -231,18 +235,20 @@ def devices_to_device_id(conn):
     return ret
 
 
-def fetch_last_status(conn):
-    """Fetches the last status for each device"""
+EVERY_DEVICE = "1=1"
+def fetch_last_status(conn, where = EVERY_DEVICE):
+    """Fetches the last status for every device. Specify where to restrict which devices are returned"""
     cursor = conn.cursor()
-    cursor.execute("""
+    cursor.execute(f"""
         SELECT a.*,b.device_name,b.notes,b.disabled_until
         FROM (SELECT * FROM devlog GROUP BY device_id HAVING logtime=max(logtime)) AS a
-        LEFT JOIN devices b where a.device_id = b.device_id
+        LEFT JOIN devices b
+        WHERE a.device_id = b.device_id AND {where}
         ORDER by b.device_name""")
     return cursor.fetchall()
 
 
-def fetch_last_status_fixed(conn):
+def fetch_last_status_fixed(conn, where = EVERY_DEVICE):
     """Runs db.fetch_last_status(conn) and then converts `status_json` into the actual dictionary for each status_json object"""
 
     def fix_status_json(devdict):
@@ -254,7 +260,7 @@ def fetch_last_status_fixed(conn):
         del devdict["status_json"]
         return devdict
 
-    return [fix_status_json(dd) for dd in fetch_last_status(conn)]
+    return [fix_status_json(dd) for dd in fetch_last_status(conn, where=where)]
 
 
 ################################################################
@@ -725,3 +731,11 @@ def get_aqi_and_weather_data(conn) -> dict:
     aqi_data = get_db_aqi(conn)
     weather_data = weather.get_weather_data()
     return {"aqi": aqi_data, "weather": weather_data}
+
+def get_all_device_aqi(conn) -> List[dict]:
+    """
+    :return: array of dicts where each has device_id, device_name, aqi (dict of aqi values)
+    """
+    statuses = fetch_last_status_fixed(conn, where="b.aqi_mon = 1")
+    statuses.append({"device_id":0, "device_name":"Outdoor Air Quality","status":{"aqi":get_db_aqi(conn)}})
+    return statuses

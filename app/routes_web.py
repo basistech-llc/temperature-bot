@@ -1,5 +1,11 @@
-"""
-Web route handlers
+"""Flask Web route handlers:
+
+- Mostly just renders the appropriate template
+
+- Note: We are slowly moving to server-side rendering
+  ("pre-rendering") to make testing possible without using a chromium
+  and a javascript interpreter.
+
 """
 
 import logging
@@ -144,6 +150,12 @@ def create_web_routes(app):
         c.execute("SELECT device_id, device_name FROM devices ORDER BY device_name")
         devices = {dev["device_id"]: dev["device_name"] for dev in c.fetchall()}
         return render_template("alerts.html", devices=devices, current_page="alerts")
+
+    @app.route("/air-quality")
+    @with_db_connection
+    def air_quality(conn):
+        """Real-time Air Quality page"""
+        return render_template("air-quality.html", current_page="air-quality", airmon=db.get_all_device_aqi(conn) )
 
     @app.route("/weather")
     def weather():

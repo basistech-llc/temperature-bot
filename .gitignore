@@ -21,3 +21,4 @@ temperature-bot-config.yaml
 temps.csv
 token.json
 venv/
+*secrets*.py
