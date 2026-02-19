@@ -50,7 +50,7 @@ etc/schema.sql:
 		| grep -v 'Run Time: real' \
 		| grep -v 'CREATE TABLE sqlite_sequence' \
 		| sed 's/CREATE INDEX/CREATE INDEX IF NOT EXISTS/' \
-		| sed 's/CREATE TABLE/CREATE INDEX IF NOT TABLE/' \
+		| sed 's/CREATE TABLE/CREATE TABLE IF NOT EXISTS/' \
 		| tee etc/schema.sql
 
 make-dev-db:
