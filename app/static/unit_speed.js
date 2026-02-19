@@ -5,7 +5,7 @@
  * setFanSpeed()
  * asctime()
  * updateNote()
- * setupMatrixListenerss()
+ * setupMatrixListeners()
  * loadWeatherAndStartRefresh()
  */
 
@@ -154,7 +154,7 @@ async function updateNote(deviceId, notes) {
 }
 
 // Handle all user events
-function setupMatrixListenerss() {
+function setupMatrixListeners() {
   // Add event listeners for radio buttons (including Off button)
   const radioButtons = document.querySelectorAll(
     'input[type="radio"][x-data-device-id]',
@@ -577,6 +577,6 @@ window.displayWeather = displayWeather;
 window.getCurrentWeatherData = function() { return currentWeatherData; };
 
 window.addEventListener("DOMContentLoaded", function () {
-  setupMatrixListenerss();
+  setupMatrixListeners();
   loadWeatherAndStartRefresh();
 });
