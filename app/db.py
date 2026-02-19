@@ -235,7 +235,7 @@ def devices_to_device_id(conn):
 
 
 EVERY_DEVICE = "1=1"
-def fetch_last_status(conn, where = EVERY_DEVICE):
+def fetch_last_status(conn, where=EVERY_DEVICE):
     """Fetches the last status for every device. Specify where to restrict which devices are returned"""
     cursor = conn.cursor()
     cursor.execute(f"""
@@ -247,7 +247,7 @@ def fetch_last_status(conn, where = EVERY_DEVICE):
     return cursor.fetchall()
 
 
-def fetch_last_status_fixed(conn, where = EVERY_DEVICE):
+def fetch_last_status_fixed(conn, where=EVERY_DEVICE):
     """Runs db.fetch_last_status(conn) and then converts `status_json` into the actual dictionary for each status_json object"""
 
     def fix_status_json(devdict):
