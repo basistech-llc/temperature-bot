@@ -234,9 +234,14 @@ def devices_to_device_id(conn):
     return ret
 
 
-EVERY_DEVICE = "1=1"
-def fetch_last_status(conn, where=EVERY_DEVICE):
+EVERY_DEVICE=1
+AIR_MON_DEVICES=2
+def fetch_last_status(conn, flag=EVERY_DEVICE):
     """Fetches the last status for every device. Specify where to restrict which devices are returned"""
+    if flag==AIR_MON_DEVICES:
+        where = "b.aqi_mon = 1"
+    else:
+        where = "1=1"
     cursor = conn.cursor()
     cursor.execute(f"""
         SELECT a.*,b.device_name,b.notes,b.disabled_until
@@ -247,7 +252,7 @@ def fetch_last_status(conn, where=EVERY_DEVICE):
     return cursor.fetchall()
 
 
-def fetch_last_status_fixed(conn, where=EVERY_DEVICE):
+def fetch_last_status_fixed(conn, flag=EVERY_DEVICE):
     """Runs db.fetch_last_status(conn) and then converts `status_json` into the actual dictionary for each status_json object"""
 
     def fix_status_json(devdict):
@@ -259,7 +264,7 @@ def fetch_last_status_fixed(conn, where=EVERY_DEVICE):
         del devdict["status_json"]
         return devdict
 
-    return [fix_status_json(dd) for dd in fetch_last_status(conn, where=where)]
+    return [fix_status_json(dd) for dd in fetch_last_status(conn, flag=flag)]
 
 
 ################################################################
@@ -735,6 +740,6 @@ def get_all_device_aqi(conn) -> List[dict]:
     """
     :return: array of dicts where each has device_id, device_name, aqi (dict of aqi values)
     """
-    statuses = fetch_last_status_fixed(conn, where="b.aqi_mon = 1")
+    statuses = fetch_last_status_fixed(conn, flag=AIR_MON_DEVICES)
     statuses.append({"device_id":0, "device_name":"Outdoor Air Quality","status":{"aqi":get_db_aqi(conn)}})
     return statuses
