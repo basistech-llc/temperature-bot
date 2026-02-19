@@ -124,6 +124,44 @@ def get_db_connection():
         else:
             db_path = os.environ[DB_PATH]
         conn = connect_db(db_path)
+
+        # Ensure the database schema is applied for fresh/empty DBs
+        # and optionally when the schema file is newer than the DB file.
+        needs_schema = False
+
+        try:
+            cursor = conn.execute(
+                "SELECT name FROM sqlite_master "
+                "WHERE type='table' AND name NOT LIKE 'sqlite_%';"
+            )
+            existing_tables = [row[0] for row in cursor.fetchall()]
+            if not existing_tables:
+                # Fresh database with no user tables.
+                needs_schema = True
+        except sqlite3.Error:
+            # If we cannot introspect the schema, fall back to applying it.
+            needs_schema = True
+
+        if not needs_schema:
+            # Best-effort mtime-based schema auto-apply for existing DBs.
+            try:
+                schema_mtime = os.path.getmtime(SCHEMA_FILE_PATH)
+                db_mtime = os.path.getmtime(db_path)
+            except OSError:
+                schema_mtime = None
+                db_mtime = None
+
+            if schema_mtime is not None and db_mtime is not None:
+                if schema_mtime > db_mtime:
+                    needs_schema = True
+
+        if needs_schema:
+            logger.info(
+                "Applying database schema from '%s' to '%s'",
+                SCHEMA_FILE_PATH,
+                db_path,
+            )
+            setup_database(conn, SCHEMA_FILE_PATH)
         return conn
     except KeyError as e:
         logger.exception("KeyError: %s", e)
@@ -738,8 +776,9 @@ def get_aqi_and_weather_data(conn) -> dict:
 
 def get_all_device_aqi(conn) -> List[dict]:
     """
-    :return: array of dicts where each has device_id, device_name, aqi (dict of aqi values)
+    :return: list of dicts where each has device_id, device_name, and status;
+             status["aqi"] is a dict of AQI values (same structure as get_db_aqi())
     """
-    statuses = fetch_last_status_fixed(conn, flag=AIR_MON_DEVICES)
-    statuses.append({"device_id":0, "device_name":"Outdoor Air Quality","status":{"aqi":get_db_aqi(conn)}})
+    statuses = fetch_last_status_fixed(conn, where="b.aqi_mon = 1")
+    statuses.append({"device_id": 0, "device_name": "Outdoor Air Quality", "status": {"aqi": get_db_aqi(conn)}})
     return statuses
