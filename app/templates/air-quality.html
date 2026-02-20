@@ -29,8 +29,8 @@
   <tbody>
     {% for row in airmon %}
       {% if row.status and row.status.co2 %}
-    <tr><th>{{ row.device_name }}</th>
-      <th>{{ row.status.co2.value }}</th> <th>{{row.status.humidity.value }}</th> <th>{{row.status.pm1.value}}</th> <th>{{row.status.pm25.value}}</th> <th>{{row.status.pressure.value}}</th> <th>{{row.status.radonShortTermAvg.value}}</th> <th>{{row.status.temp.value}}</th> <th>{{row.status.voc.value}}</th></tr>
+    <tr><th scope="row">{{ row.device_name }}</th>
+      <td>{{ row.status.co2.value }}</td> <td>{{row.status.humidity.value }}</td> <td>{{row.status.pm1.value}}</td> <td>{{row.status.pm25.value}}</td> <td>{{row.status.pressure.value}}</td> <td>{{row.status.radonShortTermAvg.value}}</td> <td>{{row.status.temp.value}}</td> <td>{{row.status.voc.value}}</td></tr>
     {% endif %}
     {% endfor %}
   </tbody>
@@ -45,7 +45,7 @@
   <tbody>
     {% for row in airmon %}
 {% if row.status and row.status.aqi %}
-    <tr><th>{{ row.device_name }}</th><th style='color:{{row.status.aqi.color}}'>{{row.status.aqi.color_name}} {{row.status.aqi.value}}</th></tr>
+    <tr><th scope="row">{{ row.device_name }}</th><td style='color:{{row.status.aqi.color}}'>{{row.status.aqi.color_name}} {{row.status.aqi.value}}</td></tr>
     {% endif %}
     {% endfor %}
   </tbody>
