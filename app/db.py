@@ -35,6 +35,7 @@ from pydantic import BaseModel
 from flask import request
 
 from .constants import DB_PATH, TEST_DB_NAME
+from .paths import SCHEMA_FILE_PATH
 from .util import github_style_duration
 from . import ae200
 from . import airquality
