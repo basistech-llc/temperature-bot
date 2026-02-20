@@ -113,15 +113,11 @@ function rowFormatterFunction(row) {
 
   if (!isResolved) {
     if (data.alert_type === 'Filter warning') {
-      // Unresolved filter warning - lighter orange background
-      row.getElement().style.backgroundColor = '#fff5e6';
-      row.getElement().style.opacity = '0.7';
+      row.getElement().classList.add('alert-row-filter-warning');
     } else if (data.alert_type === 'Error') {
-      // Unresolved error - light red background
-      row.getElement().style.backgroundColor = '#ffe6e6';
+      row.getElement().classList.add('alert-row-error');
     } else if (data.alert_type === 'Water issue') {
-      // Unresolved water issue - light orange background
-      row.getElement().style.backgroundColor = '#fff0e6';
+      row.getElement().classList.add('alert-row-water-issue');
     }
   }
 }
@@ -131,9 +127,9 @@ function alertTypeFormatter(cell) {
   if (value === 'Filter warning') {
     return value;
   } else if (value === 'Error') {
-    return '<span style="color: #ff4444; font-weight: bold;">' + value + '</span>';
+    return '<span class="alert-type-error">' + value + '</span>';
   } else if (value === 'Water issue') {
-    return '<span style="color: #ff8800; font-weight: bold;">' + value + '</span>';
+    return '<span class="alert-type-water-issue">' + value + '</span>';
   }
   return value;
 }

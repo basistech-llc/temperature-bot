@@ -116,6 +116,36 @@ body {
     background-color: #0056b3;
 }
 
+/* Set temperature control (index + room dashboard) */
+.settemp-container {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 4px;
+}
+
+.settemp-display {
+    min-width: 3.5em;
+    text-align: right;
+    display: inline-block;
+}
+
+.settemp-arrow-column {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+}
+
+.settemp-arrow {
+    padding: 0;
+    font-size: 0.6em;
+    line-height: 1;
+    display: inline-block;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+}
+
 /* main grid */
 
 #main-grid {
@@ -172,6 +202,11 @@ td.cell-notes:not(:empty) {
 
 #weather {
     width: 300px;
+}
+
+/* Utility: hide element; JS toggles by adding/removing this class */
+.hidden {
+    display: none !important;
 }
 
 .rules-disabled-superscript {
@@ -626,6 +661,10 @@ li.pure-menu-item > .temperature-toggle {
     font-weight: 600;
 }
 
+.github-popup.is-open {
+    display: block;
+}
+
 /* Active/Selected menu item styling */
 .pure-menu-selected {
     background-color: #e6f3ff !important;
@@ -664,6 +703,52 @@ li.pure-menu-item > .temperature-toggle {
 
 .tab-hidden {
     display: none !important;
+}
+
+/* Alerts page: row background by alert type */
+.alert-row-filter-warning {
+    background-color: #fff5e6;
+    opacity: 0.7;
+}
+
+.alert-row-error {
+    background-color: #ffe6e6;
+}
+
+.alert-row-water-issue {
+    background-color: #fff0e6;
+}
+
+.alert-type-error {
+    color: #ff4444;
+    font-weight: bold;
+}
+
+.alert-type-water-issue {
+    color: #ff8800;
+    font-weight: bold;
+}
+
+/* Device log: alert status column */
+.alert-status-on {
+    color: red;
+    font-weight: bold;
+}
+
+.alert-status-off {
+    color: green;
+    font-weight: bold;
+}
+
+/* Room dashboard: back link */
+.main-link-back {
+    margin-bottom: 1em;
+}
+
+/* Note input created by JS (unit_speed) */
+.note-input-edit {
+    width: 100%;
+    min-width: 150px;
 }
 
 /* Chart page */

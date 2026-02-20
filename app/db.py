@@ -35,6 +35,7 @@ from pydantic import BaseModel
 from flask import request
 
 from .constants import DB_PATH, TEST_DB_NAME
+from .paths import SCHEMA_FILE_PATH
 from .util import github_style_duration
 from . import ae200
 from . import airquality
@@ -779,6 +780,6 @@ def get_all_device_aqi(conn) -> List[dict]:
     :return: list of dicts where each has device_id, device_name, and status;
              status["aqi"] is a dict of AQI values (same structure as get_db_aqi())
     """
-    statuses = fetch_last_status_fixed(conn, where="b.aqi_mon = 1")
+    statuses = fetch_last_status_fixed(conn, flag=AIR_MON_DEVICES)
     statuses.append({"device_id": 0, "device_name": "Outdoor Air Quality", "status": {"aqi": get_db_aqi(conn)}})
     return statuses

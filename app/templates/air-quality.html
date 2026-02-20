@@ -9,7 +9,7 @@
 </div>
 
 <!-- Hidden main-grid container so shared JS can safely reference it -->
-<div id="main-grid" style="display: none;"></div>
+<div id="main-grid" class="hidden"></div>
 
 <div class="pure-g">
   <div class="pure-u-1" id="aqi-weather">
@@ -24,7 +24,7 @@
 
 <table>
   <thead>
-  <tr><th>Name</ht><th>CO2</th><th>humidity</th><th>pm1</th><th>pm25</th><th>pressure</ht><th>radon</th><th>temp</th><th>voc</th></tr>
+  <tr><th>Name</th><th>CO2</th><th>humidity</th><th>pm1</th><th>pm25</th><th>pressure</th><th>radon</th><th>temp</th><th>voc</th></tr>
   </thead>
   <tbody>
     {% for row in airmon %}
@@ -45,10 +45,18 @@
   <tbody>
     {% for row in airmon %}
 {% if row.status and row.status.aqi %}
-    <tr><th scope="row">{{ row.device_name }}</th><td style='color:{{row.status.aqi.color}}'>{{row.status.aqi.color_name}} {{row.status.aqi.value}}</td></tr>
+    <tr><th scope="row">{{ row.device_name }}</th><td class="aqi-cell" data-aqi-color="{{ row.status.aqi.color }}">{{row.status.aqi.color_name}} {{row.status.aqi.value}}</td></tr>
     {% endif %}
     {% endfor %}
   </tbody>
 </table>
 
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('.aqi-cell[data-aqi-color]').forEach(function(cell) {
+        var color = cell.getAttribute('data-aqi-color');
+        if (color) { cell.style.setProperty('color', color); }
+    });
+});
+</script>
 {% endblock %}

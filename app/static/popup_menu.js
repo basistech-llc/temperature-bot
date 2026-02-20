@@ -6,18 +6,13 @@ document.addEventListener('DOMContentLoaded', function() {
     if (roomsLink && popup) {
         roomsLink.addEventListener('click', function(e) {
             e.preventDefault();
-            // Toggle popup visibility
-            if (popup.style.display === 'block') {
-                popup.style.display = 'none';
-            } else {
-                popup.style.display = 'block';
-            }
+            popup.classList.toggle('is-open');
         });
 
         // Close popup when clicking outside
         document.addEventListener('click', function(e) {
             if (!roomsLink.contains(e.target) && !popup.contains(e.target)) {
-                popup.style.display = 'none';
+                popup.classList.remove('is-open');
             }
         });
 
@@ -25,7 +20,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const popupLinks = popup.querySelectorAll('a');
         popupLinks.forEach(function(link) {
             link.addEventListener('click', function() {
-                popup.style.display = 'none';
+                popup.classList.remove('is-open');
             });
         });
     }
@@ -37,18 +32,13 @@ document.addEventListener('DOMContentLoaded', function() {
     if (adminLink && adminPopup) {
         adminLink.addEventListener('click', function(e) {
             e.preventDefault();
-            // Toggle popup visibility
-            if (adminPopup.style.display === 'block') {
-                adminPopup.style.display = 'none';
-            } else {
-                adminPopup.style.display = 'block';
-            }
+            adminPopup.classList.toggle('is-open');
         });
 
         // Close popup when clicking outside
         document.addEventListener('click', function(e) {
             if (!adminLink.contains(e.target) && !adminPopup.contains(e.target)) {
-                adminPopup.style.display = 'none';
+                adminPopup.classList.remove('is-open');
             }
         });
 
@@ -56,7 +46,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const adminPopupLinks = adminPopup.querySelectorAll('a');
         adminPopupLinks.forEach(function(link) {
             link.addEventListener('click', function() {
-                adminPopup.style.display = 'none';
+                adminPopup.classList.remove('is-open');
             });
         });
     }

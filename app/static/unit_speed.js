@@ -305,8 +305,7 @@ function createNoteInput(value) {
   const input = document.createElement("input");
   input.type = "text";
   input.value = value;
-  input.style.width = "100%";
-  input.style.minWidth = "150px";
+  input.className = "note-input-edit";
   return input;
 }
 
@@ -565,9 +564,9 @@ function updateRulesDisabledBadge(dev) {
     const tooltipText = `Rules disabled until ${asctime(dt)} (${hoursRemaining} hour${hoursRemaining !== 1 ? "s" : ""})`;
     badge.textContent = "rules disabled";
     badge.setAttribute("title", tooltipText);
-    badge.style.display = "inline";
+    badge.classList.remove("hidden");
   } else {
-    badge.style.display = "none";
+    badge.classList.add("hidden");
   }
 }
 

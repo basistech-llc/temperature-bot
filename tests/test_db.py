@@ -4,7 +4,6 @@ test for db.py
 
 import logging
 import json
-import types
 
 from app import db
 from bin import runner
