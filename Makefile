@@ -101,7 +101,7 @@ live-dev-runner: $(REQ)
 tags:
 	etags */*.py
 
-.PHONY: local-dev local-dev-web live-dev-runner tags
+.PHONY: local-dev live-dev-web live-dev-runner tags
 ################################################################
 ## Analysis tools
 ## Static Analysis
