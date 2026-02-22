@@ -37,15 +37,39 @@ RUFF_VERSION   ?= 0.13.2
 
 
 ################################################################
-# Create the virtual environment and install both host requirements
-# and the lambda requirements for testing
+# Create the virtual environment and install python modules.
 .venv/pyvenv.cfg:
 	@echo install venv for the development environment
 	echo $$PATH
 	poetry install
 
 ################################################################
-.PHONY: etc/schema.sql
+# Manage the local development database and configuration file.
+#
+
+# make a clean local development database from the schema file
+make-dev-db:
+	/bin/rm -f $(DEV_DB)
+	mkdir -p $(dir $(DEV_DB))
+	sqlite3 $(DEV_DB) < etc/schema.sql
+	ls -l $(DEV_DB)
+
+# fetch the local development database and configuration file.
+# Then give the user a status report of what is in the database.
+# NOTE: temperature-bot-config.yaml includes production secrets
+#       until we move to better secret management system
+fetch-dev-db:
+	rsync --verbose --delete --archive air.basistech.net:/var/db/ var/db/
+	rsync --verbose air.basistech.net:/home/air/temperature-bot/temperature-bot-config.yaml ./temperature-bot-config.yaml
+	@ls -l var/db/
+	@echo database contents:
+	echo 'select "devices",count(*) from devices;select "devlog",count(*) from devlog;select "changelog",count(*) from changelog; select "aqi",count(*) from aqi;' | sqlite3 var/db/temperature-bot.db
+
+# Build the etc/schema.sql file based on the local development database
+# We use this when we make changes on the production database with 'ALTER TABLE'
+# and want the schema.sql file to reflect those changes.
+# The changes need to be incorporated into schema.sql so that the CI/CD tests run
+
 etc/schema.sql:
 	echo ".schema"| sqlite3 $(DEV_DB) \
 		| grep -v 'Run Time: real' \
@@ -54,21 +78,17 @@ etc/schema.sql:
 		| sed 's/CREATE TABLE/CREATE TABLE IF NOT EXISTS/' \
 		| tee etc/schema.sql
 
-make-dev-db:
-	/bin/rm -f $(DEV_DB)
-	mkdir -p $(dir $(DEV_DB))
-	sqlite3 $(DEV_DB) < etc/schema.sql
-	ls -l $(DEV_DB)
+.PHONY: make-dev-db fetch-dev-db
 
-fetch-dev-db:
-	rsync --verbose --delete --archive slg1.basistech.net:/var/db var/
-	echo 'select "devices",count(*) from devices;select "devlog",count(*) from devlog;select "changelog",count(*) from changelog; select "aqi",count(*) from aqi;' | sqlite3 var/db/temperature-bot.db
-	/bin/rm -f etc/schema.sql
-	make etc/schema.sql
+################################################################
+## Local development targets. These use the flask built-in web server,
+## which automatically does a live reload when any files are changed.
+## NOTE: It does not do JavaScript live reload; you need to use node for that
+##       or just hit shift-reload on the web browser
 
 # Run web backend locally, with simulated data. (needs popuplated db too)
 local-dev: $(REQ)
-	FLASK_DEBUG=True AE200_SIMULATOR=1 $(PYTHON) run_local.py
+	export AE200_SIMULATOR=1 && make live-dev-web
 
 # Run the web backend locally, querying the hardware (assumes VPN or running in CALA)
 live-dev-web: $(REQ)
@@ -81,22 +101,12 @@ live-dev-runner: $(REQ)
 tags:
 	etags */*.py
 
+.PHONY: local-dev local-dev-web live-dev-runner tags
 ################################################################
-
+## Analysis tools
 ## Static Analysis
-.PHONY: eslint lint pylint test pytest clean
-PYLINT_THRESHOLD := 9.5
+PYLINT_THRESHOLD := 10.0
 PYLINT_OPTS :=--output-format=parseable --rcfile .pylintrc --fail-under=$(PYLINT_THRESHOLD) --verbose
-
-pylint: .venv/pyvenv.cfg
-	poetry run ruff check --fix app | etc/ruff-reformat.bash
-	$(PYTHON) -m pylint $(PYLINT_OPTS) app tests *.py
-
-djlint:
-	poetry run djlint $(DJLINT_FLAGS) $(TEMPLATE_DIR)/*.html | etc/djlint-reformat.bash
-
-eslint:
-	(cd app/static; make eslint)
 
 lint: check
 check: $(REQ)
@@ -104,6 +114,16 @@ check: $(REQ)
 	make djlint
 	make eslint
 	echo make check-types
+
+pylint: $(REQ)
+	poetry run ruff check --fix app | etc/ruff-reformat.bash
+	$(PYTHON) -m pylint $(PYLINT_OPTS) app tests *.py
+
+djlint: $(REQ)
+	poetry run djlint $(DJLINT_FLAGS) $(TEMPLATE_DIR)/*.html | etc/djlint-reformat.bash
+
+eslint: $(REQ)
+	(cd app/static; make eslint)
 
 check-types: $(REQ)
 	poetry run mypy app
@@ -113,7 +133,7 @@ pytest: $(REQ)
 	make pylint
 	$(PYTHON) -m pytest . -v --cov=. --cov-report=xml --cov-report=html --log-cli-level=WARNING --log-file-level=DEBUG
 	@echo coverage report in htmlcov/
-test-js:
+test-js: $(REQ)
 	@echo "Running JavaScript unit tests..."
 	node tests/test_time_utils.js
 test: $(REQ)
@@ -122,12 +142,30 @@ test: $(REQ)
 	make test-js || js_exit=$$?; \
 	exit $$(($$python_exit + $$js_exit))
 
+.PHONY: lint check pylint djlint eslint check-types pytest test-js test
+
 ################################################################
-## Every minutes
+## Cron targets
+## Here mostly for testing. The actual cron entries are:
+##
+##  * * * * * cd /home/air/temperature-bot ; DB_PATH=/var/db/temperature-bot.db .venv/bin/python -m bin.runner --loglevel INFO >> /home/air/temperature-bot.log 2>&1
+##
+##
+## @daily    cd /home/air/temperature-bot ; sleep 15 ; DB_PATH=/var/db/temperature-bot.db .venv/bin/python -m bin.runner --loglevel INFO --daily  >> /home/air/temperature-bot-daily.log 2>&1
+## @hourly   cd /home/air/temperature-bot ; sleep 30 ; DB_PATH=/var/db/temperature-bot.db .venv/bin/python -m bin.runner --loglevel INFO --aqi    >> /home/air/temperature-bot-hourly.log 2>&1
+##
+## Question - should we just have cron do a 'make daily' and 'make every-minute' ?
+
 every-minute: $(REQ)
 	$(PYTHON) -m bin.runner
+
 daily: $(REQ)
 	$(PYTHON) -m bin.runner --daily
+
+.PHONY: every-minute daily
+
+################################################################
+## Installation targets
 
 install-either:
 	pipx ensurepath
@@ -186,3 +224,6 @@ deploy:
 	else \
 		echo "Deploy skipped: not running on slg1 (current hostname: $$(hostname))"; \
 	fi
+
+
+.PHONY: install-either install-ubuntu install-macos install-browser-sync clean cleanall deploy
