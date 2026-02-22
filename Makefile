@@ -70,7 +70,7 @@ fetch-dev-db:
 # and want the schema.sql file to reflect those changes.
 # The changes need to be incorporated into schema.sql so that the CI/CD tests run
 
-etc/schema.sql:
+etc/schema.sql: $(DEV_DB)
 	echo ".schema"| sqlite3 $(DEV_DB) \
 		| grep -v 'Run Time: real' \
 		| grep -v 'CREATE TABLE sqlite_sequence' \
@@ -78,7 +78,11 @@ etc/schema.sql:
 		| sed 's/CREATE TABLE/CREATE TABLE IF NOT EXISTS/' \
 		| tee etc/schema.sql
 
-.PHONY: make-dev-db fetch-dev-db
+# Phony target to force regeneration of etc/schema.sql regardless of timestamps
+schema:
+	$(MAKE) --always-make etc/schema.sql
+
+.PHONY: make-dev-db fetch-dev-db schema
 
 ################################################################
 ## Local development targets. These use the flask built-in web server,
