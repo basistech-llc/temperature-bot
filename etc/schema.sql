@@ -1,13 +1,7 @@
--- ****************************************************************
--- BE AWARE:
--- As of now (2025-Oct-24), this file is run at runtime on the existing database. It
--- must not assume an empty database.
--- ****************************************************************
-
 CREATE TABLE IF NOT EXISTS devices (
     device_id INTEGER PRIMARY KEY AUTOINCREMENT,
     device_name TEXT UNIQUE NOT NULL
-, ae200_device_id INTEGER, disabled_until INTEGER, notes TEXT);
+, ae200_device_id INTEGER, disabled_until INTEGER, notes TEXT, aqi_mon INTEGER DEFAULT 0);
 CREATE INDEX IF NOT EXISTS idx_devices_device_name ON devices (device_name);
 CREATE TABLE IF NOT EXISTS devlog (
     log_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -25,12 +19,11 @@ CREATE TABLE IF NOT EXISTS changelog (
                     logtime INTEGER NOT NULL,
                     device_id INTEGER NOT NULL,
                     unit INTEGER,
-                    ipaddr TEXT,
                     current_values TEXT,
                     new_value TEXT,
                     agent TEXT,
                     comment TEXT
-                );
+                , ipaddr text);
 CREATE TABLE IF NOT EXISTS aqi (
     logtime INTEGER NOT NULL,
     aqi INTEGER NOT NULL

@@ -23,8 +23,8 @@
             <tr>
               <th class="column-speed column-speed-off">Off</th>
               <th class="column-speed column-speed-low">Low</th>
-              <th class="column-speed column-speed-mid2">Med&#8209;Low</th>
-              <th class="column-speed column-speed-mid1">Med&#8209;High</th>
+              <th class="column-speed column-speed-mid2">Med–Low</th>
+              <th class="column-speed column-speed-mid1">Med–High</th>
               <th class="column-speed column-speed-high">High</th>
             </tr>
           </thead>
@@ -33,7 +33,7 @@
             {% if device.has_speed_control and device.device_name.lower().startswith('erv') %}
                 <tr class="device-row" x-data-device-id="{{ device.device_id }}">
                   <td class="cell-unit">
-                    {{ device.device_name }}<span class="rules-disabled-superscript" id="rules-disabled-{{ device.device_id }}" style="display: none;" title=""></span>
+                    {{ device.device_name }}<span class="rules-disabled-superscript hidden" id="rules-disabled-{{ device.device_id }}" title=""></span>
                     <span id="device-{{ device.device_id }}-notes"></span>
                     <div class="temporal-links">
                       <a href="/chart?device_ids={{ device.device_id }}" target="_blank">graph</a>
@@ -94,7 +94,7 @@
             {% if device.has_speed_control and not device.device_name.lower().startswith('erv') %}
                 <tr class="device-row" x-data-device-id="{{ device.device_id }}">
                   <td class="cell-unit">
-                    {{ device.device_name }}<span class="rules-disabled-superscript" id="rules-disabled-{{ device.device_id }}" style="display: none;" title=""></span>
+                    {{ device.device_name }}<span class="rules-disabled-superscript hidden" id="rules-disabled-{{ device.device_id }}" title=""></span>
                     <span id="device-{{ device.device_id }}-notes"></span>
                     <div class="temporal-links">
                       <a href="/chart?device_ids={{ device.device_id }}" target="_blank">graph</a>
@@ -106,24 +106,19 @@
                   <td class="cell-temp cell-temp-na">n/a</td>
                   {% endif %}
                   <td class="cell-temp" id="settemp-{{ device.device_id }}">
-                    <span class="settemp-container"
-                          style="display: flex; align-items: center; justify-content: flex-end; gap: 4px;">
+                    <span class="settemp-container">
                       <span class="settemp-display"
                             id="settemp-display-{{ device.device_id }}"
-                            data-device-id="{{ device.device_id }}"
-                            style="min-width: 3.5em; text-align: right; display: inline-block;">--</span>
-                      <span class="settemp-arrow-column"
-                            style="display: flex; flex-direction: column; gap: 1px;">
+                            data-device-id="{{ device.device_id }}">--</span>
+                      <span class="settemp-arrow-column">
                         <button type="button"
                                 class="settemp-arrow"
                                 data-device-id="{{ device.device_id }}"
-                                data-delta="0.5"
-                                style="padding: 0; font-size: 0.6em; line-height: 1; display: inline-block; background: transparent; border: none; cursor: pointer;">▲</button>
+                                data-delta="0.5">▲</button>
                         <button type="button"
                                 class="settemp-arrow"
                                 data-device-id="{{ device.device_id }}"
-                                data-delta="-0.5"
-                                style="padding: 0; font-size: 0.6em; line-height: 1; display: inline-block; background: transparent; border: none; cursor: pointer;">▼</button>
+                                data-delta="-0.5">▼</button>
                       </span>
                     </span>
                   </td>
@@ -177,7 +172,7 @@
             {% if not device.has_speed_control and device.temp10x %}
                 <tr class="device-row" x-data-device-id="{{ device.device_id }}">
                   <td class="cell-unit">
-                    <span title="{{ device.device_name }}">{{ device.device_label }}</span><span class="rules-disabled-superscript" id="rules-disabled-{{ device.device_id }}" style="display: none;" title=""></span>
+                    <span title="{{ device.device_name }}">{{ device.device_label }}</span><span class="rules-disabled-superscript hidden" id="rules-disabled-{{ device.device_id }}" title=""></span>
                     <span id="device-{{ device.device_id }}-notes"></span>
                     <div class="temporal-links">
                       <a href="/chart?device_ids={{ device.device_id }}" target="_blank">graph</a>

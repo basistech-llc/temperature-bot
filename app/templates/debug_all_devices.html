@@ -16,13 +16,13 @@
       <details open>
         <summary>Show / hide database device names</summary>
         <div id="db-names-loading" class="loading-indicator">Loading...</div>
-        <pre id="db-names-pre" class="debug-pre" style="display: none;"></pre>
+        <pre id="db-names-pre" class="debug-pre hidden"></pre>
       </details>
       <h3>Full Device Data</h3>
       <details>
         <summary>Show / hide full database device data</summary>
         <div id="db-data-loading" class="loading-indicator">Loading...</div>
-        <pre id="db-data-pre" class="debug-pre" style="display: none;"></pre>
+        <pre id="db-data-pre" class="debug-pre hidden"></pre>
       </details>
     </div>
   </div>
@@ -36,13 +36,13 @@
       <details open>
         <summary>Show / hide Hubitat device names</summary>
         <div id="hubitat-names-loading" class="loading-indicator">Loading...</div>
-        <pre id="hubitat-names-pre" class="debug-pre" style="display: none;"></pre>
+        <pre id="hubitat-names-pre" class="debug-pre hidden"></pre>
       </details>
       <h3>Full Device Data</h3>
       <details>
         <summary>Show / hide full Hubitat device data</summary>
         <div id="hubitat-data-loading" class="loading-indicator">Loading...</div>
-        <pre id="hubitat-data-pre" class="debug-pre" style="display: none;"></pre>
+        <pre id="hubitat-data-pre" class="debug-pre hidden"></pre>
       </details>
     </div>
   </div>
@@ -56,19 +56,19 @@
       <details open>
         <summary>Show / hide AE-200 unit names</summary>
         <div id="ae200-names-loading" class="loading-indicator">Loading...</div>
-        <pre id="ae200-names-pre" class="debug-pre" style="display: none;"></pre>
+        <pre id="ae200-names-pre" class="debug-pre hidden"></pre>
       </details>
       <h3>Raw Unit List (id + name)</h3>
       <details>
         <summary>Show / hide raw AE-200 unit list</summary>
         <div id="ae200-devices-loading" class="loading-indicator">Loading...</div>
-        <pre id="ae200-devices-pre" class="debug-pre" style="display: none;"></pre>
+        <pre id="ae200-devices-pre" class="debug-pre hidden"></pre>
       </details>
       <h3>Per-Unit Status (from AE-200)</h3>
       <details>
         <summary>Show / hide AE-200 per-unit status</summary>
         <div id="ae200-details-loading" class="loading-indicator">Loading...</div>
-        <pre id="ae200-details-pre" class="debug-pre" style="display: none;"></pre>
+        <pre id="ae200-details-pre" class="debug-pre hidden"></pre>
       </details>
     </div>
   </div>
@@ -84,13 +84,13 @@ document.addEventListener('DOMContentLoaded', function() {
                 document.getElementById('db-names-loading').textContent = 'Error: ' + data.error;
                 document.getElementById('db-data-loading').textContent = 'Error: ' + data.error;
             } else {
-                document.getElementById('db-names-loading').style.display = 'none';
+                document.getElementById('db-names-loading').classList.add('hidden');
                 document.getElementById('db-names-pre').textContent = JSON.stringify(data.names, null, 2);
-                document.getElementById('db-names-pre').style.display = 'block';
+                document.getElementById('db-names-pre').classList.remove('hidden');
 
-                document.getElementById('db-data-loading').style.display = 'none';
+                document.getElementById('db-data-loading').classList.add('hidden');
                 document.getElementById('db-data-pre').textContent = JSON.stringify(data.data, null, 2);
-                document.getElementById('db-data-pre').style.display = 'block';
+                document.getElementById('db-data-pre').classList.remove('hidden');
             }
         })
         .catch(error => {
@@ -106,13 +106,13 @@ document.addEventListener('DOMContentLoaded', function() {
                 document.getElementById('hubitat-names-loading').textContent = 'Error: ' + data.error;
                 document.getElementById('hubitat-data-loading').textContent = 'Error: ' + data.error;
             } else {
-                document.getElementById('hubitat-names-loading').style.display = 'none';
+                document.getElementById('hubitat-names-loading').classList.add('hidden');
                 document.getElementById('hubitat-names-pre').textContent = JSON.stringify(data.names, null, 2);
-                document.getElementById('hubitat-names-pre').style.display = 'block';
+                document.getElementById('hubitat-names-pre').classList.remove('hidden');
 
-                document.getElementById('hubitat-data-loading').style.display = 'none';
+                document.getElementById('hubitat-data-loading').classList.add('hidden');
                 document.getElementById('hubitat-data-pre').textContent = JSON.stringify(data.data, null, 2);
-                document.getElementById('hubitat-data-pre').style.display = 'block';
+                document.getElementById('hubitat-data-pre').classList.remove('hidden');
             }
         })
         .catch(error => {
@@ -129,17 +129,17 @@ document.addEventListener('DOMContentLoaded', function() {
                 document.getElementById('ae200-devices-loading').textContent = 'Error: ' + data.error;
                 document.getElementById('ae200-details-loading').textContent = 'Error: ' + data.error;
             } else {
-                document.getElementById('ae200-names-loading').style.display = 'none';
+                document.getElementById('ae200-names-loading').classList.add('hidden');
                 document.getElementById('ae200-names-pre').textContent = JSON.stringify(data.names, null, 2);
-                document.getElementById('ae200-names-pre').style.display = 'block';
+                document.getElementById('ae200-names-pre').classList.remove('hidden');
 
-                document.getElementById('ae200-devices-loading').style.display = 'none';
+                document.getElementById('ae200-devices-loading').classList.add('hidden');
                 document.getElementById('ae200-devices-pre').textContent = JSON.stringify(data.devices, null, 2);
-                document.getElementById('ae200-devices-pre').style.display = 'block';
+                document.getElementById('ae200-devices-pre').classList.remove('hidden');
 
-                document.getElementById('ae200-details-loading').style.display = 'none';
+                document.getElementById('ae200-details-loading').classList.add('hidden');
                 document.getElementById('ae200-details-pre').textContent = JSON.stringify(data.details, null, 2);
-                document.getElementById('ae200-details-pre').style.display = 'block';
+                document.getElementById('ae200-details-pre').classList.remove('hidden');
             }
         })
         .catch(error => {

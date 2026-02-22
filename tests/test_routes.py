@@ -77,3 +77,10 @@ def test_weather_route(flask_test_client):  # noqa: F811
     response = flask_test_client.get("/weather")
     assert response.status_code == 200
     assert b"Local Weather" in response.data or b"AQI" in response.data
+
+
+def test_air_quality_route(flask_test_client):  # noqa: F811
+    """Test the /air-quality route"""
+    response = flask_test_client.get("/air-quality")
+    assert response.status_code == 200
+    assert b"Air Quality" in response.data or b"AQI" in response.data

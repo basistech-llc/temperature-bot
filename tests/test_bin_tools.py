@@ -1,6 +1,6 @@
 """
 Tests for bin/ tools to ensure they work correctly after refactoring.
-Tests cover runner.py, scheduler.py, and rules.py functionality.
+Tests cover runner.py, and rules.py functionality.
 """
 import os
 import sys
@@ -90,45 +90,6 @@ class TestBinTools:
         # Should complete without error
         assert result.returncode == 0, f"runner.py --aqi failed: {result.stderr}"
 
-    def test_scheduler_help(self, bin_dir):
-        """Test that scheduler.py --help works"""
-        result = subprocess.run(
-            [sys.executable, str(bin_dir / "scheduler.py"), "--help"],
-            capture_output=True,
-            text=True,
-            timeout=30,
-            check=False )
-
-        assert result.returncode == 0, f"scheduler.py --help failed: {result.stderr}"
-        assert "BasisTech LLC Rules Scheduler" in result.stdout
-        assert "--debug" in result.stdout
-        assert "--dry-run" in result.stdout
-
-    def test_scheduler_dry_run(self, bin_dir):
-        """Test that scheduler.py --dry-run works"""
-        result = subprocess.run(
-            [sys.executable, str(bin_dir / "scheduler.py"), "--dry-run"],
-            capture_output=True,
-            text=True,
-            timeout=30,
-            check=False )
-
-        assert result.returncode == 0, f"scheduler.py --dry-run failed: {result.stderr}"
-        assert "=dry run=" in result.stdout
-        # Should show device list
-        assert "id" in result.stdout and "name" in result.stdout
-
-    def test_scheduler_verbose(self, bin_dir):
-        """Test that scheduler.py --verbose works"""
-        result = subprocess.run(
-            [sys.executable, str(bin_dir / "scheduler.py"), "--verbose", "--dry-run"],
-            capture_output=True,
-            text=True,
-            timeout=30,
-            check=False )
-
-        assert result.returncode == 0, f"scheduler.py --verbose failed: {result.stderr}"
-
     def test_rules_file_exists(self, bin_dir):
         """Test that rules.py file exists and is readable"""
         rules_file = bin_dir / "rules.py"
@@ -175,24 +136,6 @@ print('runner.py imports successfully')
 
         assert result.returncode == 0, f"runner.py import failed: {result.stderr}"
         assert "runner.py imports successfully" in result.stdout
-
-    def test_scheduler_imports(self, bin_dir):
-        """Test that scheduler.py can import all required modules"""
-        result = subprocess.run(
-            [sys.executable, "-c", f"""
-import sys
-sys.path.append('{bin_dir.parent}')
-import bin.scheduler
-print('scheduler.py imports successfully')
-"""],
-            capture_output=True,
-            text=True,
-            timeout=30,
-            check=False
-        )
-
-        assert result.returncode == 0, f"scheduler.py import failed: {result.stderr}"
-        assert "scheduler.py imports successfully" in result.stdout
 
     def test_runner_with_test_database(self, bin_dir, temp_db):
         """Test runner.py with a test database that has some data"""
@@ -309,7 +252,7 @@ print('scheduler.py imports successfully')
 
     def test_all_tools_help_consistency(self, bin_dir):
         """Test that all tools have consistent help output"""
-        tools = ["runner.py", "scheduler.py"]
+        tools = ["runner.py"]
 
         for tool in tools:
             result = subprocess.run(

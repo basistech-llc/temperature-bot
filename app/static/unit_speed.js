@@ -1,4 +1,13 @@
-// interactivity for unit speed grid
+/* interactivity for unit speed grid
+ * provides:
+ * displayWeather()
+ * setDrive()
+ * setFanSpeed()
+ * asctime()
+ * updateNote()
+ * setupMatrixListeners()
+ * loadWeatherAndStartRefresh()
+ */
 
 console.log("unit_speed.js loaded");
 
@@ -145,7 +154,7 @@ async function updateNote(deviceId, notes) {
 }
 
 // Handle all user events
-function setupMatrixListenerss() {
+function setupMatrixListeners() {
   // Add event listeners for radio buttons (including Off button)
   const radioButtons = document.querySelectorAll(
     'input[type="radio"][x-data-device-id]',
@@ -296,8 +305,7 @@ function createNoteInput(value) {
   const input = document.createElement("input");
   input.type = "text";
   input.value = value;
-  input.style.width = "100%";
-  input.style.minWidth = "150px";
+  input.className = "note-input-edit";
   return input;
 }
 
@@ -556,9 +564,9 @@ function updateRulesDisabledBadge(dev) {
     const tooltipText = `Rules disabled until ${asctime(dt)} (${hoursRemaining} hour${hoursRemaining !== 1 ? "s" : ""})`;
     badge.textContent = "rules disabled";
     badge.setAttribute("title", tooltipText);
-    badge.style.display = "inline";
+    badge.classList.remove("hidden");
   } else {
-    badge.style.display = "none";
+    badge.classList.add("hidden");
   }
 }
 
@@ -568,6 +576,6 @@ window.displayWeather = displayWeather;
 window.getCurrentWeatherData = function() { return currentWeatherData; };
 
 window.addEventListener("DOMContentLoaded", function () {
-  setupMatrixListenerss();
+  setupMatrixListeners();
   loadWeatherAndStartRefresh();
 });

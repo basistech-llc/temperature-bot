@@ -16,10 +16,13 @@
 #           Uses var/db/temperature-bot.db if not set (note this is a relative path)
 #           For installation, cron & systemd use /var/db/temperature-bot.db
 #
+# DEV_DB - your development DB. typically var/db/temperature-bot
 # AE200_SIMULATOR - set to 1 for `make local-dev` -
 
 
-DB_PATH := var/db/temperature-bot.db
+export DB_PATH ?= var/db/temperature-bot.db
+export DEV_DB   ?= var/db/temperature-bot.db
+
 REQ := .venv/pyvenv.cfg
 PYTHON := .venv/bin/python
 TEMPLATE_DIR := app/templates
@@ -44,7 +47,12 @@ RUFF_VERSION   ?= 0.13.2
 ################################################################
 .PHONY: etc/schema.sql
 etc/schema.sql:
-	echo ".schema"| sqlite3 $(DEV_DB) | grep -v 'Run Time: real' | grep -v 'CREATE TABLE sqlite_sequence' > etc/schema.sql
+	echo ".schema"| sqlite3 $(DEV_DB) \
+		| grep -v 'Run Time: real' \
+		| grep -v 'CREATE TABLE sqlite_sequence' \
+		| sed 's/CREATE INDEX/CREATE INDEX IF NOT EXISTS/' \
+		| sed 's/CREATE TABLE/CREATE TABLE IF NOT EXISTS/' \
+		| tee etc/schema.sql
 
 make-dev-db:
 	/bin/rm -f $(DEV_DB)
@@ -55,7 +63,8 @@ make-dev-db:
 fetch-dev-db:
 	rsync --verbose --delete --archive slg1.basistech.net:/var/db var/
 	echo 'select "devices",count(*) from devices;select "devlog",count(*) from devlog;select "changelog",count(*) from changelog; select "aqi",count(*) from aqi;' | sqlite3 var/db/temperature-bot.db
-	echo '.schema' | sqlite3 var/db/temperature-bot.db
+	/bin/rm -f etc/schema.sql
+	make etc/schema.sql
 
 # Run web backend locally, with simulated data. (needs popuplated db too)
 local-dev: $(REQ)
@@ -63,7 +72,7 @@ local-dev: $(REQ)
 
 # Run the web backend locally, querying the hardware (assumes VPN or running in CALA)
 live-dev-web: $(REQ)
-	FLASK_DEBUG=True $(PYTHON) run_local.py
+	FLASK_DEBUG=True poetry run flask --app app.main:app run --port 8000
 
 # Run the data collection agent and rules runner locally, querying the hardware (assumes VPN or running in CALA)
 live-dev-runner: $(REQ)
