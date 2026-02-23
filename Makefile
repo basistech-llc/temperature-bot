@@ -88,7 +88,7 @@ etc/schema.sql:
 
 # Run web backend locally, with simulated data. (needs popuplated db too)
 local-dev: $(REQ)
-	export AE200_SIMULATOR=1 && make live-dev-web
+	export AE200_SIMULATOR=1 && $(MAKE) live-dev-web
 
 # Run the web backend locally, querying the hardware (assumes VPN or running in CALA)
 live-dev-web: $(REQ)
