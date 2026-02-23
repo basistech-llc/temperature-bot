@@ -59,6 +59,7 @@ make-dev-db:
 # NOTE: temperature-bot-config.yaml includes production secrets
 #       until we move to better secret management system
 fetch-dev-db:
+	mkdir -p var/db/
 	rsync --verbose --delete --archive air.basistech.net:/var/db/ var/db/
 	rsync --verbose air.basistech.net:/home/air/temperature-bot/temperature-bot-config.yaml ./temperature-bot-config.yaml
 	@ls -l var/db/
