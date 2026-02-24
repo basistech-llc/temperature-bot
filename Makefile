@@ -21,7 +21,7 @@
 
 
 export DB_PATH ?= var/db/temperature-bot.db
-export DEV_DB   ?= var/db/temperature-bot.db
+export DEV_DB  ?= var/db/temperature-bot.db
 
 REQ := .venv/pyvenv.cfg
 PYTHON := .venv/bin/python
@@ -54,11 +54,19 @@ etc/schema.sql:
 		| sed 's/CREATE TABLE/CREATE TABLE IF NOT EXISTS/' \
 		| tee etc/schema.sql
 
+# manually create the DEV_DB
 make-dev-db:
 	/bin/rm -f $(DEV_DB)
 	mkdir -p $(dir $(DEV_DB))
 	sqlite3 $(DEV_DB) < etc/schema.sql
 	ls -l $(DEV_DB)
+
+# Explicit rule for the development database file so that schema generation
+# fails with a clear, actionable message when the DB is missing.
+$(DEV_DB):
+	@echo "ERROR: Development database '$(DEV_DB)' does not exist."
+	@echo "       Create it with 'make make-dev-db' or fetch it with 'make fetch-dev-db'."
+	@false
 
 fetch-dev-db:
 	rsync --verbose --delete --archive slg1.basistech.net:/var/db var/
