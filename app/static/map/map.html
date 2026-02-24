@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Interactive Floor Plan & Annotator</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            background-color: #f0f0f0;
+            padding: 20px;
+        }
+        .container {
+            display: flex;
+            gap: 20px;
+            align-items: flex-start;
+        }
+        .canvas-container {
+            flex: 2;
+        }
+        canvas {
+            background-color: white;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            max-width: 100%;
+            cursor: crosshair; /* Changed to crosshair to indicate drawing */
+        }
+        .sidebar {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        #info-box {
+            padding: 15px;
+            background: white;
+            border-left: 5px solid #007bff;
+            font-size: 1.1em;
+        }
+        textarea {
+            width: 100%;
+            height: 300px;
+            font-family: monospace;
+            padding: 10px;
+            box-sizing: border-box;
+            border: 1px solid #ccc;
+            white-space: pre;
+        }
+        .instructions {
+            background: #fff3cd;
+            border-left: 5px solid #ffc107;
+            padding: 10px;
+            font-size: 0.9em;
+        }
+    </style>
+</head>
+<body>
+
+    <h2>Floor Plan Annotator</h2>
+    <div class="container">
+        <div class="canvas-container">
+            <canvas id="floorplanCanvas"></canvas>
+        </div>
+
+        <div class="sidebar">
+            <div id="info-box">Hover over a room...</div>
+
+            <div class="instructions">
+                <strong>How to add rooms:</strong> Click and drag on the floor plan to draw a bounding box. The JSON code will automatically generate below.
+            </div>
+
+            <textarea id="json-output" placeholder="New JSON rows will appear here..."></textarea>
+        </div>
+    </div>
+
+<script>
+    // 1. Existing Bounding Box Data
+    const regions = [
+      { id: 'garage', label: 'GARAGE', x: 0.205, y: 0.290, w: 0.540, h: 0.400 },
+      { id: 'broadway', label: 'Broadway', x: 0.845, y: 0.263, w: 0.120, h: 0.388 },
+      { id: 'sunken_garden', label: 'Sunken Garden', x: 0.534, y: 0.169, w: 0.181, h: 0.122 },
+      { id: 'media_room', label: 'Hickory', x: 0.174, y: 0.059, w: 0.069, h: 0.203 },
+      { id: 'area_51', label: 'Area 51',  x: 0.249, y: 0.058, w: 0.289, h: 0.208 },
+      { id: 'dungeon', label: 'Dungeon', x: 0.149, y: 0.272, w: 0.058, h: 0.213 }
+      { id: 'bamboo', label: 'Bamboo', x: 0.733, y: 0.037, w: 0.092, h: 0.137 },
+      { id: 'greenhouse', label: 'Greenhouse', x: 0.532, y: 0.038, w: 0.206, h: 0.138 }
+    ];
+
+    const canvas = document.getElementById('floorplanCanvas');
+    const ctx = canvas.getContext('2d');
+    const infoBox = document.getElementById('info-box');
+    const jsonOutput = document.getElementById('json-output');
+
+    // Drawing State Variables
+    let isDrawing = false;
+    let startX = 0;
+    let startY = 0;
+    let currentX = 0;
+    let currentY = 0;
+
+    // Load the Image
+    const img = new Image();
+    img.src = 'basistech_floorplan.png'; // <-- REPLACE WITH YOUR IMAGE FILE NAME
+
+    img.onload = () => {
+        canvas.width = img.width;
+        canvas.height = img.height;
+        drawBase();
+    };
+
+    // Drawing Logic (Base Image + Existing Regions)
+    function drawBase(hoveredId = null) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0);
+
+        regions.forEach(r => {
+            let px = r.x * canvas.width;
+            let py = r.y * canvas.height;
+            let pw = r.w * canvas.width;
+            let ph = r.h * canvas.height;
+
+            ctx.beginPath();
+            ctx.rect(px, py, pw, ph);
+
+            if (r.id === hoveredId) {
+                ctx.fillStyle = 'rgba(0, 123, 255, 0.4)';
+                ctx.strokeStyle = '#0056b3';
+            } else {
+                ctx.fillStyle = 'rgba(255, 0, 0, 0.15)';
+                ctx.strokeStyle = 'red';
+            }
+            ctx.fill();
+            ctx.lineWidth = 2;
+            ctx.stroke();
+        });
+    }
+
+    // Helper: Get Scaled Mouse Coordinates
+    function getMousePos(e) {
+        const rect = canvas.getBoundingClientRect();
+        const scaleX = canvas.width / rect.width;
+        const scaleY = canvas.height / rect.height;
+        return {
+            x: (e.clientX - rect.left) * scaleX,
+            y: (e.clientY - rect.top) * scaleY
+        };
+    }
+
+    // Mouse Down (Start Drawing)
+    canvas.addEventListener('mousedown', (e) => {
+        const pos = getMousePos(e);
+        startX = pos.x;
+        startY = pos.y;
+        isDrawing = true;
+    });
+
+    // Mouse Move (Hover effects OR drawing the temporary box)
+    canvas.addEventListener('mousemove', (e) => {
+        const pos = getMousePos(e);
+
+        if (isDrawing) {
+            currentX = pos.x;
+            currentY = pos.y;
+
+            // Redraw everything, then draw the temporary green box on top
+            drawBase();
+            ctx.beginPath();
+            ctx.rect(startX, startY, currentX - startX, currentY - startY);
+            ctx.fillStyle = 'rgba(40, 167, 69, 0.3)';
+            ctx.fill();
+            ctx.strokeStyle = '#28a745';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+        } else {
+            // Standard Hover Detection (only when not drawing)
+            let foundHover = null;
+            for (let r of regions) {
+                let px = r.x * canvas.width;
+                let py = r.y * canvas.height;
+                let pw = r.w * canvas.width;
+                let ph = r.h * canvas.height;
+
+                if (pos.x >= px && pos.x <= px + pw &&
+                    pos.y >= py && pos.y <= py + ph) {
+                    foundHover = r;
+                    break;
+                }
+            }
+
+            if (foundHover) {
+                drawBase(foundHover.id);
+                infoBox.innerText = `Currently viewing: ${foundHover.label}`;
+            } else {
+                drawBase();
+                infoBox.innerText = 'Hover over a room...';
+            }
+        }
+    });
+
+    // Mouse Up (Finish Drawing and Output JSON)
+    canvas.addEventListener('mouseup', (e) => {
+        if (!isDrawing) return;
+        isDrawing = false;
+
+        // Handle dragging in any direction (top-left to bottom-right, or bottom-right to top-left)
+        const minX = Math.min(startX, currentX);
+        const minY = Math.min(startY, currentY);
+        const w = Math.abs(currentX - startX);
+        const h = Math.abs(currentY - startY);
+
+        // Ignore accidental tiny clicks
+        if (w < 5 || h < 5) {
+            drawBase();
+            return;
+        }
+
+        // Convert to normalized coordinates (0.0 to 1.0) and round to 3 decimals
+        const normX = (minX / canvas.width).toFixed(3);
+        const normY = (minY / canvas.height).toFixed(3);
+        const normW = (w / canvas.width).toFixed(3);
+        const normH = (h / canvas.height).toFixed(3);
+
+        const newJsonRow = `{ id: 'new_room', label: 'New Room', x: ${normX}, y: ${normY}, w: ${normW}, h: ${normH} },`;
+
+        // Output to console and text area
+        console.log(newJsonRow);
+        jsonOutput.value += newJsonRow + '\n';
+
+        // Redraw to remove the temporary green box
+        drawBase();
+    });
+</script>
+
+</body>
+</html>
