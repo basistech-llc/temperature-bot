@@ -21,7 +21,7 @@
 
 
 export DB_PATH ?= var/db/temperature-bot.db
-export DEV_DB   ?= var/db/temperature-bot.db
+export DEV_DB  ?= var/db/temperature-bot.db
 
 # Remote host and paths used by fetch-dev-db (override as needed for your environment)
 FETCH_HOST           ?= air.basistech.net
@@ -58,6 +58,13 @@ make-dev-db:
 	mkdir -p $(dir $(DEV_DB))
 	sqlite3 $(DEV_DB) < etc/schema.sql
 	ls -l $(DEV_DB)
+
+# Explicit rule for the development database file so that schema generation
+# fails with a clear, actionable message when the DB is missing.
+$(DEV_DB):
+	@echo "ERROR: Development database '$(DEV_DB)' does not exist."
+	@echo "       Create it with 'make make-dev-db' or fetch it with 'make fetch-dev-db'."
+	@false
 
 # fetch the local development database and configuration file.
 # Then give the user a status report of what is in the database.
