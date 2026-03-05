@@ -196,12 +196,84 @@ td.cell-notes:not(:empty) {
 }
 
 #last-refresh {
-    color: blue;
+    margin-top: 6px;
+    color: #666;
     font-style: italic;
+    font-size: 0.85em;
 }
 
 #weather {
     width: 300px;
+}
+
+.indoor-summary--good {
+    background-color: #e6f4ea;
+    color: #137333;
+}
+
+.indoor-summary--moderate {
+    background-color: #fff7e0;
+    color: #b97800;
+}
+
+.indoor-summary--unhealthy {
+    background-color: #fce8e6;
+    color: #c5221f;
+}
+
+.indoor-summary--poor {
+    background-color: #f3e8fd;
+    color: #5b2abf;
+}
+
+.indoor-summary {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    font-size: 0.9em;
+}
+
+.indoor-pill {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 4px;
+    padding: 3px 9px;
+    border-radius: 999px;
+    border: 1px solid transparent;
+    background-color: #fff;
+}
+
+.indoor-pill-label {
+    font-weight: 600;
+    color: #555;
+}
+
+.indoor-pill-separator {
+    color: #777;
+}
+
+.indoor-pill-state {
+    font-weight: 600;
+}
+
+.indoor-issues {
+    color: #555;
+    font-size: 0.85em;
+}
+
+.indoor-pill--clear {
+    background-color: #e6f4ea;
+    color: #137333;
+}
+
+.indoor-pill--watch {
+    background-color: #fff7e0;
+    color: #b97800;
+}
+
+.indoor-pill--alert {
+    background-color: #fce8e6;
+    color: #c5221f;
 }
 
 /* Utility: hide element; JS toggles by adding/removing this class */
@@ -388,17 +460,40 @@ table.rules-table th  {
 }
 
 #aqi-weather {
-    width: 400px;
+    max-width: 540px;
     background-color: #f0f8ff;
-    min-height: 100px;
+    padding: 10px 14px;
+    border-radius: 6px;
+    min-height: 80px;
 }
 
-#aqi-status {
-    display: inline-block;
-    padding: 5px 10px;
+.aqi-status {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+}
+
+.aqi-pill {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 4px;
+    padding: 4px 10px;
+    border-radius: 999px;
     border: 1px solid #ccc;
-    border-radius: 4px;
-    max-width: 250px;
+    background-color: #fff;
+    font-size: 0.9em;
+}
+
+.aqi-pill-label {
+    font-weight: 600;
+    color: #555;
+}
+
+.aqi-pill-name#aqi-name {
+    padding: 0 8px;
+    border-radius: 999px;
+    color: #fff;
 }
 
 #fan-status-container .pure-u-1.pure-u-md-1-2:first-child {

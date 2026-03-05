@@ -14,7 +14,39 @@
 <div class="pure-g">
   <div class="pure-u-1" id="aqi-weather">
     <div id="aqi">
-      <div id="aqi-status">AQI <span id="aqi-value"></span> <span id="aqi-name"></span></div>
+      <div id="aqi-status" class="aqi-status">
+        <div class="aqi-pill">
+          <span class="aqi-pill-label">Outdoor AQI</span>
+          <span class="aqi-pill-value" id="aqi-value"></span>
+          <span class="aqi-pill-name" id="aqi-name"></span>
+        </div>
+        {% if indoor_summary %}
+          <div class="indoor-summary">
+            <div class="indoor-pill indoor-pill--{{ indoor_summary.state }}">
+              <span class="indoor-pill-label">Indoor air</span>
+              <span class="indoor-pill-separator">·</span>
+              <span class="indoor-pill-state">
+                {% if indoor_summary.state == 'clear' %}
+                  OK
+                {% elif indoor_summary.state == 'watch' %}
+                  Watch
+                {% else %}
+                  Alert
+                {% endif %}
+              </span>
+            </div>
+            <div class="indoor-issues">
+              {% if indoor_summary.issues %}
+                {%- for issue in indoor_summary.issues -%}
+                  {{ issue.metric }} {{ issue.value|round(0) }} ({{ issue.device_name }}){% if not loop.last %} · {% endif %}
+                {%- endfor -%}
+              {% else %}
+                All clear
+              {% endif %}
+            </div>
+          </div>
+        {% endif %}
+      </div>
     </div>
     <div id="last-refresh"></div>
   </div>

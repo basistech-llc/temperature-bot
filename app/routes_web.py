@@ -29,6 +29,134 @@ logger = logging.getLogger(__name__)
 def create_web_routes(app):
     """Create web routes and register them with the app"""
 
+    def _score_metric(metric_name, value):
+        """Return (severity_score, label, short_name) for a metric value.
+
+        severity_score: 0=good, 1=elevated, 2=problem
+        """
+        if value is None:
+            return (0, "good", metric_name)
+
+        # Defaults
+        score = 0
+        label = "good"
+        short_name = metric_name
+
+        if metric_name == "co2":
+            short_name = "CO₂"
+            if value > 1200:
+                score, label = 2, "problem"
+            elif value > 800:
+                score, label = 1, "elevated"
+        elif metric_name == "pm25":
+            short_name = "PM2.5"
+            if value > 35:
+                score, label = 2, "problem"
+            elif value > 12:
+                score, label = 1, "elevated"
+        elif metric_name == "pm1":
+            short_name = "PM1"
+            if value > 35:
+                score, label = 2, "problem"
+            elif value > 12:
+                score, label = 1, "elevated"
+        elif metric_name == "humidity":
+            short_name = "RH"
+            if value < 30 or value > 60:
+                score, label = 2, "problem"
+            elif value < 35 or value > 55:
+                score, label = 1, "elevated"
+        elif metric_name == "temp":
+            short_name = "Temp"
+            if value < 18 or value > 27:
+                score, label = 2, "problem"
+            elif value < 20 or value > 25:
+                score, label = 1, "elevated"
+        elif metric_name == "radonShortTermAvg":
+            short_name = "Radon"
+            # Thresholds chosen as a reasonable default; adjust to local units if needed.
+            if value > 150:
+                score, label = 2, "problem"
+            elif value > 100:
+                score, label = 1, "elevated"
+        elif metric_name == "voc":
+            short_name = "VOC"
+            if value > 2000:
+                score, label = 2, "problem"
+            elif value > 500:
+                score, label = 1, "elevated"
+
+        return (score, label, short_name)
+
+    def _compute_indoor_air_summary(airmon):
+        """Summarize indoor air issues across multiple metrics."""
+        issues = []
+
+        for row in airmon:
+            status = row.get("status") or {}
+            # Skip synthetic outdoor AQI row, which only has status["aqi"]
+            if "aqi" in status:
+                continue
+
+            device_name = row.get("device_name", "")
+            for metric_name in [
+                "co2",
+                "pm25",
+                "pm1",
+                "humidity",
+                "temp",
+                "radonShortTermAvg",
+                "voc",
+            ]:
+                val_dict = status.get(metric_name)
+                value = None
+                if isinstance(val_dict, dict):
+                    value = val_dict.get("value")
+                elif isinstance(val_dict, (int, float)):
+                    value = val_dict
+
+                score, label, short_name = _score_metric(metric_name, value)
+                if score > 0 and value is not None:
+                    issues.append(
+                        {
+                            "device_name": device_name,
+                            "metric": short_name,
+                            "value": value,
+                            "score": score,
+                            "label": label,
+                        }
+                    )
+
+        if not issues:
+            return {
+                "state": "clear",
+                "issues": [],
+            }
+
+        # Determine overall state
+        worst_score = max(i["score"] for i in issues)
+        if worst_score >= 2:
+            state = "alert"
+        else:
+            state = "watch"
+
+        # Sort issues: highest score first, then by value descending, and keep top 3
+        issues_sorted = sorted(
+            issues, key=lambda i: (i["score"], i["value"]), reverse=True
+        )[:3]
+
+        return {
+            "state": state,
+            "issues": [
+                {
+                    "device_name": i["device_name"],
+                    "metric": i["metric"],
+                    "value": i["value"],
+                }
+                for i in issues_sorted
+            ],
+        }
+
     @app.route("/")
     @with_db_connection
     def read_index(conn):
@@ -155,7 +283,14 @@ def create_web_routes(app):
     @with_db_connection
     def air_quality(conn):
         """Real-time Air Quality page"""
-        return render_template("air-quality.html", current_page="air-quality", airmon=db.get_all_device_aqi(conn) )
+        airmon = db.get_all_device_aqi(conn)
+        indoor_summary = _compute_indoor_air_summary(airmon)
+        return render_template(
+            "air-quality.html",
+            current_page="air-quality",
+            airmon=airmon,
+            indoor_summary=indoor_summary,
+        )
 
     @app.route("/weather")
     def weather():
