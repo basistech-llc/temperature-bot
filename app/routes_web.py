@@ -250,10 +250,39 @@ def create_web_routes(app):
         """Real-time Air Quality page"""
         airmon = db.get_all_device_aqi(conn)
         _annotate_air_quality_cells(airmon)
+
+        # Indoor data timestamp: newest devlog logtime among indoor devices
+        indoor_ts = None
+        for row in airmon:
+            status = row.get("status") or {}
+            if "aqi" in status:
+                continue
+            if "logtime" in row:
+                if indoor_ts is None or row["logtime"] > indoor_ts:
+                    indoor_ts = row["logtime"]
+
+        indoor_asof = None
+        if indoor_ts is not None:
+            indoor_asof = datetime.datetime.fromtimestamp(indoor_ts).strftime(
+                "%Y-%m-%d %H:%M:%S"
+            )
+
+        # Outdoor AQI timestamp: latest logtime from aqi table
+        c = conn.cursor()
+        c.execute("SELECT logtime FROM aqi ORDER BY logtime DESC LIMIT 1")
+        row = c.fetchone()
+        outdoor_asof = None
+        if row is not None and row[0] is not None:
+            outdoor_asof = datetime.datetime.fromtimestamp(row[0]).strftime(
+                "%Y-%m-%d %H:%M:%S"
+            )
+
         return render_template(
             "air-quality.html",
             current_page="air-quality",
             airmon=airmon,
+            indoor_asof=indoor_asof,
+            outdoor_asof=outdoor_asof,
         )
 
     @app.route("/weather")

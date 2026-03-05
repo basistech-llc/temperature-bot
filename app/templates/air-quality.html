@@ -44,14 +44,16 @@
         </tbody>
       </table>
 
-      <div id="last-refresh" class="last-refresh-inline"></div>
-
       <div class="aq-legend">
         Shading:
         <span class="legend-swatch aq-elevated">elevated</span>,
         <span class="legend-swatch aq-problem">problem</span>
         (see column headings for details).
       </div>
+
+      {% if indoor_asof %}
+        <div class="last-refresh-inline">Data as of: {{ indoor_asof }}</div>
+      {% endif %}
 
       <h2>Outdoor Air Quality</h2>
 
@@ -77,6 +79,10 @@
           {% endfor %}
         </tbody>
       </table>
+
+      {% if outdoor_asof %}
+        <div class="last-refresh-inline">Data as of: {{ outdoor_asof }}</div>
+      {% endif %}
     </div>
   </div>
 </div>
