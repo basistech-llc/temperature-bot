@@ -38,7 +38,7 @@
             <div class="indoor-issues">
               {% if indoor_summary.issues %}
                 {%- for issue in indoor_summary.issues -%}
-                  {{ issue.metric }} {{ issue.value|round(0) }} ({{ issue.device_name }}){% if not loop.last %} · {% endif %}
+                  {{ issue.metric }} {{ issue.value|round(0) }} ({{ issue.device_name|replace('Airthings ', '') }}){% if not loop.last %} · {% endif %}
                 {%- endfor -%}
               {% else %}
                 All clear
@@ -61,7 +61,7 @@
   <tbody>
     {% for row in airmon %}
       {% if row.status and row.status.co2 %}
-    <tr><th scope="row">{{ row.device_name }}</th>
+    <tr><th scope="row">{{ row.device_name|replace('Airthings ', '') }}</th>
       <td>{{ row.status.co2.value }}</td> <td>{{row.status.humidity.value }}</td> <td>{{row.status.pm1.value}}</td> <td>{{row.status.pm25.value}}</td> <td>{{row.status.pressure.value}}</td> <td>{{row.status.radonShortTermAvg.value}}</td> <td>{{row.status.temp.value}}</td> <td>{{row.status.voc.value}}</td></tr>
     {% endif %}
     {% endfor %}
@@ -77,7 +77,7 @@
   <tbody>
     {% for row in airmon %}
 {% if row.status and row.status.aqi %}
-    <tr><th scope="row">{{ row.device_name }}</th><td class="aqi-cell" data-aqi-color="{{ row.status.aqi.color }}">{{row.status.aqi.color_name}} {{row.status.aqi.value}}</td></tr>
+    <tr><th scope="row">{{ row.device_name|replace('Airthings ', '') }}</th><td class="aqi-cell" data-aqi-color="{{ row.status.aqi.color }}">{{row.status.aqi.color_name}} {{row.status.aqi.value}}</td></tr>
     {% endif %}
     {% endfor %}
   </tbody>
