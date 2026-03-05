@@ -483,7 +483,9 @@ const refreshGridRows = () => {
 
         // Update last refresh time
         const lr = document.getElementById("last-refresh");
-        lr.innerHtml = "Last Refresh: " + asctime(new Date());
+        if (lr) {
+          lr.textContent = "Last Refresh: " + asctime(new Date());
+        }
 
         // Update the refresh time
         lastRefreshTime = now;
