@@ -88,75 +88,6 @@ def create_web_routes(app):
 
         return (score, label, short_name)
 
-    def _compute_indoor_air_summary(airmon):
-        """Summarize indoor air issues across multiple metrics."""
-        issues = []
-
-        for row in airmon:
-            status = row.get("status") or {}
-            # Skip synthetic outdoor AQI row, which only has status["aqi"]
-            if "aqi" in status:
-                continue
-
-            device_name = row.get("device_name", "")
-            for metric_name in [
-                "co2",
-                "pm25",
-                "pm1",
-                "humidity",
-                "temp",
-                "radonShortTermAvg",
-                "voc",
-            ]:
-                val_dict = status.get(metric_name)
-                value = None
-                if isinstance(val_dict, dict):
-                    value = val_dict.get("value")
-                elif isinstance(val_dict, (int, float)):
-                    value = val_dict
-
-                score, label, short_name = _score_metric(metric_name, value)
-                if score > 0 and value is not None:
-                    issues.append(
-                        {
-                            "device_name": device_name,
-                            "metric": short_name,
-                            "value": value,
-                            "score": score,
-                            "label": label,
-                        }
-                    )
-
-        if not issues:
-            return {
-                "state": "clear",
-                "issues": [],
-            }
-
-        # Determine overall state
-        worst_score = max(i["score"] for i in issues)
-        if worst_score >= 2:
-            state = "alert"
-        else:
-            state = "watch"
-
-        # Sort issues: highest score first, then by value descending, and keep top 3
-        issues_sorted = sorted(
-            issues, key=lambda i: (i["score"], i["value"]), reverse=True
-        )[:3]
-
-        return {
-            "state": state,
-            "issues": [
-                {
-                    "device_name": i["device_name"],
-                    "metric": i["metric"],
-                    "value": i["value"],
-                }
-                for i in issues_sorted
-            ],
-        }
-
     def _annotate_air_quality_cells(airmon):
         """Annotate indoor air-quality rows with CSS classes based on metric severity."""
         for row in airmon:
@@ -319,12 +250,10 @@ def create_web_routes(app):
         """Real-time Air Quality page"""
         airmon = db.get_all_device_aqi(conn)
         _annotate_air_quality_cells(airmon)
-        indoor_summary = _compute_indoor_air_summary(airmon)
         return render_template(
             "air-quality.html",
             current_page="air-quality",
             airmon=airmon,
-            indoor_summary=indoor_summary,
         )
 
     @app.route("/weather")

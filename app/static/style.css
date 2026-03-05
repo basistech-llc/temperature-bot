@@ -195,7 +195,7 @@ td.cell-notes:not(:empty) {
     min-width: 150px;
 }
 
-#last-refresh {
+.last-refresh-inline {
     margin-top: 6px;
     color: #666;
     font-style: italic;
@@ -206,82 +206,44 @@ td.cell-notes:not(:empty) {
     width: 300px;
 }
 
-.indoor-summary--good {
-    background-color: #e6f4ea;
-    color: #137333;
-}
-
-.indoor-summary--moderate {
-    background-color: #fff7e0;
-    color: #b97800;
-}
-
-.indoor-summary--unhealthy {
-    background-color: #fce8e6;
-    color: #c5221f;
-}
-
-.indoor-summary--poor {
-    background-color: #f3e8fd;
-    color: #5b2abf;
-}
-
-.indoor-summary {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    font-size: 0.9em;
-}
-
-.indoor-pill {
-    display: inline-flex;
-    align-items: baseline;
-    gap: 4px;
-    padding: 3px 9px;
-    border-radius: 999px;
-    border: 1px solid transparent;
-    background-color: #fff;
-}
-
-.indoor-pill-label {
-    font-weight: 600;
-    color: #555;
-}
-
-.indoor-pill-separator {
-    color: #777;
-}
-
-.indoor-pill-state {
-    font-weight: 600;
-}
-
-.indoor-issues {
-    color: #555;
-    font-size: 0.85em;
-}
-
-.indoor-pill--clear {
-    background-color: #e6f4ea;
-    color: #137333;
-}
-
-.indoor-pill--watch {
-    background-color: #fff7e0;
-    color: #b97800;
-}
-
-.indoor-pill--alert {
-    background-color: #fce8e6;
-    color: #c5221f;
+.aq-legend {
+    margin-top: 4px;
+    color: #666;
+    font-size: 0.8em;
 }
 
 .pure-table td.aq-elevated {
     background-color: #fff7e0;
+    border: 1px dashed #e0b600;
 }
 
 .pure-table td.aq-problem {
     background-color: #fce8e6;
+    border: 1px solid #d93025;
+}
+
+.legend-swatch {
+    display: inline-block;
+    padding: 1px 6px;
+    border-radius: 999px;
+    margin: 0 2px;
+}
+
+.legend-swatch.aq-elevated {
+    background-color: #fff7e0;
+    border: 1px dashed #e0b600;
+}
+
+.legend-swatch.aq-problem {
+    background-color: #fce8e6;
+    border: 1px solid #d93025;
+}
+
+.aqi-pill-table {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 0.9em;
 }
 
 /* Utility: hide element; JS toggles by adding/removing this class */
@@ -465,43 +427,6 @@ table.rules-table th  {
         margin-left: 0;
         margin-top: 50px;
     }
-}
-
-#aqi-weather {
-    max-width: 540px;
-    background-color: #f0f8ff;
-    padding: 10px 14px;
-    border-radius: 6px;
-    min-height: 80px;
-}
-
-.aqi-status {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 10px;
-    align-items: center;
-}
-
-.aqi-pill {
-    display: inline-flex;
-    align-items: baseline;
-    gap: 4px;
-    padding: 4px 10px;
-    border-radius: 999px;
-    border: 1px solid #ccc;
-    background-color: #fff;
-    font-size: 0.9em;
-}
-
-.aqi-pill-label {
-    font-weight: 600;
-    color: #555;
-}
-
-.aqi-pill-name#aqi-name {
-    padding: 0 8px;
-    border-radius: 999px;
-    color: #fff;
 }
 
 #fan-status-container .pure-u-1.pure-u-md-1-2:first-child {

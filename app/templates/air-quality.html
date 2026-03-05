@@ -9,61 +9,20 @@
 <div class="pure-g">
   <div class="pure-u-1">
     <div id="main-grid">
-      <h1>Air Quality Indoor and Outdoor</h1>
-
-      <div id="aqi-weather">
-    <div id="aqi">
-      <div id="aqi-status" class="aqi-status">
-        <div class="aqi-pill">
-          <span class="aqi-pill-label">Outdoor AQI</span>
-          <span class="aqi-pill-value" id="aqi-value"></span>
-          <span class="aqi-pill-name" id="aqi-name"></span>
-        </div>
-        {% if indoor_summary %}
-          <div class="indoor-summary">
-            <div class="indoor-pill indoor-pill--{{ indoor_summary.state }}">
-              <span class="indoor-pill-label">Indoor air</span>
-              <span class="indoor-pill-separator">·</span>
-              <span class="indoor-pill-state">
-                {% if indoor_summary.state == 'clear' %}
-                  OK
-                {% elif indoor_summary.state == 'watch' %}
-                  Watch
-                {% else %}
-                  Alert
-                {% endif %}
-              </span>
-            </div>
-            <div class="indoor-issues">
-              {% if indoor_summary.issues %}
-                {%- for issue in indoor_summary.issues -%}
-                  {{ issue.metric }} {{ issue.value|round(0) }} ({{ issue.device_name|replace('Airthings ', '') }}){% if not loop.last %} · {% endif %}
-                {%- endfor -%}
-              {% else %}
-                All clear
-              {% endif %}
-            </div>
-          </div>
-        {% endif %}
-      </div>
-    </div>
-    <div id="last-refresh"></div>
-      </div>
-
-      <h2>Indoor</h2>
+      <h2>Indoor Air Quality</h2>
 
       <table class="pure-table air-quality-table">
         <thead>
           <tr>
             <th class="column-unit" title="Indoor sensor location">Unit</th>
-            <th title="Carbon dioxide (ppm)">CO2</th>
-            <th title="Relative humidity (%)">Humidity</th>
-            <th title="Fine particles &lt;1µm (µg/m³)">PM1</th>
-            <th title="Fine particles &lt;2.5µm (µg/m³)">PM2.5</th>
-            <th title="Barometric pressure (hPa)">Pressure</th>
-            <th title="Short-term average radon level">Radon</th>
-            <th title="Temperature (°C)">Temp</th>
-            <th title="Volatile organic compounds (ppb)">VOC</th>
+            <th title="Carbon dioxide (ppm).&#10;Elevated: 801–1200.&#10;Problem: &gt;1200.">CO2</th>
+            <th title="Relative humidity (%).&#10;Elevated: 30–35 or 55–60.&#10;Problem: &lt;30 or &gt;60.">Humidity</th>
+            <th title="Fine particles &lt;1µm (µg/m³).&#10;Elevated: 13–35.&#10;Problem: &gt;35.">PM1</th>
+            <th title="Fine particles &lt;2.5µm (µg/m³).&#10;Elevated: 13–35.&#10;Problem: &gt;35.">PM2.5</th>
+            <th title="Barometric pressure (hPa).&#10;Not used for alerts.">Pressure</th>
+            <th title="Short-term average radon level.&#10;Elevated: 100–150.&#10;Problem: &gt;150.">Radon</th>
+            <th title="Temperature (°C).&#10;Elevated: 18–20 or 25–27.&#10;Problem: &lt;18 or &gt;27.">Temp</th>
+            <th title="Volatile organic compounds (ppb).&#10;Elevated: 501–2000.&#10;Problem: &gt;2000.">VOC</th>
           </tr>
         </thead>
         <tbody>
@@ -85,7 +44,16 @@
         </tbody>
       </table>
 
-      <h2>Outdoor</h2>
+      <div id="last-refresh" class="last-refresh-inline"></div>
+
+      <div class="aq-legend">
+        Shading:
+        <span class="legend-swatch aq-elevated">elevated</span>,
+        <span class="legend-swatch aq-problem">problem</span>
+        (see column headings for details).
+      </div>
+
+      <h2>Outdoor Air Quality</h2>
 
       <table class="pure-table air-quality-table">
         <thead>
@@ -99,8 +67,10 @@
             {% if row.status and row.status.aqi %}
             <tr>
               <td class="cell-unit">{{ row.device_name|replace('Airthings ', '') }}</td>
-              <td class="aqi-cell" data-aqi-color="{{ row.status.aqi.color }}">
-                {{ row.status.aqi.color_name }} {{ fmt(row.status.aqi.value) }}
+              <td class="aqi-cell">
+                <span class="aqi-pill-table" data-aqi-color="{{ row.status.aqi.color }}">
+                  {{ row.status.aqi.name }}: {{ fmt(row.status.aqi.value) }}
+                </span>
               </td>
             </tr>
             {% endif %}
@@ -113,9 +83,12 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    document.querySelectorAll('.aqi-cell[data-aqi-color]').forEach(function(cell) {
-        var color = cell.getAttribute('data-aqi-color');
-        if (color) { cell.style.setProperty('color', color); }
+    document.querySelectorAll('.aqi-pill-table[data-aqi-color]').forEach(function(pill) {
+        var color = pill.getAttribute('data-aqi-color');
+        if (color) {
+            pill.style.backgroundColor = color;
+            pill.style.color = '#fff';
+        }
     });
 });
 </script>
