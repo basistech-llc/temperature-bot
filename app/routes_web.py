@@ -22,105 +22,16 @@ from . import hubitat
 from . import room_config
 from .utils.request_utils import parse_device_ids
 from .utils.db_utils import with_db_connection
+from .routes_web_airquality_utils import (
+    annotate_air_quality_cells,
+    format_unix_as_asc,
+)
 
 logger = logging.getLogger(__name__)
 
 
-def create_web_routes(app):
-    """Create web routes and register them with the app"""
-
-    def _score_metric(metric_name, value):
-        """Return (severity_score, label, short_name) for a metric value.
-
-        severity_score: 0=good, 1=elevated, 2=problem
-        """
-        if value is None:
-            return (0, "good", metric_name)
-
-        # Defaults
-        score = 0
-        label = "good"
-        short_name = metric_name
-
-        if metric_name == "co2":
-            short_name = "CO₂"
-            if value > 1200:
-                score, label = 2, "problem"
-            elif value > 800:
-                score, label = 1, "elevated"
-        elif metric_name == "pm25":
-            short_name = "PM2.5"
-            if value > 35:
-                score, label = 2, "problem"
-            elif value > 12:
-                score, label = 1, "elevated"
-        elif metric_name == "pm1":
-            short_name = "PM1"
-            if value > 35:
-                score, label = 2, "problem"
-            elif value > 12:
-                score, label = 1, "elevated"
-        elif metric_name == "humidity":
-            short_name = "RH"
-            if value < 30 or value > 60:
-                score, label = 2, "problem"
-            elif value < 35 or value > 55:
-                score, label = 1, "elevated"
-        elif metric_name == "temp":
-            short_name = "Temp"
-            if value < 18 or value > 27:
-                score, label = 2, "problem"
-            elif value < 20 or value > 25:
-                score, label = 1, "elevated"
-        elif metric_name == "radonShortTermAvg":
-            short_name = "Radon"
-            # Thresholds chosen as a reasonable default; adjust to local units if needed.
-            if value > 150:
-                score, label = 2, "problem"
-            elif value > 100:
-                score, label = 1, "elevated"
-        elif metric_name == "voc":
-            short_name = "VOC"
-            if value > 2000:
-                score, label = 2, "problem"
-            elif value > 500:
-                score, label = 1, "elevated"
-
-        return (score, label, short_name)
-
-    def _annotate_air_quality_cells(airmon):
-        """Annotate indoor air-quality rows with CSS classes based on metric severity."""
-        for row in airmon:
-            status = row.get("status") or {}
-            # Skip synthetic outdoor AQI row
-            if "aqi" in status:
-                continue
-
-            cell_classes: dict[str, str] = {}
-            for metric_name in [
-                "co2",
-                "pm25",
-                "pm1",
-                "humidity",
-                "temp",
-                "radonShortTermAvg",
-                "voc",
-            ]:
-                val_dict = status.get(metric_name)
-                value = None
-                if isinstance(val_dict, dict):
-                    value = val_dict.get("value")
-                elif isinstance(val_dict, (int, float)):
-                    value = val_dict
-
-                score, _label, _short_name = _score_metric(metric_name, value)
-                if score == 1:
-                    cell_classes[metric_name] = "aq-elevated"
-                elif score == 2:
-                    cell_classes[metric_name] = "aq-problem"
-
-            if cell_classes:
-                row["aq_classes"] = cell_classes
+def _register_core_routes(app):
+    """Register core web routes that back the main navigation."""
 
     @app.route("/")
     @with_db_connection
@@ -154,7 +65,7 @@ def create_web_routes(app):
     def show_rules(conn):
         """Rules page"""
         # Check if we should run the rules or skip them
-        run_rules = request.args.get("run_rules", "1", type=int)  # type: ignore
+        run_rules = request.args.get("run_rules", "1", type=int)
         hour_now = datetime.datetime.now().replace(minute=0, second=0, microsecond=0)
 
         # If requests, see how the rules will render for the next seven days
@@ -249,7 +160,7 @@ def create_web_routes(app):
     def air_quality(conn):
         """Real-time Air Quality page"""
         airmon = db.get_all_device_aqi(conn)
-        _annotate_air_quality_cells(airmon)
+        annotate_air_quality_cells(airmon)
 
         # Indoor data timestamp: newest devlog logtime among indoor devices
         indoor_ts = None
@@ -261,21 +172,13 @@ def create_web_routes(app):
                 if indoor_ts is None or row["logtime"] > indoor_ts:
                     indoor_ts = row["logtime"]
 
-        indoor_asof = None
-        if indoor_ts is not None:
-            indoor_asof = datetime.datetime.fromtimestamp(indoor_ts).strftime(
-                "%Y-%m-%d %H:%M:%S"
-            )
+        indoor_asof = format_unix_as_asc(indoor_ts)
 
         # Outdoor AQI timestamp: latest logtime from aqi table
         c = conn.cursor()
         c.execute("SELECT logtime FROM aqi ORDER BY logtime DESC LIMIT 1")
         row = c.fetchone()
-        outdoor_asof = None
-        if row is not None and row[0] is not None:
-            outdoor_asof = datetime.datetime.fromtimestamp(row[0]).strftime(
-                "%Y-%m-%d %H:%M:%S"
-            )
+        outdoor_asof = format_unix_as_asc(row[0] if row is not None else None)
 
         return render_template(
             "air-quality.html",
@@ -318,6 +221,85 @@ def create_web_routes(app):
             hide_nav=True,  # Hide navigation menu
         )
 
+    return app
+
+
+def _filter_speed_control_devices(devices, device_names):
+    """Filter devices with speed control matching given names."""
+    return [
+        device
+        for device in devices
+        if device.get("has_speed_control")
+        and device.get("device_name") in device_names
+    ]
+
+
+def _get_hubitat_sensors(sensor_names):
+    """Fetch and filter Hubitat temperature sensors by exact name match."""
+    if not sensor_names:
+        return []
+
+    try:
+        all_hubitat = hubitat.get_all_devices()
+        return [
+            dev
+            for dev in all_hubitat
+            if "TemperatureMeasurement" in dev.get("capabilities", [])
+            and dev.get("name") in sensor_names
+        ]
+    except (ValueError, RuntimeError, OSError) as e:
+        logger.warning("Failed to fetch Hubitat sensors: %s", e)
+        return []
+
+
+def _collect_device_notes(devices):
+    """Collect notes from devices and format as banner text."""
+    notes = [
+        f"{device.get('device_name')}: {device.get('notes')}"
+        for device in devices
+        if device.get("notes")
+    ]
+    return " | ".join(notes) if notes else None
+
+
+def _render_room_dashboard_with_data(conn, location: str):
+    """Render room dashboard with device data filtered by configuration."""
+    room_key = location.lower()
+    config = room_config.ROOM_CONFIGS.get(room_key, {})
+
+    all_devices = db.get_device_status(conn)
+
+    # Filter ERVs and fans
+    erv_devices = _filter_speed_control_devices(all_devices, config.get("ervs", []))
+
+    # For fans, take first available match
+    fan_names: List[str] = config.get("fans", [])
+    fan_devices = []
+    if fan_names:
+        filtered = _filter_speed_control_devices(all_devices, fan_names)
+        if filtered:
+            fan_devices = [filtered[0]]  # Only first match
+
+    # Get Hubitat sensors
+    hubitat_sensors = _get_hubitat_sensors(config.get("sensors", []))
+
+    # Collect notes
+    notes = _collect_device_notes(erv_devices + fan_devices)
+
+    return render_template(
+        "room_dashboard.html",
+        location=location,
+        hide_nav=True,
+        erv_devices=erv_devices,
+        fan_devices=fan_devices,
+        hubitat_sensors=hubitat_sensors,
+        notes=notes,
+    )
+
+
+def _register_room_routes(app):
+    """Register routes related to room dashboards and debug views."""
+
     @app.route("/all_devices")
     def debug_all_devices():
         """Debug endpoint to show all devices from database and Hubitat"""
@@ -339,71 +321,11 @@ def create_web_routes(app):
         """Hickory HVAC control dashboard."""
         return _render_room_dashboard_with_data(conn, "Hickory")
 
-    def _filter_speed_control_devices(devices, device_names):
-        """Filter devices with speed control matching given names."""
-        return [
-            device
-            for device in devices
-            if device.get("has_speed_control")
-            and device.get("device_name") in device_names
-        ]
+    return app
 
-    def _get_hubitat_sensors(sensor_names):
-        """Fetch and filter Hubitat temperature sensors by exact name match."""
-        if not sensor_names:
-            return []
 
-        try:
-            all_hubitat = hubitat.get_all_devices()
-            return [
-                dev
-                for dev in all_hubitat
-                if "TemperatureMeasurement" in dev.get("capabilities", [])
-                and dev.get("name") in sensor_names
-            ]
-        except (ValueError, RuntimeError, OSError) as e:
-            logger.warning("Failed to fetch Hubitat sensors: %s", e)
-            return []
-
-    def _collect_device_notes(devices):
-        """Collect notes from devices and format as banner text."""
-        notes = [
-            f"{device.get('device_name')}: {device.get('notes')}"
-            for device in devices
-            if device.get("notes")
-        ]
-        return " | ".join(notes) if notes else None
-
-    def _render_room_dashboard_with_data(conn, location: str):
-        """Render room dashboard with device data filtered by configuration."""
-        room_key = location.lower()
-        config = room_config.ROOM_CONFIGS.get(room_key, {})
-
-        all_devices = db.get_device_status(conn)
-
-        # Filter ERVs and fans
-        erv_devices = _filter_speed_control_devices(all_devices, config.get("ervs", []))
-
-        # For fans, take first available match
-        fan_names: List[str] = config.get("fans", [])
-        fan_devices = []
-        if fan_names:
-            filtered = _filter_speed_control_devices(all_devices, fan_names)
-            if filtered:
-                fan_devices = [filtered[0]]  # Only first match
-
-        # Get Hubitat sensors
-        hubitat_sensors = _get_hubitat_sensors(config.get("sensors", []))
-
-        # Collect notes
-        notes = _collect_device_notes(erv_devices + fan_devices)
-
-        return render_template(
-            "room_dashboard.html",
-            location=location,
-            hide_nav=True,
-            erv_devices=erv_devices,
-            fan_devices=fan_devices,
-            hubitat_sensors=hubitat_sensors,
-            notes=notes,
-        )
+def create_web_routes(app):
+    """Create web routes and register them with the app."""
+    _register_core_routes(app)
+    _register_room_routes(app)
+    return app
