@@ -2,17 +2,16 @@
 {% block title %} Air Quality {% endblock %}
 
 {% block body %}
-<div class="pure-g"><!-- the start of the pure row -->
-  <div class="pure-u-1"><!-- across the entire row -->
-    <h1>Air Quality Indoor and Outdoor</h1>
-  </div>
-</div>
 
-<!-- Hidden main-grid container so shared JS can safely reference it -->
-<div id="main-grid" class="hidden"></div>
-
+{% macro fmt(value) -%}
+  {{ "{:,.1f}".format(value) }}
+{%- endmacro %}
 <div class="pure-g">
-  <div class="pure-u-1" id="aqi-weather">
+  <div class="pure-u-1">
+    <div id="main-grid">
+      <h1>Air Quality Indoor and Outdoor</h1>
+
+      <div id="aqi-weather">
     <div id="aqi">
       <div id="aqi-status" class="aqi-status">
         <div class="aqi-pill">
@@ -49,39 +48,68 @@
       </div>
     </div>
     <div id="last-refresh"></div>
+      </div>
+
+      <h2>Indoor</h2>
+
+      <table class="pure-table air-quality-table">
+        <thead>
+          <tr>
+            <th class="column-unit" title="Indoor sensor location">Unit</th>
+            <th title="Carbon dioxide (ppm)">CO2</th>
+            <th title="Relative humidity (%)">Humidity</th>
+            <th title="Fine particles &lt;1µm (µg/m³)">PM1</th>
+            <th title="Fine particles &lt;2.5µm (µg/m³)">PM2.5</th>
+            <th title="Barometric pressure (hPa)">Pressure</th>
+            <th title="Short-term average radon level">Radon</th>
+            <th title="Temperature (°C)">Temp</th>
+            <th title="Volatile organic compounds (ppb)">VOC</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in airmon %}
+            {% if row.status and row.status.co2 %}
+            <tr>
+              <td class="cell-unit">{{ row.device_name|replace('Airthings ', '') }}</td>
+              <td class="{{ row.aq_classes.get('co2') if row.aq_classes is defined else '' }}">{{ fmt(row.status.co2.value) }}</td>
+              <td class="{{ row.aq_classes.get('humidity') if row.aq_classes is defined else '' }}">{{ fmt(row.status.humidity.value) }}</td>
+              <td class="{{ row.aq_classes.get('pm1') if row.aq_classes is defined else '' }}">{{ fmt(row.status.pm1.value) }}</td>
+              <td class="{{ row.aq_classes.get('pm25') if row.aq_classes is defined else '' }}">{{ fmt(row.status.pm25.value) }}</td>
+              <td>{{ fmt(row.status.pressure.value) }}</td>
+              <td class="{{ row.aq_classes.get('radonShortTermAvg') if row.aq_classes is defined else '' }}">{{ fmt(row.status.radonShortTermAvg.value) }}</td>
+              <td class="{{ row.aq_classes.get('temp') if row.aq_classes is defined else '' }}">{{ fmt(row.status.temp.value) }}</td>
+              <td class="{{ row.aq_classes.get('voc') if row.aq_classes is defined else '' }}">{{ fmt(row.status.voc.value) }}</td>
+            </tr>
+            {% endif %}
+          {% endfor %}
+        </tbody>
+      </table>
+
+      <h2>Outdoor</h2>
+
+      <table class="pure-table air-quality-table">
+        <thead>
+          <tr>
+            <th class="column-unit" title="Outdoor sensor source">Unit</th>
+            <th title="Outdoor Air Quality Index">AQI</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in airmon %}
+            {% if row.status and row.status.aqi %}
+            <tr>
+              <td class="cell-unit">{{ row.device_name|replace('Airthings ', '') }}</td>
+              <td class="aqi-cell" data-aqi-color="{{ row.status.aqi.color }}">
+                {{ row.status.aqi.color_name }} {{ fmt(row.status.aqi.value) }}
+              </td>
+            </tr>
+            {% endif %}
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
   </div>
 </div>
-
-<h1>Indoor</h1>
-
-<table>
-  <thead>
-  <tr><th>Name</th><th>CO2</th><th>humidity</th><th>pm1</th><th>pm25</th><th>pressure</th><th>radon</th><th>temp</th><th>voc</th></tr>
-  </thead>
-  <tbody>
-    {% for row in airmon %}
-      {% if row.status and row.status.co2 %}
-    <tr><th scope="row">{{ row.device_name|replace('Airthings ', '') }}</th>
-      <td>{{ row.status.co2.value }}</td> <td>{{row.status.humidity.value }}</td> <td>{{row.status.pm1.value}}</td> <td>{{row.status.pm25.value}}</td> <td>{{row.status.pressure.value}}</td> <td>{{row.status.radonShortTermAvg.value}}</td> <td>{{row.status.temp.value}}</td> <td>{{row.status.voc.value}}</td></tr>
-    {% endif %}
-    {% endfor %}
-  </tbody>
-</table>
-
-<h1>Outdoor</h1>
-
-<table>
-  <thead>
-  <tr><th>Name</th><th>AQI</th></tr>
-  </thead>
-  <tbody>
-    {% for row in airmon %}
-{% if row.status and row.status.aqi %}
-    <tr><th scope="row">{{ row.device_name|replace('Airthings ', '') }}</th><td class="aqi-cell" data-aqi-color="{{ row.status.aqi.color }}">{{row.status.aqi.color_name}} {{row.status.aqi.value}}</td></tr>
-    {% endif %}
-    {% endfor %}
-  </tbody>
-</table>
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {

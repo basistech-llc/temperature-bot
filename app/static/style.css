@@ -276,6 +276,14 @@ td.cell-notes:not(:empty) {
     color: #c5221f;
 }
 
+.pure-table td.aq-elevated {
+    background-color: #fff7e0;
+}
+
+.pure-table td.aq-problem {
+    background-color: #fce8e6;
+}
+
 /* Utility: hide element; JS toggles by adding/removing this class */
 .hidden {
     display: none !important;
@@ -527,6 +535,10 @@ table.rules-table th  {
     white-space: normal;
     min-width: 300px;
     word-break: break-word;
+}
+
+.air-quality-table .column-unit {
+    min-width: 180px;
 }
 
 .column-speed {

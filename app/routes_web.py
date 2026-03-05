@@ -157,6 +157,40 @@ def create_web_routes(app):
             ],
         }
 
+    def _annotate_air_quality_cells(airmon):
+        """Annotate indoor air-quality rows with CSS classes based on metric severity."""
+        for row in airmon:
+            status = row.get("status") or {}
+            # Skip synthetic outdoor AQI row
+            if "aqi" in status:
+                continue
+
+            cell_classes: dict[str, str] = {}
+            for metric_name in [
+                "co2",
+                "pm25",
+                "pm1",
+                "humidity",
+                "temp",
+                "radonShortTermAvg",
+                "voc",
+            ]:
+                val_dict = status.get(metric_name)
+                value = None
+                if isinstance(val_dict, dict):
+                    value = val_dict.get("value")
+                elif isinstance(val_dict, (int, float)):
+                    value = val_dict
+
+                score, _label, _short_name = _score_metric(metric_name, value)
+                if score == 1:
+                    cell_classes[metric_name] = "aq-elevated"
+                elif score == 2:
+                    cell_classes[metric_name] = "aq-problem"
+
+            if cell_classes:
+                row["aq_classes"] = cell_classes
+
     @app.route("/")
     @with_db_connection
     def read_index(conn):
@@ -284,6 +318,7 @@ def create_web_routes(app):
     def air_quality(conn):
         """Real-time Air Quality page"""
         airmon = db.get_all_device_aqi(conn)
+        _annotate_air_quality_cells(airmon)
         indoor_summary = _compute_indoor_air_summary(airmon)
         return render_template(
             "air-quality.html",
