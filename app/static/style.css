@@ -195,13 +195,55 @@ td.cell-notes:not(:empty) {
     min-width: 150px;
 }
 
-#last-refresh {
-    color: blue;
+.last-refresh-inline {
+    margin-top: 6px;
+    color: #666;
     font-style: italic;
+    font-size: 0.85em;
 }
 
 #weather {
     width: 300px;
+}
+
+.aq-legend {
+    margin-top: 4px;
+    color: #666;
+    font-size: 0.8em;
+}
+
+.pure-table td.aq-elevated {
+    background-color: #fff7e0;
+    border: 1px dashed #e0b600;
+}
+
+.pure-table td.aq-problem {
+    background-color: #fce8e6;
+    border: 1px solid #d93025;
+}
+
+.legend-swatch {
+    display: inline-block;
+    padding: 1px 6px;
+    border-radius: 999px;
+    margin: 0 2px;
+}
+
+.legend-swatch.aq-elevated {
+    background-color: #fff7e0;
+    border: 1px dashed #e0b600;
+}
+
+.legend-swatch.aq-problem {
+    background-color: #fce8e6;
+    border: 1px solid #d93025;
+}
+
+.aqi-pill-table {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 0.9em;
 }
 
 /* Utility: hide element; JS toggles by adding/removing this class */
@@ -387,20 +429,6 @@ table.rules-table th  {
     }
 }
 
-#aqi-weather {
-    width: 400px;
-    background-color: #f0f8ff;
-    min-height: 100px;
-}
-
-#aqi-status {
-    display: inline-block;
-    padding: 5px 10px;
-    border: 1px solid #ccc;
-    border-radius: 4px;
-    max-width: 250px;
-}
-
 #fan-status-container .pure-u-1.pure-u-md-1-2:first-child {
     max-width: 400px;
 }
@@ -432,6 +460,10 @@ table.rules-table th  {
     white-space: normal;
     min-width: 300px;
     word-break: break-word;
+}
+
+.air-quality-table .column-unit {
+    min-width: 180px;
 }
 
 .column-speed {
