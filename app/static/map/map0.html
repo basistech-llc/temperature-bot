@@ -15,13 +15,21 @@
             max-width: 100%; /* Ensures it scales on smaller screens */
             cursor: pointer;
         }
-        #info-box {
-            margin-top: 15px;
-            padding: 15px;
-            background: white;
-            border-left: 5px solid #007bff;
-            font-size: 1.2em;
-            display: inline-block;
+        #room-tooltip {
+            position: fixed;
+            padding: 6px 10px;
+            background: rgba(0, 0, 0, 0.85);
+            color: #fff;
+            font-size: 14px;
+            border-radius: 4px;
+            pointer-events: none;
+            z-index: 1000;
+            visibility: hidden;
+            white-space: nowrap;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+        }
+        #room-tooltip.visible {
+            visibility: visible;
         }
     </style>
 </head>
@@ -29,8 +37,7 @@
 
     <h2>Interactive Office Floor Plan</h2>
     <canvas id="floorplanCanvas"></canvas>
-    <br>
-    <div id="info-box">Hover over a room...</div>
+    <div id="room-tooltip"></div>
 
 <script>
     // 1. The Bounding Box Data (Normalized Coordinates: 0.0 to 1.0)
@@ -48,7 +55,8 @@
 
     const canvas = document.getElementById('floorplanCanvas');
     const ctx = canvas.getContext('2d');
-    const infoBox = document.getElementById('info-box');
+    const tooltip = document.getElementById('room-tooltip');
+    const TOOLTIP_OFFSET = 14;
 
     // 2. Load the Image
     const img = new Image();
@@ -124,16 +132,24 @@
             }
         }
 
-        // Update UI if hover state changes
+        // Update canvas and tooltip
         if (foundHover) {
             draw(foundHover.id);
-            infoBox.innerText = `Currently viewing: ${foundHover.label}`;
+            tooltip.textContent = foundHover.label;
+            tooltip.classList.add('visible');
+            tooltip.style.left = (e.clientX + TOOLTIP_OFFSET) + 'px';
+            tooltip.style.top = (e.clientY + TOOLTIP_OFFSET) + 'px';
             canvas.style.cursor = 'pointer';
         } else {
-            draw(); // Redraw with no hover
-            infoBox.innerText = 'Hover over a room...';
+            draw();
+            tooltip.classList.remove('visible');
             canvas.style.cursor = 'default';
         }
+    });
+    canvas.addEventListener('mouseleave', () => {
+        tooltip.classList.remove('visible');
+        draw();
+        canvas.style.cursor = 'default';
     });
 </script>
 
