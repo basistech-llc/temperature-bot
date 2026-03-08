@@ -217,7 +217,7 @@ function setupEditableNotes() {
  * Buttons operate in the currently selected UI unit but send Celsius to backend.
  */
 function setupSetTempControls() {
-  document.querySelectorAll(".settemp-arrow").forEach((button) => {
+  document.querySelectorAll(".settemp-btn").forEach((button) => {
     button.addEventListener("click", function () {
       const deviceId = parseInt(this.getAttribute("data-device-id"));
       const delta = parseFloat(this.getAttribute("data-delta") || "0");
