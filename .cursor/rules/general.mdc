@@ -6,5 +6,5 @@
 - Each new test file must contain at least one `def test_...` that runs standalone without subclassing or external fixtures.
 - Don’t introduce `tests/test_base.py`, `Base*Test` classes, or cross-file fixture dependencies unless I ask.
 - Prefer local, in-file fixtures; avoid `conftest.py` changes unless requested.
-
 - Do not use f-format strings in logging methods.
+- make sure pylint and pytest always work after code is added.
