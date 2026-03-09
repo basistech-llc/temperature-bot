@@ -401,6 +401,37 @@ const refreshGridRows = () => {
               cell.innerHTML = TemperatureUtils.formatTemperature(tempC);
             }
 
+            // Update humidity where available
+            const humidityCell = document.getElementById(
+              `humidity-${dev.device_id}`,
+            );
+            if (humidityCell) {
+              const status = dev.status || {};
+              let humidityValue = null;
+
+              const h = status.humidity;
+              if (h && typeof h === "object" && h.value != null) {
+                humidityValue = parseFloat(h.value);
+              } else if (typeof h === "number") {
+                humidityValue = h;
+              } else if (status.RoomHumidity != null) {
+                humidityValue = parseFloat(status.RoomHumidity);
+              } else if (status.InletHumidity != null) {
+                humidityValue = parseFloat(status.InletHumidity);
+              }
+
+              if (
+                humidityValue != null &&
+                !Number.isNaN(humidityValue) &&
+                Number.isFinite(humidityValue)
+              ) {
+                const rounded = Math.round(humidityValue * 10) / 10;
+                humidityCell.textContent = `${rounded.toFixed(1)}%`;
+              } else {
+                humidityCell.textContent = "--";
+              }
+            }
+
             // Update set temperature (from AE-200 status) where available
             const setTempCell = document.getElementById(
               `settemp-${dev.device_id}`,

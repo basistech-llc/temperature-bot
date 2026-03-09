@@ -163,6 +163,7 @@
           <thead>
             <tr>
               <th class="column-unit" rowspan="2">Unit</th>
+              <th class="column-humidity" rowspan="2">Humidity</th>
               <th class="column-temp" rowspan="2">Temp</th>
               <th class="column-notes" rowspan="2">Notes</th>
             </tr>
@@ -178,6 +179,7 @@
                       <a href="/chart?device_ids={{ device.device_id }}" target="_blank">graph</a>
                     </div>
                   </td>
+                  <td class="cell-humidity" id="humidity-{{ device.device_id }}">--</td>
                   <td class="cell-temp" id="temp-{{ device.device_id }}">--</td>
                   <td class="cell-notes">
                     <span class="notes editable-notes" id="notes-{{ device.device_id }}" data-device-id="{{ device.device_id }}" title="Click to edit"></span>
