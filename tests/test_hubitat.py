@@ -24,6 +24,6 @@ def test_hubitat():
     count = 0
     for t in temps:
         if t['name'] == 'A51 Sensor 3':
-            assert t['temperature'] == "23.4"
+            assert t['temperature'] == 23.4
             count += 1
     assert count == 1
