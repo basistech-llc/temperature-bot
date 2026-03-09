@@ -9,6 +9,9 @@ open tabs here:
   - [Simson's clone](https://slg1.basistech.net/)
   - [David's clone](https://deg1.basistech.net/)
   - [local](http://localhost:8000/)
+  - Hubitat:
+    - Dashboard: http://10.2.3.51/
+    - Documentation: https://docs2.hubitat.com/en/home
 - Database: Often useful to copy latest database from /var/db on server to each instance. Placed in
   root or var/db.
 - Raw view of [Mitsubishi HVAC](http://10.2.1.20/control/index.html). Credentials in
