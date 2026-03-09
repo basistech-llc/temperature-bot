@@ -14,6 +14,7 @@ from . import db_alerts
 from . import rules_engine
 from . import hubitat
 from . import ae200
+from .display_names import display_device_name
 from .utils.request_utils import parse_device_ids
 from .utils.db_utils import with_db_connection
 
@@ -87,6 +88,15 @@ def get_status(conn):
     """Get device status"""
     logger.debug("**************** /status ****************")
     device_data = db.get_device_status(conn)
+
+    # Attach a generic display name for each device so frontends can show
+    # human-friendly labels without duplicating string logic. This currently
+    # applies neutral transforms (like "XXX on YYY" elision) that do not depend
+    # on Hubitat being available.
+    for dev in device_data:
+        raw_name = dev.get("device_name", "")
+        dev["display_name"] = display_device_name(raw_name, source="db")
+
     return jsonify({"devices": device_data})
 
 
@@ -106,10 +116,17 @@ def get_temperature(conn):
     if device_ids is None and request.args.get("device_ids"):
         return jsonify({"error": "Invalid device_ids format"}), 400
     series = db.get_temperature_series(conn, device_ids)
-    # Use Hubitat label for series display name when available
+    # Use centralized helper for series display names, preferring Hubitat label
+    # when available and applying display-only transforms.
     name_to_label = hubitat.get_name_to_label()
     for s in series:
-        s["name"] = name_to_label.get(s["name"], s["name"])
+        raw_name = s.get("name", "")
+        hub_label = name_to_label.get(raw_name)
+        s["name"] = display_device_name(
+            raw_name,
+            hubitat_label=hub_label,
+            source="hubitat",
+        )
     return jsonify({"series": series})
 
 

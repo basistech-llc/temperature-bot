@@ -27,6 +27,38 @@ const FAN_SPEEDS = [-1, 0, 1, 2, 3, 4];
 let currentWeatherData = null;
 
 ////////////////////////////////////////////////////////////////
+// Shared helpers
+
+/**
+ * Update a temperature- or humidity-like cell with staleness and tooltip.
+ *
+ * @param {HTMLElement|null} cell - The table cell element to update.
+ * @param {Object} dev - Device data object from /api/v1/status.
+ */
+function updateStalenessAndTooltip(cell, dev) {
+  if (!cell || !dev) {
+    return;
+  }
+
+  // Calculate if value is stale (>= 5 minutes = 300 seconds)
+  const nowTs = Math.floor(Date.now() / 1000);
+  const lastUpdate = (dev.logtime || 0) + (dev.duration || 0);
+  const ageSeconds = nowTs - lastUpdate;
+  const isStale = ageSeconds >= 300; // 5 minutes
+
+  // Set title attribute for hover tooltip
+  if (dev.age) {
+    cell.setAttribute("title", `Last updated: ${dev.age} ago`);
+  }
+
+  // Apply color class based on staleness
+  cell.classList.remove("temp-stale");
+  if (isStale) {
+    cell.classList.add("temp-stale");
+  }
+}
+
+////////////////////////////////////////////////////////////////
 // Weather display functions
 function displayWeather(weatherInfo) {
   console.log("displayWeather called with:", weatherInfo);
@@ -217,13 +249,11 @@ function setupEditableNotes() {
  * Buttons operate in the currently selected UI unit but send Celsius to backend.
  */
 function setupSetTempControls() {
-  document.querySelectorAll(".settemp-arrow").forEach((button) => {
+  document.querySelectorAll(".settemp-btn").forEach((button) => {
     button.addEventListener("click", function () {
       const deviceId = parseInt(this.getAttribute("data-device-id"));
       const delta = parseFloat(this.getAttribute("data-delta") || "0");
-      const display = document.getElementById(
-        `settemp-display-${deviceId}`,
-      );
+      const display = document.getElementById(`settemp-display-${deviceId}`);
       if (!display) {
         return;
       }
@@ -380,25 +410,98 @@ const refreshGridRows = () => {
               // Store original Celsius value in data attribute for instant conversion
               cell.setAttribute("data-temp-c", tempC.toString());
 
-              // Calculate if temperature is stale (>= 5 minutes = 300 seconds)
-              const now = Math.floor(Date.now() / 1000);
-              const lastUpdate = (dev.logtime || 0) + (dev.duration || 0);
-              const ageSeconds = now - lastUpdate;
-              const isStale = ageSeconds >= 300; // 5 minutes
-
-              // Set title attribute for hover tooltip
-              if (dev.age) {
-                cell.setAttribute("title", `Last updated: ${dev.age} ago`);
-              }
-
-              // Apply color class based on staleness
-              cell.classList.remove("temp-stale");
-              if (isStale) {
-                cell.classList.add("temp-stale");
-              }
+              // Apply shared staleness + tooltip behavior
+              updateStalenessAndTooltip(cell, dev);
 
               // Display temperature without age
               cell.innerHTML = TemperatureUtils.formatTemperature(tempC);
+            }
+
+            // Update humidity where available
+            const humidityCell = document.getElementById(
+              `humidity-${dev.device_id}`,
+            );
+            if (humidityCell) {
+              const status = dev.status || {};
+              let humidityValue = null;
+
+              const h = status.humidity;
+              if (h && typeof h === "object" && h.value != null) {
+                // Airthings-style: { value, unit }
+                humidityValue = parseFloat(h.value);
+              } else if (typeof h === "number") {
+                humidityValue = h;
+              } else if (typeof h === "string" && h.trim() !== "") {
+                humidityValue = parseFloat(h);
+              } else if (status.RoomHumidity != null) {
+                humidityValue = parseFloat(status.RoomHumidity);
+              } else if (status.InletHumidity != null) {
+                humidityValue = parseFloat(status.InletHumidity);
+              } else if (
+                status.attributes &&
+                status.attributes.humidity != null
+              ) {
+                const ah = status.attributes.humidity;
+                if (typeof ah === "number") {
+                  humidityValue = ah;
+                } else if (typeof ah === "string" && ah.trim() !== "") {
+                  humidityValue = parseFloat(ah);
+                }
+              }
+
+              if (
+                humidityValue != null &&
+                !Number.isNaN(humidityValue) &&
+                Number.isFinite(humidityValue)
+              ) {
+                const rounded = Math.round(humidityValue * 10) / 10;
+                // Reuse the same staleness + tooltip logic as temperature.
+                updateStalenessAndTooltip(humidityCell, dev);
+
+                humidityCell.textContent = `${rounded.toFixed(1)}%`;
+              } else {
+                humidityCell.textContent = "--";
+              }
+            }
+
+            // Update illuminance where available
+            const illumCell = document.getElementById(
+              `illuminance-${dev.device_id}`,
+            );
+            if (illumCell) {
+              const status = dev.status || {};
+              let illumValue = null;
+
+              const il = status.illuminance;
+              if (typeof il === "number") {
+                illumValue = il;
+              } else if (typeof il === "string" && il.trim() !== "") {
+                illumValue = parseFloat(il);
+              } else if (
+                status.attributes &&
+                status.attributes.illuminance != null
+              ) {
+                const ail = status.attributes.illuminance;
+                if (typeof ail === "number") {
+                  illumValue = ail;
+                } else if (typeof ail === "string" && ail.trim() !== "") {
+                  illumValue = parseFloat(ail);
+                }
+              }
+
+              if (
+                illumValue != null &&
+                !Number.isNaN(illumValue) &&
+                Number.isFinite(illumValue)
+              ) {
+                const rounded = Math.round(illumValue * 10) / 10;
+                // Reuse the same staleness + tooltip logic as temperature.
+                updateStalenessAndTooltip(illumCell, dev);
+
+                illumCell.textContent = `${rounded.toFixed(1)} lx`;
+              } else {
+                illumCell.textContent = "--";
+              }
             }
 
             // Update set temperature (from AE-200 status) where available
@@ -419,10 +522,7 @@ const refreshGridRows = () => {
                   // AE-200 SetTemp is reported in Celsius
                   const setTempC = setTempValue;
                   // Store Celsius value for UI conversions and adjustments
-                  setTempCell.setAttribute(
-                    "data-temp-c",
-                    setTempC.toString(),
-                  );
+                  setTempCell.setAttribute("data-temp-c", setTempC.toString());
                   setTempDisplay.setAttribute(
                     "data-temp-c",
                     setTempC.toString(),
@@ -575,7 +675,9 @@ function updateRulesDisabledBadge(dev) {
 // Make refreshGridRows and displayWeather available globally for temperature unit changes
 window.refreshGridRows = refreshGridRows;
 window.displayWeather = displayWeather;
-window.getCurrentWeatherData = function() { return currentWeatherData; };
+window.getCurrentWeatherData = function () {
+  return currentWeatherData;
+};
 
 window.addEventListener("DOMContentLoaded", function () {
   setupMatrixListeners();

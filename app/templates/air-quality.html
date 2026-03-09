@@ -44,7 +44,7 @@ Problem: &gt;2000.">VOC</th>
           {% for row in airmon %}
             {% if row.status and row.status.co2 %}
             <tr>
-              <td class="cell-unit">{{ row.device_name|replace('Airthings ', '') }}</td>
+              <td class="cell-unit">{{ row.display_name or row.device_name }}</td>
               <td class="{{ row.aq_classes.get('co2') if row.aq_classes is defined else '' }}">{{ fmt(row.status.co2.value) }}</td>
               <td class="{{ row.aq_classes.get('humidity') if row.aq_classes is defined else '' }}">{{ fmt(row.status.humidity.value) }}</td>
               <td class="{{ row.aq_classes.get('pm1') if row.aq_classes is defined else '' }}">{{ fmt(row.status.pm1.value) }}</td>
@@ -83,7 +83,7 @@ Problem: &gt;2000.">VOC</th>
           {% for row in airmon %}
             {% if row.status and row.status.aqi %}
             <tr>
-              <td class="cell-unit">{{ row.device_name|replace('Airthings ', '') }}</td>
+              <td class="cell-unit">{{ row.display_name or row.device_name }}</td>
               <td class="aqi-cell">
                 <span class="aqi-pill-table" data-aqi-color="{{ row.status.aqi.color }}">
                   {{ row.status.aqi.name }}: {{ fmt(row.status.aqi.value) }}

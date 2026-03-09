@@ -116,34 +116,56 @@ body {
     background-color: #0056b3;
 }
 
-/* Set temperature control (index + room dashboard) */
-.settemp-container {
-    display: flex;
+/* Set temperature: thermostat-style inline [−] value [+] — one line, no extra height */
+.settemp-thermostat {
+    display: inline-flex;
     align-items: center;
-    justify-content: flex-end;
-    gap: 4px;
+    gap: 0.15rem;
 }
 
-.settemp-display {
+.settemp-thermostat .settemp-display {
     min-width: 3.5em;
-    text-align: right;
-    display: inline-block;
+    text-align: center;
+    font-weight: 600;
+    color: #1a202c;
 }
 
-.settemp-arrow-column {
-    display: flex;
-    flex-direction: column;
-    gap: 1px;
-}
-
-.settemp-arrow {
-    padding: 0;
-    font-size: 0.6em;
+/* Thermostat adjust: wide tap targets, minimal look — doesn’t add row height */
+.settemp-thermostat .settemp-btn {
+    /* Wide enough for touch (44px min); no min-height so row stays compact */
+    min-width: 44px;
+    padding: 0.2rem 0.35rem;
+    font-size: 1.1rem;
+    font-weight: 600;
     line-height: 1;
-    display: inline-block;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     background: transparent;
     border: none;
+    color: #64748b;
     cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+    border-radius: 4px;
+}
+
+.settemp-thermostat .settemp-btn:hover {
+    color: #1a202c;
+    background: #f1f5f9;
+}
+
+.settemp-thermostat .settemp-btn:active {
+    background: #e2e8f0;
+}
+
+.settemp-thermostat .settemp-btn:focus {
+    outline: none;
+}
+
+.settemp-thermostat .settemp-btn:focus-visible {
+    outline: 2px solid #3b82f6;
+    outline-offset: 1px;
 }
 
 /* main grid */
@@ -184,6 +206,11 @@ button {
 
 .column-temp {
     min-width: 80px;
+}
+
+.column-temp-set,
+.cell-temp-set {
+    min-width: 160px;
 }
 
 .cell-temp {

@@ -19,7 +19,7 @@ import requests
 sys.path.append(dirname(dirname(abspath(__file__))))
 
 from app.paths import ETC_DIR
-from app.rules_engine import rules_results, run_rules, all_rules_disabled_until
+from app.rules_engine import rules_results, run_rules
 from app import airquality
 from app import ae200
 from app import airthings
@@ -75,12 +75,19 @@ def process_device_alert_data(conn, dev, data):
 
 def update_from_hubitat(conn):
     try:
-        temps = hubitat.extract_temperatures(hubitat.get_all_devices())
+        devices = hubitat.get_all_devices()
+        temps = hubitat.extract_temperatures(devices)
     except requests.exceptions.ConnectTimeout as e:
         logger.error("update_from_hubitat: timeout %s", e)
         return
     for item in temps:
-        db.insert_devlog_entry(conn, device_name=item["name"], temp=item["temperature"])
+        statusdict = item.get("status") or {}
+        db.insert_devlog_entry(
+            conn,
+            device_name=item["name"],
+            temp=item["temperature"],
+            statusdict=statusdict,
+        )
 
 def update_from_airthings(conn):
     logtime = time.time()
