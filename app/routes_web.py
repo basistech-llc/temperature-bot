@@ -20,6 +20,7 @@ from . import db_alerts
 from . import rules_engine
 from . import hubitat
 from . import room_config
+from .display_names import display_device_name
 from .utils.request_utils import parse_device_ids
 from .utils.db_utils import with_db_connection
 from .routes_web_airquality_utils import (
@@ -40,10 +41,18 @@ def _register_core_routes(app):
         # Get device data for the template
         device_data = db.get_device_status(conn)
 
-        # Enrich with Hubitat label for display (Air Quality section: label visible, name in title)
+        # Enrich with Hubitat label for display (Air Quality section).
+        # The central helper handles any display-only transforms so we can
+        # easily tweak naming strategy in one place.
         name_to_label = hubitat.get_name_to_label()
         for d in device_data:
-            d["device_label"] = name_to_label.get(d["device_name"], d["device_name"])
+            raw_name = d.get("device_name", "")
+            hub_label = name_to_label.get(raw_name)
+            d["device_label"] = display_device_name(
+                raw_name,
+                hubitat_label=hub_label,
+                source="hubitat",
+            )
 
         # Add current timestamp for temporal links
         now = int(time.time())
@@ -161,6 +170,12 @@ def _register_core_routes(app):
         """Real-time Air Quality page"""
         airmon = db.get_all_device_aqi(conn)
         annotate_air_quality_cells(airmon)
+
+        # Attach a centralized display name for each row so templates do not
+        # need to know about vendor prefixes, " on " suffixes, etc.
+        for row in airmon:
+            raw_name = row.get("device_name", "")
+            row["display_name"] = display_device_name(raw_name, source="airthings")
 
         # Indoor data timestamp: newest devlog logtime among indoor devices
         indoor_ts = None
@@ -282,6 +297,17 @@ def _render_room_dashboard_with_data(conn, location: str):
 
     # Get Hubitat sensors
     hubitat_sensors = _get_hubitat_sensors(config.get("sensors", []))
+
+    # Attach display names for sensors using the centralized helper. We prefer
+    # Hubitat labels when available and then apply generic display transforms.
+    for sensor in hubitat_sensors:
+        raw_name = sensor.get("name", "")
+        label = sensor.get("label") or None
+        sensor["display_name"] = display_device_name(
+            raw_name,
+            hubitat_label=label,
+            source="hubitat",
+        )
 
     # Collect notes
     notes = _collect_device_notes(erv_devices + fan_devices)

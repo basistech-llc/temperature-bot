@@ -33,7 +33,7 @@
             {% if device.has_speed_control and device.device_name.lower().startswith('erv') %}
                 <tr class="device-row" x-data-device-id="{{ device.device_id }}">
                   <td class="cell-unit">
-                    {{ device.device_name }}<span class="rules-disabled-superscript hidden" id="rules-disabled-{{ device.device_id }}" title=""></span>
+                    <span title="{{ device.device_name }}">{{ device.device_label }}</span><span class="rules-disabled-superscript hidden" id="rules-disabled-{{ device.device_id }}" title=""></span>
                     <span id="device-{{ device.device_id }}-notes"></span>
                     <div class="temporal-links">
                       <a href="/chart?device_ids={{ device.device_id }}" target="_blank">graph</a>
@@ -50,7 +50,7 @@
                            id="radio-{{ device.device_id }}-0"
                            x-data-device-id="{{ device.device_id }}"
                            x-data-fan_speed="0"
-                           title="Turn {{ device.device_name }} off">
+                           title="Turn {{ device.device_label }} off">
                   </td>
                   {% for fan_speed in [1, 2, 3, 4] %}
                   <td class="cell-speed cell-speed-{{ fan_speed if fan_speed >= 2 else 'low' }}">
@@ -59,7 +59,7 @@
                            id="radio-{{ device.device_id }}-{{ fan_speed }}"
                            x-data-device-id="{{ device.device_id }}"
                            x-data-fan_speed="{{ fan_speed }}"
-                           title="Set {{ device.device_name }} to speed {{ fan_speed }}">
+                           title="Set {{ device.device_label }} to speed {{ fan_speed }}">
                   </td>
                   {% endfor %}
                   <td class="cell-notes">
@@ -94,7 +94,7 @@
             {% if device.has_speed_control and not device.device_name.lower().startswith('erv') %}
                 <tr class="device-row" x-data-device-id="{{ device.device_id }}">
                   <td class="cell-unit">
-                    {{ device.device_name }}<span class="rules-disabled-superscript hidden" id="rules-disabled-{{ device.device_id }}" title=""></span>
+                    <span title="{{ device.device_name }}">{{ device.device_label }}</span><span class="rules-disabled-superscript hidden" id="rules-disabled-{{ device.device_id }}" title=""></span>
                     <span id="device-{{ device.device_id }}-notes"></span>
                     <div class="temporal-links">
                       <a href="/chart?device_ids={{ device.device_id }}" target="_blank">graph</a>
@@ -128,7 +128,7 @@
                            id="radio-{{ device.device_id }}-0"
                            x-data-device-id="{{ device.device_id }}"
                            x-data-fan_speed="0"
-                           title="Turn {{ device.device_name }} off">
+                           title="Turn {{ device.device_label }} off">
                   </td>
                   <td class="cell-speed cell-speed-auto">
                     <input type="radio" name="fan_speed-{{ device.device_id }}"
@@ -136,7 +136,7 @@
                            id="radio-{{ device.device_id }}-auto"
                            x-data-device-id="{{ device.device_id }}"
                            x-data-fan_speed="-1"
-                           title="Set {{ device.device_name }} to auto">
+                           title="Set {{ device.device_label }} to auto">
                   </td>
                   {% for fan_speed in [2, 3, 4] %}
                   <td class="cell-speed cell-speed-{{ fan_speed }}">
@@ -145,7 +145,7 @@
                            id="radio-{{ device.device_id }}-{{ fan_speed }}"
                            x-data-device-id="{{ device.device_id }}"
                            x-data-fan_speed="{{ fan_speed }}"
-                           title="Set {{ device.device_name }} to speed {{ fan_speed }}">
+                           title="Set {{ device.device_label }} to speed {{ fan_speed }}">
                   </td>
                   {% endfor %}
                   <td class="cell-notes">

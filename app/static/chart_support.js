@@ -28,7 +28,7 @@ async function loadAllSensors() {
 
     // Extract device names from the status data
     allSensors = data.devices
-      .map((device) => device.device_name)
+      .map((device) => device.display_name || device.device_name)
       .filter((name) => name) // Remove any null/undefined names
       .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' })); // Sort alphabetically (case-insensitive)
 
