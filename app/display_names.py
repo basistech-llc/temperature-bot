@@ -73,6 +73,8 @@ def display_device_name(
     - Strip the ``'Airthings '`` vendor prefix.
     - Elide ``' on '`` and everything after it to remove verbose location suffixes.
     """
+    # Currently informational only; keep reference so linters know it's intentional.
+    _ = source
     base = (hubitat_label or raw_name or "").strip()
 
     # Strip vendor-specific prefixes we don't want in most UI labels.
@@ -86,4 +88,3 @@ def display_device_name(
 
 
 __all__ = ["display_device_name"]
-
