@@ -163,6 +163,31 @@ def disable_rules(conn):
     return jsonify({"status": "success", "seconds": seconds})
 
 
+@api_v1.route("/rules_master", methods=["GET", "POST"])
+@with_db_connection
+def rules_master(conn):
+    """
+    Get or set the global master rules switch state.
+
+    - GET returns JSON: {"enabled": bool}
+    - POST accepts JSON body {"enabled": bool} and updates the state.
+    """
+    if request.method == "GET":
+        enabled = db.get_rules_master_enabled(conn)
+        return jsonify({"enabled": enabled})
+
+    # POST
+    payload = request.get_json(silent=True) or {}
+
+    if "enabled" not in payload:
+        return jsonify({"error": "Missing 'enabled' field"}), 400
+
+    enabled = bool(payload["enabled"])
+    db.set_rules_master_enabled(conn, enabled)
+    logger.info("Master rules switch set to enabled=%s", enabled)
+    return jsonify({"enabled": enabled})
+
+
 @api_v1.route("/alerts/active")
 @with_db_connection
 def alerts_active(conn):

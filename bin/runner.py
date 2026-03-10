@@ -371,8 +371,10 @@ def main():
         update_from_hubitat(conn)
         update_from_airthings(conn)
         rules_engine.prune_rules(conn)
-        if rules_engine.all_rules_disabled_until(conn) >= time.time():
-            logger.info("all rules disabled")
+        if not db.get_rules_master_enabled(conn):
+            logger.info("Master rules switch is OFF; skipping all rules execution")
+        elif rules_engine.all_rules_disabled_until(conn) >= time.time():
+            logger.info("all rules disabled (time-limited suspension)")
         else:
             run_rules(conn)
 
