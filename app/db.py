@@ -540,6 +540,58 @@ def device_rules_disabled_until(conn, device_id: int) -> int | None:
     return row[0] if row is not None else None
 
 
+def get_rules_master_enabled(conn) -> bool:
+    """
+    Return True if the global master rules switch is enabled, False if disabled.
+
+    This uses a dedicated RULES_MASTER pseudo-device's disabled_until field as
+    the underlying storage, so we can distinguish it from time-limited rules
+    disablement on the rules_engine device.
+    """
+    device_id = get_or_create_device_id(conn, "rules_master")
+    disabled_until = device_rules_disabled_until(conn, device_id)
+    # When disabled_until is 0 or in the past, rules are enabled.
+    if not disabled_until:
+        return True
+    return disabled_until <= int(time.time())
+
+
+def set_rules_master_enabled(conn, enabled: bool):
+    """
+    Set the global master rules switch enabled/disabled using the RULES_MASTER
+    pseudo-device's disabled_until.
+    """
+    device_id = get_or_create_device_id(conn, "rules_master")
+    now = int(time.time())
+    if enabled:
+        until = 0
+    else:
+        # Use a far-future timestamp (~10 years) to represent "off until changed".
+        until = now + 10 * 365 * 24 * 60 * 60
+
+    c = conn.cursor()
+    c.execute(
+        "UPDATE devices set disabled_until=? where device_id=?", (until, device_id)
+    )
+    # Also record in changelog for audit/history purposes.
+    c.execute(
+        """
+        INSERT INTO changelog (logtime, ipaddr, device_id, current_values, new_value, agent, comment)
+        VALUES (?,?,?,?,?,?,?)
+        """,
+        (
+            now,
+            None,
+            device_id,
+            None,
+            until,
+            "web",
+            "master rules switch " + ("enabled" if enabled else "disabled"),
+        ),
+    )
+    conn.commit()
+
+
 def disable_rules_for_device(
     conn, device_id: int, seconds: int, ipaddr=None, agent=None, comment=None
 ):

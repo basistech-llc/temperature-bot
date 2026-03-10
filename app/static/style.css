@@ -32,8 +32,9 @@ body {
      padding-left: 50px;
 }
 
-/* Temperature unit toggle - consistent styling everywhere */
-.temperature-toggle {
+/* Top-nav pill toggles (temperature + master rules) share styling */
+.temperature-toggle,
+.rules-master-toggle {
     display: flex;
     align-items: center;
     justify-content: center;
@@ -682,6 +683,65 @@ td.cell-speed-off {
 li.pure-menu-item > .temperature-toggle {
     display: inline-flex;
     vertical-align: middle;
+}
+
+/* Master rules toggle in the top nav */
+.rules-master-toggle {
+    min-width: 110px; /* Slightly wider for label + state */
+}
+
+.rules-label {
+    font-weight: 600;
+    color: #333;
+    user-select: none;
+}
+
+.rules-state-label {
+    font-weight: 500;
+    color: #2e7d32; /* greenish when on */
+    min-width: 20px;
+    text-align: center;
+    user-select: none;
+}
+
+.rules-state-label.rules-state-off {
+    color: #c62828; /* red when off */
+}
+
+/* Ensure rules toggle aligns nicely in menu item */
+li.pure-menu-item > .rules-master-toggle {
+    display: inline-flex;
+    vertical-align: middle;
+}
+
+/* Banner shown when rules are turned off via master switch */
+.rules-master-banner {
+    margin-top: 0.5em;
+    margin-bottom: 0.5em;
+    padding: 8px 12px;
+    background-color: #fff3cd;
+    border: 1px solid #ffeeba;
+    color: #856404;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    max-width: 960px;
+}
+
+.rules-master-banner-text {
+    font-size: 0.9em;
+}
+
+.rules-master-banner-close {
+    background: transparent;
+    border: none;
+    font-size: 1.1em;
+    line-height: 1;
+    cursor: pointer;
+    color: #856404;
+    padding: 0 4px;
 }
 
 .github-popup {

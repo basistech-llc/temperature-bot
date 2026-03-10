@@ -50,7 +50,7 @@ def get_air_dict(conn):
 
 def all_rules_disabled_until(conn) -> int:
     until = db.device_rules_disabled_until(conn, rules_id(conn))
-    logging.info("all rules disabled until %s",until)
+    logging.info("all rules disabled until %s", until)
     return until if until else 0
 
 def disable_all_rules(conn, seconds:int):
@@ -184,26 +184,29 @@ def run_rules(conn, when=None):
     """
     logger.debug("when=%s",when)
 
+    # Global master kill switch: if rules are disabled, exit immediately.
+    if not db.get_rules_master_enabled(conn):
+        logger.info("Master rules switch is OFF; skipping all rules execution")
+        return
+
     all_devices = db.fetch_all_device_dicts(conn)
-    disabled_until_dict = {dev['device_id']:dev['disabled_until'] for dev in all_devices}
+    disabled_until_dict = {dev["device_id"]: dev["disabled_until"] for dev in all_devices}
+
     def is_disabled(device_id):
         try:
-            return time.time() > disabled_until_dict.get(device_id,0)
-        except (ValueError,TypeError,KeyError):
+            return time.time() <= disabled_until_dict.get(device_id, 0)
+        except (ValueError, TypeError, KeyError):
             return False
-
-    if is_disabled( rules_id( conn ) ):
-        logger.info("all rules disabled")
 
     def set_drive(device_id, drive):
         if is_disabled(device_id):
-            logger.info("device_id=%s drive set disabled",(device_id,))
+            logger.info("device_id=%s drive set disabled", (device_id,))
             return
         set_body_drive(conn, DriveControl(device_id=device_id, drive=drive), 'n/a', 'rule')
 
     def set_fan_speed(device_id, fan_speed):
         if is_disabled(device_id):
-            logger.info("device_id=%s fan set disabled",(device_id,))
+            logger.info("device_id=%s fan set disabled", (device_id,))
             return
         set_body_fan_speed(conn, SpeedControl(device_id=device_id, fan_speed=fan_speed), 'n/a', 'rule')
 
