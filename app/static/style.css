@@ -202,7 +202,26 @@ button {
 }
 
 #log-table {
-    max-width:1000px;
+    max-width: 1000px;
+    min-height: calc(100vh - 220px);
+    margin: 0;
+}
+
+.log-controls {
+    max-width: 1000px;
+    margin: 6px 0 0 0;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.log-controls #log-show-more {
+    width: auto;
+}
+
+.log-range-summary {
+    font-size: 0.85em;
+    color: #666;
 }
 
 .column-temp {
