@@ -52,7 +52,8 @@
       <li class="pure-menu-item">
         <a href="#" id="admin-menu-link" class="pure-menu-link">Admin</a>
         <div id="admin-popup" class="github-popup">
-          <a href="/chart"{% if current_page == 'chart' %} class="pure-menu-selected"{% endif %}>Temperature Chart</a>
+          <a href="/chart"{% if current_page == 'temperature_chart' %} class="pure-menu-selected"{% endif %}>Temperature Chart</a>
+          <a href="/lighting_chart"{% if current_page == 'lighting_chart' %} class="pure-menu-selected"{% endif %}>Lighting Chart</a>
           <a href="/chart_aqi"{% if current_page == 'chart_aqi' %} class="pure-menu-selected"{% endif %}>Air Quality Chart</a>
           <a href="/alerts"{% if current_page == 'alerts' %} class="pure-menu-selected"{% endif %}>Alerts</a>
           <a href="/rules"{% if current_page == 'rules' %} class="pure-menu-selected"{% endif %}>Rules</a>

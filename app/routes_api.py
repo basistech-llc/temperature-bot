@@ -137,6 +137,28 @@ def get_ai(conn):
     return jsonify(db.get_aqi_series(conn))
 
 
+@api_v1.route("/lighting")
+@with_db_connection
+def get_lighting(conn):
+    """Get lighting (illuminance) series data"""
+    device_ids = parse_device_ids()
+    if device_ids is None and request.args.get("device_ids"):
+        return jsonify({"error": "Invalid device_ids format"}), 400
+    series = db.get_lighting_series(conn, device_ids)
+    # Use centralized helper for series display names, preferring Hubitat label
+    # when available and applying display-only transforms.
+    name_to_label = hubitat.get_name_to_label()
+    for s in series:
+        raw_name = s.get("name", "")
+        hub_label = name_to_label.get(raw_name)
+        s["name"] = display_device_name(
+            raw_name,
+            hubitat_label=hub_label,
+            source="hubitat",
+        )
+    return jsonify({"series": series})
+
+
 @api_v1.route("/logs")
 @with_db_connection
 def get_logs(conn):
