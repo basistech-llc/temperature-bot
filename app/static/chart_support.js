@@ -8,7 +8,19 @@ let currentStart = null; // time_t
 let currentEnd = null; // time_t
 let currentDeviceIds = []; // current devices to load. [] means load them all
 let allDevices = []; // all available devices for dropdown
-let allSensors = []; // dynamically loaded list of all available sensors
+// Dynamically loaded list of all available sensors.
+// Each entry is an object: { displayName, fullName }
+let allSensors = [];
+
+function buildSensor(displayName, deviceName) {
+  const safeDisplay = displayName || deviceName || "";
+  const fullName = deviceName || displayName || "";
+  if (!safeDisplay) return null;
+  return {
+    displayName: safeDisplay,
+    fullName,
+  };
+}
 let selectedTemporalButton = null; // currently selected temporal button
 /** Sensors the user has unchecked (excluded). Persisted only for page session; default = show all with data. */
 let excludedSensorNames = new Set();
@@ -26,11 +38,17 @@ async function loadAllSensors() {
     const response = await fetch(STATUS_ENDPOINT);
     const data = await response.json();
 
-    // Extract device names from the status data
+    // Extract device names from the status data. Keep both the human-friendly
+    // display name (with prefixes/suffixes stripped) and the full underlying
+    // device name so we can show the latter on hover where needed.
     allSensors = data.devices
-      .map((device) => device.display_name || device.device_name)
-      .filter((name) => name) // Remove any null/undefined names
-      .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' })); // Sort alphabetically (case-insensitive)
+      .map((device) => buildSensor(device.display_name, device.device_name))
+      .filter((sensor) => sensor !== null) // Remove any null/undefined names
+      .sort((a, b) =>
+        a.displayName.localeCompare(b.displayName, undefined, {
+          sensitivity: "base",
+        }),
+      ); // Sort alphabetically (case-insensitive)
 
     console.log("Loaded sensors:", allSensors);
     return allSensors;
@@ -207,7 +225,9 @@ function createAllSensorCheckboxes() {
   const availableSensors = new Set(tempData.map((series) => series.name));
 
   programmaticCheckboxUpdate = true;
-  allSensors.forEach((sensorName, index) => {
+  allSensors.forEach((sensor, index) => {
+    const sensorName = sensor.displayName;
+    const fullName = sensor.fullName || sensorName;
     const id = `checkbox-${index}`;
     const wrapper = document.createElement("div");
     wrapper.className = "checkbox-item";
@@ -228,6 +248,9 @@ function createAllSensorCheckboxes() {
     const label = document.createElement("label");
     label.htmlFor = id;
     label.innerText = sensorName;
+    // Always show a hover title so users get immediate feedback that tooltips
+    // are available, even when the full name matches the pretty label.
+    label.title = fullName;
     if (!hasData) {
       label.classList.add("disabled");
     }
@@ -270,13 +293,15 @@ function updateTempChart() {
   );
   const series = [];
 
-  // Create a map of tempData by sensor name for quick lookup
+  // Create a map of tempData by sensor display name for quick lookup
   const tempDataMap = new Map(tempData.map((series) => [series.name, series]));
 
   // Include all series but control visibility via legend selection
   const legendSelected = {};
   checkboxes.forEach((cb, i) => {
-    const sensorName = allSensors[i];
+    const sensor = allSensors[i];
+    if (!sensor) return;
+    const sensorName = sensor.displayName;
     const seriesData = tempDataMap.get(sensorName);
 
     // Only include series that have data and are checked
@@ -473,7 +498,9 @@ function updateTempChart() {
       "#checkboxes input[type=checkbox]",
     );
     checkboxes.forEach((cb, i) => {
-      const sensorName = allSensors[i];
+      const sensor = allSensors[i];
+      if (!sensor) return;
+      const sensorName = sensor.displayName;
       if (sensorName === params.name) {
         cb.checked = params.selected[params.name];
       }
@@ -704,7 +731,9 @@ function setupEventListeners() {
       );
 
       checkboxes.forEach((cb, i) => {
-        const sensorName = allSensors[i];
+        const sensor = allSensors[i];
+        if (!sensor) return;
+        const sensorName = sensor.displayName;
         const seriesData = tempDataMap.get(sensorName);
         if (cb.checked && seriesData) {
           visibleSeries.push(seriesData);
@@ -777,7 +806,9 @@ function setupCheckboxControls() {
   if (clearAllBtn) {
     clearAllBtn.addEventListener("click", function () {
       // Exclude all sensors so that when user then checks a few, that set persists across range change
-      allSensors.forEach((name) => excludedSensorNames.add(name));
+      allSensors.forEach((sensor) =>
+        excludedSensorNames.add(sensor.displayName),
+      );
       programmaticCheckboxUpdate = true;
       const checkboxes = document.querySelectorAll(
         "#checkboxes input[type=checkbox]",

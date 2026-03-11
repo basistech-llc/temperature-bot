@@ -735,17 +735,30 @@ def get_device_status(conn) -> List[Dict[str, Any]]:
 
 
 def get_changelog(
-    conn, draw: int = 1, start_row: int = 0, length: int = 100
+    conn,
+    draw: int = 1,
+    start_row: int | None = 0,
+    length: int | None = 100,
 ) -> Dict[str, Any]:
-    """Get changelog data with pagination"""
+    """Get changelog data with pagination.
+
+    Temporal bounds (start/end) are taken directly from the current request
+    via :func:`temporal_quantification`.
+    """
     cmd = """SELECT c.logtime, c.ipaddr, d.device_name as unit, c.new_value, c.agent, c.comment FROM changelog c
                LEFT JOIN devices d ON c.device_id = d.device_id WHERE 1=1"""
     args: List[Any] = []
 
     (cmd, args) = temporal_quantification(cmd, args)
 
+    if length is None:
+        length = 100
+    if start_row is None:
+        start_row = 0
+
     cmd += " ORDER BY logtime DESC LIMIT ? OFFSET ?"
     args.extend([length, start_row])
+
     logger.debug("cmd=%s args=%s", cmd, args)
 
     c = conn.cursor()
