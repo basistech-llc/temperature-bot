@@ -221,8 +221,13 @@ function createAllSensorCheckboxes() {
   checkboxItemsWrapper.style.flexWrap = "wrap";
   checkboxItemsWrapper.style.gap = "0.5em";
 
-  // Create a map of available sensor names for quick lookup
+  // Only show sensors that actually have temperature series data.
+  // Build a set of series names from the current temperature payload and
+  // filter the status-derived sensor list down to that set.
   const availableSensors = new Set(tempData.map((series) => series.name));
+  allSensors = allSensors.filter((sensor) =>
+    availableSensors.has(sensor.displayName),
+  );
 
   programmaticCheckboxUpdate = true;
   allSensors.forEach((sensor, index) => {
