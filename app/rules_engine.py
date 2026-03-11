@@ -315,11 +315,14 @@ def run_rules(conn, when=None):
     now = int(time.time())
     for dev in all_devices:
         try:
-            is_disabled = 0 < dev["disabled_until"] < now
+            disabled_timer_expired = 0 < dev["disabled_until"] < now
         except (TypeError, KeyError):
-            is_disabled = False
+            disabled_timer_expired = False
 
-        if not is_disabled:
+        # Only clear the timer (and log) when a non-zero disabled_until has
+        # actually expired. This avoids spamming the changelog every time the
+        # rules runner executes for devices that are not currently disabled.
+        if disabled_timer_expired:
             db.disable_rules_for_device(
                 conn,
                 dev["device_id"],
