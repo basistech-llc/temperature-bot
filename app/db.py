@@ -718,6 +718,68 @@ def get_temperature_series(
     return series
 
 
+def get_lighting_series(
+    conn, device_ids: List[int] | None = None
+) -> List[Dict[str, Any]]:
+    """Get lighting (illuminance) series data for devices.
+
+    Values are taken from ``devlog.status_json`` where available, using the
+    top-level ``illuminance`` field first and falling back to
+    ``attributes.illuminance`` when present.
+    """
+    c = conn.cursor()
+    c.execute("SELECT device_id, device_name FROM devices")
+    devices = c.fetchall()
+
+    if not device_ids:
+        device_ids = [dev["device_id"] for dev in devices]
+
+    series: List[Dict[str, Any]] = []
+
+    for dev in devices:
+        device_id = dev["device_id"]
+        if device_id not in device_ids:
+            continue
+
+        c.execute(
+            """
+            SELECT logtime, status_json
+            FROM devlog
+            WHERE device_id = ? AND logtime IS NOT NULL AND status_json IS NOT NULL
+            ORDER BY logtime
+            """,
+            (device_id,),
+        )
+        rows = c.fetchall()
+
+        data: List[List[float]] = []
+        for row in rows:
+            status_json = row["status_json"]
+            try:
+                status = json.loads(status_json)
+            except (TypeError, json.JSONDecodeError):
+                continue
+
+            illum = status.get("illuminance")
+            if illum is None:
+                attrs = status.get("attributes") or {}
+                illum = attrs.get("illuminance")
+
+            try:
+                if illum is None or illum == "":
+                    continue
+                illum_val = float(illum)
+            except (TypeError, ValueError):
+                continue
+
+            data.append([row["logtime"], illum_val])
+
+        if data:
+            series.append({"name": dev["device_name"], "data": data})
+
+    return series
+
+
 def get_device_status(conn) -> List[Dict[str, Any]]:
     """Get device status with annotations"""
     device_data = fetch_last_status_fixed(conn)

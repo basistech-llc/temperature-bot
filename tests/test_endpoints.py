@@ -575,6 +575,25 @@ def test_temperature_api_series_uses_hubitat_label_when_available(
     assert "Broadway" in series_names
 
 
+def test_lighting_api_basic_series_shape(flask_test_client):  # noqa: F811
+    """Lighting series API returns series list with expected structure and numeric data."""
+    response = flask_test_client.get("/api/v1/lighting")
+    assert response.status_code == 200
+    data = response.json
+    assert "series" in data
+    assert isinstance(data["series"], list)
+    if data["series"]:
+        first = data["series"][0]
+        assert "name" in first
+        assert "data" in first
+        assert isinstance(first["data"], list)
+        # Each datapoint should be [timestamp, value] with numeric value
+        if first["data"]:
+            ts, val = first["data"][0]
+            assert isinstance(ts, int)
+            assert isinstance(val, (int, float))
+
+
 @patch("app.routes_api.hubitat.get_all_devices")
 def test_debug_hubitat_devices_endpoint_error(mock_get_all_devices, flask_test_client):  # noqa: F811
     """Test the /api/v1/debug/hubitat_devices endpoint handles errors"""

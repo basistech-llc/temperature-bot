@@ -35,13 +35,13 @@ def test_chart_page_with_specific_devices(flask_test_client):  # noqa: F811 # py
 
 
 def test_temperature_chart_page_has_exclusion_controls(flask_test_client):  # noqa: F811
-    """Temperature chart page has Select All / Clear All and chart_support.js for exclusion-set behavior."""
+    """Temperature chart page has Select All / Clear All and temperature_chart_support.js for exclusion-set behavior."""
     response = flask_test_client.get("/chart")
     assert response.status_code == 200
     content = response.data.decode("utf-8")
     assert "Select All" in content
     assert "Clear All" in content
-    assert "chart_support.js" in content
+    assert "temperature_chart_support.js" in content
     assert 'id="checkboxes"' in content
     assert 'id="temp-chart"' in content
 
@@ -54,6 +54,20 @@ def test_chart_aqi_page_loads(flask_test_client):  # noqa: F811
     assert "Air Quality Chart" in content
     assert 'id="aqi-chart"' in content
     assert "chart_aqi_support.js" in content
+    assert "day" in content
+    assert "week" in content
+    assert "month" in content
+    assert "all" in content
+
+
+def test_lighting_chart_page_loads(flask_test_client):  # noqa: F811
+    """Lighting chart page loads with lighting chart and temporal controls."""
+    response = flask_test_client.get("/lighting_chart")
+    assert response.status_code == 200
+    content = response.data.decode("utf-8")
+    assert "Lighting Time Series" in content
+    assert 'id="lighting-chart"' in content
+    assert "lighting_chart_support.js" in content
     assert "day" in content
     assert "week" in content
     assert "month" in content

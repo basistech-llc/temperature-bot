@@ -73,3 +73,38 @@ def test_temperature_insert(test_database_conn_with_test_data):
     assert rows[0]['logtime']==100
     assert rows[0]['duration']==50
     assert rows[0]['temp10x']==210 # 1 seconds at 20, 1 second at 21, 1 second at 22
+
+
+def test_get_lighting_series_uses_status_json_illuminance(
+    test_database_conn_with_test_data,
+):  # noqa: F811
+    """get_lighting_series extracts illuminance from status_json and returns non-empty series."""
+    conn = test_database_conn_with_test_data[0]
+    # Clear devlog and devices to control test data
+    c = conn.cursor()
+    c.execute("DELETE FROM devlog")
+    c.execute("DELETE FROM devices")
+    conn.commit()
+
+    # Create a device and a few devlog rows with status_json containing illuminance
+    device_id = db.get_or_create_device_id(conn, "Lighting Test Device")
+    rows = [
+      (device_id, 1000, '{"illuminance": 10}'),
+      (device_id, 1010, '{"attributes": {"illuminance": 12.5}}'),
+    ]
+    for logtime, status_json in [(t, s) for (_, t, s) in rows]:
+        c.execute(
+            "INSERT INTO devlog (device_id, logtime, duration, temp10x, status_json) VALUES (?, ?, ?, ?, ?)",
+            (device_id, logtime, 1, None, status_json),
+        )
+    conn.commit()
+
+    series = db.get_lighting_series(conn, [device_id])
+    assert series, "expected at least one lighting series"
+    assert series[0]["name"] == "Lighting Test Device"
+    datapoints = series[0]["data"]
+    assert len(datapoints) == 2
+    # Values should be numeric and match the JSON payloads
+    values = [v for (_, v) in datapoints]
+    assert 10.0 in values
+    assert 12.5 in values

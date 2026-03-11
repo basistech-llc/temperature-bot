@@ -144,7 +144,16 @@ def _register_core_routes(app):
         device_ids = parse_device_ids()
 
         return render_template(
-            "chart.html", device_ids=device_ids, current_page="chart"
+            "temperature_chart.html",
+            device_ids=device_ids,
+            current_page="temperature_chart",
+        )
+
+    @app.route("/lighting_chart")
+    def show_lighting_chart():
+        """Lighting (illuminance) chart page"""
+        return render_template(
+            "lighting_chart.html", current_page="lighting_chart"
         )
 
     @app.route("/chart_aqi")

@@ -176,7 +176,7 @@ def test_temperature_api_record_counts_for_temporal_ranges(
 def test_chart_page_with_device_id(
     flask_test_client, test_database_conn_with_test_data
 ):  # noqa: F811
-    """Test /chart page with device_id parameter"""
+    """Test /chart (temperature_chart) page with device_id parameter"""
     device_id = test_database_conn_with_test_data[1]
     response = flask_test_client.get(f"/chart?device_id={device_id}")
     assert response.status_code == 200
