@@ -571,8 +571,10 @@ def test_temperature_api_series_uses_hubitat_label_when_available(
     response = flask_test_client.get("/api/v1/temperature?device_id=" + str(device_id))
     assert response.status_code == 200
     series = response.json.get("series", [])
+    assert series, "expected at least one series"
     series_names = [s["name"] for s in series]
     assert "Broadway" in series_names
+    assert "device_id" in series[0], "series must include device_id for chart keying"
 
 
 def test_lighting_api_basic_series_shape(flask_test_client):  # noqa: F811

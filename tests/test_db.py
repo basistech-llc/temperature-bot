@@ -6,6 +6,7 @@ import logging
 import json
 
 from app import db
+from app.main import app
 from bin import runner
 
 
@@ -108,3 +109,18 @@ def test_get_lighting_series_uses_status_json_illuminance(
     values = [v for (_, v) in datapoints]
     assert 10.0 in values
     assert 12.5 in values
+
+
+def test_get_temperature_series_includes_device_id(test_database_conn_with_test_data):
+    """get_temperature_series returns each series with device_id, name, and data."""
+    conn = test_database_conn_with_test_data[0]
+    device_id = test_database_conn_with_test_data[1]
+    with app.test_request_context():
+        series = db.get_temperature_series(conn, [device_id])
+    assert series, "expected at least one temperature series"
+    for s in series:
+        assert "device_id" in s
+        assert s["device_id"] == device_id
+        assert "name" in s
+        assert "data" in s
+        assert isinstance(s["data"], list)

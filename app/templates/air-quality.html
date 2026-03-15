@@ -14,30 +14,30 @@
       <table class="pure-table air-quality-table">
         <thead>
           <tr>
-            <th class="column-unit" title="Indoor sensor location">Unit</th>
-            <th title="Carbon dioxide (ppm).
+            <th class="column-unit" scope="col" title="Indoor sensor location">Unit</th>
+            <th scope="col" title="Carbon dioxide (ppm).
 Elevated: 801–1200.
-Problem: &gt;1200.">CO2</th>
-            <th title="Relative humidity (%).
+Problem: &gt;1200.">CO2<br><small>ppm</small></th>
+            <th class="column-humidity" scope="col" title="Relative humidity (%).
 Elevated: 30–35 or 55–60.
-Problem: &lt;30 or &gt;60.">Humidity</th>
-            <th title="Fine particles &lt;1µm (µg/m³).
+Problem: &lt;30 or &gt;60.">Humidity<br><small>%</small></th>
+            <th scope="col" title="Fine particles &lt;1µm (µg/m³).
 Elevated: 13–35.
-Problem: &gt;35.">PM1</th>
-            <th title="Fine particles &lt;2.5µm (µg/m³).
+Problem: &gt;35.">PM1<br><small>µg/m³</small></th>
+            <th scope="col" title="Fine particles &lt;2.5µm (µg/m³).
 Elevated: 13–35.
-Problem: &gt;35.">PM2.5</th>
-            <th title="Barometric pressure (hPa).
-Not used for alerts.">Pressure</th>
-            <th title="Short-term average radon level.
+Problem: &gt;35.">PM2.5<br><small>µg/m³</small></th>
+            <th scope="col" title="Barometric pressure (hPa).
+Not used for alerts.">Pressure<br><small>hPa</small></th>
+            <th scope="col" title="Short-term average radon level (Bq/m³).
 Elevated: 100–150.
-Problem: &gt;150.">Radon</th>
-            <th title="Temperature (°C).
-Elevated: 18–20 or 25–27.
-Problem: &lt;18 or &gt;27.">Temp</th>
-            <th title="Volatile organic compounds (ppb).
+Problem: &gt;150.">Radon<br><small>Bq/m³</small></th>
+            <th class="column-temp" scope="col" title="Temperature. Unit follows site C/F toggle.
+Elevated: 18–20 or 25–27 °C.
+Problem: &lt;18 or &gt;27 °C.">Temp<br><small id="aq-temp-unit-label">°C</small></th>
+            <th scope="col" title="Volatile organic compounds (ppb).
 Elevated: 501–2000.
-Problem: &gt;2000.">VOC</th>
+Problem: &gt;2000.">VOC<br><small>ppb</small></th>
           </tr>
         </thead>
         <tbody>
@@ -46,12 +46,12 @@ Problem: &gt;2000.">VOC</th>
             <tr>
               <td class="cell-unit">{{ row.display_name or row.device_name }}</td>
               <td class="{{ row.aq_classes.get('co2') if row.aq_classes is defined else '' }}">{{ fmt(row.status.co2.value) }}</td>
-              <td class="{{ row.aq_classes.get('humidity') if row.aq_classes is defined else '' }}">{{ fmt(row.status.humidity.value) }}</td>
+              <td class="{{ row.aq_classes.get('humidity') if row.aq_classes is defined else '' }} cell-humidity">{{ fmt(row.status.humidity.value) }}</td>
               <td class="{{ row.aq_classes.get('pm1') if row.aq_classes is defined else '' }}">{{ fmt(row.status.pm1.value) }}</td>
               <td class="{{ row.aq_classes.get('pm25') if row.aq_classes is defined else '' }}">{{ fmt(row.status.pm25.value) }}</td>
               <td>{{ fmt(row.status.pressure.value) }}</td>
               <td class="{{ row.aq_classes.get('radonShortTermAvg') if row.aq_classes is defined else '' }}">{{ fmt(row.status.radonShortTermAvg.value) }}</td>
-              <td class="{{ row.aq_classes.get('temp') if row.aq_classes is defined else '' }}">{{ fmt(row.status.temp.value) }}</td>
+              <td class="{{ row.aq_classes.get('temp') if row.aq_classes is defined else '' }} cell-temp temp-display temp-display-no-unit" data-temp-c="{{ row.status.temp.value }}">{{ fmt(row.status.temp.value) }}</td>
               <td class="{{ row.aq_classes.get('voc') if row.aq_classes is defined else '' }}">{{ fmt(row.status.voc.value) }}</td>
             </tr>
             {% endif %}
@@ -75,8 +75,8 @@ Problem: &gt;2000.">VOC</th>
       <table class="pure-table air-quality-table">
         <thead>
           <tr>
-            <th class="column-unit" title="Outdoor sensor source">Unit</th>
-            <th title="Outdoor Air Quality Index">AQI</th>
+            <th class="column-unit" scope="col" title="Outdoor sensor source">Unit</th>
+            <th scope="col" title="Outdoor Air Quality Index">AQI</th>
           </tr>
         </thead>
         <tbody>

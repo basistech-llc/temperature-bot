@@ -116,8 +116,8 @@ def get_temperature(conn):
     if device_ids is None and request.args.get("device_ids"):
         return jsonify({"error": "Invalid device_ids format"}), 400
     series = db.get_temperature_series(conn, device_ids)
-    # Use centralized helper for series display names, preferring Hubitat label
-    # when available and applying display-only transforms.
+    # Use centralized helper for series display names, preferring Hubitat label when available
+    # and applying display-only transforms.
     name_to_label = hubitat.get_name_to_label()
     for s in series:
         raw_name = s.get("name", "")

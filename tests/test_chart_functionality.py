@@ -75,13 +75,18 @@ def test_lighting_chart_page_loads(flask_test_client):  # noqa: F811
 
 
 def test_temperature_api_with_multiple_devices(flask_test_client):  # noqa: F811 # pylint: disable=unused-argument
-    """Test that the temperature API works with multiple device IDs"""
+    """Temperature API returns series with device_id, name, and data for chart keying by device."""
     response = flask_test_client.get("/api/v1/temperature?device_ids=1,2")
     assert response.status_code == 200
 
     data = json.loads(response.data)
     assert "series" in data
     assert isinstance(data["series"], list)
+    for s in data["series"]:
+        assert "device_id" in s, "each series must include device_id for chart keying"
+        assert "name" in s
+        assert "data" in s
+        assert isinstance(s["data"], list)
 
 
 def test_status_api_devices_sorted_alphabetically(flask_test_client):  # noqa: F811 # pylint: disable=unused-argument
