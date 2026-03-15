@@ -24,6 +24,7 @@ CREATE TABLE IF NOT EXISTS changelog (
                     agent TEXT,
                     comment TEXT
                 , ipaddr text);
+CREATE INDEX IF NOT EXISTS idx_changelog_logtime ON changelog (logtime DESC);
 CREATE TABLE IF NOT EXISTS aqi (
     logtime INTEGER NOT NULL,
     aqi INTEGER NOT NULL
