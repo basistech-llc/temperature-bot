@@ -691,7 +691,7 @@ def get_temperature_series(
 ) -> List[Dict[str, Any]]:
     """Get temperature series data for devices.
     :param device_ids: a list of integer device IDs or None. An empty list or None gets all devices
-    :return: a list of dicts each in the form {name:"name", data:[[time1,val1], [time2,val2], ...]}
+    :return: a list of dicts each with device_id, name (raw device_name), and data: [[time1,val1], ...]
     """
     c = conn.cursor()
     # Get all devices
@@ -714,7 +714,11 @@ def get_temperature_series(
             rows = c.fetchall()
             data = [[row["logtime"], row["temp10x"] / 10] for row in rows]
             if data:
-                series.append({"name": dev["device_name"], "data": data})
+                series.append({
+                    "device_id": dev["device_id"],
+                    "name": dev["device_name"],
+                    "data": data,
+                })
     return series
 
 

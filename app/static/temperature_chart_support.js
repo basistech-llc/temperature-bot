@@ -59,8 +59,31 @@ function loadTempData() {
  * Checkbox rendering (temperature-specific wrapper)
  ****************************************************************/
 function createAllSensorCheckboxes() {
-  const availableNames = tempData.map((series) => series.name);
-  renderSensorCheckboxes(availableNames, updateTempChart);
+  // Build one sensor per series so each device_id gets its own line; sort by displayName then
+  // fullName to match status list order. Use device_id for lookup/exclusion; fullName for legend.
+  const sensorsFromTemp = tempData.map((series) => {
+    const fromStatus = allSensorsFromStatus.find(
+      (s) => s.device_id === series.device_id,
+    );
+    return {
+      device_id: series.device_id,
+      displayName: series.name,
+      fullName: (fromStatus && fromStatus.fullName) || series.name,
+      exclusionKey: series.device_id,
+      legendLabel: (fromStatus && fromStatus.fullName) || series.name,
+    };
+  });
+  allSensors = sensorsFromTemp.sort((a, b) => {
+    const cmp = a.displayName.localeCompare(b.displayName, undefined, {
+      sensitivity: "base",
+    });
+    return cmp !== 0
+      ? cmp
+      : (a.fullName || "").localeCompare(b.fullName || "", undefined, {
+          sensitivity: "base",
+        });
+  });
+  renderSensorCheckboxes(null, updateTempChart);
 }
 
 /****************************************************************
@@ -74,8 +97,9 @@ function updateTempChart() {
     "#checkboxes input[type=checkbox]",
   );
 
-  const tempDataMap = new Map(tempData.map((series) => [series.name, series]));
-
+  const tempDataMap = new Map(
+    tempData.map((series) => [series.device_id, series]),
+  );
   const {
     series,
     legendSelected,
@@ -90,6 +114,7 @@ function updateTempChart() {
       TemperatureUtils.getTemperatureUnitPreference()
         ? TemperatureUtils.celsiusToFahrenheit(val)
         : val,
+    { dataKey: "device_id", legendName: "fullName" },
   );
 
   const option = {
@@ -192,8 +217,8 @@ function updateTempChart() {
     checkboxes.forEach((cb, i) => {
       const sensor = allSensors[i];
       if (!sensor) return;
-      const sensorName = sensor.displayName;
-      if (sensorName === params.name) {
+      const seriesLabel = sensor.legendLabel ?? sensor.fullName ?? sensor.displayName;
+      if (seriesLabel === params.name) {
         cb.checked = params.selected[params.name];
       }
     });
@@ -263,14 +288,12 @@ function setupTemperatureEventListeners() {
         visibleSeries.push(...tempData);
       } else {
         const tempDataMap = new Map(
-          tempData.map((series) => [series.name, series]),
+          tempData.map((s) => [s.device_id, s]),
         );
-
         checkboxes.forEach((cb, i) => {
           const sensor = allSensors[i];
           if (!sensor) return;
-          const sensorName = sensor.displayName;
-          const seriesData = tempDataMap.get(sensorName);
+          const seriesData = tempDataMap.get(sensor.device_id);
           if (cb.checked && seriesData) {
             visibleSeries.push(seriesData);
           }
@@ -282,8 +305,11 @@ function setupTemperatureEventListeners() {
         return;
       }
 
+      const csvNames = visibleSeries.map(
+        (s) => (allSensors.find((sens) => sens.device_id === s.device_id) || {}).fullName || s.name,
+      );
       let csvContent = "data:text/csv;charset=utf-8,";
-      csvContent += "Time," + visibleSeries.map((s) => s.name).join(",") + "\n";
+      csvContent += "Time," + csvNames.join(",") + "\n";
 
       const allTimestamps = new Set();
       visibleSeries.forEach((series) => {
@@ -331,7 +357,7 @@ function setupTemperatureEventListeners() {
   if (clearAllBtn) {
     clearAllBtn.addEventListener("click", () => {
       allSensors.forEach((sensor) =>
-        excludedSensorNames.add(sensor.displayName),
+        excludedSensorNames.add(sensor.exclusionKey ?? sensor.displayName),
       );
       programmaticCheckboxUpdate = true;
       const checkboxes = document.querySelectorAll(

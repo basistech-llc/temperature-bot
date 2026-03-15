@@ -5,9 +5,11 @@
 let currentStart = null; // time_t (seconds)
 let currentEnd = null; // time_t (seconds)
 
-// Shared sensor metadata loaded from /api/v1/status.
-// Each entry: { displayName, fullName }
+// Sensor metadata from /api/v1/status. Each entry: { displayName, fullName, device_id }.
 let allSensors = [];
+// Copy of allSensors from status load; used by temperature chart to resolve fullName when
+// building from tempData.
+let allSensorsFromStatus = [];
 let selectedTemporalButton = null;
 
 // Sensors the user has unchecked (excluded). Session-scoped.
@@ -19,13 +21,14 @@ let programmaticCheckboxUpdate = false;
 
 const STATUS_ENDPOINT = "/api/v1/status";
 
-function buildSensor(displayName, deviceName) {
+function buildSensor(displayName, deviceName, deviceId) {
   const safeDisplay = displayName || deviceName || "";
   const fullName = deviceName || displayName || "";
   if (!safeDisplay) return null;
   return {
     displayName: safeDisplay,
     fullName,
+    device_id: deviceId,
   };
 }
 
@@ -38,23 +41,29 @@ function buildSensor(displayName, deviceName) {
  * "nice" Y-axis range for a time-series chart.
  *
  * @param {NodeListOf<HTMLInputElement>} checkboxes
- * @param {Array<{displayName: string}>} sensors
- * @param {Map<string, {name: string, data: Array<[number, number]>}>} dataMap
+ * @param {Array<{displayName: string, fullName?: string, device_id?: number}>} sensors
+ * @param {Map<string|number, {name?: string, data: Array<[number, number]>}>} dataMap - keyed
+ *   by dataKey (e.g. displayName or device_id)
  * @param {(value: number) => number} valueTransform
+ * @param {{ dataKey?: string, legendName?: string }} [options] - dataKey: sensor property for
+ *   dataMap lookup (default 'displayName'); legendName: sensor property for series/legend label
  */
-function buildSeriesAndAxis(checkboxes, sensors, dataMap, valueTransform) {
+function buildSeriesAndAxis(checkboxes, sensors, dataMap, valueTransform, options) {
+  const dataKey = (options && options.dataKey) || "displayName";
+  const legendName = (options && options.legendName) || "displayName";
   const series = [];
   const legendSelected = {};
 
   checkboxes.forEach((cb, i) => {
     const sensor = sensors[i];
     if (!sensor) return;
-    const sensorName = sensor.displayName;
-    const seriesData = dataMap.get(sensorName);
+    const key = sensor[dataKey];
+    const label = sensor[legendName] || sensor.displayName;
+    const seriesData = dataMap.get(key);
 
     if (seriesData && cb.checked) {
       series.push({
-        name: sensorName,
+        name: label,
         type: "line",
         showSymbol: false,
         data: seriesData.data.map(([ts, val]) => [
@@ -63,7 +72,7 @@ function buildSeriesAndAxis(checkboxes, sensors, dataMap, valueTransform) {
         ]),
       });
     }
-    legendSelected[sensorName] = cb.checked;
+    legendSelected[label] = cb.checked;
   });
 
   // Vertical day-break lines
@@ -133,19 +142,23 @@ async function loadAllSensors() {
     const data = await response.json();
 
     allSensors = data.devices
-      .map((device) => buildSensor(device.display_name, device.device_name))
+      .map((device) =>
+        buildSensor(device.display_name, device.device_name, device.device_id),
+      )
       .filter((sensor) => sensor !== null)
       .sort((a, b) =>
         a.displayName.localeCompare(b.displayName, undefined, {
           sensitivity: "base",
         }),
       );
+    allSensorsFromStatus = allSensors.slice();
 
     console.log("Loaded sensors:", allSensors);
     return allSensors;
   } catch (error) {
     console.error("Failed to load sensor list:", error);
     allSensors = [];
+    allSensorsFromStatus = [];
     return allSensors;
   }
 }
@@ -238,6 +251,11 @@ function formatTime(ts) {
 /****************************************************************
  * Generic checkbox rendering (shared)
  ****************************************************************/
+/**
+ * @param {string[]|null} availableNames - If null, render all allSensors without filtering
+ *   (e.g. temperature chart builds allSensors from tempData). Otherwise filter to sensors
+ *   whose displayName is in the set.
+ */
 function renderSensorCheckboxes(availableNames, onChange) {
   const checkboxContainer = document.getElementById("checkboxes");
   if (!checkboxContainer) return;
@@ -250,20 +268,26 @@ function renderSensorCheckboxes(availableNames, onChange) {
   checkboxItemsWrapper.style.flexWrap = "wrap";
   checkboxItemsWrapper.style.gap = "0.5em";
 
-  const availableSensors = new Set(availableNames);
-  allSensors = allSensors.filter((sensor) =>
-    availableSensors.has(sensor.displayName),
-  );
+  const availableSensors =
+    availableNames === null || availableNames === undefined
+      ? null
+      : new Set(availableNames);
+  if (availableSensors !== null) {
+    allSensors = allSensors.filter((sensor) =>
+      availableSensors.has(sensor.displayName),
+    );
+  }
 
   programmaticCheckboxUpdate = true;
   allSensors.forEach((sensor, index) => {
     const sensorName = sensor.displayName;
     const fullName = sensor.fullName || sensorName;
+    const exclusionKey = sensor.exclusionKey ?? sensor.displayName;
+    const hasData = availableSensors === null || availableSensors.has(sensorName);
     const id = `checkbox-${index}`;
     const wrapper = document.createElement("div");
     wrapper.className = "checkbox-item";
 
-    const hasData = availableSensors.has(sensorName);
     if (!hasData) {
       wrapper.classList.add("disabled");
     }
@@ -271,7 +295,7 @@ function renderSensorCheckboxes(availableNames, onChange) {
     const checkbox = document.createElement("input");
     checkbox.type = "checkbox";
     checkbox.id = id;
-    checkbox.checked = hasData && !excludedSensorNames.has(sensorName);
+    checkbox.checked = hasData && !excludedSensorNames.has(exclusionKey);
     checkbox.disabled = !hasData;
 
     const label = document.createElement("label");
@@ -285,9 +309,9 @@ function renderSensorCheckboxes(availableNames, onChange) {
     checkbox.addEventListener("change", () => {
       if (programmaticCheckboxUpdate) return;
       if (checkbox.checked) {
-        excludedSensorNames.delete(sensorName);
+        excludedSensorNames.delete(exclusionKey);
       } else {
-        excludedSensorNames.add(sensorName);
+        excludedSensorNames.add(exclusionKey);
       }
       onChange();
     });
