@@ -509,8 +509,40 @@ table.rules-table th  {
     word-break: break-word;
 }
 
+/* First column (sensor/location name): narrow, left-aligned */
 .air-quality-table .column-unit {
-    min-width: 180px;
+    min-width: 7em;
+    text-align: left;
+}
+
+.air-quality-table td.cell-unit {
+    text-align: left;
+}
+
+/* Column headers: metric name and unit line centered; data cells right-aligned for decimal alignment */
+.air-quality-table thead th:not(.column-unit) {
+    text-align: center;
+}
+
+.air-quality-table tbody td:not(.cell-unit) {
+    text-align: right;
+}
+
+.air-quality-table thead th small {
+    display: block;
+    text-align: center;
+}
+
+/* Humidity column min width */
+.air-quality-table th.column-humidity,
+.air-quality-table td.cell-humidity {
+    min-width: 3.5em;
+}
+
+/* Temp column shows numeric value only (unit in header). Min width fits values like 78.3. */
+.air-quality-table th.column-temp,
+.air-quality-table td.cell-temp {
+    min-width: 3.75em;
 }
 
 .column-speed {

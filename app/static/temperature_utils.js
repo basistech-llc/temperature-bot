@@ -108,39 +108,69 @@ function updateTemperatureToggleUI() {
       labels[1].classList.remove("active"); // °F
     }
   }
+
+  updateAqTempHeader();
+}
+
+/** Thresholds for elevated/problem tooltip (Celsius); converted to °F when preference is Fahrenheit. */
+const AQ_TEMP_THRESHOLDS_C = { lowElevated: 18, highElevated: 20, lowComfort: 25, highComfort: 27 };
+
+/**
+ * Sets the air quality table Temp column header to the current unit symbol and
+ * tooltip text. Tooltip shows elevated/problem ranges in the current unit.
+ */
+function updateAqTempHeader() {
+  const aqTempLabel = document.getElementById("aq-temp-unit-label");
+  if (!aqTempLabel) return;
+  const th = aqTempLabel.closest("th");
+  if (!th) return;
+
+  aqTempLabel.textContent = getTemperatureUnit();
+
+  const { lowElevated, highElevated, lowComfort, highComfort } = AQ_TEMP_THRESHOLDS_C;
+  if (USE_FAHRENHEIT) {
+    const lE = Math.round(celsiusToFahrenheit(lowElevated));
+    const hE = Math.round(celsiusToFahrenheit(highElevated));
+    const lC = Math.round(celsiusToFahrenheit(lowComfort));
+    const hC = Math.round(celsiusToFahrenheit(highComfort));
+    th.title =
+      "Temperature. Unit follows site C/F toggle.\n" +
+      `Elevated: ${lE}–${hE} or ${lC}–${hC} °F.\n` +
+      `Problem: <${lE} or >${hC} °F.`;
+  } else {
+    th.title =
+      "Temperature. Unit follows site C/F toggle.\n" +
+      `Elevated: ${lowElevated}–${highElevated} or ${lowComfort}–${highComfort} °C.\n` +
+      `Problem: <${lowElevated} or >${highComfort} °C.`;
+  }
 }
 
 /**
- * Update all temperature displays on the page
- * This function should be called after changing the temperature unit
+ * Updates every temperature display on the page to match the current unit preference.
  * @returns {void}
  */
 function updateAllTemperatureDisplays() {
-  // Update device log temperatures
+  // .temp-display: value from data-temp-c; .temp-display-no-unit omits unit (e.g. air quality table)
   const tempDisplays = document.querySelectorAll(".temp-display");
   tempDisplays.forEach((element) => {
     const tempC = parseFloat(element.getAttribute("data-temp-c"));
     if (!isNaN(tempC)) {
-      element.textContent = formatTemperature(tempC);
+      const includeUnit = !element.classList.contains("temp-display-no-unit");
+      element.textContent = formatTemperature(tempC, includeUnit);
     }
   });
 
-  // Update main page current temperature cells (temp-{device_id})
   const tempCells = document.querySelectorAll('[id^="temp-"]');
   tempCells.forEach((element) => {
-    // Get original Celsius value from data attribute
     const tempC = parseFloat(element.getAttribute("data-temp-c"));
     if (!isNaN(tempC)) {
-      // Extract age if present from current HTML
       const currentHTML = element.innerHTML;
       const ageMatch = currentHTML.match(/<span class=['"]age['"]>\(([^)]+)\)<\/span>/);
       const age = ageMatch ? ageMatch[1] : null;
-      // Update with new format using stored Celsius value
       element.innerHTML = formatTemperature(tempC) + (age ? ` <span class='age'>(${age})</span> ` : "");
     }
   });
 
-  // Update main page set temperature displays (settemp-display-{device_id})
   const setTempDisplays = document.querySelectorAll(".settemp-display");
   setTempDisplays.forEach((element) => {
     const tempC = parseFloat(element.getAttribute("data-temp-c"));
@@ -157,6 +187,8 @@ function updateAllTemperatureDisplays() {
       window.displayWeather(weatherData);
     }
   }
+
+  updateAqTempHeader();
 }
 
 /**
@@ -166,6 +198,7 @@ function updateAllTemperatureDisplays() {
 function initializeTemperatureUtils() {
   loadTemperaturePreference();
   updateTemperatureToggleUI();
+  updateAllTemperatureDisplays();
 
   // Set up toggle switch event listener
   const toggle = document.getElementById("temp-unit-toggle");
@@ -174,14 +207,9 @@ function initializeTemperatureUtils() {
       setTemperatureUnit(toggle.checked);
       updateAllTemperatureDisplays();
 
-      // Trigger chart refresh if chart_support.js is loaded
       if (typeof updateTempChart === "function") {
         updateTempChart();
       }
-
-      // Immediately update all temperature displays (no API call needed)
-      // The main dashboard temperatures will be updated on next refresh cycle
-      // but we've already updated the display above
     });
   } else {
     console.warn("Temperature toggle element not found - toggle functionality disabled");
