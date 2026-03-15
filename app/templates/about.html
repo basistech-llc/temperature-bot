@@ -6,38 +6,38 @@
     max-width: 800px;
     padding: 0 1em;
   }
-  .admin-toggle {
+  .deep-dive-toggle {
     margin: 1em 0;
   }
-  .admin-toggle-link {
+  .deep-dive-toggle-link {
     color: #0078e7;
     cursor: pointer;
     text-decoration: underline;
   }
-  .admin-toggle-link:hover {
+  .deep-dive-toggle-link:hover {
     color: #005bb5;
   }
-  .admin-content {
+  .deep-dive-content {
     display: none;
     margin-top: 1em;
     padding: 1em;
     background-color: #f5f5f5;
     border-left: 3px solid #0078e7;
   }
-  .admin-content.show {
+  .deep-dive-content.show {
     display: block;
   }
 </style>
 <script>
-  function toggleAdminOptions() {
-    const content = document.getElementById('admin-options-content');
-    const link = document.getElementById('admin-toggle-link');
+  function toggleDeepDiveOptions() {
+    const content = document.getElementById('deep-dive-options-content');
+    const link = document.getElementById('deep-dive-toggle-link');
     if (content.classList.contains('show')) {
       content.classList.remove('show');
-      link.textContent = 'Show Admin Options';
+      link.textContent = 'Show Deep Dive Options';
     } else {
       content.classList.add('show');
-      link.textContent = 'Hide Admin Options';
+      link.textContent = 'Hide Deep Dive Options';
     }
   }
 </script>
@@ -61,11 +61,11 @@
       The system also displays local air quality information and weather conditions
       to help you make informed decisions about ventilation.
     </p>
-    <div class="admin-toggle">
-      <a id="admin-toggle-link" class="admin-toggle-link" onclick="toggleAdminOptions(); return false;" href="#">Show Admin Options</a>
-      <div id="admin-options-content" class="admin-content">
+    <div class="deep-dive-toggle">
+      <a id="deep-dive-toggle-link" class="deep-dive-toggle-link" onclick="toggleDeepDiveOptions(); return false;" href="#">Show Deep Dive Options</a>
+      <div id="deep-dive-options-content" class="deep-dive-content">
         <p>
-          The Admin section provides additional tools for managing and monitoring
+          The Deep Dive section provides additional tools for managing and monitoring
           the HVAC system:
         </p>
         <ul>
