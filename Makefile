@@ -182,7 +182,7 @@ daily: $(REQ)
 monthly-backup:
 	sudo cp /var/db/temperature-bot.db /var/db/temperature-bot.backup.$$(date -I).db
 
-.PHONY: every-minute daily
+.PHONY: every-minute daily monthly-backup
 
 ################################################################
 ## Installation targets
