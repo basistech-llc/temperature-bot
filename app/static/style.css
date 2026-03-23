@@ -237,6 +237,29 @@ button {
     color: #000; /* Default black for fresh temperatures */
 }
 
+/* Right-align all numeric columns (header + data) */
+.cell-humidity,
+.cell-temp,
+.cell-illuminance,
+td[id^="co2-"],
+td[id^="voc-"],
+td[id^="radon-"],
+td[id^="pm25-"],
+td[id^="pm1-"] {
+    text-align: right;
+}
+/* Index-page Air Quality table: centered headers, right-aligned data */
+.aq-table thead th:not(.column-unit):not(.column-notes) {
+    text-align: center;
+}
+.aq-table thead th small {
+    display: block;
+    text-align: center;
+}
+.aq-table tbody td:not(.cell-unit):not(.cell-notes) {
+    text-align: right;
+}
+
 /* Make a minimum width of 150 if the text is not empty */
 td.cell-notes:not(:empty) {
     min-width: 150px;

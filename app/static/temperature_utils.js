@@ -120,12 +120,18 @@ const AQ_TEMP_THRESHOLDS_C = { lowElevated: 18, highElevated: 20, lowComfort: 25
  * tooltip text. Tooltip shows elevated/problem ranges in the current unit.
  */
 function updateAqTempHeader() {
-  const aqTempLabel = document.getElementById("aq-temp-unit-label");
+  // Update unit labels on both the air-quality page and the index page AQ section
+  const labelIds = ["aq-temp-unit-label", "aq-index-temp-unit-label"];
+  const aqTempLabel = labelIds.map((id) => document.getElementById(id)).find(Boolean);
   if (!aqTempLabel) return;
   const th = aqTempLabel.closest("th");
   if (!th) return;
 
-  aqTempLabel.textContent = getTemperatureUnit();
+  // Update all matching labels on the page
+  for (const id of labelIds) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = getTemperatureUnit();
+  }
 
   const { lowElevated, highElevated, lowComfort, highComfort } = AQ_TEMP_THRESHOLDS_C;
   if (USE_FAHRENHEIT) {
@@ -164,10 +170,11 @@ function updateAllTemperatureDisplays() {
   tempCells.forEach((element) => {
     const tempC = parseFloat(element.getAttribute("data-temp-c"));
     if (!isNaN(tempC)) {
+      const includeUnit = !element.classList.contains("temp-display-no-unit");
       const currentHTML = element.innerHTML;
       const ageMatch = currentHTML.match(/<span class=['"]age['"]>\(([^)]+)\)<\/span>/);
       const age = ageMatch ? ageMatch[1] : null;
-      element.innerHTML = formatTemperature(tempC) + (age ? ` <span class='age'>(${age})</span> ` : "");
+      element.innerHTML = formatTemperature(tempC, includeUnit) + (age ? ` <span class='age'>(${age})</span> ` : "");
     }
   });
 

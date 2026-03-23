@@ -413,8 +413,9 @@ const refreshGridRows = () => {
               // Apply shared staleness + tooltip behavior
               updateStalenessAndTooltip(cell, dev);
 
-              // Display temperature without age
-              cell.innerHTML = TemperatureUtils.formatTemperature(tempC);
+              // Display temperature; omit unit when header already shows it
+              const includeUnit = !cell.classList.contains("temp-display-no-unit");
+              cell.innerHTML = TemperatureUtils.formatTemperature(tempC, includeUnit);
             }
 
             // Update humidity where available
@@ -458,7 +459,7 @@ const refreshGridRows = () => {
                 // Reuse the same staleness + tooltip logic as temperature.
                 updateStalenessAndTooltip(humidityCell, dev);
 
-                humidityCell.textContent = `${rounded.toFixed(1)}%`;
+                humidityCell.textContent = `${rounded.toFixed(1)}`;
               } else {
                 humidityCell.textContent = "--";
               }
@@ -498,9 +499,37 @@ const refreshGridRows = () => {
                 // Reuse the same staleness + tooltip logic as temperature.
                 updateStalenessAndTooltip(illumCell, dev);
 
-                illumCell.textContent = `${rounded.toFixed(1)} lx`;
+                illumCell.textContent = `${rounded.toFixed(1)}`;
               } else {
                 illumCell.textContent = "--";
+              }
+            }
+
+            // Update air quality metrics (Airthings-style {value, unit} objects)
+            const aqMetrics = [
+              { key: "co2",               cellPrefix: "co2",   decimals: 0, unit: "" },
+              { key: "voc",               cellPrefix: "voc",   decimals: 0, unit: "" },
+              { key: "radonShortTermAvg", cellPrefix: "radon", decimals: 0, unit: "" },
+              { key: "pm25",              cellPrefix: "pm25",  decimals: 1, unit: "" },
+              { key: "pm1",               cellPrefix: "pm1",   decimals: 1, unit: "" },
+            ];
+            for (const { key, cellPrefix, decimals } of aqMetrics) {
+              const aqCell = document.getElementById(`${cellPrefix}-${dev.device_id}`);
+              if (!aqCell) continue;
+              const status = dev.status || {};
+              const raw = status[key];
+              let val = null;
+              if (raw != null && typeof raw === "object" && raw.value != null) {
+                val = parseFloat(raw.value);
+              } else if (typeof raw === "number") {
+                val = raw;
+              } else if (typeof raw === "string" && raw.trim() !== "") {
+                val = parseFloat(raw);
+              }
+              if (val != null && !Number.isNaN(val) && Number.isFinite(val)) {
+                aqCell.textContent = val.toFixed(decimals);
+              } else {
+                aqCell.textContent = "--";
               }
             }
 
