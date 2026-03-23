@@ -540,6 +540,58 @@ def device_rules_disabled_until(conn, device_id: int) -> int | None:
     return row[0] if row is not None else None
 
 
+def get_rules_master_enabled(conn) -> bool:
+    """
+    Return True if the global master rules switch is enabled, False if disabled.
+
+    This uses a dedicated RULES_MASTER pseudo-device's disabled_until field as
+    the underlying storage, so we can distinguish it from time-limited rules
+    disablement on the rules_engine device.
+    """
+    device_id = get_or_create_device_id(conn, "rules_master")
+    disabled_until = device_rules_disabled_until(conn, device_id)
+    # When disabled_until is 0 or in the past, rules are enabled.
+    if not disabled_until:
+        return True
+    return disabled_until <= int(time.time())
+
+
+def set_rules_master_enabled(conn, enabled: bool):
+    """
+    Set the global master rules switch enabled/disabled using the RULES_MASTER
+    pseudo-device's disabled_until.
+    """
+    device_id = get_or_create_device_id(conn, "rules_master")
+    now = int(time.time())
+    if enabled:
+        until = 0
+    else:
+        # Use a far-future timestamp (~10 years) to represent "off until changed".
+        until = now + 10 * 365 * 24 * 60 * 60
+
+    c = conn.cursor()
+    c.execute(
+        "UPDATE devices set disabled_until=? where device_id=?", (until, device_id)
+    )
+    # Also record in changelog for audit/history purposes.
+    c.execute(
+        """
+        INSERT INTO changelog (logtime, ipaddr, device_id, current_values, new_value, agent, comment)
+        VALUES (?,?,?,?,?,?,?)
+        """,
+        (
+            now,
+            None,
+            device_id,
+            None,
+            until,
+            "web",
+            "master rules switch " + ("enabled" if enabled else "disabled"),
+        ),
+    )
+    conn.commit()
+
+
 def disable_rules_for_device(
     conn, device_id: int, seconds: int, ipaddr=None, agent=None, comment=None
 ):
@@ -639,7 +691,7 @@ def get_temperature_series(
 ) -> List[Dict[str, Any]]:
     """Get temperature series data for devices.
     :param device_ids: a list of integer device IDs or None. An empty list or None gets all devices
-    :return: a list of dicts each in the form {name:"name", data:[[time1,val1], [time2,val2], ...]}
+    :return: a list of dicts each with device_id, name (raw device_name), and data: [[time1,val1], ...]
     """
     c = conn.cursor()
     # Get all devices
@@ -662,7 +714,73 @@ def get_temperature_series(
             rows = c.fetchall()
             data = [[row["logtime"], row["temp10x"] / 10] for row in rows]
             if data:
-                series.append({"name": dev["device_name"], "data": data})
+                series.append({
+                    "device_id": dev["device_id"],
+                    "name": dev["device_name"],
+                    "data": data,
+                })
+    return series
+
+
+def get_lighting_series(
+    conn, device_ids: List[int] | None = None
+) -> List[Dict[str, Any]]:
+    """Get lighting (illuminance) series data for devices.
+
+    Values are taken from ``devlog.status_json`` where available, using the
+    top-level ``illuminance`` field first and falling back to
+    ``attributes.illuminance`` when present.
+    """
+    c = conn.cursor()
+    c.execute("SELECT device_id, device_name FROM devices")
+    devices = c.fetchall()
+
+    if not device_ids:
+        device_ids = [dev["device_id"] for dev in devices]
+
+    series: List[Dict[str, Any]] = []
+
+    for dev in devices:
+        device_id = dev["device_id"]
+        if device_id not in device_ids:
+            continue
+
+        c.execute(
+            """
+            SELECT logtime, status_json
+            FROM devlog
+            WHERE device_id = ? AND logtime IS NOT NULL AND status_json IS NOT NULL
+            ORDER BY logtime
+            """,
+            (device_id,),
+        )
+        rows = c.fetchall()
+
+        data: List[List[float]] = []
+        for row in rows:
+            status_json = row["status_json"]
+            try:
+                status = json.loads(status_json)
+            except (TypeError, json.JSONDecodeError):
+                continue
+
+            illum = status.get("illuminance")
+            if illum is None:
+                attrs = status.get("attributes") or {}
+                illum = attrs.get("illuminance")
+
+            try:
+                if illum is None or illum == "":
+                    continue
+                illum_val = float(illum)
+            except (TypeError, ValueError):
+                continue
+
+            data.append([row["logtime"], illum_val])
+
+        if data:
+            series.append({"name": dev["device_name"], "data": data})
+
     return series
 
 
@@ -683,17 +801,30 @@ def get_device_status(conn) -> List[Dict[str, Any]]:
 
 
 def get_changelog(
-    conn, draw: int = 1, start_row: int = 0, length: int = 100
+    conn,
+    draw: int = 1,
+    start_row: int | None = 0,
+    length: int | None = 100,
 ) -> Dict[str, Any]:
-    """Get changelog data with pagination"""
+    """Get changelog data with pagination.
+
+    Temporal bounds (start/end) are taken directly from the current request
+    via :func:`temporal_quantification`.
+    """
     cmd = """SELECT c.logtime, c.ipaddr, d.device_name as unit, c.new_value, c.agent, c.comment FROM changelog c
                LEFT JOIN devices d ON c.device_id = d.device_id WHERE 1=1"""
     args: List[Any] = []
 
     (cmd, args) = temporal_quantification(cmd, args)
 
+    if length is None:
+        length = 100
+    if start_row is None:
+        start_row = 0
+
     cmd += " ORDER BY logtime DESC LIMIT ? OFFSET ?"
     args.extend([length, start_row])
+
     logger.debug("cmd=%s args=%s", cmd, args)
 
     c = conn.cursor()

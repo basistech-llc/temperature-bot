@@ -17,6 +17,7 @@
   <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
   <script src="/static/temperature_utils.js"></script>
   <script src="/static/popup_menu.js"></script>
+  <script src="/static/rules_master.js"></script>
 
   {% block head %}
   {% endblock %}
@@ -49,9 +50,10 @@
         <a href="/weather" class="pure-menu-link">Weather</a>
       </li>
       <li class="pure-menu-item">
-        <a href="#" id="admin-menu-link" class="pure-menu-link">Admin</a>
-        <div id="admin-popup" class="github-popup">
-          <a href="/chart"{% if current_page == 'chart' %} class="pure-menu-selected"{% endif %}>Temperature Chart</a>
+        <a href="#" id="deep-dive-menu-link" class="pure-menu-link">Deep Dive</a>
+        <div id="deep-dive-popup" class="github-popup">
+          <a href="/chart"{% if current_page == 'temperature_chart' %} class="pure-menu-selected"{% endif %}>Temperature Chart</a>
+          <a href="/lighting_chart"{% if current_page == 'lighting_chart' %} class="pure-menu-selected"{% endif %}>Lighting Chart</a>
           <a href="/chart_aqi"{% if current_page == 'chart_aqi' %} class="pure-menu-selected"{% endif %}>Air Quality Chart</a>
           <a href="/alerts"{% if current_page == 'alerts' %} class="pure-menu-selected"{% endif %}>Alerts</a>
           <a href="/rules"{% if current_page == 'rules' %} class="pure-menu-selected"{% endif %}>Rules</a>
@@ -74,10 +76,29 @@
           <span class="temp-unit-label">°F</span>
         </div>
       </li>
+      <li class="pure-menu-item">
+        <div class="rules-master-toggle" aria-label="Master rules switch">
+          <span class="rules-label">Rules</span>
+          <div class="toggle-switch">
+            <input type="checkbox" id="rules-master-toggle" class="toggle-input">
+            <label for="rules-master-toggle" class="toggle-label">
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+          <span class="rules-state-label" id="rules-master-state-label">On</span>
+        </div>
+      </li>
     </ul>
   </div>
   {% endif %}
   </header>
+
+  <div id="rules-master-banner" class="rules-master-banner hidden" role="status" aria-live="polite">
+    <span class="rules-master-banner-text">
+      Rules have been turned off. To help us improve this system, please send a brief note about why you turned off the rules in the <strong>#hvac</strong> Slack channel.
+    </span>
+    <button type="button" class="rules-master-banner-close" aria-label="Dismiss message">×</button>
+  </div>
 
   {% block body %}
   {% endblock %}

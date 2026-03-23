@@ -80,7 +80,21 @@ def test_weather_route(flask_test_client):  # noqa: F811
 
 
 def test_air_quality_route(flask_test_client):  # noqa: F811
-    """Test the /air-quality route"""
+    """Test the /air-quality route structure and key content."""
     response = flask_test_client.get("/air-quality")
     assert response.status_code == 200
-    assert b"Air Quality" in response.data or b"AQI" in response.data
+
+    html = response.data
+
+    # Section headings
+    assert b"Indoor Air Quality" in html
+    assert b"Outdoor Air Quality" in html
+
+    # Column headings
+    for heading in [b"CO2", b"Humidity", b"PM1", b"PM2.5", b"Pressure", b"Radon", b"Temp", b"VOC"]:
+        assert heading in html
+
+    # Legend and explanatory text
+    assert b"Shading:" in html
+    assert b"elevated" in html
+    assert b"problem" in html

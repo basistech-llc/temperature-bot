@@ -20,14 +20,19 @@ from . import db_alerts
 from . import rules_engine
 from . import hubitat
 from . import room_config
+from .display_names import display_device_name
 from .utils.request_utils import parse_device_ids
 from .utils.db_utils import with_db_connection
+from .routes_web_airquality_utils import (
+    annotate_air_quality_cells,
+    format_unix_as_asc,
+)
 
 logger = logging.getLogger(__name__)
 
 
-def create_web_routes(app):
-    """Create web routes and register them with the app"""
+def _register_core_routes(app):
+    """Register core web routes that back the main navigation."""
 
     @app.route("/")
     @with_db_connection
@@ -36,10 +41,18 @@ def create_web_routes(app):
         # Get device data for the template
         device_data = db.get_device_status(conn)
 
-        # Enrich with Hubitat label for display (Air Quality section: label visible, name in title)
+        # Enrich with Hubitat label for display (Air Quality section).
+        # The central helper handles any display-only transforms so we can
+        # easily tweak naming strategy in one place.
         name_to_label = hubitat.get_name_to_label()
         for d in device_data:
-            d["device_label"] = name_to_label.get(d["device_name"], d["device_name"])
+            raw_name = d.get("device_name", "")
+            hub_label = name_to_label.get(raw_name)
+            d["device_label"] = display_device_name(
+                raw_name,
+                hubitat_label=hub_label,
+                source="hubitat",
+            )
 
         # Add current timestamp for temporal links
         now = int(time.time())
@@ -61,7 +74,7 @@ def create_web_routes(app):
     def show_rules(conn):
         """Rules page"""
         # Check if we should run the rules or skip them
-        run_rules = request.args.get("run_rules", "1", type=int)  # type: ignore
+        run_rules = request.args.get("run_rules", "1", type=int)
         hour_now = datetime.datetime.now().replace(minute=0, second=0, microsecond=0)
 
         # If requests, see how the rules will render for the next seven days
@@ -131,7 +144,16 @@ def create_web_routes(app):
         device_ids = parse_device_ids()
 
         return render_template(
-            "chart.html", device_ids=device_ids, current_page="chart"
+            "temperature_chart.html",
+            device_ids=device_ids,
+            current_page="temperature_chart",
+        )
+
+    @app.route("/lighting_chart")
+    def show_lighting_chart():
+        """Lighting (illuminance) chart page"""
+        return render_template(
+            "lighting_chart.html", current_page="lighting_chart"
         )
 
     @app.route("/chart_aqi")
@@ -155,7 +177,40 @@ def create_web_routes(app):
     @with_db_connection
     def air_quality(conn):
         """Real-time Air Quality page"""
-        return render_template("air-quality.html", current_page="air-quality", airmon=db.get_all_device_aqi(conn) )
+        airmon = db.get_all_device_aqi(conn)
+        annotate_air_quality_cells(airmon)
+
+        # Attach a centralized display name for each row so templates do not
+        # need to know about vendor prefixes, " on " suffixes, etc.
+        for row in airmon:
+            raw_name = row.get("device_name", "")
+            row["display_name"] = display_device_name(raw_name, source="airthings")
+
+        # Indoor data timestamp: newest devlog logtime among indoor devices
+        indoor_ts = None
+        for row in airmon:
+            status = row.get("status") or {}
+            if "aqi" in status:
+                continue
+            if "logtime" in row:
+                if indoor_ts is None or row["logtime"] > indoor_ts:
+                    indoor_ts = row["logtime"]
+
+        indoor_asof = format_unix_as_asc(indoor_ts)
+
+        # Outdoor AQI timestamp: latest logtime from aqi table
+        c = conn.cursor()
+        c.execute("SELECT logtime FROM aqi ORDER BY logtime DESC LIMIT 1")
+        row = c.fetchone()
+        outdoor_asof = format_unix_as_asc(row[0] if row is not None else None)
+
+        return render_template(
+            "air-quality.html",
+            current_page="air-quality",
+            airmon=airmon,
+            indoor_asof=indoor_asof,
+            outdoor_asof=outdoor_asof,
+        )
 
     @app.route("/weather")
     def weather():
@@ -190,6 +245,96 @@ def create_web_routes(app):
             hide_nav=True,  # Hide navigation menu
         )
 
+    return app
+
+
+def _filter_speed_control_devices(devices, device_names):
+    """Filter devices with speed control matching given names."""
+    return [
+        device
+        for device in devices
+        if device.get("has_speed_control")
+        and device.get("device_name") in device_names
+    ]
+
+
+def _get_hubitat_sensors(sensor_names):
+    """Fetch and filter Hubitat temperature sensors by exact name match."""
+    if not sensor_names:
+        return []
+
+    try:
+        all_hubitat = hubitat.get_all_devices()
+        return [
+            dev
+            for dev in all_hubitat
+            if "TemperatureMeasurement" in dev.get("capabilities", [])
+            and dev.get("name") in sensor_names
+        ]
+    except (ValueError, RuntimeError, OSError) as e:
+        logger.warning("Failed to fetch Hubitat sensors: %s", e)
+        return []
+
+
+def _collect_device_notes(devices):
+    """Collect notes from devices and format as banner text."""
+    notes = [
+        f"{device.get('device_name')}: {device.get('notes')}"
+        for device in devices
+        if device.get("notes")
+    ]
+    return " | ".join(notes) if notes else None
+
+
+def _render_room_dashboard_with_data(conn, location: str):
+    """Render room dashboard with device data filtered by configuration."""
+    room_key = location.lower()
+    config = room_config.ROOM_CONFIGS.get(room_key, {})
+
+    all_devices = db.get_device_status(conn)
+
+    # Filter ERVs and fans
+    erv_devices = _filter_speed_control_devices(all_devices, config.get("ervs", []))
+
+    # For fans, take first available match
+    fan_names: List[str] = config.get("fans", [])
+    fan_devices = []
+    if fan_names:
+        filtered = _filter_speed_control_devices(all_devices, fan_names)
+        if filtered:
+            fan_devices = [filtered[0]]  # Only first match
+
+    # Get Hubitat sensors
+    hubitat_sensors = _get_hubitat_sensors(config.get("sensors", []))
+
+    # Attach display names for sensors using the centralized helper. We prefer
+    # Hubitat labels when available and then apply generic display transforms.
+    for sensor in hubitat_sensors:
+        raw_name = sensor.get("name", "")
+        label = sensor.get("label") or None
+        sensor["display_name"] = display_device_name(
+            raw_name,
+            hubitat_label=label,
+            source="hubitat",
+        )
+
+    # Collect notes
+    notes = _collect_device_notes(erv_devices + fan_devices)
+
+    return render_template(
+        "room_dashboard.html",
+        location=location,
+        hide_nav=True,
+        erv_devices=erv_devices,
+        fan_devices=fan_devices,
+        hubitat_sensors=hubitat_sensors,
+        notes=notes,
+    )
+
+
+def _register_room_routes(app):
+    """Register routes related to room dashboards and debug views."""
+
     @app.route("/all_devices")
     def debug_all_devices():
         """Debug endpoint to show all devices from database and Hubitat"""
@@ -211,71 +356,11 @@ def create_web_routes(app):
         """Hickory HVAC control dashboard."""
         return _render_room_dashboard_with_data(conn, "Hickory")
 
-    def _filter_speed_control_devices(devices, device_names):
-        """Filter devices with speed control matching given names."""
-        return [
-            device
-            for device in devices
-            if device.get("has_speed_control")
-            and device.get("device_name") in device_names
-        ]
+    return app
 
-    def _get_hubitat_sensors(sensor_names):
-        """Fetch and filter Hubitat temperature sensors by exact name match."""
-        if not sensor_names:
-            return []
 
-        try:
-            all_hubitat = hubitat.get_all_devices()
-            return [
-                dev
-                for dev in all_hubitat
-                if "TemperatureMeasurement" in dev.get("capabilities", [])
-                and dev.get("name") in sensor_names
-            ]
-        except (ValueError, RuntimeError, OSError) as e:
-            logger.warning("Failed to fetch Hubitat sensors: %s", e)
-            return []
-
-    def _collect_device_notes(devices):
-        """Collect notes from devices and format as banner text."""
-        notes = [
-            f"{device.get('device_name')}: {device.get('notes')}"
-            for device in devices
-            if device.get("notes")
-        ]
-        return " | ".join(notes) if notes else None
-
-    def _render_room_dashboard_with_data(conn, location: str):
-        """Render room dashboard with device data filtered by configuration."""
-        room_key = location.lower()
-        config = room_config.ROOM_CONFIGS.get(room_key, {})
-
-        all_devices = db.get_device_status(conn)
-
-        # Filter ERVs and fans
-        erv_devices = _filter_speed_control_devices(all_devices, config.get("ervs", []))
-
-        # For fans, take first available match
-        fan_names: List[str] = config.get("fans", [])
-        fan_devices = []
-        if fan_names:
-            filtered = _filter_speed_control_devices(all_devices, fan_names)
-            if filtered:
-                fan_devices = [filtered[0]]  # Only first match
-
-        # Get Hubitat sensors
-        hubitat_sensors = _get_hubitat_sensors(config.get("sensors", []))
-
-        # Collect notes
-        notes = _collect_device_notes(erv_devices + fan_devices)
-
-        return render_template(
-            "room_dashboard.html",
-            location=location,
-            hide_nav=True,
-            erv_devices=erv_devices,
-            fan_devices=fan_devices,
-            hubitat_sensors=hubitat_sensors,
-            notes=notes,
-        )
+def create_web_routes(app):
+    """Create web routes and register them with the app."""
+    _register_core_routes(app)
+    _register_room_routes(app)
+    return app

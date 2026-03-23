@@ -39,7 +39,7 @@ SKIP_BROWSER_TEST = "SKIP_BROWSER_TEST" in os.environ
 def test_chart_page_no_dom_errors(test_database_conn_with_test_data):  # noqa: F811  # pylint: disable=unused-argument
     """
     This test requires the Flask server to be running at http://localhost:8000.
-    It checks for DOM errors (like NotFoundError) in the chart page JavaScript.
+    It checks for DOM errors (like NotFoundError) in the temperature chart page JavaScript.
     """
     # Start the Flask app in a separate thread
 
@@ -63,9 +63,9 @@ def test_chart_page_no_dom_errors(test_database_conn_with_test_data):  # noqa: F
             "console", lambda msg: errors.append(msg) if msg.type == "error" else None
         )
 
-        # Go to the chart page
+        # Go to the temperature chart page
         page.goto("http://127.0.0.1:5004/chart")
-        # Wait for the chart and controls to load (chart.html has #controls, #record-count)
+        # Wait for the chart and controls to load (temperature_chart.html has #controls, #record-count)
         page.wait_for_selector("#controls", timeout=15000)
         page.wait_for_selector("#record-count", timeout=15000)
 

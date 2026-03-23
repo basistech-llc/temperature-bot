@@ -1,0 +1,11 @@
+## Frontend Rendering Strategy Reference
+
+- When adding or modifying any **web route**, **Jinja2 template**, or **frontend JavaScript** in this project, first consult `doc/frontend-rendering-strategy.md`.
+- Follow the documented **SSR-first, JS-enhanced** philosophy:
+  - Prefer Jinja2 for page structure and initial content.
+  - Use `/api/v1/...` JSON endpoints and JS only where live updates or rich interactivity are truly needed.
+  - Do not introduce new templating systems or React/SPA frameworks unless explicitly requested in a separate design/change request.
+- For older JS-heavy areas, follow the migration guidance in that doc:
+  - Do **not** initiate large rewrites just to “match the philosophy”.
+  - When making unrelated changes, favor small, low-risk refactors that move code toward the documented practices.
+

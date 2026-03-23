@@ -21,7 +21,12 @@
 
 
 export DB_PATH ?= var/db/temperature-bot.db
-export DEV_DB   ?= var/db/temperature-bot.db
+export DEV_DB  ?= var/db/temperature-bot.db
+
+# Remote host and paths used by fetch-dev-db (override as needed for your environment)
+FETCH_HOST           ?= air.basistech.net
+FETCH_REMOTE_DB_DIR  ?= /var/db/
+FETCH_REMOTE_CONFIG  ?= /home/air/temperature-bot/temperature-bot-config.yaml
 
 REQ := .venv/pyvenv.cfg
 PYTHON := .venv/bin/python
@@ -54,24 +59,31 @@ make-dev-db:
 	sqlite3 $(DEV_DB) < etc/schema.sql
 	ls -l $(DEV_DB)
 
+# Explicit rule for the development database file so that schema generation
+# fails with a clear, actionable message when the DB is missing.
+$(DEV_DB):
+	@echo "ERROR: Development database '$(DEV_DB)' does not exist."
+	@echo "       Create it with 'make make-dev-db' or fetch it with 'make fetch-dev-db'."
+	@false
+
 # fetch the local development database and configuration file.
 # Then give the user a status report of what is in the database.
 # NOTE: temperature-bot-config.yaml includes production secrets
 #       until we move to better secret management system
 fetch-dev-db:
-	mkdir -p var/db/
-	rsync --verbose --delete --archive air.basistech.net:/var/db/ var/db/
-	rsync --verbose air.basistech.net:/home/air/temperature-bot/temperature-bot-config.yaml ./temperature-bot-config.yaml
-	@ls -l var/db/
+	mkdir -p $(dir $(DEV_DB))
+	rsync --verbose --delete --archive $(FETCH_HOST):$(FETCH_REMOTE_DB_DIR) $(dir $(DEV_DB))
+	rsync --verbose $(FETCH_HOST):$(FETCH_REMOTE_CONFIG) ./temperature-bot-config.yaml
+	@ls -l $(dir $(DEV_DB))
 	@echo database contents:
-	echo 'select "devices",count(*) from devices;select "devlog",count(*) from devlog;select "changelog",count(*) from changelog; select "aqi",count(*) from aqi;' | sqlite3 var/db/temperature-bot.db
+	echo 'select "devices",count(*) from devices;select "devlog",count(*) from devlog;select "changelog",count(*) from changelog; select "aqi",count(*) from aqi;' | sqlite3 $(DEV_DB)
 
 # Build the etc/schema.sql file based on the local development database
 # We use this when we make changes on the production database with 'ALTER TABLE'
 # and want the schema.sql file to reflect those changes.
 # The changes need to be incorporated into schema.sql so that the CI/CD tests run
 
-etc/schema.sql:
+etc/schema.sql: $(DEV_DB)
 	echo ".schema"| sqlite3 $(DEV_DB) \
 		| grep -v 'Run Time: real' \
 		| grep -v 'CREATE TABLE sqlite_sequence' \
@@ -79,7 +91,11 @@ etc/schema.sql:
 		| sed 's/CREATE TABLE/CREATE TABLE IF NOT EXISTS/' \
 		| tee etc/schema.sql
 
-.PHONY: make-dev-db fetch-dev-db etc/schema.sql
+# Phony target to force regeneration of etc/schema.sql regardless of timestamps
+schema:
+	$(MAKE) --always-make etc/schema.sql
+
+.PHONY: make-dev-db fetch-dev-db schema
 
 ################################################################
 ## Local development targets. These use the flask built-in web server,

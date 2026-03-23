@@ -1,4 +1,4 @@
-// Popup menu functionality for Rooms and Admin menus
+// Popup menu functionality for Rooms and Deep Dive menus
 document.addEventListener('DOMContentLoaded', function() {
     const roomsLink = document.getElementById('rooms-menu-link');
     const popup = document.getElementById('rooms-popup');
@@ -25,28 +25,28 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // Admin menu popup functionality
-    const adminLink = document.getElementById('admin-menu-link');
-    const adminPopup = document.getElementById('admin-popup');
+    // Deep Dive menu popup functionality
+    const deepDiveLink = document.getElementById('deep-dive-menu-link');
+    const deepDivePopup = document.getElementById('deep-dive-popup');
 
-    if (adminLink && adminPopup) {
-        adminLink.addEventListener('click', function(e) {
+    if (deepDiveLink && deepDivePopup) {
+        deepDiveLink.addEventListener('click', function(e) {
             e.preventDefault();
-            adminPopup.classList.toggle('is-open');
+            deepDivePopup.classList.toggle('is-open');
         });
 
         // Close popup when clicking outside
         document.addEventListener('click', function(e) {
-            if (!adminLink.contains(e.target) && !adminPopup.contains(e.target)) {
-                adminPopup.classList.remove('is-open');
+            if (!deepDiveLink.contains(e.target) && !deepDivePopup.contains(e.target)) {
+                deepDivePopup.classList.remove('is-open');
             }
         });
 
         // Handle popup link clicks
-        const adminPopupLinks = adminPopup.querySelectorAll('a');
-        adminPopupLinks.forEach(function(link) {
+        const deepDivePopupLinks = deepDivePopup.querySelectorAll('a');
+        deepDivePopupLinks.forEach(function(link) {
             link.addEventListener('click', function() {
-                adminPopup.classList.remove('is-open');
+                deepDivePopup.classList.remove('is-open');
             });
         });
     }

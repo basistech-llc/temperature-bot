@@ -32,8 +32,9 @@ body {
      padding-left: 50px;
 }
 
-/* Temperature unit toggle - consistent styling everywhere */
-.temperature-toggle {
+/* Top-nav pill toggles (temperature + master rules) share styling */
+.temperature-toggle,
+.rules-master-toggle {
     display: flex;
     align-items: center;
     justify-content: center;
@@ -116,34 +117,56 @@ body {
     background-color: #0056b3;
 }
 
-/* Set temperature control (index + room dashboard) */
-.settemp-container {
-    display: flex;
+/* Set temperature: thermostat-style inline [−] value [+] — one line, no extra height */
+.settemp-thermostat {
+    display: inline-flex;
     align-items: center;
-    justify-content: flex-end;
-    gap: 4px;
+    gap: 0.15rem;
 }
 
-.settemp-display {
+.settemp-thermostat .settemp-display {
     min-width: 3.5em;
-    text-align: right;
-    display: inline-block;
+    text-align: center;
+    font-weight: 600;
+    color: #1a202c;
 }
 
-.settemp-arrow-column {
-    display: flex;
-    flex-direction: column;
-    gap: 1px;
-}
-
-.settemp-arrow {
-    padding: 0;
-    font-size: 0.6em;
+/* Thermostat adjust: wide tap targets, minimal look — doesn’t add row height */
+.settemp-thermostat .settemp-btn {
+    /* Wide enough for touch (44px min); no min-height so row stays compact */
+    min-width: 44px;
+    padding: 0.2rem 0.35rem;
+    font-size: 1.1rem;
+    font-weight: 600;
     line-height: 1;
-    display: inline-block;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     background: transparent;
     border: none;
+    color: #64748b;
     cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+    border-radius: 4px;
+}
+
+.settemp-thermostat .settemp-btn:hover {
+    color: #1a202c;
+    background: #f1f5f9;
+}
+
+.settemp-thermostat .settemp-btn:active {
+    background: #e2e8f0;
+}
+
+.settemp-thermostat .settemp-btn:focus {
+    outline: none;
+}
+
+.settemp-thermostat .settemp-btn:focus-visible {
+    outline: 2px solid #3b82f6;
+    outline-offset: 1px;
 }
 
 /* main grid */
@@ -179,11 +202,35 @@ button {
 }
 
 #log-table {
-    max-width:1000px;
+    max-width: 1000px;
+    min-height: calc(100vh - 220px);
+    margin: 0;
+}
+
+.log-controls {
+    max-width: 1000px;
+    margin: 6px 0 0 0;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.log-controls #log-show-more {
+    width: auto;
+}
+
+.log-range-summary {
+    font-size: 0.85em;
+    color: #666;
 }
 
 .column-temp {
     min-width: 80px;
+}
+
+.column-temp-set,
+.cell-temp-set {
+    min-width: 160px;
 }
 
 .cell-temp {
@@ -195,13 +242,55 @@ td.cell-notes:not(:empty) {
     min-width: 150px;
 }
 
-#last-refresh {
-    color: blue;
+.last-refresh-inline {
+    margin-top: 6px;
+    color: #666;
     font-style: italic;
+    font-size: 0.85em;
 }
 
 #weather {
     width: 300px;
+}
+
+.aq-legend {
+    margin-top: 4px;
+    color: #666;
+    font-size: 0.8em;
+}
+
+.pure-table td.aq-elevated {
+    background-color: #fff7e0;
+    border: 1px dashed #e0b600;
+}
+
+.pure-table td.aq-problem {
+    background-color: #fce8e6;
+    border: 1px solid #d93025;
+}
+
+.legend-swatch {
+    display: inline-block;
+    padding: 1px 6px;
+    border-radius: 999px;
+    margin: 0 2px;
+}
+
+.legend-swatch.aq-elevated {
+    background-color: #fff7e0;
+    border: 1px dashed #e0b600;
+}
+
+.legend-swatch.aq-problem {
+    background-color: #fce8e6;
+    border: 1px solid #d93025;
+}
+
+.aqi-pill-table {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 0.9em;
 }
 
 /* Utility: hide element; JS toggles by adding/removing this class */
@@ -387,20 +476,6 @@ table.rules-table th  {
     }
 }
 
-#aqi-weather {
-    width: 400px;
-    background-color: #f0f8ff;
-    min-height: 100px;
-}
-
-#aqi-status {
-    display: inline-block;
-    padding: 5px 10px;
-    border: 1px solid #ccc;
-    border-radius: 4px;
-    max-width: 250px;
-}
-
 #fan-status-container .pure-u-1.pure-u-md-1-2:first-child {
     max-width: 400px;
 }
@@ -432,6 +507,42 @@ table.rules-table th  {
     white-space: normal;
     min-width: 300px;
     word-break: break-word;
+}
+
+/* First column (sensor/location name): narrow, left-aligned */
+.air-quality-table .column-unit {
+    min-width: 7em;
+    text-align: left;
+}
+
+.air-quality-table td.cell-unit {
+    text-align: left;
+}
+
+/* Column headers: metric name and unit line centered; data cells right-aligned for decimal alignment */
+.air-quality-table thead th:not(.column-unit) {
+    text-align: center;
+}
+
+.air-quality-table tbody td:not(.cell-unit) {
+    text-align: right;
+}
+
+.air-quality-table thead th small {
+    display: block;
+    text-align: center;
+}
+
+/* Humidity column min width */
+.air-quality-table th.column-humidity,
+.air-quality-table td.cell-humidity {
+    min-width: 3.5em;
+}
+
+/* Temp column shows numeric value only (unit in header). Min width fits values like 78.3. */
+.air-quality-table th.column-temp,
+.air-quality-table td.cell-temp {
+    min-width: 3.75em;
 }
 
 .column-speed {
@@ -625,6 +736,65 @@ li.pure-menu-item > .temperature-toggle {
     vertical-align: middle;
 }
 
+/* Master rules toggle in the top nav */
+.rules-master-toggle {
+    min-width: 110px; /* Slightly wider for label + state */
+}
+
+.rules-label {
+    font-weight: 600;
+    color: #333;
+    user-select: none;
+}
+
+.rules-state-label {
+    font-weight: 500;
+    color: #2e7d32; /* greenish when on */
+    min-width: 20px;
+    text-align: center;
+    user-select: none;
+}
+
+.rules-state-label.rules-state-off {
+    color: #c62828; /* red when off */
+}
+
+/* Ensure rules toggle aligns nicely in menu item */
+li.pure-menu-item > .rules-master-toggle {
+    display: inline-flex;
+    vertical-align: middle;
+}
+
+/* Banner shown when rules are turned off via master switch */
+.rules-master-banner {
+    margin-top: 0.5em;
+    margin-bottom: 0.5em;
+    padding: 8px 12px;
+    background-color: #fff3cd;
+    border: 1px solid #ffeeba;
+    color: #856404;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    max-width: 960px;
+}
+
+.rules-master-banner-text {
+    font-size: 0.9em;
+}
+
+.rules-master-banner-close {
+    background: transparent;
+    border: none;
+    font-size: 1.1em;
+    line-height: 1;
+    cursor: pointer;
+    color: #856404;
+    padding: 0 4px;
+}
+
 .github-popup {
     display: none;
     position: absolute;
@@ -759,6 +929,12 @@ li.pure-menu-item > .temperature-toggle {
 }
 
 #temp-chart {
+    height: 620px;
+    width: 100%;
+    margin-top: 16px;
+}
+
+#lighting-chart {
     height: 620px;
     width: 100%;
     margin-top: 16px;

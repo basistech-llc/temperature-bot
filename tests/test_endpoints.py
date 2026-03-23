@@ -571,8 +571,29 @@ def test_temperature_api_series_uses_hubitat_label_when_available(
     response = flask_test_client.get("/api/v1/temperature?device_id=" + str(device_id))
     assert response.status_code == 200
     series = response.json.get("series", [])
+    assert series, "expected at least one series"
     series_names = [s["name"] for s in series]
     assert "Broadway" in series_names
+    assert "device_id" in series[0], "series must include device_id for chart keying"
+
+
+def test_lighting_api_basic_series_shape(flask_test_client):  # noqa: F811
+    """Lighting series API returns series list with expected structure and numeric data."""
+    response = flask_test_client.get("/api/v1/lighting")
+    assert response.status_code == 200
+    data = response.json
+    assert "series" in data
+    assert isinstance(data["series"], list)
+    if data["series"]:
+        first = data["series"][0]
+        assert "name" in first
+        assert "data" in first
+        assert isinstance(first["data"], list)
+        # Each datapoint should be [timestamp, value] with numeric value
+        if first["data"]:
+            ts, val = first["data"][0]
+            assert isinstance(ts, int)
+            assert isinstance(val, (int, float))
 
 
 @patch("app.routes_api.hubitat.get_all_devices")
@@ -648,3 +669,46 @@ def test_disable_rules_api_enable_and_disable(
     assert disabled_until >= min_expected, (
         f"rules should be disabled until at least {min_expected}, got {disabled_until}"
     )
+
+
+def test_rules_master_api_default_and_toggle(
+    flask_test_client, test_database_conn_with_test_data
+):  # noqa: F811
+    """rules_master API reports default enabled, and toggling persists to the database."""
+    conn = test_database_conn_with_test_data[0]
+    client = flask_test_client
+
+    # By default, master should be enabled
+    r = client.get("/api/v1/rules_master")
+    assert r.status_code == 200
+    assert r.json == {"enabled": True}
+    assert db.get_rules_master_enabled(conn) is True
+
+    # Turn master OFF
+    r = client.post("/api/v1/rules_master", json={"enabled": False})
+    assert r.status_code == 200
+    assert r.json == {"enabled": False}
+    assert db.get_rules_master_enabled(conn) is False
+
+    # Verify underlying RULES_MASTER device row has a future disabled_until
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT disabled_until FROM devices WHERE device_name = ?", ("rules_master",)
+    )
+    row = cursor.fetchone()
+    assert row is not None
+    disabled_until = row["disabled_until"]
+    assert disabled_until is not None and disabled_until > int(time.time())
+
+    # Turn master back ON
+    r = client.post("/api/v1/rules_master", json={"enabled": True})
+    assert r.status_code == 200
+    assert r.json == {"enabled": True}
+    assert db.get_rules_master_enabled(conn) is True
+
+    cursor.execute(
+        "SELECT disabled_until FROM devices WHERE device_name = ?", ("rules_master",)
+    )
+    row = cursor.fetchone()
+    assert row is not None
+    assert row["disabled_until"] == 0
