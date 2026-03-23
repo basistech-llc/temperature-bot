@@ -179,7 +179,10 @@ every-minute: $(REQ)
 daily: $(REQ)
 	$(PYTHON) -m bin.runner --daily
 
-.PHONY: every-minute daily
+monthly-backup:
+	sudo cp /var/db/temperature-bot.db /var/db/temperature-bot.backup.$$(date -I).db
+
+.PHONY: every-minute daily monthly-backup
 
 ################################################################
 ## Installation targets
