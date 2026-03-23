@@ -36,7 +36,7 @@
                     <span title="{{ device.device_name }}">{{ device.device_label }}</span><span class="rules-disabled-superscript hidden" id="rules-disabled-{{ device.device_id }}" title=""></span>
                     <span id="device-{{ device.device_id }}-notes"></span>
                     <div class="temporal-links">
-                      <a href="/chart?device_ids={{ device.device_id }}" target="_blank">graph</a>
+                      <a href="/chart?device_ids={{ device.device_id }}" target="_self">chart</a>
                     </div>
                   </td>
                   {% if device.temp10x %}
@@ -97,7 +97,7 @@
                     <span title="{{ device.device_name }}">{{ device.device_label }}</span><span class="rules-disabled-superscript hidden" id="rules-disabled-{{ device.device_id }}" title=""></span>
                     <span id="device-{{ device.device_id }}-notes"></span>
                     <div class="temporal-links">
-                      <a href="/chart?device_ids={{ device.device_id }}" target="_blank">graph</a>
+                      <a href="/chart?device_ids={{ device.device_id }}" target="_self">chart</a>
                     </div>
                   </td>
                   {% if device.temp10x %}
@@ -177,7 +177,8 @@
                     <span title="{{ device.device_name }}">{{ device.device_label }}</span><span class="rules-disabled-superscript hidden" id="rules-disabled-{{ device.device_id }}" title=""></span>
                     <span id="device-{{ device.device_id }}-notes"></span>
                     <div class="temporal-links">
-                      <a href="/chart?device_ids={{ device.device_id }}" target="_blank">graph</a>
+                      <a href="/chart?device_ids={{ device.device_id }}" target="_self">temp</a>
+                      {% if device.has_illuminance %} · <a href="/lighting_chart" target="_self">light</a>{% endif %}
                     </div>
                   </td>
                   <td class="cell-humidity" id="humidity-{{ device.device_id }}">--</td>

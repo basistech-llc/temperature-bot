@@ -792,6 +792,11 @@ def get_device_status(conn) -> List[Dict[str, Any]]:
     for data in device_data:
         if "status" in data:
             data.update(ae200.extract_drive_and_fan_speed(data["status"]))
+            status = data["status"]
+            illum = status.get("illuminance")
+            if illum is None:
+                illum = (status.get("attributes") or {}).get("illuminance")
+            data["has_illuminance"] = illum is not None
         if "logtime" in data:
             data["age"] = github_style_duration(
                 data["logtime"] + data.get("duration", 1)

@@ -10,6 +10,7 @@
 let tempChart = null; // ECharts instance for temperature
 let tempData = []; // series from /api/v1/temperature
 let currentDeviceIds = []; // devices to load; [] means all
+let preSelectedDeviceIds = []; // device IDs from URL ?device_ids=; pre-checks specific sensor(s)
 let allDevices = []; // reserved for future use
 
 const TEMP_ENDPOINT = "/api/v1/temperature";
@@ -46,9 +47,7 @@ function loadTempData() {
       tempData = json.series || [];
       console.log("tempData=", tempData);
 
-      if (currentDeviceIds.length === 0) {
-        createAllSensorCheckboxes();
-      }
+      createAllSensorCheckboxes();
 
       updateTempRecordCount();
       updateTempChart();
@@ -83,6 +82,14 @@ function createAllSensorCheckboxes() {
           sensitivity: "base",
         });
   });
+  // If navigating from a per-unit link, pre-check only the specified device(s).
+  if (preSelectedDeviceIds.length > 0) {
+    excludedSensorNames = new Set(
+      allSensors
+        .filter((s) => !preSelectedDeviceIds.includes(s.device_id))
+        .map((s) => s.exclusionKey),
+    );
+  }
   renderSensorCheckboxes(null, updateTempChart);
 }
 
@@ -121,10 +128,15 @@ function updateTempChart() {
     title: {
       text: (() => {
         let baseTitle =
-          currentDeviceIds && currentDeviceIds.length > 1
+          preSelectedDeviceIds.length > 1
             ? `Temperature Time Series - Multiple Devices`
-            : currentDeviceIds && currentDeviceIds.length === 1
-              ? `Temperature Time Series - Device ${currentDeviceIds[0]}`
+            : preSelectedDeviceIds.length === 1
+              ? `Temperature Time Series - ${(() => {
+                  const s = tempData.find(
+                    (d) => d.device_id === preSelectedDeviceIds[0],
+                  );
+                  return s ? s.name : `Device ${preSelectedDeviceIds[0]}`;
+                })()}`
               : "Temperature Time Series";
 
         if (
@@ -384,6 +396,16 @@ document.addEventListener("DOMContentLoaded", async function () {
   if (!tempEl) {
     // Not on the temperature chart page; helpers are still used by lighting.
     return;
+  }
+
+  // When navigating from a per-unit link, pre-check only that device's checkbox.
+  const urlParams = new URLSearchParams(window.location.search);
+  const deviceIdsParam = urlParams.get("device_ids");
+  if (deviceIdsParam) {
+    preSelectedDeviceIds = deviceIdsParam
+      .split(",")
+      .map((id) => parseInt(id.trim(), 10))
+      .filter((n) => !isNaN(n));
   }
 
   await loadAllSensors();
