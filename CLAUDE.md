@@ -2,29 +2,9 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## What This Is
+**Read `.github/copilot-instructions.md` for full coding conventions, project structure, and workflow details.**
 
-Flask-based home automation monitoring app for temperature sensors, HVAC control, and air quality. Collects data from Hubitat hub, AE200 HVAC controller, and Airthings sensors, stores in SQLite (dev) / ClickHouse (prod), and provides a web UI for visualization and control.
-
-## Commands
-
-```bash
-make install-macos      # Install dependencies (Homebrew → pipx → Poetry)
-make local-dev          # Run dev server with AE200 simulator + hot-reload
-make test               # Python + JavaScript tests with coverage
-make pytest             # Python tests only (coverage in htmlcov/)
-make test-js            # JavaScript unit tests (Node.js)
-make check              # All linters: ruff, pylint, djlint, eslint
-make check-types        # mypy type checking
-make make-dev-db        # Create fresh dev database from schema
-make fetch-dev-db       # Pull production DB + config from remote server
-make every-minute       # Run data collection (normally runs via cron)
-make daily              # Daily cleanup and RLE aggregation
-
-# Single test file / test
-poetry run pytest tests/test_db.py -v
-poetry run pytest tests/test_db.py::test_function_name -v
-```
+To run a single test: `poetry run pytest tests/test_db.py::test_function_name -v`
 
 ## Architecture
 
@@ -45,24 +25,6 @@ poetry run pytest tests/test_db.py::test_function_name -v
 **Rules engine** (`app/rules_engine.py`, `bin/rules.py`): Auto-controls HVAC based on temperature, AQI, and time-of-day. Rules are Python code evaluated at runtime. Can be disabled globally or per-device (default: 3 hours via `RULES_DISABLE_SECONDS`). Virtual device `"rules_engine"` in `devices` table controls global enable/disable.
 
 **Web layer:** Server-side rendering (Jinja2) for initial structure; JavaScript adds live updates, ECharts time-series charts, and Tabulator tables. Pages should be functional without JS. Route handlers in `routes_web.py` (UI) and `routes_api.py` (`/api/v1/*`).
-
-## Coding Conventions
-
-- **No f-strings in logging**: `logger.info("msg %s", var)` — required for performance and log level filtering
-- **Function-style tests only**: `def test_*()` functions, never test classes
-- **Database connections**: Use context managers, explicit commit, enable foreign keys (`PRAGMA foreign_keys = ON;`), use `sqlite3.Row` factory
-- **Pylint threshold**: Must score ≥ 9.5/10
-- Keep route handlers thin — business logic belongs in `db.py`, `rules_engine.py`, or integration modules
-
-## Test Fixtures (conftest.py)
-
-- `empty_database_conn` — empty SQLite DB (no data)
-- `test_database_conn` — schema applied, no data
-- `test_database_conn_with_test_data` — schema + sample data across 4 time intervals
-- `flask_test_client` — Flask test client with overridden DB connection
-- `skip_on_github` — marker to skip tests in CI
-
-Browser (Playwright) tests are opt-in; most tests use Flask test client only.
 
 ## Task Tracking
 
