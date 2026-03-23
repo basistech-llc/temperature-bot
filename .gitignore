@@ -23,3 +23,9 @@ temps.csv
 token.json
 venv/
 *secrets*.py
+
+# Dolt database files (added by bd init)
+.dolt/
+
+# Beads / Dolt files (added by bd init)
+.beads-credential-key

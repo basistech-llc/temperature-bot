@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "server",
+  "dolt_database": "hvac",
+  "project_id": "08ec8672-88e3-4955-a185-81b6c8c20a3c"
+}
