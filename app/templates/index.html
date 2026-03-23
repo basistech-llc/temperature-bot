@@ -1,5 +1,9 @@
 {% extends 'base.html' %}
 {% block title %} Unit Speed Control {% endblock %}
+
+{# Shared SVG sparkline icon used inside chart badge links #}
+{% macro sparkline_icon() %}<svg width="12" height="9" viewBox="0 0 12 9" fill="none" aria-hidden="true" style="vertical-align:middle"><polyline points="0,8 3,4 5,6 8,1 12,3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>{% endmacro %}
+
 {% block head %}
 <link rel="stylesheet" href="/static/slider.css">
 <link href="https://unpkg.com/tabulator-tables@5.5.2/dist/css/tabulator.min.css" rel="stylesheet">
@@ -36,7 +40,8 @@
                     <span title="{{ device.device_name }}">{{ device.device_label }}</span><span class="rules-disabled-superscript hidden" id="rules-disabled-{{ device.device_id }}" title=""></span>
                     <span id="device-{{ device.device_id }}-notes"></span>
                     <div class="temporal-links">
-                      <a href="/chart?device_ids={{ device.device_id }}" target="_blank">graph</a>
+                      <a href="/chart?device_ids={{ device.device_id }}" target="_self"
+                         class="chart-badge chart-badge-temp" title="Temperature chart for {{ device.device_label }}">{{ sparkline_icon() }}temp</a>
                     </div>
                   </td>
                   {% if device.temp10x %}
@@ -97,7 +102,8 @@
                     <span title="{{ device.device_name }}">{{ device.device_label }}</span><span class="rules-disabled-superscript hidden" id="rules-disabled-{{ device.device_id }}" title=""></span>
                     <span id="device-{{ device.device_id }}-notes"></span>
                     <div class="temporal-links">
-                      <a href="/chart?device_ids={{ device.device_id }}" target="_blank">graph</a>
+                      <a href="/chart?device_ids={{ device.device_id }}" target="_self"
+                         class="chart-badge chart-badge-temp" title="Temperature chart for {{ device.device_label }}">{{ sparkline_icon() }}temp</a>
                     </div>
                   </td>
                   {% if device.temp10x %}
@@ -159,14 +165,19 @@
 
         <!-- Section 3: Air Quality — devices without speed control that have temp -->
         <h2>Air Quality</h2>
-        <table class="pure-table">
+        <table class="pure-table aq-table">
           <thead>
             <tr>
-              <th class="column-unit" rowspan="2">Unit</th>
-              <th class="column-humidity" rowspan="2">Humidity</th>
-              <th class="column-temp" rowspan="2">Temp</th>
-              <th class="column-illuminance" rowspan="2">Illuminance</th>
-              <th class="column-notes" rowspan="2">Notes</th>
+              <th class="column-unit">Unit</th>
+              <th class="column-humidity" title="Relative humidity (%). Elevated: 30–35 or 55–60. Problem: &lt;30 or &gt;60.">Humidity<br><small>%</small></th>
+              <th class="column-temp" title="Temperature. Unit follows site C/F toggle. Elevated: 18–20 or 25–27 °C. Problem: &lt;18 or &gt;27 °C.">Temp<br><small id="aq-index-temp-unit-label">°C</small></th>
+              <th class="column-illuminance" title="Illuminance (lux).">Illuminance<br><small>lx</small></th>
+              <th title="Carbon dioxide (ppm). Elevated: 801–1200. Problem: &gt;1200.">CO₂<br><small>ppm</small></th>
+              <th title="Volatile organic compounds (ppb). Elevated: 501–2000. Problem: &gt;2000.">VOC<br><small>ppb</small></th>
+              <th title="Short-term average radon level (Bq/m³). Elevated: 100–150. Problem: &gt;150.">Radon<br><small>Bq/m³</small></th>
+              <th title="Fine particles &lt;2.5µm (µg/m³). Elevated: 13–35. Problem: &gt;35.">PM2.5<br><small>µg/m³</small></th>
+              <th title="Fine particles &lt;1µm (µg/m³). Elevated: 13–35. Problem: &gt;35.">PM1<br><small>µg/m³</small></th>
+              <th class="column-notes">Notes</th>
             </tr>
           </thead>
           <tbody>
@@ -177,12 +188,22 @@
                     <span title="{{ device.device_name }}">{{ device.device_label }}</span><span class="rules-disabled-superscript hidden" id="rules-disabled-{{ device.device_id }}" title=""></span>
                     <span id="device-{{ device.device_id }}-notes"></span>
                     <div class="temporal-links">
-                      <a href="/chart?device_ids={{ device.device_id }}" target="_blank">graph</a>
+                      <a href="/chart?device_ids={{ device.device_id }}" target="_self"
+                         class="chart-badge chart-badge-temp" title="Temperature chart for {{ device.device_label }}">{{ sparkline_icon() }}temp</a>
+                      {% if device.has_illuminance %}
+                      <a href="/lighting_chart?device_ids={{ device.device_id }}" target="_self"
+                         class="chart-badge chart-badge-light" title="Lighting chart for {{ device.device_label }}">{{ sparkline_icon() }}light</a>
+                      {% endif %}
                     </div>
                   </td>
                   <td class="cell-humidity" id="humidity-{{ device.device_id }}">--</td>
-                  <td class="cell-temp" id="temp-{{ device.device_id }}">--</td>
+                  <td class="cell-temp temp-display temp-display-no-unit" id="temp-{{ device.device_id }}">--</td>
                   <td class="cell-illuminance" id="illuminance-{{ device.device_id }}">--</td>
+                  <td id="co2-{{ device.device_id }}">--</td>
+                  <td id="voc-{{ device.device_id }}">--</td>
+                  <td id="radon-{{ device.device_id }}">--</td>
+                  <td id="pm25-{{ device.device_id }}">--</td>
+                  <td id="pm1-{{ device.device_id }}">--</td>
                   <td class="cell-notes">
                     <span class="notes editable-notes" id="notes-{{ device.device_id }}" data-device-id="{{ device.device_id }}" title="Click to edit"></span>
                   </td>

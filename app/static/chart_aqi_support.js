@@ -104,15 +104,60 @@ function updateAQChart() {
     encode: { x: 0, y: 1 },
     yAxisIndex: s.yAxisIndex,
     data: s.data,
+    ...(s.name === "AQI"
+      ? {
+          lineStyle: { width: 3.5 },
+          itemStyle: { color: "#E65100" },
+          color: "#E65100",
+          z: 10,
+        }
+      : { lineStyle: { width: 1.5 } }),
   }));
 
   const yAxes = [
-    { type: "value", name: "PM2.5 (µg/m³)", axisLabel: { formatter: (v) => `${v}` }, position: "left", offset: 0 },
-    { type: "value", name: "PM10 (µg/m³)", axisLabel: { formatter: (v) => `${v}` }, position: "left", offset: 75 },
-    { type: "value", name: "O₃ (ppb)", axisLabel: { formatter: (v) => `${v}` }, position: "left", offset: 150 },
-    { type: "value", name: "NO₂ (ppb)", axisLabel: { formatter: (v) => `${v}` }, position: "right", offset: 0 },
-    { type: "value", name: "CO (ppm)", axisLabel: { formatter: (v) => `${v}` }, position: "right", offset: 75 },
-    { type: "value", name: "AQI", axisLabel: { formatter: (v) => `${v}` }, position: "right", offset: 150 },
+    {
+      type: "value",
+      name: "PM2.5 (µg/m³)",
+      axisLabel: { formatter: (v) => `${v}` },
+      position: "left",
+      offset: 0,
+    },
+    {
+      type: "value",
+      name: "PM10 (µg/m³)",
+      axisLabel: { formatter: (v) => `${v}` },
+      position: "left",
+      offset: 75,
+    },
+    {
+      type: "value",
+      name: "O₃ (ppb)",
+      axisLabel: { formatter: (v) => `${v}` },
+      position: "left",
+      offset: 150,
+    },
+    {
+      type: "value",
+      name: "NO₂ (ppb)",
+      axisLabel: { formatter: (v) => `${v}` },
+      position: "right",
+      offset: 0,
+    },
+    {
+      type: "value",
+      name: "CO (ppm)",
+      axisLabel: { formatter: (v) => `${v}` },
+      position: "right",
+      offset: 75,
+    },
+    {
+      type: "value",
+      name: "AQI",
+      axisLabel: { formatter: (v) => `${v}`, color: "#E65100" },
+      nameTextStyle: { color: "#E65100", fontWeight: "bold" },
+      position: "right",
+      offset: 150,
+    },
   ];
 
   yAxes.forEach((ax, i) => {
@@ -137,7 +182,10 @@ function updateAQChart() {
           timeZoneName: "short",
         }).format(d);
         return params.reduce((out, p) => {
-          return out + `${p.marker} ${p.seriesName}: ${p.value[1]}${unitFor(p.seriesName)}<br>`;
+          return (
+            out +
+            `${p.marker} ${p.seriesName}: ${p.value[1]}${unitFor(p.seriesName)}<br>`
+          );
         }, `${time}<br>`);
       },
     },
@@ -173,7 +221,9 @@ function setupEventListeners() {
     document.getElementById("endDate").value = "";
     loadAirQualityData();
   });
-  document.getElementById("startDate").addEventListener("change", pickersChanged);
+  document
+    .getElementById("startDate")
+    .addEventListener("change", pickersChanged);
   document.getElementById("endDate").addEventListener("change", pickersChanged);
 }
 

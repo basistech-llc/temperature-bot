@@ -237,6 +237,29 @@ button {
     color: #000; /* Default black for fresh temperatures */
 }
 
+/* Right-align all numeric columns (header + data) */
+.cell-humidity,
+.cell-temp,
+.cell-illuminance,
+td[id^="co2-"],
+td[id^="voc-"],
+td[id^="radon-"],
+td[id^="pm25-"],
+td[id^="pm1-"] {
+    text-align: right;
+}
+/* Index-page Air Quality table: centered headers, right-aligned data */
+.aq-table thead th:not(.column-unit):not(.column-notes) {
+    text-align: center;
+}
+.aq-table thead th small {
+    display: block;
+    text-align: center;
+}
+.aq-table tbody td:not(.cell-unit):not(.cell-notes) {
+    text-align: right;
+}
+
 /* Make a minimum width of 150 if the text is not empty */
 td.cell-notes:not(:empty) {
     min-width: 150px;
@@ -499,6 +522,27 @@ table.rules-table th  {
     background-color: #f0f0f0;
     border-radius: 3px;
 }
+
+.chart-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 1px 8px;
+    font-size: 0.78em;
+    border-radius: 10px;
+    border: 1px solid currentColor;
+    text-decoration: none;
+    white-space: nowrap;
+    opacity: 0.75;
+    margin-right: 4px;
+}
+.chart-badge:hover {
+    opacity: 1;
+    background-color: rgba(0,0,0,0.04);
+}
+/* Higher specificity than .temporal-links a to override the #999 default */
+.temporal-links .chart-badge-temp { color: #c0392b; }
+.temporal-links .chart-badge-light { color: #9a6800; }
 
 /****************************************************************/
 
