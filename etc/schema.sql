@@ -43,3 +43,5 @@ CREATE INDEX IF NOT EXISTS idx_alerts_device_id ON alerts (device_id);
 CREATE INDEX IF NOT EXISTS idx_alerts_active ON alerts (end_time) WHERE end_time IS NULL;
 CREATE INDEX IF NOT EXISTS idx_alerts_type ON alerts (alert_type);
 CREATE INDEX IF NOT EXISTS idx_alerts_start_time ON alerts (start_time);
+CREATE INDEX IF NOT EXISTS idx_changelog_logtime ON changelog (logtime);
+CREATE INDEX IF NOT EXISTS idx_changelog_device_id ON changelog (device_id);

@@ -79,7 +79,7 @@ etc/schema.sql:
 		| sed 's/CREATE TABLE/CREATE TABLE IF NOT EXISTS/' \
 		| tee etc/schema.sql
 
-.PHONY: make-dev-db fetch-dev-db
+.PHONY: make-dev-db fetch-dev-db etc/schema.sql
 
 ################################################################
 ## Local development targets. These use the flask built-in web server,
@@ -162,6 +162,9 @@ every-minute: $(REQ)
 
 daily: $(REQ)
 	$(PYTHON) -m bin.runner --daily
+
+monthly-backup:
+	sudo cp /var/db/temperature-bot.db /var/db/temperature-bot.backup.$$(date -I).db
 
 .PHONY: every-minute daily
 
