@@ -2,6 +2,7 @@
 
 let lightingChart = null;
 let lightingData = [];
+let preSelectedDeviceIds = []; // device IDs from URL ?device_ids=; pre-checks specific sensor(s)
 
 const LIGHTING_ENDPOINT = "/api/v1/lighting";
 
@@ -49,8 +50,31 @@ function loadLightingData() {
  *** Checkbox rendering
  ****************************************************************/
 function createLightingSensorCheckboxes() {
-  const availableNames = lightingData.map((series) => series.name);
-  renderSensorCheckboxes(availableNames, updateLightingChart);
+  // Build one sensor per lighting series, keyed by device_id to avoid name-mismatch
+  // between the lighting API (which may use Hubitat labels) and the status API.
+  allSensors = lightingData
+    .map((series) => ({
+      device_id: series.device_id,
+      displayName: series.name,
+      fullName: series.name,
+      exclusionKey: series.device_id,
+    }))
+    .sort((a, b) =>
+      a.displayName.localeCompare(b.displayName, undefined, {
+        sensitivity: "base",
+      }),
+    );
+
+  // If navigating from a per-unit link, pre-check only the specified device(s).
+  if (preSelectedDeviceIds.length > 0) {
+    excludedSensorNames = new Set(
+      allSensors
+        .filter((s) => !preSelectedDeviceIds.includes(s.device_id))
+        .map((s) => s.exclusionKey),
+    );
+  }
+
+  renderSensorCheckboxes(null, updateLightingChart);
 }
 
 /****************************************************************
@@ -62,7 +86,7 @@ function updateLightingChart() {
   const checkboxes = document.querySelectorAll(
     "#checkboxes input[type=checkbox]",
   );
-  const dataMap = new Map(lightingData.map((s) => [s.name, s]));
+  const dataMap = new Map(lightingData.map((s) => [s.device_id, s]));
 
   const {
     series,
@@ -70,11 +94,24 @@ function updateLightingChart() {
     markLines,
     yAxisMin,
     yAxisMax,
-  } = buildSeriesAndAxis(checkboxes, allSensors, dataMap, (v) => v);
+  } = buildSeriesAndAxis(checkboxes, allSensors, dataMap, (v) => v, {
+    dataKey: "device_id",
+  });
 
   const option = {
     title: {
-      text: "Lighting Time Series",
+      text: (() => {
+        if (preSelectedDeviceIds.length === 1) {
+          const s = lightingData.find(
+            (d) => d.device_id === preSelectedDeviceIds[0],
+          );
+          if (s) return `Lighting Time Series - ${s.name}`;
+        }
+        if (preSelectedDeviceIds.length > 1) {
+          return "Lighting Time Series - Multiple Devices";
+        }
+        return "Lighting Time Series";
+      })(),
       top: 0,
     },
     tooltip: {
@@ -197,7 +234,7 @@ function setupLightingEventListeners() {
   if (clearAllBtn) {
     clearAllBtn.addEventListener("click", function () {
       allSensors.forEach((sensor) =>
-        excludedSensorNames.add(sensor.displayName),
+        excludedSensorNames.add(sensor.exclusionKey ?? sensor.displayName),
       );
       programmaticCheckboxUpdate = true;
       const checkboxes = document.querySelectorAll(
@@ -220,6 +257,16 @@ function reloadLightingData() {
 document.addEventListener("DOMContentLoaded", async function () {
   const chartEl = document.getElementById("lighting-chart");
   if (!chartEl) return;
+
+  // When navigating from a per-unit link, pre-check only that device's checkbox.
+  const urlParams = new URLSearchParams(window.location.search);
+  const deviceIdsParam = urlParams.get("device_ids");
+  if (deviceIdsParam) {
+    preSelectedDeviceIds = deviceIdsParam
+      .split(",")
+      .map((id) => parseInt(id.trim(), 10))
+      .filter((n) => !isNaN(n));
+  }
 
   await loadAllSensors();
 

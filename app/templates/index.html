@@ -186,8 +186,8 @@
                       <a href="/chart?device_ids={{ device.device_id }}" target="_self"
                          class="chart-badge chart-badge-temp" title="Temperature chart for {{ device.device_label }}">{{ sparkline_icon() }}temp</a>
                       {% if device.has_illuminance %}
-                      <a href="/lighting_chart" target="_self"
-                         class="chart-badge chart-badge-light" title="Lighting chart">{{ sparkline_icon() }}light</a>
+                      <a href="/lighting_chart?device_ids={{ device.device_id }}" target="_self"
+                         class="chart-badge chart-badge-light" title="Lighting chart for {{ device.device_label }}">{{ sparkline_icon() }}light</a>
                       {% endif %}
                     </div>
                   </td>

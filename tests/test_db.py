@@ -100,7 +100,8 @@ def test_get_lighting_series_uses_status_json_illuminance(
         )
     conn.commit()
 
-    series = db.get_lighting_series(conn, [device_id])
+    with app.test_request_context():
+        series = db.get_lighting_series(conn, [device_id])
     assert series, "expected at least one lighting series"
     assert series[0]["name"] == "Lighting Test Device"
     datapoints = series[0]["data"]

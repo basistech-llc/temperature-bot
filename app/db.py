@@ -745,15 +745,15 @@ def get_lighting_series(
         if device_id not in device_ids:
             continue
 
-        c.execute(
-            """
+        cmd = """
             SELECT logtime, status_json
             FROM devlog
             WHERE device_id = ? AND logtime IS NOT NULL AND status_json IS NOT NULL
-            ORDER BY logtime
-            """,
-            (device_id,),
-        )
+            """
+        args = [device_id]
+        (cmd, args) = temporal_quantification(cmd, args)
+        cmd += " ORDER BY logtime"
+        c.execute(cmd, args)
         rows = c.fetchall()
 
         data: List[List[float]] = []
@@ -768,6 +768,10 @@ def get_lighting_series(
             if illum is None:
                 attrs = status.get("attributes") or {}
                 illum = attrs.get("illuminance")
+            if illum is None:
+                light = status.get("light")
+                if isinstance(light, dict):
+                    illum = light.get("value")
 
             try:
                 if illum is None or illum == "":
@@ -779,7 +783,7 @@ def get_lighting_series(
             data.append([row["logtime"], illum_val])
 
         if data:
-            series.append({"name": dev["device_name"], "data": data})
+            series.append({"name": dev["device_name"], "device_id": device_id, "data": data})
 
     return series
 
