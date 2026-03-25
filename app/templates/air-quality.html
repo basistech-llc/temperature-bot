@@ -31,7 +31,7 @@ Problem: &gt;35.">PM2.5<br><small>µg/m³</small></th>
 Not used for alerts.">Pressure<br><small>hPa</small></th>
             <th scope="col" title="Short-term average radon level (Bq/m³).
 Elevated: 100–150.
-Problem: &gt;150.">Radon<br><small>Bq/m³</small></th>
+Problem: &gt;150.">Radon<br><small id="aq-radon-unit-label">Bq/m³</small></th>
             <th class="column-temp" scope="col" title="Temperature. Unit follows site C/F toggle.
 Elevated: 18–20 or 25–27 °C.
 Problem: &lt;18 or &gt;27 °C.">Temp<br><small id="aq-temp-unit-label">°C</small></th>
@@ -52,7 +52,7 @@ Problem: &gt;2000.">VOC<br><small>ppb</small></th>
               <td class="{{ row.aq_classes.get('pm1') if row.aq_classes is defined else '' }}{{ stale_cls }}" title="{{ stale_title }}">{{ fmt(row.status.pm1.value) }}</td>
               <td class="{{ row.aq_classes.get('pm25') if row.aq_classes is defined else '' }}{{ stale_cls }}" title="{{ stale_title }}">{{ fmt(row.status.pm25.value) }}</td>
               <td class="{{ stale_cls }}" title="{{ stale_title }}">{{ fmt(row.status.pressure.value) }}</td>
-              <td class="{{ row.aq_classes.get('radonShortTermAvg') if row.aq_classes is defined else '' }}{{ stale_cls }}" title="{{ stale_title }}">{{ fmt(row.status.radonShortTermAvg.value) }}</td>
+              <td class="radon-display {{ row.aq_classes.get('radonShortTermAvg') if row.aq_classes is defined else '' }}{{ stale_cls }}" data-radon-bqm3="{{ row.status.radonShortTermAvg.value }}" title="{{ stale_title }}">{{ fmt(row.status.radonShortTermAvg.value) }}</td>
               <td class="{{ row.aq_classes.get('temp') if row.aq_classes is defined else '' }} cell-temp temp-display temp-display-no-unit{{ stale_cls }}" data-temp-c="{{ row.status.temp.value }}" title="{{ stale_title }}">{{ fmt(row.status.temp.value) }}</td>
               <td class="{{ row.aq_classes.get('voc') if row.aq_classes is defined else '' }}{{ stale_cls }}" title="{{ stale_title }}">{{ fmt(row.status.voc.value) }}</td>
             </tr>

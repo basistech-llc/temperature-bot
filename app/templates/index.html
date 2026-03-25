@@ -174,7 +174,7 @@
               <th class="column-illuminance" title="Illuminance (lux).">Illuminance<br><small>lx</small></th>
               <th title="Carbon dioxide (ppm). Elevated: 801–1200. Problem: &gt;1200.">CO₂<br><small>ppm</small></th>
               <th title="Volatile organic compounds (ppb). Elevated: 501–2000. Problem: &gt;2000.">VOC<br><small>ppb</small></th>
-              <th title="Short-term average radon level (Bq/m³). Elevated: 100–150. Problem: &gt;150.">Radon<br><small>Bq/m³</small></th>
+              <th title="Short-term average radon level (Bq/m³). Elevated: 100–150. Problem: &gt;150.">Radon<br><small id="aq-index-radon-unit-label">Bq/m³</small></th>
               <th title="Fine particles &lt;2.5µm (µg/m³). Elevated: 13–35. Problem: &gt;35.">PM2.5<br><small>µg/m³</small></th>
               <th title="Fine particles &lt;1µm (µg/m³). Elevated: 13–35. Problem: &gt;35.">PM1<br><small>µg/m³</small></th>
               <th class="column-notes">Notes</th>
@@ -201,7 +201,7 @@
                   <td class="cell-illuminance" id="illuminance-{{ device.device_id }}">--</td>
                   <td id="co2-{{ device.device_id }}">--</td>
                   <td id="voc-{{ device.device_id }}">--</td>
-                  <td id="radon-{{ device.device_id }}">--</td>
+                  <td class="radon-display" id="radon-{{ device.device_id }}">--</td>
                   <td id="pm25-{{ device.device_id }}">--</td>
                   <td id="pm1-{{ device.device_id }}">--</td>
                   <td class="cell-notes">

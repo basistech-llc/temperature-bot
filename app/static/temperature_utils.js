@@ -110,45 +110,91 @@ function updateTemperatureToggleUI() {
   }
 
   updateAqTempHeader();
+  updateRadonHeaders();
 }
 
 /** Thresholds for elevated/problem tooltip (Celsius); converted to °F when preference is Fahrenheit. */
 const AQ_TEMP_THRESHOLDS_C = { lowElevated: 18, highElevated: 20, lowComfort: 25, highComfort: 27 };
 
-/**
- * Sets the air quality table Temp column header to the current unit symbol and
- * tooltip text. Tooltip shows elevated/problem ranges in the current unit.
- */
-function updateAqTempHeader() {
-  // Update unit labels on both the air-quality page and the index page AQ section
-  const labelIds = ["aq-temp-unit-label", "aq-index-temp-unit-label"];
-  const aqTempLabel = labelIds.map((id) => document.getElementById(id)).find(Boolean);
-  if (!aqTempLabel) return;
-  const th = aqTempLabel.closest("th");
-  if (!th) return;
+/** Radon thresholds in Bq/m³; converted to pCi/L when preference is Fahrenheit (US units). */
+const RADON_THRESHOLDS_BQM3 = { elevated: 100, problem: 150 };
+const BQM3_TO_PCIL = 37;
 
-  // Update all matching labels on the page
+/**
+ * Format radon value with appropriate unit conversion.
+ * US users (Fahrenheit) see pCi/L; others see Bq/m³.
+ * @param {number} bqm3 - Radon value in Bq/m³
+ * @returns {string} Formatted radon string
+ */
+function formatRadon(bqm3) {
+  if (USE_FAHRENHEIT) {
+    return (bqm3 / BQM3_TO_PCIL).toFixed(1);
+  }
+  return Math.round(bqm3).toString();
+}
+
+/**
+ * Get the current radon unit label.
+ * @returns {string} 'pCi/L' or 'Bq/m³'
+ */
+function getRadonUnit() {
+  return USE_FAHRENHEIT ? "pCi/L" : "Bq/m³";
+}
+
+/**
+ * Update AQ column headers: set unit label text and tooltip on each matching element.
+ * @param {string[]} labelIds - DOM IDs of the <small> unit-label elements
+ * @param {string} unitText - Unit string to display (e.g. "°C", "pCi/L")
+ * @param {string} titleText - Tooltip text for the parent <th>
+ */
+function updateAqColumnHeader(labelIds, unitText, titleText) {
   for (const id of labelIds) {
     const el = document.getElementById(id);
-    if (el) el.textContent = getTemperatureUnit();
+    if (!el) continue;
+    el.textContent = unitText;
+    const th = el.closest("th");
+    if (th) th.title = titleText;
   }
+}
 
+function updateAqTempHeader() {
   const { lowElevated, highElevated, lowComfort, highComfort } = AQ_TEMP_THRESHOLDS_C;
+  let title;
   if (USE_FAHRENHEIT) {
     const lE = Math.round(celsiusToFahrenheit(lowElevated));
     const hE = Math.round(celsiusToFahrenheit(highElevated));
     const lC = Math.round(celsiusToFahrenheit(lowComfort));
     const hC = Math.round(celsiusToFahrenheit(highComfort));
-    th.title =
+    title =
       "Temperature. Unit follows site C/F toggle.\n" +
       `Elevated: ${lE}–${hE} or ${lC}–${hC} °F.\n` +
       `Problem: <${lE} or >${hC} °F.`;
   } else {
-    th.title =
+    title =
       "Temperature. Unit follows site C/F toggle.\n" +
       `Elevated: ${lowElevated}–${highElevated} or ${lowComfort}–${highComfort} °C.\n` +
       `Problem: <${lowElevated} or >${highComfort} °C.`;
   }
+  updateAqColumnHeader(["aq-temp-unit-label", "aq-index-temp-unit-label"], getTemperatureUnit(), title);
+}
+
+function updateRadonHeaders() {
+  const { elevated, problem } = RADON_THRESHOLDS_BQM3;
+  let title;
+  if (USE_FAHRENHEIT) {
+    const eP = (elevated / BQM3_TO_PCIL).toFixed(1);
+    const pP = (problem / BQM3_TO_PCIL).toFixed(1);
+    title =
+      "Short-term average radon level. Unit follows site C/F toggle.\n" +
+      `Elevated: ${eP}–${pP} pCi/L.\n` +
+      `Problem: >${pP} pCi/L.`;
+  } else {
+    title =
+      "Short-term average radon level (Bq/m³).\n" +
+      `Elevated: ${elevated}–${problem}.\n` +
+      `Problem: >${problem}.`;
+  }
+  updateAqColumnHeader(["aq-radon-unit-label", "aq-index-radon-unit-label"], getRadonUnit(), title);
 }
 
 /**
@@ -196,6 +242,15 @@ function updateAllTemperatureDisplays() {
   }
 
   updateAqTempHeader();
+  updateRadonHeaders();
+
+  // Update radon displays to match current unit preference
+  document.querySelectorAll(".radon-display").forEach((element) => {
+    const bqm3 = parseFloat(element.getAttribute("data-radon-bqm3"));
+    if (!isNaN(bqm3)) {
+      element.textContent = formatRadon(bqm3);
+    }
+  });
 }
 
 /**
@@ -223,7 +278,8 @@ function initializeTemperatureUtils() {
   }
 }
 
-// Make functions available globally
+// Make functions available globally (skip in Node.js test environment)
+if (typeof window === "undefined") { var window = {}; }
 window.TemperatureUtils = {
   celsiusToFahrenheit,
   fahrenheitToCelsius,
@@ -235,7 +291,16 @@ window.TemperatureUtils = {
   initializeTemperatureUtils,
   loadTemperaturePreference,
   updateTemperatureToggleUI,
+  formatRadon,
+  getRadonUnit,
 };
 
-// Auto-initialize when DOM is ready
-document.addEventListener("DOMContentLoaded", initializeTemperatureUtils);
+// Auto-initialize when DOM is ready (skip in Node.js test environment)
+if (typeof document !== "undefined") {
+  document.addEventListener("DOMContentLoaded", initializeTemperatureUtils);
+}
+
+// Node.js export for testing
+if (typeof module !== "undefined" && module.exports) {
+  module.exports = { celsiusToFahrenheit, fahrenheitToCelsius, formatTemperature, formatRadon, getRadonUnit, getTemperatureUnit, _setUseFahrenheit: (v) => { USE_FAHRENHEIT = v; } };
+}

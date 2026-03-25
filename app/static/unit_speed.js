@@ -528,7 +528,12 @@ const refreshGridRows = () => {
               }
               if (val != null && !Number.isNaN(val) && Number.isFinite(val)) {
                 updateStalenessAndTooltip(aqCell, dev);
-                aqCell.textContent = val.toFixed(decimals);
+                if (key === "radonShortTermAvg") {
+                  aqCell.setAttribute("data-radon-bqm3", val.toString());
+                  aqCell.textContent = TemperatureUtils.formatRadon(val);
+                } else {
+                  aqCell.textContent = val.toFixed(decimals);
+                }
               } else {
                 aqCell.textContent = "--";
               }
