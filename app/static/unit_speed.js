@@ -527,6 +527,7 @@ const refreshGridRows = () => {
                 val = parseFloat(raw);
               }
               if (val != null && !Number.isNaN(val) && Number.isFinite(val)) {
+                updateStalenessAndTooltip(aqCell, dev);
                 aqCell.textContent = val.toFixed(decimals);
               } else {
                 aqCell.textContent = "--";
@@ -556,6 +557,7 @@ const refreshGridRows = () => {
                     "data-temp-c",
                     setTempC.toString(),
                   );
+                  updateStalenessAndTooltip(setTempDisplay, dev);
                   setTempDisplay.textContent =
                     TemperatureUtils.formatTemperature(setTempC);
                 } else {

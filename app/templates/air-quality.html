@@ -43,16 +43,18 @@ Problem: &gt;2000.">VOC<br><small>ppb</small></th>
         <tbody>
           {% for row in airmon %}
             {% if row.status and row.status.co2 %}
+            {% set stale_cls = ' temp-stale' if row.is_stale else '' %}
+            {% set stale_title = 'Last updated: ' ~ row.age ~ ' ago' if row.age else '' %}
             <tr>
               <td class="cell-unit">{{ row.display_name or row.device_name }}</td>
-              <td class="{{ row.aq_classes.get('co2') if row.aq_classes is defined else '' }}">{{ fmt(row.status.co2.value) }}</td>
-              <td class="{{ row.aq_classes.get('humidity') if row.aq_classes is defined else '' }} cell-humidity">{{ fmt(row.status.humidity.value) }}</td>
-              <td class="{{ row.aq_classes.get('pm1') if row.aq_classes is defined else '' }}">{{ fmt(row.status.pm1.value) }}</td>
-              <td class="{{ row.aq_classes.get('pm25') if row.aq_classes is defined else '' }}">{{ fmt(row.status.pm25.value) }}</td>
-              <td>{{ fmt(row.status.pressure.value) }}</td>
-              <td class="{{ row.aq_classes.get('radonShortTermAvg') if row.aq_classes is defined else '' }}">{{ fmt(row.status.radonShortTermAvg.value) }}</td>
-              <td class="{{ row.aq_classes.get('temp') if row.aq_classes is defined else '' }} cell-temp temp-display temp-display-no-unit" data-temp-c="{{ row.status.temp.value }}">{{ fmt(row.status.temp.value) }}</td>
-              <td class="{{ row.aq_classes.get('voc') if row.aq_classes is defined else '' }}">{{ fmt(row.status.voc.value) }}</td>
+              <td class="{{ row.aq_classes.get('co2') if row.aq_classes is defined else '' }}{{ stale_cls }}" title="{{ stale_title }}">{{ fmt(row.status.co2.value) }}</td>
+              <td class="{{ row.aq_classes.get('humidity') if row.aq_classes is defined else '' }} cell-humidity{{ stale_cls }}" title="{{ stale_title }}">{{ fmt(row.status.humidity.value) }}</td>
+              <td class="{{ row.aq_classes.get('pm1') if row.aq_classes is defined else '' }}{{ stale_cls }}" title="{{ stale_title }}">{{ fmt(row.status.pm1.value) }}</td>
+              <td class="{{ row.aq_classes.get('pm25') if row.aq_classes is defined else '' }}{{ stale_cls }}" title="{{ stale_title }}">{{ fmt(row.status.pm25.value) }}</td>
+              <td class="{{ stale_cls }}" title="{{ stale_title }}">{{ fmt(row.status.pressure.value) }}</td>
+              <td class="{{ row.aq_classes.get('radonShortTermAvg') if row.aq_classes is defined else '' }}{{ stale_cls }}" title="{{ stale_title }}">{{ fmt(row.status.radonShortTermAvg.value) }}</td>
+              <td class="{{ row.aq_classes.get('temp') if row.aq_classes is defined else '' }} cell-temp temp-display temp-display-no-unit{{ stale_cls }}" data-temp-c="{{ row.status.temp.value }}" title="{{ stale_title }}">{{ fmt(row.status.temp.value) }}</td>
+              <td class="{{ row.aq_classes.get('voc') if row.aq_classes is defined else '' }}{{ stale_cls }}" title="{{ stale_title }}">{{ fmt(row.status.voc.value) }}</td>
             </tr>
             {% endif %}
           {% endfor %}
@@ -82,9 +84,11 @@ Problem: &gt;2000.">VOC<br><small>ppb</small></th>
         <tbody>
           {% for row in airmon %}
             {% if row.status and row.status.aqi %}
+            {% set stale_cls = ' temp-stale' if row.is_stale else '' %}
+            {% set stale_title = 'Last updated: ' ~ row.age ~ ' ago' if row.age else '' %}
             <tr>
               <td class="cell-unit">{{ row.display_name or row.device_name }}</td>
-              <td class="aqi-cell">
+              <td class="aqi-cell{{ stale_cls }}" title="{{ stale_title }}">
                 <span class="aqi-pill-table" data-aqi-color="{{ row.status.aqi.color }}">
                   {{ row.status.aqi.name }}: {{ fmt(row.status.aqi.value) }}
                 </span>

@@ -1,7 +1,10 @@
 """Helpers for air-quality specific web rendering and scoring."""
 
 import datetime
+import time
 from typing import Dict, Any, List, Optional, Tuple
+
+from .util import github_style_duration
 
 
 # Data-driven thresholds to keep branching complexity low.
@@ -123,6 +126,19 @@ def annotate_air_quality_cells(airmon: List[Dict[str, Any]]) -> None:
 
         if cell_classes:
             row["aq_classes"] = cell_classes
+
+
+def annotate_staleness(airmon: List[Dict[str, Any]]) -> None:
+    """Add ``age`` and ``is_stale`` to each device row for template rendering."""
+    now_ts = int(time.time())
+    for row in airmon:
+        if "logtime" in row:
+            last_update = row["logtime"] + row.get("duration", 1)
+            row["age"] = github_style_duration(last_update)
+            row["is_stale"] = (now_ts - last_update) >= 300
+        else:
+            row["age"] = None
+            row["is_stale"] = False
 
 
 def format_unix_as_asc(ts: Optional[int]) -> Optional[str]:
