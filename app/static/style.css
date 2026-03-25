@@ -260,9 +260,9 @@ td[id^="pm1-"] {
     text-align: right;
 }
 
-/* Make a minimum width of 150 if the text is not empty */
+/* Make a minimum width for notes column */
 td.cell-notes:not(:empty) {
-    min-width: 150px;
+    min-width: 300px;
 }
 
 .last-refresh-inline {
@@ -369,7 +369,7 @@ td.cell-notes:not(:empty) {
     border-radius: 3px;
     transition: all 0.2s ease;
     display: inline-block;
-    min-width: 150px;
+    min-width: 250px;
     min-height: 1.5em;
     position: relative;
 }
@@ -503,53 +503,24 @@ table.rules-table th  {
     max-width: 400px;
 }
 
-.temporal-links {
-    margin-top: 8px;
-    margin-bottom: 8px;
-    line-height: 1.5;
-    white-space: nowrap;
-    display: inline-block;
+/* Clickable data cells that link to charts */
+.cell-temp-link,
+.cell-illuminance-link {
+    cursor: pointer;
 }
-
-.temporal-links a {
-    margin-right: 8px;
-    padding: 2px 4px;
-    text-decoration: none;
-    color: #999;
+.cell-temp-link:hover {
+    background-color: rgba(192, 57, 43, 0.08);
 }
-
-.temporal-links a:hover {
-    background-color: #f0f0f0;
-    border-radius: 3px;
+.cell-illuminance-link:hover {
+    background-color: rgba(154, 104, 0, 0.08);
 }
-
-.chart-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 3px;
-    padding: 1px 8px;
-    font-size: 0.78em;
-    border-radius: 10px;
-    border: 1px solid currentColor;
-    text-decoration: none;
-    white-space: nowrap;
-    opacity: 0.75;
-    margin-right: 4px;
-}
-.chart-badge:hover {
-    opacity: 1;
-    background-color: rgba(0,0,0,0.04);
-}
-/* Higher specificity than .temporal-links a to override the #999 default */
-.temporal-links .chart-badge-temp { color: #c0392b; }
-.temporal-links .chart-badge-light { color: #9a6800; }
 
 /****************************************************************/
 
 /* optional: avoid a hard fixed width on the header */
 .column-unit {
     white-space: normal;
-    min-width: 300px;
+    min-width: 120px;
     word-break: break-word;
 }
 
