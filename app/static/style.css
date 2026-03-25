@@ -249,9 +249,18 @@ button {
     text-align: right;
 }
 
-/* Make a minimum width for notes column */
-td.cell-notes:not(:empty) {
+/* [TODO] Per-table min-widths are a kludge to give Notes more space in tables
+   with fewer columns. CSS auto table layout has no way to direct leftover space
+   to a single column. Refactoring from <table> to Flexbox or CSS Grid would
+   allow a clean "Notes fills remaining width" layout. */
+td.cell-notes {
     min-width: 300px;
+}
+.erv-table td.cell-notes {
+    min-width: 600px;
+}
+.fcu-table td.cell-notes {
+    min-width: 430px;
 }
 
 .last-refresh-inline {
