@@ -153,13 +153,17 @@ pytest: $(REQ)
 test-js: $(REQ)
 	@echo "Running JavaScript unit tests..."
 	node tests/test_time_utils.js
+	node tests/test_temperature_utils.js
 test: $(REQ)
 	@python_exit=0; js_exit=0; \
 	make pytest || python_exit=$$?; \
 	make test-js || js_exit=$$?; \
 	exit $$(($$python_exit + $$js_exit))
 
-.PHONY: lint check pylint djlint eslint check-types pytest test-js test
+outdated: $(REQ)
+	poetry show --outdated --top-level
+
+.PHONY: lint check pylint djlint eslint check-types pytest test-js test outdated
 
 ################################################################
 ## Cron targets

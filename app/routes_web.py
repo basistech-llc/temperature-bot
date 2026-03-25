@@ -25,6 +25,7 @@ from .utils.request_utils import parse_device_ids
 from .utils.db_utils import with_db_connection
 from .routes_web_airquality_utils import (
     annotate_air_quality_cells,
+    annotate_staleness,
     format_unix_as_asc,
 )
 
@@ -185,6 +186,8 @@ def _register_core_routes(app):
         for row in airmon:
             raw_name = row.get("device_name", "")
             row["display_name"] = display_device_name(raw_name, source="airthings")
+
+        annotate_staleness(airmon)
 
         # Indoor data timestamp: newest devlog logtime among indoor devices
         indoor_ts = None

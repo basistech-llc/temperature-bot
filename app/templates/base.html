@@ -36,8 +36,8 @@
   <div class="pure-menu pure-menu-horizontal">
     <a href="." class="pure-menu-heading pure-menu-link{% if current_page == 'home' %} pure-menu-selected{% endif %}">BasisTech HVAC</a>
     <ul class="pure-menu-list">
-      <li class="pure-menu-item">
-        <a href="#" id="rooms-menu-link" class="pure-menu-link">Rooms</a>
+      <li class="pure-menu-item{% if current_page in ['kitchen', 'hickory'] %} pure-menu-selected{% endif %}">
+        <a href="#" id="rooms-menu-link" class="pure-menu-link">Rooms ▾</a>
         <div id="rooms-popup" class="github-popup">
           <a href="/kitchen">Kitchen</a>
           <a href="/hickory">Hickory</a>
@@ -49,8 +49,8 @@
       <li class="pure-menu-item{% if current_page == 'weather' %} pure-menu-selected{% endif %}">
         <a href="/weather" class="pure-menu-link">Weather</a>
       </li>
-      <li class="pure-menu-item">
-        <a href="#" id="deep-dive-menu-link" class="pure-menu-link">Deep Dive</a>
+      <li class="pure-menu-item{% if current_page in ['temperature_chart', 'lighting_chart', 'chart_aqi', 'alerts', 'rules', 'logs_today', 'all_devices'] %} pure-menu-selected{% endif %}">
+        <a href="#" id="deep-dive-menu-link" class="pure-menu-link">Deep Dive ▾</a>
         <div id="deep-dive-popup" class="github-popup">
           <a href="/chart"{% if current_page == 'temperature_chart' %} class="pure-menu-selected"{% endif %}>Temperature Chart</a>
           <a href="/lighting_chart"{% if current_page == 'lighting_chart' %} class="pure-menu-selected"{% endif %}>Lighting Chart</a>

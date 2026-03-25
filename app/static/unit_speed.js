@@ -294,7 +294,7 @@ function setupSetTempControls() {
 
       // Optimistically update UI
       display.setAttribute("data-temp-c", newC.toString());
-      display.textContent = TemperatureUtils.formatTemperature(newC);
+      display.textContent = TemperatureUtils.formatTemperature(newC, false);
 
       // Send to backend in Celsius
       setDeviceSetTemp(deviceId, newC);
@@ -527,7 +527,13 @@ const refreshGridRows = () => {
                 val = parseFloat(raw);
               }
               if (val != null && !Number.isNaN(val) && Number.isFinite(val)) {
-                aqCell.textContent = val.toFixed(decimals);
+                updateStalenessAndTooltip(aqCell, dev);
+                if (key === "radonShortTermAvg") {
+                  aqCell.setAttribute("data-radon-bqm3", val.toString());
+                  aqCell.textContent = TemperatureUtils.formatRadon(val);
+                } else {
+                  aqCell.textContent = val.toFixed(decimals);
+                }
               } else {
                 aqCell.textContent = "--";
               }
@@ -556,8 +562,9 @@ const refreshGridRows = () => {
                     "data-temp-c",
                     setTempC.toString(),
                   );
+                  updateStalenessAndTooltip(setTempDisplay, dev);
                   setTempDisplay.textContent =
-                    TemperatureUtils.formatTemperature(setTempC);
+                    TemperatureUtils.formatTemperature(setTempC, false);
                 } else {
                   setTempCell.removeAttribute("data-temp-c");
                   setTempDisplay.removeAttribute("data-temp-c");
@@ -711,4 +718,11 @@ window.getCurrentWeatherData = function () {
 window.addEventListener("DOMContentLoaded", function () {
   setupMatrixListeners();
   loadWeatherAndStartRefresh();
+
+  // Make data cells with chart URLs clickable
+  document.querySelectorAll("[data-chart-url]").forEach(function (cell) {
+    cell.addEventListener("click", function () {
+      window.location.href = cell.dataset.chartUrl;
+    });
+  });
 });

@@ -1,9 +1,6 @@
 {% extends 'base.html' %}
 {% block title %} Unit Speed Control {% endblock %}
 
-{# Shared SVG sparkline icon used inside chart badge links #}
-{% macro sparkline_icon() %}<svg width="12" height="9" viewBox="0 0 12 9" fill="none" aria-hidden="true" style="vertical-align:middle"><polyline points="0,8 3,4 5,6 8,1 12,3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>{% endmacro %}
-
 {% block head %}
 <link rel="stylesheet" href="/static/slider.css">
 <link href="https://unpkg.com/tabulator-tables@5.5.2/dist/css/tabulator.min.css" rel="stylesheet">
@@ -16,11 +13,11 @@
     <div id="main-grid" class="maxwidth">
       <form>
         <h2>Energy Recovery Ventilation (ERVs)</h2>
-        <table class="pure-table">
+        <table class="pure-table data-table erv-table">
           <thead>
             <tr>
               <th class="column-unit" rowspan="2">Unit</th>
-              <th class="column-temp" rowspan="2">Temp</th>
+              <th class="column-temp" rowspan="2">Temp<br><small id="erv-temp-unit-label">°C</small></th>
               <th class="column-speed" colspan="5">Fan Speed</th>
               <th class="column-notes" rowspan="2">Notes</th>
             </tr>
@@ -39,13 +36,11 @@
                   <td class="cell-unit">
                     <span title="{{ device.device_name }}">{{ device.device_label }}</span><span class="rules-disabled-superscript hidden" id="rules-disabled-{{ device.device_id }}" title=""></span>
                     <span id="device-{{ device.device_id }}-notes"></span>
-                    <div class="temporal-links">
-                      <a href="/chart?device_ids={{ device.device_id }}" target="_self"
-                         class="chart-badge chart-badge-temp" title="Temperature chart for {{ device.device_label }}">{{ sparkline_icon() }}temp</a>
-                    </div>
                   </td>
                   {% if device.temp10x %}
-                  <td class="cell-temp" id="temp-{{ device.device_id }}">--</td>
+                  <td class="cell-temp cell-temp-link temp-display-no-unit" id="temp-{{ device.device_id }}"
+                      data-chart-url="/chart?device_ids={{ device.device_id }}"
+                      title="Temperature chart for {{ device.device_label }}">--</td>
                   {% else %}
                   <td class="cell-temp cell-temp-na">n/a</td>
                   {% endif %}
@@ -77,12 +72,12 @@
         </table>
 
         <h2>Heating and Cooling - Fan Control Units (FCUs)</h2>
-        <table class="pure-table">
+        <table class="pure-table data-table fcu-table">
           <thead>
             <tr>
               <th class="column-unit" rowspan="2">Unit</th>
-              <th class="column-temp" rowspan="2">Temp</th>
-              <th class="column-temp column-temp-set" rowspan="2">Set Temp</th>
+              <th class="column-temp" rowspan="2">Temp<br><small id="fcu-temp-unit-label">°C</small></th>
+              <th class="column-temp column-temp-set" rowspan="2">Set Temp<br><small id="fcu-settemp-unit-label">°C</small></th>
               <th class="column-speed" colspan="5">Fan Speed</th>
               <th class="column-notes" rowspan="2">Notes</th>
             </tr>
@@ -101,13 +96,11 @@
                   <td class="cell-unit">
                     <span title="{{ device.device_name }}">{{ device.device_label }}</span><span class="rules-disabled-superscript hidden" id="rules-disabled-{{ device.device_id }}" title=""></span>
                     <span id="device-{{ device.device_id }}-notes"></span>
-                    <div class="temporal-links">
-                      <a href="/chart?device_ids={{ device.device_id }}" target="_self"
-                         class="chart-badge chart-badge-temp" title="Temperature chart for {{ device.device_label }}">{{ sparkline_icon() }}temp</a>
-                    </div>
                   </td>
                   {% if device.temp10x %}
-                  <td class="cell-temp" id="temp-{{ device.device_id }}">--</td>
+                  <td class="cell-temp cell-temp-link temp-display-no-unit" id="temp-{{ device.device_id }}"
+                      data-chart-url="/chart?device_ids={{ device.device_id }}"
+                      title="Temperature chart for {{ device.device_label }}">--</td>
                   {% else %}
                   <td class="cell-temp cell-temp-na">n/a</td>
                   {% endif %}
@@ -165,7 +158,7 @@
 
         <!-- Section 3: Air Quality — devices without speed control that have temp -->
         <h2>Air Quality</h2>
-        <table class="pure-table aq-table">
+        <table class="pure-table data-table">
           <thead>
             <tr>
               <th class="column-unit">Unit</th>
@@ -174,7 +167,7 @@
               <th class="column-illuminance" title="Illuminance (lux).">Illuminance<br><small>lx</small></th>
               <th title="Carbon dioxide (ppm). Elevated: 801–1200. Problem: &gt;1200.">CO₂<br><small>ppm</small></th>
               <th title="Volatile organic compounds (ppb). Elevated: 501–2000. Problem: &gt;2000.">VOC<br><small>ppb</small></th>
-              <th title="Short-term average radon level (Bq/m³). Elevated: 100–150. Problem: &gt;150.">Radon<br><small>Bq/m³</small></th>
+              <th title="Short-term average radon level (Bq/m³). Elevated: 100–150. Problem: &gt;150.">Radon<br><small id="aq-index-radon-unit-label">Bq/m³</small></th>
               <th title="Fine particles &lt;2.5µm (µg/m³). Elevated: 13–35. Problem: &gt;35.">PM2.5<br><small>µg/m³</small></th>
               <th title="Fine particles &lt;1µm (µg/m³). Elevated: 13–35. Problem: &gt;35.">PM1<br><small>µg/m³</small></th>
               <th class="column-notes">Notes</th>
@@ -187,21 +180,17 @@
                   <td class="cell-unit">
                     <span title="{{ device.device_name }}">{{ device.device_label }}</span><span class="rules-disabled-superscript hidden" id="rules-disabled-{{ device.device_id }}" title=""></span>
                     <span id="device-{{ device.device_id }}-notes"></span>
-                    <div class="temporal-links">
-                      <a href="/chart?device_ids={{ device.device_id }}" target="_self"
-                         class="chart-badge chart-badge-temp" title="Temperature chart for {{ device.device_label }}">{{ sparkline_icon() }}temp</a>
-                      {% if device.has_illuminance %}
-                      <a href="/lighting_chart?device_ids={{ device.device_id }}" target="_self"
-                         class="chart-badge chart-badge-light" title="Lighting chart for {{ device.device_label }}">{{ sparkline_icon() }}light</a>
-                      {% endif %}
-                    </div>
                   </td>
                   <td class="cell-humidity" id="humidity-{{ device.device_id }}">--</td>
-                  <td class="cell-temp temp-display temp-display-no-unit" id="temp-{{ device.device_id }}">--</td>
-                  <td class="cell-illuminance" id="illuminance-{{ device.device_id }}">--</td>
+                  <td class="cell-temp cell-temp-link temp-display temp-display-no-unit" id="temp-{{ device.device_id }}"
+                      data-chart-url="/chart?device_ids={{ device.device_id }}"
+                      title="Temperature chart for {{ device.device_label }}">--</td>
+                  <td class="cell-illuminance{% if device.has_illuminance %} cell-illuminance-link{% endif %}" id="illuminance-{{ device.device_id }}"
+                      {% if device.has_illuminance %}data-chart-url="/lighting_chart?device_ids={{ device.device_id }}"
+                      title="Lighting chart for {{ device.device_label }}"{% endif %}>--</td>
                   <td id="co2-{{ device.device_id }}">--</td>
                   <td id="voc-{{ device.device_id }}">--</td>
-                  <td id="radon-{{ device.device_id }}">--</td>
+                  <td class="radon-display" id="radon-{{ device.device_id }}">--</td>
                   <td id="pm25-{{ device.device_id }}">--</td>
                   <td id="pm1-{{ device.device_id }}">--</td>
                   <td class="cell-notes">
