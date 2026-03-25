@@ -160,7 +160,10 @@ test: $(REQ)
 	make test-js || js_exit=$$?; \
 	exit $$(($$python_exit + $$js_exit))
 
-.PHONY: lint check pylint djlint eslint check-types pytest test-js test
+outdated: $(REQ)
+	poetry show --outdated --top-level
+
+.PHONY: lint check pylint djlint eslint check-types pytest test-js test outdated
 
 ################################################################
 ## Cron targets
