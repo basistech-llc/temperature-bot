@@ -13,11 +13,11 @@
     <div id="main-grid" class="maxwidth">
       <form>
         <h2>Energy Recovery Ventilation (ERVs)</h2>
-        <table class="pure-table">
+        <table class="pure-table data-table">
           <thead>
             <tr>
               <th class="column-unit" rowspan="2">Unit</th>
-              <th class="column-temp" rowspan="2">Temp</th>
+              <th class="column-temp" rowspan="2">Temp<br><small id="erv-temp-unit-label">°C</small></th>
               <th class="column-speed" colspan="5">Fan Speed</th>
               <th class="column-notes" rowspan="2">Notes</th>
             </tr>
@@ -38,7 +38,7 @@
                     <span id="device-{{ device.device_id }}-notes"></span>
                   </td>
                   {% if device.temp10x %}
-                  <td class="cell-temp cell-temp-link" id="temp-{{ device.device_id }}"
+                  <td class="cell-temp cell-temp-link temp-display-no-unit" id="temp-{{ device.device_id }}"
                       data-chart-url="/chart?device_ids={{ device.device_id }}"
                       title="Temperature chart for {{ device.device_label }}">--</td>
                   {% else %}
@@ -72,12 +72,12 @@
         </table>
 
         <h2>Heating and Cooling - Fan Control Units (FCUs)</h2>
-        <table class="pure-table">
+        <table class="pure-table data-table">
           <thead>
             <tr>
               <th class="column-unit" rowspan="2">Unit</th>
-              <th class="column-temp" rowspan="2">Temp</th>
-              <th class="column-temp column-temp-set" rowspan="2">Set Temp</th>
+              <th class="column-temp" rowspan="2">Temp<br><small id="fcu-temp-unit-label">°C</small></th>
+              <th class="column-temp column-temp-set" rowspan="2">Set Temp<br><small id="fcu-settemp-unit-label">°C</small></th>
               <th class="column-speed" colspan="5">Fan Speed</th>
               <th class="column-notes" rowspan="2">Notes</th>
             </tr>
@@ -98,7 +98,7 @@
                     <span id="device-{{ device.device_id }}-notes"></span>
                   </td>
                   {% if device.temp10x %}
-                  <td class="cell-temp cell-temp-link" id="temp-{{ device.device_id }}"
+                  <td class="cell-temp cell-temp-link temp-display-no-unit" id="temp-{{ device.device_id }}"
                       data-chart-url="/chart?device_ids={{ device.device_id }}"
                       title="Temperature chart for {{ device.device_label }}">--</td>
                   {% else %}
@@ -158,7 +158,7 @@
 
         <!-- Section 3: Air Quality — devices without speed control that have temp -->
         <h2>Air Quality</h2>
-        <table class="pure-table aq-table">
+        <table class="pure-table data-table">
           <thead>
             <tr>
               <th class="column-unit">Unit</th>

@@ -175,7 +175,7 @@ function updateAqTempHeader() {
       `Elevated: ${lowElevated}–${highElevated} or ${lowComfort}–${highComfort} °C.\n` +
       `Problem: <${lowElevated} or >${highComfort} °C.`;
   }
-  updateAqColumnHeader(["aq-temp-unit-label", "aq-index-temp-unit-label"], getTemperatureUnit(), title);
+  updateAqColumnHeader(["aq-temp-unit-label", "aq-index-temp-unit-label", "erv-temp-unit-label", "fcu-temp-unit-label", "fcu-settemp-unit-label"], getTemperatureUnit(), title);
 }
 
 function updateRadonHeaders() {
@@ -228,7 +228,7 @@ function updateAllTemperatureDisplays() {
   setTempDisplays.forEach((element) => {
     const tempC = parseFloat(element.getAttribute("data-temp-c"));
     if (!isNaN(tempC)) {
-      element.textContent = formatTemperature(tempC);
+      element.textContent = formatTemperature(tempC, false);
     }
   });
 
