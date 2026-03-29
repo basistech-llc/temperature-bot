@@ -2,7 +2,7 @@
 {% block title %} Air Quality Chart {% endblock %}
 {% block head %}
 {% if dist %}
-   <script src="https://cdn.jsdelivr.net/npm/echarts@5"></script>
+   <script src="https://cdn.jsdelivr.net/npm/echarts@{{ echarts_version }}"></script>
 {% else %}
    <script src="/static/echarts@5"></script>
 {% endif %}
