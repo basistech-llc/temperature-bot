@@ -2,6 +2,11 @@
 <html lang="en">
 {% set only = hide_nav if hide_nav is defined else request.args.get('only') %}
 {% set dist=0 %}
+{# ── CDN library versions (single source of truth) ── #}
+{% set echarts_version = "5" %}
+{% set tabulator_version = "5.5.2" %}
+{% set purecss_version = "3.0.0" %}
+{% set purecss_sri = "sha384-X38yfunGUhNzHpBaEBsWLO+A0HDYOQi8ufWDkZ0k9e0eXz/tH3II7uKZ9msv++Ls" %}
 <head>
   <meta charset="utf-8">
   <meta name="keywords" content="temperature"/>
@@ -9,9 +14,9 @@
   <title> {% block title %} {{title}} {% endblock %}</title>
   <!-- use Pure.css - https://purecss.io/ -->
   {% if dist %}
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/purecss@3.0.0/build/pure-min.css" integrity="sha384-X38yfunGUhNzHpBaEBsWLO+A0HDYOQi8ufWDkZ0k9e0eXz/tH3II7uKZ9msv++Ls" crossorigin="anonymous"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/purecss@{{ purecss_version }}/build/pure-min.css" integrity="{{ purecss_sri }}" crossorigin="anonymous"/>
   {% else %}
-  <link rel="stylesheet" href="/static/pure-min.css" integrity="sha384-X38yfunGUhNzHpBaEBsWLO+A0HDYOQi8ufWDkZ0k9e0eXz/tH3II7uKZ9msv++Ls" crossorigin="anonymous"/>
+  <link rel="stylesheet" href="/static/pure-min.css" integrity="{{ purecss_sri }}" crossorigin="anonymous"/>
   {% endif %}
   <link rel="stylesheet" href="/static/style.css">
   <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
