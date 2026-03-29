@@ -161,7 +161,14 @@ test: $(REQ)
 	exit $$(($$python_exit + $$js_exit))
 
 outdated: $(REQ)
-	poetry show --outdated --top-level
+	@echo "=== Python ==="
+	poetry show --outdated --top-level || true
+	@echo ""
+	@echo "=== npm ==="
+	npm outdated || true
+	@echo ""
+	@echo "=== CDN libraries (in templates) ==="
+	bash etc/check-cdn-versions.bash
 
 .PHONY: lint check pylint djlint eslint check-types pytest test-js test outdated
 
