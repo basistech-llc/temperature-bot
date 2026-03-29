@@ -161,6 +161,8 @@ test: $(REQ)
 	exit $$(($$python_exit + $$js_exit))
 
 outdated: $(REQ)
+	poetry lock
+	poetry install
 	@echo "=== Python ==="
 	poetry show --outdated --top-level || true
 	@echo ""
