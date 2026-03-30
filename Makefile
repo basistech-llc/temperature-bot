@@ -166,9 +166,6 @@ outdated: $(REQ)
 	@echo "=== Python ==="
 	poetry show --outdated --top-level || true
 	@echo ""
-	@echo "=== npm ==="
-	npm outdated || true
-	@echo ""
 	@echo "=== CDN libraries (in templates) ==="
 	bash etc/check-cdn-versions.bash
 
@@ -221,9 +218,6 @@ install-macos:
 	brew install pipx
 	make install-either
 
-install-browser-sync:
-	npm install browser-sync -g
-
 # Clean all the tmp and work product files.
 clean:
 	@echo "Cleaning up generated files and virtual environment..."
@@ -259,4 +253,4 @@ deploy:
 	fi
 
 
-.PHONY: install-either install-ubuntu install-macos install-browser-sync clean cleanall deploy
+.PHONY: install-either install-ubuntu install-macos clean cleanall deploy
