@@ -124,12 +124,17 @@ def dump_dashboard(dash_id, access_token_override=None):
     Fetches dashboard elements.
     Note: Dashboards often have their own unique access tokens.
     """
-    params = get_base_params(app_id_override=dash_id)
-    params['dash_id'] = dash_id
+    config = get_config()
+    hubitat_cfg = config.get("hubitat", {})
+    dashboard_app_id = hubitat_cfg.get("dashboard_appId") or hubitat_cfg.get("appId")
+
+    # Use a dedicated dashboard appId if configured, otherwise fall back to the main appId.
+    params = get_base_params(app_id_override=dashboard_app_id)
+    params["dash_id"] = dash_id
 
     # If a specific token was provided for this dashboard, use it
     if access_token_override:
-        params['access_token'] = access_token_override
+        params["access_token"] = access_token_override
 
     url = HUBITAT_DUMP_DASHBOARD.format(**params)
     r = requests.get(url, timeout=TIMEOUT_SECONDS)
