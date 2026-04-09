@@ -325,6 +325,12 @@ function refreshRoomStatus() {
                     valueEl.textContent = data.dimmer.level + '%';
                 }
             }
+            if (data.wall_inner) {
+                updateWallButton('inner', data.wall_inner.switch);
+            }
+            if (data.wall_outer) {
+                updateWallButton('outer', data.wall_outer.switch);
+            }
         })
         .catch(error => {
             if (DEBUG) {
@@ -351,6 +357,43 @@ function setupDimmer() {
             valueEl.textContent = level + '%';
         }
         debouncedSet(level);
+    });
+}
+
+/**
+ * Update a wall light button to reflect current state.
+ * @param {string} light - 'inner' or 'outer'
+ * @param {string} state - 'on' or 'off'
+ */
+function updateWallButton(light, state) {
+    const btn = document.getElementById('wall-' + light + '-btn');
+    if (!btn) {
+        return;
+    }
+    const isOn = state === 'on';
+    btn.textContent = isOn ? 'ON' : 'OFF';
+    btn.classList.toggle('is-on', isOn);
+}
+
+/**
+ * Handle wall light button click — toggle on/off.
+ * @param {HTMLElement} button - Clicked button element
+ */
+function handleWallButton(button) {
+    const light = button.getAttribute('data-light');
+    const isOn = button.classList.contains('is-on');
+    const newState = isOn ? 'off' : 'on';
+
+    button.disabled = true;
+    apiCall(
+        '/api/v1/hickory/wall_light',
+        { light, state: newState },
+        'Error toggling wall light.'
+    ).then(() => {
+        updateWallButton(light, newState);
+        button.disabled = false;
+    }).catch(() => {
+        button.disabled = false;
     });
 }
 
@@ -390,6 +433,11 @@ function setupRoomDashboard() {
 
     // Set up dimmer
     setupDimmer();
+
+    // Set up wall light buttons
+    document.querySelectorAll('.wall-btn[data-light]').forEach(button => {
+        button.addEventListener('click', () => handleWallButton(button));
+    });
 
     initializeSensorTemperatures();
     setupTemperatureToggle();

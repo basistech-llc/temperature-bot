@@ -348,6 +348,8 @@ def _render_room_dashboard_with_data(conn, location: str):
         notes=notes,
         show_tv_control=config.get("tv_control", False),
         dimmer_id=config.get("dimmer_id"),
+        wall_inner_id=config.get("wall_inner_id"),
+        wall_outer_id=config.get("wall_outer_id"),
     )
 
 

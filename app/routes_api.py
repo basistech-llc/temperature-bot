@@ -249,17 +249,20 @@ def hickory_room_status():
     config = room_config.ROOM_CONFIGS.get("hickory", {})
     result = {}
     try:
-        if config.get("dimmer_id"):
-            dev = hubitat.get_device_info(config["dimmer_id"])
-            attrs = dev.get("attributes", {})
+        all_devices = hubitat.get_all_devices()
+        by_id = {str(d.get("id")): d for d in all_devices}
+
+        dimmer_id = config.get("dimmer_id")
+        if dimmer_id and dimmer_id in by_id:
+            attrs = by_id[dimmer_id].get("attributes", {})
             result["dimmer"] = {
                 "level": int(attrs.get("level", 0)),
                 "switch": attrs.get("switch", "off"),
             }
         for key in ("wall_inner_id", "wall_outer_id"):
-            if config.get(key):
-                dev = hubitat.get_device_info(config[key])
-                attrs = dev.get("attributes", {})
+            dev_id = config.get(key)
+            if dev_id and dev_id in by_id:
+                attrs = by_id[dev_id].get("attributes", {})
                 result[key.replace("_id", "")] = {
                     "switch": attrs.get("switch", "off"),
                 }
@@ -285,6 +288,28 @@ def hickory_dimmer():
         return jsonify({"status": "ok", "level": level})
     except (RuntimeError, OSError) as e:
         logger.warning("Dimmer control failed: %s", e)
+        return jsonify({"error": str(e)}), 500
+
+
+@api_v1.route("/hickory/wall_light", methods=["POST"])
+def hickory_wall_light():
+    """Toggle a Hickory wall light on or off."""
+    config = room_config.ROOM_CONFIGS.get("hickory", {})
+    payload = request.get_json(silent=True) or {}
+    light = payload.get("light")
+    state = payload.get("state")
+
+    id_map = {"inner": config.get("wall_inner_id"), "outer": config.get("wall_outer_id")}
+    device_id = id_map.get(light)
+    if not device_id:
+        return jsonify({"error": "light must be 'inner' or 'outer'"}), 400
+    if state not in ("on", "off"):
+        return jsonify({"error": "state must be 'on' or 'off'"}), 400
+    try:
+        hubitat.set_switch(device_id, state)
+        return jsonify({"status": "ok", "light": light, "state": state})
+    except (RuntimeError, OSError) as e:
+        logger.warning("Wall light control failed: %s", e)
         return jsonify({"error": str(e)}), 500
 
 
