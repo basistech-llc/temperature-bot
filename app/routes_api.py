@@ -242,6 +242,21 @@ def update_note(conn, body: NoteControl):
     return jsonify({"status": "ok", "device_id": device_id})
 
 
+@api_v1.route("/hickory/tv", methods=["POST"])
+def hickory_tv():
+    """Control the Hickory TV lift (up/down)."""
+    payload = request.get_json(silent=True) or {}
+    direction = payload.get("direction")
+    if direction not in ("up", "down"):
+        return jsonify({"error": "direction must be 'up' or 'down'"}), 400
+    try:
+        hubitat.control_hickory_tv(direction)
+        return jsonify({"status": "ok", "direction": direction})
+    except (RuntimeError, OSError) as e:
+        logger.warning("TV control failed: %s", e)
+        return jsonify({"error": str(e)}), 500
+
+
 @api_v1.route("/debug/db_devices")
 @with_db_connection
 def debug_db_devices(conn):

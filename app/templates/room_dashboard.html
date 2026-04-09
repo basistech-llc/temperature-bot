@@ -277,6 +277,34 @@ body {
   margin-top: 0.3em;
 }
 
+.tv-btn {
+  width: 140px;
+  height: 80px;
+  border: 3px solid transparent;
+  border-radius: 12px;
+  font: bold 1.3em sans-serif;
+  cursor: pointer;
+  color: white;
+  background: #5c6bc0;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.15);
+  transition: all 0.15s ease;
+}
+
+.tv-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+}
+
+.tv-btn:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: 0 1px 2px rgba(0,0,0,0.15);
+}
+
+.tv-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .sensor-offline {
   opacity: 0.5;
   border-left-color: #999;
@@ -405,6 +433,19 @@ body {
 {% for device in fan_devices %}
 {{ device_control_card(device, 'fan') }}
 {% endfor %}
+{% endif %}
+
+<!-- TV Control -->
+{% if show_tv_control %}
+<div class="device-card">
+  <h2>TV Position</h2>
+  <div class="control-panel">
+    <div class="speed-controls">
+      <button class="tv-btn" id="tv-up-btn" data-direction="up">&#9650; Up</button>
+      <button class="tv-btn" id="tv-down-btn" data-direction="down">&#9660; Down</button>
+    </div>
+  </div>
+</div>
 {% endif %}
 
 <!-- Temperature Sensors -->

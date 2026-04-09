@@ -286,12 +286,37 @@ function setupTemperatureToggle() {
 }
 
 /**
+ * Handle TV control button click.
+ * @param {HTMLElement} button - Clicked button element
+ */
+function handleTvButton(button) {
+    const direction = button.getAttribute('data-direction');
+    const buttons = document.querySelectorAll('.tv-btn');
+    buttons.forEach(b => { b.disabled = true; });
+
+    apiCall(
+        '/api/v1/hickory/tv',
+        { direction },
+        'Error controlling TV.'
+    ).then(() => {
+        buttons.forEach(b => { b.disabled = false; });
+    }).catch(() => {
+        buttons.forEach(b => { b.disabled = false; });
+    });
+}
+
+/**
  * Initialize room dashboard functionality.
  */
 function setupRoomDashboard() {
     // Set up speed control buttons
     document.querySelectorAll('button.speed-btn[data-device-id][data-speed]').forEach(button => {
         button.addEventListener('click', () => handleSpeedButton(button));
+    });
+
+    // Set up TV control buttons
+    document.querySelectorAll('.tv-btn[data-direction]').forEach(button => {
+        button.addEventListener('click', () => handleTvButton(button));
     });
 
     initializeSensorTemperatures();

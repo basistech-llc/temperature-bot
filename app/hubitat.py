@@ -173,37 +173,43 @@ def get_name_to_label():
         pass
     return name_to_label
 
-def control_hickory_tv(direction):
+def send_device_command(device_id, command, secondary_value=""):
+    """Send a command to a Hubitat device by ID.
+
+    This is the low-level helper used by all device-control wrappers.
     """
-    Finds the 'TV Up' or 'TV Down' component switch and activates it.
-    direction: 'up' or 'down'
-    """
-    devices = get_all_devices()
-
-    # Use the specific labels found in your curl output
-    search_label = "TV Up" if direction == "up" else "TV Down"
-
-    # Search by label specifically
-    target = next((d for d in devices if d.get('label') == search_label), None)
-
-    if not target:
-        raise RuntimeError(f"Device with label '{search_label}' not found in Maker API.")
-
     params = get_base_params()
-
-    # We send 'on' to trigger the component switch for either direction
     url = HUBITAT_SEND_DEVICE_COMMAND.format(
         host=params['host'],
         appId=params['appId'],
-        device_id=target['id'],
-        command="on",
-        secondary_value="",
+        device_id=device_id,
+        command=command,
+        secondary_value=secondary_value,
         access_token=params['access_token']
     ).replace("/?", "?")
 
     r = requests.get(url, timeout=TIMEOUT_SECONDS)
     r.raise_for_status()
     return r.json()
+
+
+def _find_device_by_label(label):
+    """Find a device by its Hubitat label. Raises RuntimeError if not found."""
+    devices = get_all_devices()
+    target = next((d for d in devices if d.get('label') == label), None)
+    if not target:
+        raise RuntimeError(f"Device with label '{label}' not found in Maker API.")
+    return target
+
+
+def control_hickory_tv(direction):
+    """Activate the TV Up or TV Down component switch.
+
+    direction: 'up' or 'down'
+    """
+    label = "TV Up" if direction == "up" else "TV Down"
+    target = _find_device_by_label(label)
+    return send_device_command(target['id'], "on")
 
 if __name__=="__main__":
     """A little test program"""

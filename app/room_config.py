@@ -32,5 +32,6 @@ ROOM_CONFIGS: Dict[str, RoomConfig] = {
             "Hickory Sensor",
             "Dungeon Cage",
         ],
+        "tv_control": True,
     },
 }
