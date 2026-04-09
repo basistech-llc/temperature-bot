@@ -260,6 +260,13 @@ body {
   line-height: 1;
 }
 
+.sensor-humidity {
+  font: 500 0.9em sans-serif;
+  color: #1976d2;
+  text-align: right;
+  margin-top: 0.3em;
+}
+
 /* Responsive */
 @media (max-width: 768px) {
   .speed-btn {
@@ -397,6 +404,9 @@ body {
           --
         {% endif %}
       </div>
+      {% if sensor.attributes and sensor.attributes.humidity %}
+      <div class="sensor-humidity">{{ sensor.attributes.humidity }}%</div>
+      {% endif %}
     </div>
     {% endfor %}
   </div>

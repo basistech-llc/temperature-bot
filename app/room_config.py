@@ -29,6 +29,7 @@ ROOM_CONFIGS: Dict[str, RoomConfig] = {
         "ervs": ["ERV Restrooms"],
         "fans": ["Area 51", "Dungeon"],
         "sensors": [
+            "Hickory Sensor",
             "A51 Sensor 1",
             "A51 Sensor 2",
             "A51 Sensor 3",
