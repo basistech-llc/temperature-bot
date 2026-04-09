@@ -262,21 +262,35 @@ def _filter_speed_control_devices(devices, device_names):
 
 
 def _get_hubitat_sensors(sensor_names):
-    """Fetch and filter Hubitat temperature sensors by exact name match."""
+    """Fetch and filter Hubitat temperature sensors by exact name match.
+
+    Returns an entry for every configured name.  Sensors not found in
+    Hubitat (or unreachable) are represented as placeholder dicts with
+    ``offline=True`` so the template can still render them.
+    """
     if not sensor_names:
         return []
 
     try:
         all_hubitat = hubitat.get_all_devices()
-        return [
-            dev
-            for dev in all_hubitat
-            if "TemperatureMeasurement" in dev.get("capabilities", [])
-            and dev.get("name") in sensor_names
-        ]
     except (ValueError, RuntimeError, OSError) as e:
         logger.warning("Failed to fetch Hubitat sensors: %s", e)
-        return []
+        all_hubitat = []
+
+    found = [
+        dev
+        for dev in all_hubitat
+        if "TemperatureMeasurement" in dev.get("capabilities", [])
+        and dev.get("name") in sensor_names
+    ]
+    found_names = {dev.get("name") for dev in found}
+
+    for name in sensor_names:
+        if name not in found_names:
+            logger.warning("Configured sensor %r not found in Hubitat", name)
+            found.append({"name": name, "label": name, "offline": True, "attributes": {}})
+
+    return found
 
 
 def _collect_device_notes(devices):
