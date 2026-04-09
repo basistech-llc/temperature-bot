@@ -33,5 +33,8 @@ ROOM_CONFIGS: Dict[str, RoomConfig] = {
             "Dungeon Cage",
         ],
         "tv_control": True,
+        "dimmer_id": "581",
+        "wall_inner_id": "454",
+        "wall_outer_id": "550",
     },
 }

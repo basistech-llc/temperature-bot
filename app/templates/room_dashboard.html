@@ -331,6 +331,25 @@ body {
   cursor: not-allowed;
 }
 
+.dimmer-control {
+  display: flex;
+  align-items: center;
+  gap: 0.6em;
+}
+
+.dimmer-slider {
+  width: 200px;
+  height: 28px;
+  cursor: pointer;
+  accent-color: #ffc107;
+}
+
+.dimmer-value {
+  font: bold 1em sans-serif;
+  color: #555;
+  min-width: 3em;
+}
+
 .sensor-offline {
   opacity: 0.5;
   border-left-color: #999;
@@ -461,6 +480,15 @@ body {
         <button class="tv-btn" id="tv-down-btn" data-direction="down">▼ Down</button>
       </div>
     </div>
+    {% if dimmer_id %}
+    <div class="room-control-group">
+      <div class="room-control-label">Lights</div>
+      <div class="dimmer-control">
+        <input type="range" id="dimmer-slider" class="dimmer-slider" min="0" max="100" value="0">
+        <span class="dimmer-value" id="dimmer-value">--%</span>
+      </div>
+    </div>
+    {% endif %}
   </div>
 </div>
 {% endif %}

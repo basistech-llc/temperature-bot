@@ -15,6 +15,7 @@ from . import rules_engine
 from . import hubitat
 from . import ae200
 from .display_names import display_device_name
+from . import room_config
 from .utils.request_utils import parse_device_ids
 from .utils.db_utils import with_db_connection
 
@@ -240,6 +241,51 @@ def update_note(conn, body: NoteControl):
     notes = body.notes if body.notes else None
     device_id = db.update_device_notes(conn, body.device_id, notes)
     return jsonify({"status": "ok", "device_id": device_id})
+
+
+@api_v1.route("/hickory/room_status")
+def hickory_room_status():
+    """Return current state of Hickory room control devices."""
+    config = room_config.ROOM_CONFIGS.get("hickory", {})
+    result = {}
+    try:
+        if config.get("dimmer_id"):
+            dev = hubitat.get_device_info(config["dimmer_id"])
+            attrs = dev.get("attributes", {})
+            result["dimmer"] = {
+                "level": int(attrs.get("level", 0)),
+                "switch": attrs.get("switch", "off"),
+            }
+        for key in ("wall_inner_id", "wall_outer_id"):
+            if config.get(key):
+                dev = hubitat.get_device_info(config[key])
+                attrs = dev.get("attributes", {})
+                result[key.replace("_id", "")] = {
+                    "switch": attrs.get("switch", "off"),
+                }
+    except (RuntimeError, OSError) as e:
+        logger.warning("Room status fetch failed: %s", e)
+        return jsonify({"error": str(e)}), 500
+    return jsonify(result)
+
+
+@api_v1.route("/hickory/dimmer", methods=["POST"])
+def hickory_dimmer():
+    """Set the Hickory room light dimmer level (0-100)."""
+    config = room_config.ROOM_CONFIGS.get("hickory", {})
+    device_id = config.get("dimmer_id")
+    if not device_id:
+        return jsonify({"error": "No dimmer configured"}), 404
+    payload = request.get_json(silent=True) or {}
+    level = payload.get("level")
+    if level is None or not isinstance(level, int) or not 0 <= level <= 100:
+        return jsonify({"error": "level must be an integer 0-100"}), 400
+    try:
+        hubitat.set_dimmer_level(device_id, level)
+        return jsonify({"status": "ok", "level": level})
+    except (RuntimeError, OSError) as e:
+        logger.warning("Dimmer control failed: %s", e)
+        return jsonify({"error": str(e)}), 500
 
 
 @api_v1.route("/hickory/tv", methods=["POST"])

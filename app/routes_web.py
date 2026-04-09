@@ -347,6 +347,7 @@ def _render_room_dashboard_with_data(conn, location: str):
         hubitat_sensors=hubitat_sensors,
         notes=notes,
         show_tv_control=config.get("tv_control", False),
+        dimmer_id=config.get("dimmer_id"),
     )
 
 

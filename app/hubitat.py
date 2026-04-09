@@ -193,6 +193,38 @@ def send_device_command(device_id, command, secondary_value=""):
     return r.json()
 
 
+def get_device_info(device_id):
+    """Fetch full details for a single device by ID."""
+    params = get_base_params()
+    url = HUBITAT_GET_DEVICE_INFO.format(
+        host=params['host'],
+        appId=params['appId'],
+        device_id=device_id,
+        access_token=params['access_token']
+    )
+    r = requests.get(url, timeout=TIMEOUT_SECONDS)
+    r.raise_for_status()
+    return r.json()
+
+
+def set_dimmer_level(device_id, level):
+    """Set a dimmable light to the given level (0-100).
+
+    Level 0 turns the light off; any other value turns it on at that brightness.
+    """
+    if level == 0:
+        return send_device_command(device_id, "off")
+    return send_device_command(device_id, "setLevel", str(level))
+
+
+def set_switch(device_id, state):
+    """Turn a switch device on or off.
+
+    state: 'on' or 'off'
+    """
+    return send_device_command(device_id, state)
+
+
 def _find_device_by_label(label):
     """Find a device by its Hubitat label. Raises RuntimeError if not found."""
     devices = get_all_devices()
