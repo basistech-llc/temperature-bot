@@ -17,7 +17,7 @@
 
 /* Tablet-optimized control panel design */
 body {
-  padding: 1em;
+  padding: 0.5em;
   background: #f5f5f5;
 }
 
@@ -35,13 +35,14 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 2em;
+  margin-bottom: 1em;
   text-align: center;
   color: #333;
 }
 
 .dashboard-header h1 {
   margin: 0;
+  font-size: 1.4em;
 }
 
 .dashboard-header .title-group {
@@ -49,10 +50,14 @@ body {
   text-align: center;
 }
 
+.dashboard-header .main-link-back {
+  flex-shrink: 0;
+}
+
 .live-clock {
-  font: 500 1em sans-serif;
+  font: 500 0.9em sans-serif;
   color: #666;
-  margin-top: 0.3em;
+  margin-top: 0.2em;
 }
 
 
@@ -61,47 +66,44 @@ body {
   background: white;
   border: 2px solid #e0e0e0;
   border-radius: 12px;
-  padding: 1.5em;
-  margin-bottom: 2em;
+  padding: 0.8em 1em;
+  margin-bottom: 1em;
   box-shadow: 0 4px 6px rgba(0,0,0,0.1);
 }
 
 .device-card h2, .sensors-card h2 {
-  margin: 0 0 1em 0;
+  margin: 0 0 0.4em 0;
   color: #1976d2;
-  font-size: 1.5em;
+  font-size: 1.3em;
 }
 
-.device-status {
+.device-header {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 1.5em;
-  padding: 1em;
-  background: #f8f9fa;
-  border-radius: 8px;
+  align-items: baseline;
+  gap: 1em;
+  margin-bottom: 0.5em;
 }
 
-.status-label {
-  font: 500 1.1em sans-serif;
-  color: #666;
+.device-header h2 {
+  margin: 0;
 }
 
 .status-value {
-  font: bold 1.4em sans-serif;
+  font: bold 1em sans-serif;
   color: #1976d2;
 }
 
 .temp-display {
-  font: bold 2em sans-serif;
+  font: bold 1.2em sans-serif;
   color: #d32f2f;
+  margin-left: auto;
 }
 
 /* Tablet-optimized control panel */
 .control-panel {
   display: flex;
   flex-direction: column;
-  gap: 2em;
+  gap: 0.6em;
   align-items: center;
   width: 100%;
 }
@@ -277,9 +279,33 @@ body {
   margin-top: 0.3em;
 }
 
+.room-controls-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1em 2em;
+  align-items: flex-start;
+}
+
+.room-control-group {
+  display: flex;
+  align-items: center;
+  gap: 0.8em;
+}
+
+.room-control-label {
+  font: 600 1em sans-serif;
+  color: #555;
+  min-width: 2em;
+}
+
+.room-control-buttons {
+  display: flex;
+  gap: 0.5em;
+}
+
 .tv-btn {
-  width: 140px;
-  height: 80px;
+  width: 120px;
+  height: 60px;
   border: 3px solid transparent;
   border-radius: 12px;
   font: bold 1.3em sans-serif;
@@ -320,14 +346,15 @@ body {
   .speed-btn {
     width: 90px;
     height: 90px;
-    font-size: 1.6em;
+    font-size: 1.4em;
   }
-  .speed-controls { gap: 0.75em; }
-  .temp-display { font-size: 1.5em; }
-  .device-card, .sensors-card { padding: 1em; }
+  .speed-controls { gap: 0.5em; }
+  .temp-display { font-size: 1.3em; }
+  .device-card, .sensors-card { padding: 0.6em 0.8em; }
   .sensors-grid { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0.5em; }
   .sensor-tile { padding: 0.6em; min-height: 60px; }
   .sensor-temp { font-size: 1.3em; }
+  .tv-btn { width: 100px; height: 50px; font-size: 1.1em; }
 }
 
 @media (min-width: 769px) {
@@ -340,40 +367,12 @@ body {
 {% endblock %}
 
 {% block body %}
-<a href="/" class="pure-button pure-button-primary main-link-back" id="main-link">← Main</a>
-<script>
-  // Use browser history to go back, but only if previous page is from same site
-  document.addEventListener('DOMContentLoaded', function() {
-    const mainLink = document.getElementById('main-link');
-    if (mainLink) {
-      mainLink.addEventListener('click', function(e) {
-        // Check if referrer exists and is from the same origin
-        const referrer = document.referrer;
-        if (referrer) {
-          try {
-            const referrerUrl = new URL(referrer);
-            const currentUrl = new URL(window.location.href);
-            // Only use history.back() if referrer is from same origin
-            if (referrerUrl.origin === currentUrl.origin) {
-              e.preventDefault();
-              window.history.back();
-            }
-            // Otherwise, let the default href="/" behavior work
-          } catch (err) {
-            // If URL parsing fails, fall back to default behavior
-          }
-        }
-        // If no referrer, let the default href="/" behavior work
-      });
-    }
-  });
-</script>
-
 {% if notes %}
 <div class="notes-banner">{{ notes }}</div>
 {% endif %}
 
 <div class="dashboard-header">
+  <a href="/" class="pure-button pure-button-primary main-link-back" id="main-link">← Main</a>
   <div class="title-group">
     <h1>{{ location }} HVAC Control</h1>
     <div class="live-clock" id="live-clock"></div>
@@ -389,20 +388,35 @@ body {
     <span class="temp-unit-label">°F</span>
   </div>
 </div>
+<script>
+  // Use browser history to go back, but only if previous page is from same site
+  document.addEventListener('DOMContentLoaded', function() {
+    var mainLink = document.getElementById('main-link');
+    if (mainLink) {
+      mainLink.addEventListener('click', function(e) {
+        var referrer = document.referrer;
+        if (referrer) {
+          try {
+            var referrerUrl = new URL(referrer);
+            var currentUrl = new URL(window.location.href);
+            if (referrerUrl.origin === currentUrl.origin) {
+              e.preventDefault();
+              window.history.back();
+            }
+          } catch (err) { /* fall back to default */ }
+        }
+      });
+    }
+  });
+</script>
 
 <!-- ERV and Fan Controls -->
 {% macro device_control_card(device, device_type) %}
 <div class="device-card">
-  <h2>{{ device.device_name }}</h2>
-  <div class="device-status">
-    <div>
-      <div class="status-label">Status</div>
-      <div class="status-value" id="{{ device_type }}-{{ device.device_id }}-status">--</div>
-    </div>
-    <div>
-      <div class="status-label">Temperature</div>
-      <div class="temp-display" id="{{ device_type }}-{{ device.device_id }}-temp" data-temp-c="">--</div>
-    </div>
+  <div class="device-header">
+    <h2>{{ device.device_name }}</h2>
+    <div class="status-value" id="{{ device_type }}-{{ device.device_id }}-status">--</div>
+    <div class="temp-display" id="{{ device_type }}-{{ device.device_id }}-temp" data-temp-c="">--</div>
   </div>
   <div class="control-panel">
     <div class="speed-controls">
@@ -435,14 +449,17 @@ body {
 {% endfor %}
 {% endif %}
 
-<!-- TV Control -->
+<!-- Room Controls (TV, Lights) -->
 {% if show_tv_control %}
-<div class="device-card">
-  <h2>TV Position</h2>
-  <div class="control-panel">
-    <div class="speed-controls">
-      <button class="tv-btn" id="tv-up-btn" data-direction="up">&#9650; Up</button>
-      <button class="tv-btn" id="tv-down-btn" data-direction="down">&#9660; Down</button>
+<div class="device-card room-controls-card">
+  <h2>Room Controls</h2>
+  <div class="room-controls-grid">
+    <div class="room-control-group">
+      <div class="room-control-label">TV</div>
+      <div class="room-control-buttons">
+        <button class="tv-btn" id="tv-up-btn" data-direction="up">▲ Up</button>
+        <button class="tv-btn" id="tv-down-btn" data-direction="down">▼ Down</button>
+      </div>
     </div>
   </div>
 </div>
