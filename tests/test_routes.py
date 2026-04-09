@@ -3,7 +3,10 @@
 Simple test to check if Flask routes are working
 """
 # pylint: disable=unused-import
+from unittest.mock import patch
+
 from conftest import flask_test_client  # noqa: F401
+from app.routes_web import _get_hubitat_sensors
 
 def test_status_endpoint(flask_test_client): # noqa: F811
     response = flask_test_client.get("/api/v1/status")
@@ -98,3 +101,71 @@ def test_air_quality_route(flask_test_client):  # noqa: F811
     assert b"Shading:" in html
     assert b"elevated" in html
     assert b"problem" in html
+
+
+# -- _get_hubitat_sensors unit tests --
+
+_FAKE_HUBITAT_DEVICES = [
+    {
+        "name": "Hickory Sensor",
+        "label": "Hickory Sensor",
+        "id": "582",
+        "room": "Hickory",
+        "capabilities": ["TemperatureMeasurement", "RelativeHumidityMeasurement"],
+        "attributes": {"temperature": "23.4", "humidity": "24"},
+    },
+    {
+        "name": "Dungeon Cage",
+        "label": "Dungeon Cage",
+        "id": "98",
+        "room": "Dungeon",
+        "capabilities": ["TemperatureMeasurement"],
+        "attributes": {"temperature": "24.6"},
+    },
+    {
+        "name": "Some Light",
+        "label": "Some Light",
+        "id": "999",
+        "room": "Hickory",
+        "capabilities": ["Switch"],
+        "attributes": {"switch": "on"},
+    },
+]
+
+
+@patch("app.routes_web.hubitat.get_all_devices", return_value=_FAKE_HUBITAT_DEVICES)
+def test_get_hubitat_sensors_returns_matching(_mock):
+    """Configured names found in Hubitat are returned."""
+    result = _get_hubitat_sensors(["Hickory Sensor", "Dungeon Cage"])
+    names = [s["name"] for s in result]
+    assert names == ["Hickory Sensor", "Dungeon Cage"]
+    assert all("offline" not in s for s in result)
+
+
+@patch("app.routes_web.hubitat.get_all_devices", return_value=_FAKE_HUBITAT_DEVICES)
+def test_get_hubitat_sensors_offline_placeholder(_mock):
+    """Configured names NOT in Hubitat get an offline placeholder."""
+    result = _get_hubitat_sensors(["Hickory Sensor", "Missing Sensor"])
+    assert len(result) == 2
+    online = result[0]
+    offline = result[1]
+    assert online["name"] == "Hickory Sensor"
+    assert "offline" not in online
+    assert offline["name"] == "Missing Sensor"
+    assert offline["offline"] is True
+
+
+@patch("app.routes_web.hubitat.get_all_devices", return_value=_FAKE_HUBITAT_DEVICES)
+def test_get_hubitat_sensors_skips_non_temperature(_mock):
+    """Devices without TemperatureMeasurement capability are not returned."""
+    result = _get_hubitat_sensors(["Some Light"])
+    assert len(result) == 1
+    assert result[0]["offline"] is True
+
+
+@patch("app.routes_web.hubitat.get_all_devices", side_effect=RuntimeError("unreachable"))
+def test_get_hubitat_sensors_hubitat_unreachable(_mock):
+    """When Hubitat is unreachable, all sensors get offline placeholders."""
+    result = _get_hubitat_sensors(["Hickory Sensor", "Dungeon Cage"])
+    assert len(result) == 2
+    assert all(s["offline"] is True for s in result)
