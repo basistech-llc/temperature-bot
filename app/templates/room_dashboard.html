@@ -42,7 +42,17 @@ body {
 
 .dashboard-header h1 {
   margin: 0;
+}
+
+.dashboard-header .title-group {
   flex: 1;
+  text-align: center;
+}
+
+.live-clock {
+  font: 500 1em sans-serif;
+  color: #666;
+  margin-top: 0.3em;
 }
 
 
@@ -326,7 +336,10 @@ body {
 {% endif %}
 
 <div class="dashboard-header">
-  <h1>{{ location }} HVAC Control</h1>
+  <div class="title-group">
+    <h1>{{ location }} HVAC Control</h1>
+    <div class="live-clock" id="live-clock"></div>
+  </div>
   <div class="temperature-toggle">
     <span class="temp-unit-label">°C</span>
     <div class="toggle-switch">
@@ -413,6 +426,26 @@ body {
 </div>
 {% endif %}
 
+<script>
+(function() {
+  var clockEl = document.getElementById('live-clock');
+  function updateClock() {
+    var now = new Date();
+    clockEl.textContent = now.toLocaleDateString(undefined, {
+      weekday: 'short', year: 'numeric', month: 'short', day: 'numeric'
+    }) + '  ' + now.toLocaleTimeString(undefined, {
+      hour: '2-digit', minute: '2-digit'
+    });
+  }
+  updateClock();
+  // Schedule next update at the minute boundary, then every 60s after that
+  var msUntilNextMinute = (60 - new Date().getSeconds()) * 1000;
+  setTimeout(function() {
+    updateClock();
+    setInterval(updateClock, 60000);
+  }, msUntilNextMinute);
+})();
+</script>
 <script src="/static/temperature_utils.js"></script>
 <script src="/static/room_dashboard.js"></script>
 {% endblock %}
