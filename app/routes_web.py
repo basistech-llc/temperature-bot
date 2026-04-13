@@ -338,10 +338,13 @@ def _render_room_dashboard_with_data(conn, location: str):
     # Collect notes
     notes = _collect_device_notes(erv_devices + fan_devices)
 
+    embedded = "embedded" in request.args
+
     return render_template(
         "room_dashboard.html",
         location=location,
         hide_nav=True,
+        embedded=embedded,
         erv_devices=erv_devices,
         fan_devices=fan_devices,
         hubitat_sensors=hubitat_sensors,
