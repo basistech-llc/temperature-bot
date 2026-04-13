@@ -15,6 +15,7 @@ from . import rules_engine
 from . import hubitat
 from . import ae200
 from .display_names import display_device_name
+from . import room_config
 from .utils.request_utils import parse_device_ids
 from .utils.db_utils import with_db_connection
 
@@ -240,6 +241,91 @@ def update_note(conn, body: NoteControl):
     notes = body.notes if body.notes else None
     device_id = db.update_device_notes(conn, body.device_id, notes)
     return jsonify({"status": "ok", "device_id": device_id})
+
+
+@api_v1.route("/hickory/room_status")
+def hickory_room_status():
+    """Return current state of Hickory room control devices."""
+    config = room_config.ROOM_CONFIGS.get("hickory", {})
+    result = {}
+    try:
+        all_devices = hubitat.get_all_devices()
+        by_id = {str(d.get("id")): d for d in all_devices}
+
+        dimmer_id = config.get("dimmer_id")
+        if dimmer_id and dimmer_id in by_id:
+            attrs = by_id[dimmer_id].get("attributes", {})
+            result["dimmer"] = {
+                "level": int(attrs.get("level", 0)),
+                "switch": attrs.get("switch", "off"),
+            }
+        for key in ("wall_inner_id", "wall_outer_id"):
+            dev_id = config.get(key)
+            if dev_id and dev_id in by_id:
+                attrs = by_id[dev_id].get("attributes", {})
+                result[key.replace("_id", "")] = {
+                    "switch": attrs.get("switch", "off"),
+                }
+    except (RuntimeError, OSError) as e:
+        logger.warning("Room status fetch failed: %s", e)
+        return jsonify({"error": str(e)}), 500
+    return jsonify(result)
+
+
+@api_v1.route("/hickory/dimmer", methods=["POST"])
+def hickory_dimmer():
+    """Set the Hickory room light dimmer level (0-100)."""
+    config = room_config.ROOM_CONFIGS.get("hickory", {})
+    device_id = config.get("dimmer_id")
+    if not device_id:
+        return jsonify({"error": "No dimmer configured"}), 404
+    payload = request.get_json(silent=True) or {}
+    level = payload.get("level")
+    if level is None or not isinstance(level, int) or not 0 <= level <= 100:
+        return jsonify({"error": "level must be an integer 0-100"}), 400
+    try:
+        hubitat.set_dimmer_level(device_id, level)
+        return jsonify({"status": "ok", "level": level})
+    except (RuntimeError, OSError) as e:
+        logger.warning("Dimmer control failed: %s", e)
+        return jsonify({"error": str(e)}), 500
+
+
+@api_v1.route("/hickory/wall_light", methods=["POST"])
+def hickory_wall_light():
+    """Toggle a Hickory wall light on or off."""
+    config = room_config.ROOM_CONFIGS.get("hickory", {})
+    payload = request.get_json(silent=True) or {}
+    light = payload.get("light")
+    state = payload.get("state")
+
+    id_map = {"inner": config.get("wall_inner_id"), "outer": config.get("wall_outer_id")}
+    device_id = id_map.get(light)
+    if not device_id:
+        return jsonify({"error": "light must be 'inner' or 'outer'"}), 400
+    if state not in ("on", "off"):
+        return jsonify({"error": "state must be 'on' or 'off'"}), 400
+    try:
+        hubitat.set_switch(device_id, state)
+        return jsonify({"status": "ok", "light": light, "state": state})
+    except (RuntimeError, OSError) as e:
+        logger.warning("Wall light control failed: %s", e)
+        return jsonify({"error": str(e)}), 500
+
+
+@api_v1.route("/hickory/tv", methods=["POST"])
+def hickory_tv():
+    """Control the Hickory TV lift (up/down)."""
+    payload = request.get_json(silent=True) or {}
+    direction = payload.get("direction")
+    if direction not in ("up", "down"):
+        return jsonify({"error": "direction must be 'up' or 'down'"}), 400
+    try:
+        hubitat.control_hickory_tv(direction)
+        return jsonify({"status": "ok", "direction": direction})
+    except (RuntimeError, OSError) as e:
+        logger.warning("TV control failed: %s", e)
+        return jsonify({"error": str(e)}), 500
 
 
 @api_v1.route("/debug/db_devices")

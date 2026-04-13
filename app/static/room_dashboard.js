@@ -286,6 +286,138 @@ function setupTemperatureToggle() {
 }
 
 /**
+ * Debounce helper — calls fn at most once per delay ms.
+ */
+function debounce(fn, delay) {
+    let timer = null;
+    return function(...args) {
+        clearTimeout(timer);
+        timer = setTimeout(() => fn.apply(this, args), delay);
+    };
+}
+
+/**
+ * Set the dimmer level via API.
+ * @param {number} level - 0-100
+ */
+function setDimmerLevel(level) {
+    apiCall(
+        '/api/v1/hickory/dimmer',
+        { level },
+        'Error setting dimmer.'
+    );
+}
+
+/**
+ * Fetch room control status and update UI.
+ */
+function refreshRoomStatus() {
+    fetch('/api/v1/hickory/room_status')
+        .then(response => response.json())
+        .then(data => {
+            if (data.dimmer) {
+                const slider = document.getElementById('dimmer-slider');
+                const valueEl = document.getElementById('dimmer-value');
+                if (slider && !slider.matches(':active')) {
+                    slider.value = data.dimmer.level;
+                }
+                if (valueEl) {
+                    valueEl.textContent = data.dimmer.level + '%';
+                }
+            }
+            if (data.wall_inner) {
+                updateWallButton('inner', data.wall_inner.switch);
+            }
+            if (data.wall_outer) {
+                updateWallButton('outer', data.wall_outer.switch);
+            }
+        })
+        .catch(error => {
+            if (DEBUG) {
+                console.error('Failed to refresh room status:', error);
+            }
+        });
+}
+
+/**
+ * Set up dimmer slider interaction.
+ */
+function setupDimmer() {
+    const slider = document.getElementById('dimmer-slider');
+    if (!slider) {
+        return;
+    }
+
+    const valueEl = document.getElementById('dimmer-value');
+    const debouncedSet = debounce(setDimmerLevel, 300);
+
+    slider.addEventListener('input', () => {
+        const level = parseInt(slider.value);
+        if (valueEl) {
+            valueEl.textContent = level + '%';
+        }
+        debouncedSet(level);
+    });
+}
+
+/**
+ * Update a wall light button to reflect current state.
+ * @param {string} light - 'inner' or 'outer'
+ * @param {string} state - 'on' or 'off'
+ */
+function updateWallButton(light, state) {
+    const btn = document.getElementById('wall-' + light + '-btn');
+    if (!btn) {
+        return;
+    }
+    const isOn = state === 'on';
+    btn.textContent = isOn ? 'ON' : 'OFF';
+    btn.classList.toggle('is-on', isOn);
+}
+
+/**
+ * Handle wall light button click — toggle on/off.
+ * @param {HTMLElement} button - Clicked button element
+ */
+function handleWallButton(button) {
+    const light = button.getAttribute('data-light');
+    const isOn = button.classList.contains('is-on');
+    const newState = isOn ? 'off' : 'on';
+
+    button.disabled = true;
+    apiCall(
+        '/api/v1/hickory/wall_light',
+        { light, state: newState },
+        'Error toggling wall light.'
+    ).then(() => {
+        updateWallButton(light, newState);
+        button.disabled = false;
+    }).catch(() => {
+        button.disabled = false;
+    });
+}
+
+/**
+ * Handle TV control button click.
+ * @param {HTMLElement} button - Clicked button element
+ */
+function handleTvButton(button) {
+    const direction = button.getAttribute('data-direction');
+    const buttons = document.querySelectorAll('.tv-btn');
+    buttons.forEach(b => { b.disabled = true; });
+
+    apiCall(
+        '/api/v1/hickory/tv',
+        { direction },
+        'Error controlling TV.'
+    ).then(() => {
+        buttons.forEach(b => { b.disabled = false; });
+    }).catch(() => {
+        buttons.forEach(b => { b.disabled = false; });
+    });
+}
+
+/**
  * Initialize room dashboard functionality.
  */
 function setupRoomDashboard() {
@@ -294,14 +426,29 @@ function setupRoomDashboard() {
         button.addEventListener('click', () => handleSpeedButton(button));
     });
 
+    // Set up TV control buttons
+    document.querySelectorAll('.tv-btn[data-direction]').forEach(button => {
+        button.addEventListener('click', () => handleTvButton(button));
+    });
+
+    // Set up dimmer
+    setupDimmer();
+
+    // Set up wall light buttons
+    document.querySelectorAll('.wall-btn[data-light]').forEach(button => {
+        button.addEventListener('click', () => handleWallButton(button));
+    });
+
     initializeSensorTemperatures();
     setupTemperatureToggle();
 
     // Initial status refresh
     refreshStatus();
+    refreshRoomStatus();
 
     // Set up periodic refresh
     setInterval(refreshStatus, REFRESH_INTERVAL * 1000);
+    setInterval(refreshRoomStatus, REFRESH_INTERVAL * 1000);
 }
 
 window.addEventListener('DOMContentLoaded', setupRoomDashboard);

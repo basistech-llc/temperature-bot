@@ -11,6 +11,8 @@ open tabs here:
   - [local](http://localhost:8000/)
   - Hubitat:
     - Dashboard: http://10.2.3.51/
+      - http://10.2.3.51/dashboards insufficently good dashboard
+      - http://10.2.3.51/installedapp/configure/520/mainPage new hickory dashboard
     - Documentation: https://docs2.hubitat.com/en/home
 - Database: Often useful to copy latest database from /var/db on server to each instance. Placed in
   root or var/db.
