@@ -9,7 +9,8 @@ from typing import Dict, Any
 
 RoomConfig = Dict[str, Any]
 """Type alias for room configuration dict.
-Keys: 'url' (str), 'ervs' (list[str]), 'fans' (list[str]), 'sensors' (list[str])
+Keys: 'url' (str), 'ervs' (list[str]), 'fans' (list[str]), 'sensors' (list[str]),
+'tv_control' (bool), 'dimmer_id' (str), 'wall_inner_id' (str), 'wall_outer_id' (str)
 """
 
 ROOM_CONFIGS: Dict[str, RoomConfig] = {
