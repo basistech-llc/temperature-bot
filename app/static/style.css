@@ -250,7 +250,7 @@ button {
     display: block;
     text-align: center;
 }
-.data-table tbody td:not(.cell-unit):not(.cell-notes) {
+.data-table tbody td:not(.cell-unit):not(.cell-notes):not(.cell-conditions) {
     text-align: right;
     padding-left: 0.5em;
     padding-right: 0.5em;
@@ -260,9 +260,15 @@ button {
 td.cell-notes {
     min-width: 400px;
 }
-.data-table td:not(.cell-notes) {
+.data-table td:not(.cell-notes):not(.cell-conditions) {
     width: 1px;
     white-space: nowrap;
+    vertical-align: middle;
+}
+
+.data-table td.cell-conditions {
+    text-align: left;
+    vertical-align: middle;
 }
 
 .last-refresh-inline {
@@ -272,8 +278,20 @@ td.cell-notes {
     font-size: 0.85em;
 }
 
-#weather {
-    width: 300px;
+.weather-loading {
+    color: #999;
+    font-style: italic;
+}
+
+#main-grid.weather-grid {
+    max-width: none;
+}
+
+.forecast-pair {
+    display: flex;
+    gap: 1.5em;
+    align-items: flex-start;
+    flex-wrap: wrap;
 }
 
 .aq-legend {
@@ -490,10 +508,6 @@ table.rules-table th  {
     body {
         padding-left: 5px;
         padding-right: 5px;
-    }
-    #weather {
-        margin-left: 0;
-        margin-top: 50px;
     }
 }
 
