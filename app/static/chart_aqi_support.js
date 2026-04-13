@@ -6,6 +6,31 @@ let currentStart = null;
 let currentEnd = null;
 const AQI_ENDPOINT = "/api/v1/air_quality";
 
+function formatTime(ts) {
+  const date = new Date(ts);
+  const isDayView =
+    currentStart && currentEnd && currentEnd - currentStart <= 24 * 60 * 60;
+
+  if (isDayView) {
+    return new Intl.DateTimeFormat(undefined, {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+      timeZoneName: "short",
+    }).format(date);
+  } else {
+    return new Intl.DateTimeFormat(undefined, {
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+      timeZoneName: "short",
+    }).format(date);
+  }
+}
+
 function clearTemporalButtonSelection() {
   const temporalButtons = document.querySelectorAll(".temporal-buttons button");
   temporalButtons.forEach((button) => button.classList.remove("selected"));
@@ -190,8 +215,16 @@ function updateAQChart() {
       },
     },
     legend: { top: 40 },
-    grid: { top: 120, left: 80, right: 80, bottom: 80 },
-    xAxis: { type: "time", axisLabel: { rotate: 45 } },
+    grid: { top: 120, left: 80, right: 80, bottom: 120 },
+    xAxis: {
+      type: "time",
+      axisLabel: {
+        rotate: 45,
+        formatter: function (value) {
+          return formatTime(value);
+        },
+      },
+    },
     yAxis: yAxes,
     series: series,
     axisPointer: { link: [{ xAxisIndex: "all" }], snap: true },

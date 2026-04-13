@@ -35,39 +35,44 @@ class WeatherService:
             response.raise_for_status()
             self.weather_points = response.json()
 
-    def get_current_conditions(self):
-        """Get current weather conditions from nearest station"""
+    def get_current_conditions(self, num_stations=2):
+        """Get current weather conditions from nearest stations.
+
+        Returns a list of dicts, one per station.
+        """
         self.ensure_points_loaded()
 
         observation_stations_url = self.weather_points['properties']['observationStations']
         response = self.session.get(observation_stations_url)
-        logger.debug("get %s",observation_stations_url)
+        logger.debug("get %s", observation_stations_url)
         response.raise_for_status()
         stations = response.json()
 
         if not stations['features']:
-            return None
+            return []
 
-        nearest_station = stations['features'][0]
-        station_id = nearest_station['properties']['stationIdentifier']
+        results = []
+        for feature in stations['features'][:num_stations]:
+            station_id = feature['properties']['stationIdentifier']
+            station_name = feature['properties']['name']
+            try:
+                observations_url = f"https://api.weather.gov/stations/{station_id}/observations/latest"
+                logger.debug("get %s", observations_url)
+                response = self.session.get(observations_url)
+                response.raise_for_status()
+                observation = response.json()
 
-        observations_url = f"https://api.weather.gov/stations/{station_id}/observations/latest"
-        logger.debug("get %s",observations_url)
-        response = self.session.get(observations_url)
-        response.raise_for_status()
-        observation = response.json()
+                props = observation.get('properties') or {}
+                results.append({
+                    'temperature': (props.get('temperature') or {}).get('value'),
+                    'conditions': props.get('textDescription', 'Unknown'),
+                    'icon': props.get('icon', ''),
+                    'station_name': station_name,
+                })
+            except (requests.exceptions.RequestException, KeyError, ValueError) as e:
+                logger.warning("Failed to get observations for %s: %s", station_id, e)
 
-        if not observation['properties']:
-            return None
-
-        props = observation['properties']
-
-        return {
-            'temperature': (props.get('temperature') or {}).get('value'),
-            'conditions': props.get('textDescription', 'Unknown'),
-            'icon': props.get('icon', ''),
-            'station_name': nearest_station['properties']['name']
-        }
+        return results
 
     def get_forecast(self):
         """Get hourly forecast data"""
@@ -93,19 +98,41 @@ class WeatherService:
                 'icon': period['icon']
             })
 
-            if len(forecast_data) >= 4:
+            if len(forecast_data) >= 5:
                 break
 
         return forecast_data
 
+    def get_daily_forecast(self, num_periods=5):
+        """Get daily forecast periods (e.g. 'Tonight', 'Monday', 'Monday Night')."""
+        self.ensure_points_loaded()
+
+        forecast_url = self.weather_points['properties']['forecast']
+        response = self.session.get(forecast_url)
+        logger.debug("get %s", forecast_url)
+        response.raise_for_status()
+        forecasts = response.json()
+
+        daily_data = []
+        for period in forecasts['properties']['periods'][:num_periods]:
+            daily_data.append({
+                'name': period['name'],
+                'temperature': period['temperature'],
+                'conditions': period['shortForecast'],
+            })
+
+        return daily_data
+
     def get_all_weather_data(self):
-        """Get both current conditions and forecast"""
-        current = self.get_current_conditions()
+        """Get current conditions, hourly forecast, and daily forecast"""
+        stations = self.get_current_conditions()
         forecast = self.get_forecast()
+        daily = self.get_daily_forecast()
 
         return {
-            'current': current,
-            'forecast': forecast
+            'stations': stations,
+            'forecast': forecast,
+            'daily': daily,
         }
 
     def close(self):

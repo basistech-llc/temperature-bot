@@ -13,8 +13,10 @@ class MockHelper:
         """Setup common weather and AQI mocks."""
         mock_get_airquality.return_value = aqi_value
         mock_get_weather_data.return_value = {
-            "current": {"temperature": temperature, "conditions": "Sunny"},
-            "forecast": []
+            "stations": [{"temperature": temperature, "conditions": "Sunny",
+                          "icon": "", "station_name": "Test Station"}],
+            "forecast": [],
+            "daily": [],
         }
 
 
@@ -22,8 +24,10 @@ class MockHelper:
     def create_mock_weather_data(temperature: int = 32, conditions: str = "Sunny") -> Dict[str, Any]:
         """Create mock weather data for testing."""
         return {
-            "current": {"temperature": temperature, "conditions": conditions},
-            "forecast": []
+            "stations": [{"temperature": temperature, "conditions": conditions,
+                          "icon": "", "station_name": "Test Station"}],
+            "forecast": [],
+            "daily": [],
         }
 
     @staticmethod

@@ -429,7 +429,9 @@ body {
 {% endif %}
 
 <div class="dashboard-header">
+  {% if embedded %}
   <a href="/" class="pure-button pure-button-primary main-link-back" id="main-link">← Main</a>
+  {% endif %}
   <div class="title-group">
     <h1>{{ location }} HVAC Control</h1>
     <div class="live-clock" id="live-clock"></div>
@@ -445,6 +447,7 @@ body {
     <span class="temp-unit-label">°F</span>
   </div>
 </div>
+{% if embedded %}
 <script>
   // Use browser history to go back, but only if previous page is from same site
   document.addEventListener('DOMContentLoaded', function() {
@@ -466,6 +469,7 @@ body {
     }
   });
 </script>
+{% endif %}
 
 <!-- ERV and Fan Controls -->
 {% macro device_control_card(device, device_type) %}
