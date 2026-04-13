@@ -225,7 +225,7 @@ button {
 }
 
 .column-temp {
-    min-width: 80px;
+    min-width: 60px;
 }
 
 .column-temp-set,
@@ -240,6 +240,8 @@ button {
 /* Shared data-table styling: centered headers with unit sub-labels */
 .data-table thead th:not(.column-unit):not(.column-notes) {
     text-align: center;
+    padding-left: 0.5em;
+    padding-right: 0.5em;
 }
 .data-table thead th small {
     display: block;
@@ -247,6 +249,8 @@ button {
 }
 .data-table tbody td:not(.cell-unit):not(.cell-notes) {
     text-align: right;
+    padding-left: 0.5em;
+    padding-right: 0.5em;
 }
 
 /* [TODO] Per-table min-widths are a kludge to give Notes more space in tables
@@ -528,6 +532,13 @@ table.rules-table th  {
 
 .column-speed {
     text-align: center;
+    padding-left: 0.3em;
+    padding-right: 0.3em;
+}
+.data-table td.cell-speed {
+    text-align: center;
+    padding-left: 0.3em;
+    padding-right: 0.3em;
 }
 
 /* Pale red shading for Off column cells */
