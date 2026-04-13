@@ -535,9 +535,10 @@ td.cell-speed-off {
     background-color: #ffe0e0;
 }
 
-/* Center buttons in auto column */
-.cell-speed-auto {
+/* Pale green shading for Auto column cells */
+td.cell-speed-auto {
     text-align: center;
+    background-color: #e0ffe0;
 }
 
 .cell-unit {
