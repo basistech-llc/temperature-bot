@@ -863,45 +863,66 @@ li.pure-menu-item > .rules-master-toggle {
 }
 
 /* Alerts page */
+#main-grid.alerts-grid {
+    max-width: none;
+}
+
+.alerts-tabs {
+    display: flex;
+    gap: 0;
+    border-bottom: 2px solid #ddd;
+    margin-bottom: 12px;
+}
+
+.tab-link {
+    padding: 8px 20px;
+    border: none;
+    border-bottom: 3px solid transparent;
+    background: none;
+    color: #666;
+    font-size: 0.95em;
+    cursor: pointer;
+    margin-bottom: -2px;
+    text-decoration: none;
+}
+
+.tab-link:hover {
+    color: #0078e7;
+}
+
 .tab-link.active {
-    background-color: #0078e7;
-    color: white;
+    color: #0078e7;
+    border-bottom-color: #0078e7;
+    font-weight: 600;
 }
 
-.pure-form {
-    margin: 10px 0;
+.alerts-filter {
+    margin: 0 0 10px 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
 }
 
-.pure-form label {
-    margin-right: 10px;
+.alerts-filter label {
+    color: #555;
+    font-size: 0.9em;
 }
 
 .tab-hidden {
     display: none !important;
 }
 
-/* Alerts page: row background by alert type */
-.alert-row-filter-warning {
-    background-color: #fff5e6;
-    opacity: 0.7;
-}
-
-.alert-row-error {
-    background-color: #ffe6e6;
-}
-
-.alert-row-water-issue {
-    background-color: #fff0e6;
+/* Alerts page: still-active rows in history tab */
+.tabulator-row.alert-row-active {
+    font-weight: bold;
 }
 
 .alert-type-error {
-    color: #ff4444;
-    font-weight: bold;
+    color: #d32f2f;
 }
 
 .alert-type-water-issue {
-    color: #ff8800;
-    font-weight: bold;
+    color: #e65100;
 }
 
 /* Device log: alert status column */
