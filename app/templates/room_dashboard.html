@@ -387,6 +387,60 @@ body {
   cursor: not-allowed;
 }
 
+/* Set temperature controls */
+.settemp-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.8em;
+  margin-bottom: 0.5em;
+}
+
+.settemp-label {
+  font: 500 1em sans-serif;
+  color: #555;
+}
+
+.settemp-thermostat {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3em;
+}
+
+.settemp-btn {
+  width: 44px;
+  height: 44px;
+  border: 2px solid #ccc;
+  border-radius: 8px;
+  background: #f5f5f5;
+  font: bold 1.4em sans-serif;
+  cursor: pointer;
+  color: #333;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.settemp-btn:hover {
+  background: #e0e0e0;
+  border-color: #999;
+}
+
+.settemp-btn:active {
+  transform: scale(0.95);
+}
+
+.settemp-btn-down { color: #1976d2; }
+.settemp-btn-up { color: #d32f2f; }
+
+.settemp-display {
+  font: bold 1.3em sans-serif;
+  color: #333;
+  min-width: 3.5em;
+  text-align: center;
+}
+
 .sensor-offline {
   opacity: 0.5;
   border-left-color: #999;
@@ -479,6 +533,21 @@ body {
     <div class="status-value" id="{{ device_type }}-{{ device.device_id }}-status">--</div>
     <div class="temp-display" id="{{ device_type }}-{{ device.device_id }}-temp" data-temp-c="">--</div>
   </div>
+  {% if device_type == 'fan' %}
+  <div class="settemp-row">
+    <span class="settemp-label">Set Temp</span>
+    <span class="settemp-thermostat" role="group" aria-label="Set temperature">
+      <button type="button" class="settemp-btn settemp-btn-down"
+              data-device-id="{{ device.device_id }}" data-delta="-0.5"
+              aria-label="Decrease set temperature">−</button>
+      <span class="settemp-display" id="settemp-display-{{ device.device_id }}"
+            data-device-id="{{ device.device_id }}">--</span>
+      <button type="button" class="settemp-btn settemp-btn-up"
+              data-device-id="{{ device.device_id }}" data-delta="0.5"
+              aria-label="Increase set temperature">+</button>
+    </span>
+  </div>
+  {% endif %}
   <div class="control-panel">
     <div class="speed-controls">
       <button class="speed-btn speed-off" data-device-id="{{ device.device_id }}" data-speed="0">Off</button>

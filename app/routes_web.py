@@ -11,7 +11,6 @@
 import logging
 import datetime
 import time
-from typing import List
 from flask import render_template, request, redirect, url_for
 
 from .constants import __version__
@@ -313,13 +312,7 @@ def _render_room_dashboard_with_data(conn, location: str):
     # Filter ERVs and fans
     erv_devices = _filter_speed_control_devices(all_devices, config.get("ervs", []))
 
-    # For fans, take first available match
-    fan_names: List[str] = config.get("fans", [])
-    fan_devices = []
-    if fan_names:
-        filtered = _filter_speed_control_devices(all_devices, fan_names)
-        if filtered:
-            fan_devices = [filtered[0]]  # Only first match
+    fan_devices = _filter_speed_control_devices(all_devices, config.get("fans", []))
 
     # Get Hubitat sensors
     hubitat_sensors = _get_hubitat_sensors(config.get("sensors", []))

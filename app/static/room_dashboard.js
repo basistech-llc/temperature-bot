@@ -214,6 +214,20 @@ function updateDeviceStatus(devices) {
             tempEl.textContent = formatTemperature(tempC);
         }
 
+        // Update set temperature from AE-200 status
+        const setTempDisplay = document.getElementById(`settemp-display-${deviceId}`);
+        if (setTempDisplay) {
+            const status = device.status || {};
+            const rawSetTemp = status.SetTemp;
+            if (rawSetTemp !== undefined && rawSetTemp !== '' && rawSetTemp !== '0') {
+                const setTempC = parseFloat(rawSetTemp);
+                if (!isNaN(setTempC)) {
+                    setTempDisplay.setAttribute('data-temp-c', setTempC.toString());
+                    setTempDisplay.textContent = formatTemperature(setTempC);
+                }
+            }
+        }
+
         // Update button active states
         const buttons = document.querySelectorAll(`button.speed-btn[data-device-id="${deviceId}"]`);
         buttons.forEach(button => updateButtonActiveState(button, device));
@@ -418,6 +432,60 @@ function handleTvButton(button) {
 }
 
 /**
+ * Initialize set temperature controls using compact up/down buttons.
+ * Buttons operate in the currently selected UI unit but send Celsius to backend.
+ */
+function setupSetTempControls() {
+    document.querySelectorAll('.settemp-btn').forEach(button => {
+        button.addEventListener('click', function() {
+            const deviceId = parseInt(this.getAttribute('data-device-id'));
+            const delta = parseFloat(this.getAttribute('data-delta') || '0');
+            const display = document.getElementById(`settemp-display-${deviceId}`);
+            if (!display) return;
+
+            const currentCAttr = display.getAttribute('data-temp-c');
+            let currentC = currentCAttr ? parseFloat(currentCAttr) : NaN;
+            if (isNaN(currentC)) currentC = 21.0;
+
+            const useFahrenheit = window.TemperatureUtils && window.TemperatureUtils.getTemperatureUnitPreference();
+            let currentUI = currentC;
+            if (useFahrenheit) currentUI = window.TemperatureUtils.celsiusToFahrenheit(currentC);
+
+            let newUI = currentUI + delta;
+            const minUI = useFahrenheit ? 50 : 10;
+            const maxUI = useFahrenheit ? 86 : 30;
+            newUI = Math.max(minUI, Math.min(maxUI, newUI));
+
+            let newC = useFahrenheit ? window.TemperatureUtils.fahrenheitToCelsius(newUI) : newUI;
+            newC = Math.round(newC * 10) / 10;
+
+            display.setAttribute('data-temp-c', newC.toString());
+            display.textContent = formatTemperature(newC);
+
+            setDeviceSetTemp(deviceId, newC);
+        });
+    });
+}
+
+/**
+ * Call backend API to set device set temperature in Celsius.
+ * @param {number} deviceId
+ * @param {number} setTempC
+ */
+async function setDeviceSetTemp(deviceId, setTempC) {
+    try {
+        await apiCall(
+            '/api/v1/set_temp',
+            { device_id: deviceId, set_temp_c: setTempC },
+            'Error setting temperature.'
+        );
+        refreshStatus();
+    } catch (e) {
+        // Error already handled by apiCall
+    }
+}
+
+/**
  * Initialize room dashboard functionality.
  */
 function setupRoomDashboard() {
@@ -430,6 +498,9 @@ function setupRoomDashboard() {
     document.querySelectorAll('.tv-btn[data-direction]').forEach(button => {
         button.addEventListener('click', () => handleTvButton(button));
     });
+
+    // Set up set temperature controls
+    setupSetTempControls();
 
     // Set up dimmer
     setupDimmer();
