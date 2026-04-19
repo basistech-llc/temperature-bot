@@ -7,41 +7,31 @@
 {% endblock %}
 
 {% block body %}
-<div class="pure-g"><!-- the start of the pure row -->
-  <div class="pure-u-1"><!-- across the entire row -->
-  <h1>AE200 Alerts</h1>
-  </div>
-</div>
-
 <div class="pure-g">
   <div class="pure-u-1">
-    <div class="pure-menu pure-menu-horizontal">
-      <ul class="pure-menu-list">
-        <li class="pure-menu-item">
-          <a href="#" id="active-tab" class="pure-menu-link tab-link active">Active Alerts</a>
-        </li>
-        <li class="pure-menu-item">
-          <a href="#" id="history-tab" class="pure-menu-link tab-link">Alert History</a>
-        </li>
-      </ul>
-    </div>
+    <div id="main-grid" class="alerts-grid">
+      <h2>AE200 Alerts</h2>
 
-    <div class="pure-form">
-      <label for="device-filter">Filter by device:</label>
-      <select id="device-filter" class="pure-input-1-4">
-        <option value="">All devices</option>
-        {% for device_id, device_name in devices.items() %}
-        <option value="{{ device_id }}">{{ device_name }}</option>
-        {% endfor %}
-      </select>
-    </div>
-  </div>
-</div>
+      <div class="alerts-tabs">
+        <a href="#" id="active-tab" class="tab-link active">Active Alerts</a>
+        <a href="#" id="history-tab" class="tab-link">Alert History</a>
+      </div>
 
-<div class="pure-g">
-  <div class="pure-u-1">
-    <div id="active-alerts-table"></div>
-    <div id="history-alerts-table" class="tab-hidden"></div>
+      <div class="alerts-filter">
+        <label for="device-filter">Filter by device:</label>
+        <select id="device-filter" class="pure-input-1-4">
+          <option value="">All devices</option>
+          {% for device_id, device_name in devices.items() %}
+          <option value="{{ device_id }}">{{ device_name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div id="active-alerts-table"></div>
+      <div id="history-alerts-table" class="tab-hidden"></div>
+
+      <div id="last-refresh" class="last-refresh-inline"></div>
+    </div>
   </div>
 </div>
 
@@ -105,20 +95,20 @@ function formatTimestamp(timestamp) {
   }).format(new Date(timestamp * 1000));
 }
 
-// Shared formatters
+function updateLastRefresh() {
+  const lr = document.getElementById('last-refresh');
+  if (lr) {
+    const now = new Date();
+    const pad = (n) => String(n).padStart(2, '0');
+    lr.textContent = 'Data as of: ' + now.getFullYear() + '-' + pad(now.getMonth()+1) + '-' + pad(now.getDate()) + ' ' + pad(now.getHours()) + ':' + pad(now.getMinutes()) + ':' + pad(now.getSeconds()) + ' (auto-refreshes every 30s)';
+  }
+}
+
+// Formatters
 function rowFormatterFunction(row) {
   const data = row.getData();
-  // Active alerts have no end_time field, or end_time is null
-  const isResolved = data.end_time != null;
-
-  if (!isResolved) {
-    if (data.alert_type === 'Filter warning') {
-      row.getElement().classList.add('alert-row-filter-warning');
-    } else if (data.alert_type === 'Error') {
-      row.getElement().classList.add('alert-row-error');
-    } else if (data.alert_type === 'Water issue') {
-      row.getElement().classList.add('alert-row-water-issue');
-    }
+  if (data.end_time == null) {
+    row.getElement().classList.add('alert-row-active');
   }
 }
 
@@ -143,7 +133,6 @@ const activeTable = new Tabulator("#active-alerts-table", {
   layout: "fitColumns",
   pagination: "local",
   paginationSize: 50,
-  rowFormatter: rowFormatterFunction,
   columns: [
     {title: "Device", field: "device_name", width: 120},
     {title: "Alert Type", field: "alert_type", width: 120,
@@ -223,6 +212,10 @@ const historyTable = new Tabulator("#history-alerts-table", {
     }
   ]
 });
+
+// Update timestamp on initial load
+activeTable.on('dataLoaded', updateLastRefresh);
+historyTable.on('dataLoaded', updateLastRefresh);
 
 // Auto-refresh every 30 seconds
 setInterval(function() {

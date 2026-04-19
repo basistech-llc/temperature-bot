@@ -6,7 +6,8 @@ Simple test to check if Flask routes are working
 from unittest.mock import patch
 
 from conftest import flask_test_client  # noqa: F401
-from app.routes_web import _get_hubitat_sensors
+from app.routes_web import _filter_speed_control_devices, _get_hubitat_sensors
+from app import room_config
 
 def test_status_endpoint(flask_test_client): # noqa: F811
     response = flask_test_client.get("/api/v1/status")
@@ -103,6 +104,43 @@ def test_air_quality_route(flask_test_client):  # noqa: F811
     assert b"Shading:" in html
     assert b"elevated" in html
     assert b"problem" in html
+
+
+# -- _filter_speed_control_devices unit tests --
+
+_FAKE_SPEED_DEVICES = [
+    {"device_name": "Area 51", "has_speed_control": True},
+    {"device_name": "Restrooms/BOH", "has_speed_control": True},
+    {"device_name": "ERV Kitchen", "has_speed_control": True},
+    {"device_name": "Dungeon", "has_speed_control": False},
+    {"device_name": "Lobby Sensor", "has_speed_control": False},
+]
+
+
+def test_filter_speed_control_returns_all_matches():
+    """All devices whose names appear in the filter list AND have speed control
+    must be returned — not just the first match.
+
+    Prevents regression of the old [filtered[0]] bug that suppressed
+    all but one FCU per room.
+    """
+    result = _filter_speed_control_devices(
+        _FAKE_SPEED_DEVICES, ["Area 51", "Restrooms/BOH"]
+    )
+    names = [d["device_name"] for d in result]
+    assert names == ["Area 51", "Restrooms/BOH"]
+
+
+def test_filter_speed_control_excludes_non_speed_devices():
+    """Devices without has_speed_control are excluded even if name matches."""
+    result = _filter_speed_control_devices(_FAKE_SPEED_DEVICES, ["Dungeon"])
+    assert result == []
+
+
+def test_filter_speed_control_empty_names():
+    """Empty name list returns no devices."""
+    result = _filter_speed_control_devices(_FAKE_SPEED_DEVICES, [])
+    assert result == []
 
 
 # -- _get_hubitat_sensors unit tests --
@@ -410,3 +448,49 @@ def test_tv_hubitat_error(_mock, flask_test_client):  # noqa: F811
     )
     assert resp.status_code == 500
     assert "error" in resp.get_json()
+
+
+# -- Room config tests --
+
+
+def test_room_config_hickory_has_fcu_devices():
+    """Hickory must list both FCUs so the room page renders controls for each.
+
+    Prevents regression where only one FCU was shown due to a [0] slice.
+    """
+    fans = room_config.ROOM_CONFIGS["hickory"]["fans"]
+    assert "Area 51" in fans
+    assert "Restrooms/BOH" in fans
+
+
+def test_room_config_kitchen_has_fcu():
+    """Kitchen must list its FCU so set-temp controls render."""
+    fans = room_config.ROOM_CONFIGS["kitchen"]["fans"]
+    assert "Kitchen" in fans
+
+
+def test_room_config_erv_names_start_with_erv():
+    """ERV device names must start with 'ERV' — the template uses device_type
+    to decide whether to show set-temp controls (fans only, not ERVs)."""
+    for room_key, config in room_config.ROOM_CONFIGS.items():
+        for name in config.get("ervs", []):
+            assert name.startswith("ERV"), (
+                f"{room_key} ERV device '{name}' must start with 'ERV'"
+            )
+
+
+# -- Room dashboard HTML rendering tests --
+
+
+def test_room_config_no_erv_in_fans():
+    """ERV devices must never appear in the 'fans' list.
+
+    The template renders set-temp controls only for fan-type devices.
+    If an ERV accidentally ends up in the fans list, users would see
+    temperature controls that send meaningless API calls.
+    """
+    for room_key, config in room_config.ROOM_CONFIGS.items():
+        for fan_name in config.get("fans", []):
+            assert not fan_name.startswith("ERV"), (
+                f"{room_key} fans list contains ERV device '{fan_name}'"
+            )
