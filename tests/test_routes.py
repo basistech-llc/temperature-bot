@@ -6,7 +6,7 @@ Simple test to check if Flask routes are working
 from unittest.mock import patch
 
 from conftest import flask_test_client  # noqa: F401
-from app.routes_web import _get_hubitat_sensors
+from app.routes_web import _filter_speed_control_devices, _get_hubitat_sensors
 from app import room_config
 
 def test_status_endpoint(flask_test_client): # noqa: F811
@@ -104,6 +104,43 @@ def test_air_quality_route(flask_test_client):  # noqa: F811
     assert b"Shading:" in html
     assert b"elevated" in html
     assert b"problem" in html
+
+
+# -- _filter_speed_control_devices unit tests --
+
+_FAKE_SPEED_DEVICES = [
+    {"device_name": "Area 51", "has_speed_control": True},
+    {"device_name": "Restrooms/BOH", "has_speed_control": True},
+    {"device_name": "ERV Kitchen", "has_speed_control": True},
+    {"device_name": "Dungeon", "has_speed_control": False},
+    {"device_name": "Lobby Sensor", "has_speed_control": False},
+]
+
+
+def test_filter_speed_control_returns_all_matches():
+    """All devices whose names appear in the filter list AND have speed control
+    must be returned — not just the first match.
+
+    Prevents regression of the old [filtered[0]] bug that suppressed
+    all but one FCU per room.
+    """
+    result = _filter_speed_control_devices(
+        _FAKE_SPEED_DEVICES, ["Area 51", "Restrooms/BOH"]
+    )
+    names = [d["device_name"] for d in result]
+    assert names == ["Area 51", "Restrooms/BOH"]
+
+
+def test_filter_speed_control_excludes_non_speed_devices():
+    """Devices without has_speed_control are excluded even if name matches."""
+    result = _filter_speed_control_devices(_FAKE_SPEED_DEVICES, ["Dungeon"])
+    assert result == []
+
+
+def test_filter_speed_control_empty_names():
+    """Empty name list returns no devices."""
+    result = _filter_speed_control_devices(_FAKE_SPEED_DEVICES, [])
+    assert result == []
 
 
 # -- _get_hubitat_sensors unit tests --
