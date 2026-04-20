@@ -38,6 +38,27 @@ def test_status_endpoint(flask_test_client):  # noqa: F811
     response_json = response.json
     logging.info(" /status: %s", response_json)
     assert "devices" in response_json
+    assert "all_rules_disabled_until" in response_json
+
+
+def test_status_endpoint_reflects_global_rules_disable(flask_test_client):  # noqa: F811
+    """When all rules are disabled for N seconds, /status should return a
+    non-zero all_rules_disabled_until approximately equal to now + N."""
+    test_db_path = os.environ.get("TEST_DB_NAME")
+    assert test_db_path, "TEST_DB_NAME environment variable should be set"
+
+    conn = sqlite3.connect(test_db_path)
+    conn.row_factory = sqlite3.Row
+    try:
+        before = int(time.time())
+        rules_engine.disable_all_rules(conn, 1800)  # 30 minutes
+    finally:
+        conn.close()
+
+    response = flask_test_client.get("/api/v1/status")
+    assert response.status_code == 200
+    until = response.json["all_rules_disabled_until"]
+    assert before + 1800 - 5 <= until <= before + 1800 + 5
 
 
 def test_status_endpoint_with_schema_validation(flask_test_client):  # noqa: F811

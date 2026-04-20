@@ -98,7 +98,12 @@ def get_status(conn):
         raw_name = dev.get("device_name", "")
         dev["display_name"] = display_device_name(raw_name, source="db")
 
-    return jsonify({"devices": device_data})
+    return jsonify(
+        {
+            "devices": device_data,
+            "all_rules_disabled_until": rules_engine.all_rules_disabled_until(conn),
+        }
+    )
 
 
 @api_v1.route("/weather")

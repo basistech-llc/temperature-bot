@@ -17,6 +17,7 @@
           <thead>
             <tr>
               <th class="column-unit" rowspan="2">Unit</th>
+              <th class="column-resume" rowspan="2" title="Time until rules auto-re-enable (H:MM)">Resume<br>Rules</th>
               <th class="column-temp" rowspan="2">Temp<br><small id="erv-temp-unit-label">°C</small></th>
               <th class="column-speed" colspan="5">Fan Speed</th>
               <th class="column-notes" rowspan="2">Notes</th>
@@ -37,6 +38,7 @@
                     <span title="{{ device.device_name }}">{{ device.device_label }}</span><span class="rules-disabled-superscript hidden" id="rules-disabled-{{ device.device_id }}" title=""></span>
                     <span id="device-{{ device.device_id }}-notes"></span>
                   </td>
+                  <td class="cell-resume" id="resume-{{ device.device_id }}">—</td>
                   {% if device.temp10x %}
                   <td class="cell-temp cell-temp-link temp-display-no-unit" id="temp-{{ device.device_id }}"
                       data-chart-url="/chart?device_ids={{ device.device_id }}"
@@ -76,6 +78,7 @@
           <thead>
             <tr>
               <th class="column-unit" rowspan="2">Unit</th>
+              <th class="column-resume" rowspan="2" title="Time until rules auto-re-enable (H:MM)">Resume<br>Rules</th>
               <th class="column-temp" rowspan="2">Temp<br><small id="fcu-temp-unit-label">°C</small></th>
               <th class="column-temp column-temp-set" rowspan="2">Set Temp<br><small id="fcu-settemp-unit-label">°C</small></th>
               <th class="column-speed" colspan="5">Fan Speed</th>
@@ -97,6 +100,7 @@
                     <span title="{{ device.device_name }}">{{ device.device_label }}</span><span class="rules-disabled-superscript hidden" id="rules-disabled-{{ device.device_id }}" title=""></span>
                     <span id="device-{{ device.device_id }}-notes"></span>
                   </td>
+                  <td class="cell-resume" id="resume-{{ device.device_id }}">—</td>
                   {% if device.temp10x %}
                   <td class="cell-temp cell-temp-link temp-display-no-unit" id="temp-{{ device.device_id }}"
                       data-chart-url="/chart?device_ids={{ device.device_id }}"

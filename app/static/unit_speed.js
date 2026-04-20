@@ -615,6 +615,7 @@ const refreshGridRows = () => {
             }
             updateDeviceNotes(dev);
             updateRulesDisabledBadge(dev);
+            updateResumeCell(dev, data.all_rules_disabled_until);
           }
 
         // Update last refresh time
@@ -683,6 +684,29 @@ function updateDeviceNotes(dev) {
   if (cell && !cell.classList.contains("editing")) {
     cell.textContent = dev.notes || "";
   }
+}
+
+/**
+ * Update the "Resume" column cell showing time until rules auto-re-enable.
+ * @param {Object} dev - Device data object
+ * @param {number} allRulesUntil - Global rules_engine timed disable (epoch sec)
+ */
+function updateResumeCell(dev, allRulesUntil) {
+  const cell = document.getElementById(`resume-${dev.device_id}`);
+  if (!cell) {
+    return;
+  }
+  const effective = Math.max(dev.disabled_until || 0, allRulesUntil || 0);
+  const now = Math.floor(Date.now() / 1000);
+  const secondsRemaining = effective - now;
+  if (secondsRemaining <= 0) {
+    cell.textContent = "—";
+    return;
+  }
+  const totalMinutes = Math.ceil(secondsRemaining / 60);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  cell.textContent = `${hours}:${String(minutes).padStart(2, "0")}`;
 }
 
 /**
