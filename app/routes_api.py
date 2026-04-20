@@ -4,6 +4,7 @@ API route handlers
 
 import asyncio
 import logging
+import time
 from flask import Blueprint, request, jsonify
 from flask_pydantic import validate
 
@@ -98,12 +99,7 @@ def get_status(conn):
         raw_name = dev.get("device_name", "")
         dev["display_name"] = display_device_name(raw_name, source="db")
 
-    return jsonify(
-        {
-            "devices": device_data,
-            "all_rules_disabled_until": rules_engine.all_rules_disabled_until(conn),
-        }
-    )
+    return jsonify({"devices": device_data})
 
 
 @api_v1.route("/weather")
@@ -189,6 +185,43 @@ def disable_rules(conn):
 
     rules_engine.disable_all_rules(conn, seconds)
     return jsonify({"status": "success", "seconds": seconds})
+
+
+@api_v1.route("/set_device_disabled_until", methods=["POST"])
+@with_db_connection
+def set_device_disabled_until(conn):
+    """Set the per-device rules disable timer to an absolute epoch timestamp.
+
+    Body: {"device_id": int, "disabled_until": int}
+    A disabled_until <= now re-enables rules for the device (stored as 0).
+    """
+    payload = request.get_json(silent=True) or {}
+    try:
+        device_id = int(payload["device_id"])
+        disabled_until = int(payload["disabled_until"])
+    except (KeyError, ValueError, TypeError):
+        return (
+            jsonify({"error": "device_id and disabled_until (int) are required"}),
+            400,
+        )
+
+    now = int(time.time())
+    seconds = max(0, disabled_until - now)
+    db.disable_rules_for_device(
+        conn,
+        device_id=device_id,
+        seconds=seconds,
+        ipaddr=request.remote_addr,
+        agent=request.headers.get("User-Agent"),
+        comment="set via Disable-for control",
+    )
+    return jsonify(
+        {
+            "status": "ok",
+            "device_id": device_id,
+            "disabled_until": (now + seconds) if seconds > 0 else 0,
+        }
+    )
 
 
 @api_v1.route("/rules_master", methods=["GET", "POST"])

@@ -17,7 +17,7 @@
           <thead>
             <tr>
               <th class="column-unit" rowspan="2">Unit</th>
-              <th class="column-resume" rowspan="2" title="Time until rules auto-re-enable (H:MM)">Resume<br>Rules</th>
+              <th class="column-disable-for" rowspan="2" title="Remaining time rules are disabled for this device (H:MM)">Disable<br>for</th>
               <th class="column-temp" rowspan="2">Temp<br><small id="erv-temp-unit-label">°C</small></th>
               <th class="column-speed" colspan="5">Fan Speed</th>
               <th class="column-notes" rowspan="2">Notes</th>
@@ -38,7 +38,23 @@
                     <span title="{{ device.device_name }}">{{ device.device_label }}</span><span class="rules-disabled-superscript hidden" id="rules-disabled-{{ device.device_id }}" title=""></span>
                     <span id="device-{{ device.device_id }}-notes"></span>
                   </td>
-                  <td class="cell-resume" id="resume-{{ device.device_id }}">—</td>
+                  <td class="cell-disable-for" id="disable-for-{{ device.device_id }}">
+                    <span class="disable-thermostat" role="group" aria-label="Adjust rules disable timer">
+                      <button type="button"
+                              class="disable-btn disable-btn-down hidden"
+                              data-device-id="{{ device.device_id }}"
+                              data-delta="-1"
+                              aria-label="Decrease disable time">−</button>
+                      <span class="disable-display"
+                            id="disable-display-{{ device.device_id }}"
+                            data-device-id="{{ device.device_id }}">—</span>
+                      <button type="button"
+                              class="disable-btn disable-btn-up hidden"
+                              data-device-id="{{ device.device_id }}"
+                              data-delta="1"
+                              aria-label="Increase disable time">+</button>
+                    </span>
+                  </td>
                   {% if device.temp10x %}
                   <td class="cell-temp cell-temp-link temp-display-no-unit" id="temp-{{ device.device_id }}"
                       data-chart-url="/chart?device_ids={{ device.device_id }}"
@@ -78,7 +94,7 @@
           <thead>
             <tr>
               <th class="column-unit" rowspan="2">Unit</th>
-              <th class="column-resume" rowspan="2" title="Time until rules auto-re-enable (H:MM)">Resume<br>Rules</th>
+              <th class="column-disable-for" rowspan="2" title="Remaining time rules are disabled for this device (H:MM)">Disable<br>for</th>
               <th class="column-temp" rowspan="2">Temp<br><small id="fcu-temp-unit-label">°C</small></th>
               <th class="column-temp column-temp-set" rowspan="2">Set Temp<br><small id="fcu-settemp-unit-label">°C</small></th>
               <th class="column-speed" colspan="5">Fan Speed</th>
@@ -100,7 +116,23 @@
                     <span title="{{ device.device_name }}">{{ device.device_label }}</span><span class="rules-disabled-superscript hidden" id="rules-disabled-{{ device.device_id }}" title=""></span>
                     <span id="device-{{ device.device_id }}-notes"></span>
                   </td>
-                  <td class="cell-resume" id="resume-{{ device.device_id }}">—</td>
+                  <td class="cell-disable-for" id="disable-for-{{ device.device_id }}">
+                    <span class="disable-thermostat" role="group" aria-label="Adjust rules disable timer">
+                      <button type="button"
+                              class="disable-btn disable-btn-down hidden"
+                              data-device-id="{{ device.device_id }}"
+                              data-delta="-1"
+                              aria-label="Decrease disable time">−</button>
+                      <span class="disable-display"
+                            id="disable-display-{{ device.device_id }}"
+                            data-device-id="{{ device.device_id }}">—</span>
+                      <button type="button"
+                              class="disable-btn disable-btn-up hidden"
+                              data-device-id="{{ device.device_id }}"
+                              data-delta="1"
+                              aria-label="Increase disable time">+</button>
+                    </span>
+                  </td>
                   {% if device.temp10x %}
                   <td class="cell-temp cell-temp-link temp-display-no-unit" id="temp-{{ device.device_id }}"
                       data-chart-url="/chart?device_ids={{ device.device_id }}"

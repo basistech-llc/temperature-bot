@@ -217,6 +217,9 @@ function setupMatrixListeners() {
 
   // Add event listeners for set temperature controls
   setupSetTempControls();
+
+  // Add event listeners for "Disable for" ± controls
+  setupDisableForControls();
 }
 
 /**
@@ -615,7 +618,7 @@ const refreshGridRows = () => {
             }
             updateDeviceNotes(dev);
             updateRulesDisabledBadge(dev);
-            updateResumeCell(dev, data.all_rules_disabled_until);
+            updateDisableForCell(dev);
           }
 
         // Update last refresh time
@@ -686,27 +689,121 @@ function updateDeviceNotes(dev) {
   }
 }
 
+// Pending optimistic writes for the "Disable for" column, keyed by device_id.
+// While an entry is present, the cell shows the local target value and the
+// refresh loop skips server updates for that device until the debounced POST
+// resolves. `seq` disambiguates so a late-resolving older POST can't clear an
+// entry belonging to a newer click.
+const pendingDisableWrites = new Map();
+const DISABLE_WRITE_DEBOUNCE_MS = 400;
+let disableWriteSeq = 0;
+
 /**
- * Update the "Resume" column cell showing time until rules auto-re-enable.
- * @param {Object} dev - Device data object
- * @param {number} allRulesUntil - Global rules_engine timed disable (epoch sec)
+ * Initialize −/+ buttons for the "Disable for" column. Snaps the *remaining
+ * duration* (in minutes, matching the cell display) to the next/previous
+ * 30-min multiple; once aligned, each click moves by exactly 30 min. The
+ * display updates immediately; the server POST is debounced so rapid clicks
+ * coalesce into a single write.
  */
-function updateResumeCell(dev, allRulesUntil) {
-  const cell = document.getElementById(`resume-${dev.device_id}`);
-  if (!cell) {
+function setupDisableForControls() {
+  document.querySelectorAll(".disable-btn").forEach((button) => {
+    button.addEventListener("click", function () {
+      const deviceId = parseInt(this.getAttribute("data-device-id"));
+      const delta = parseInt(this.getAttribute("data-delta") || "0");
+      const display = document.getElementById(`disable-display-${deviceId}`);
+      if (!display) {
+        return;
+      }
+      const currentAttr = display.getAttribute("data-disabled-until");
+      const current = currentAttr ? parseInt(currentAttr) : 0;
+      if (!current) {
+        return;
+      }
+      const now = Math.floor(Date.now() / 1000);
+      const remainingMin = Math.ceil((current - now) / 60);
+      let newMin;
+      if (delta > 0) {
+        newMin = Math.ceil((remainingMin + 1) / 30) * 30;
+      } else {
+        newMin = Math.floor((remainingMin - 1) / 30) * 30;
+      }
+      const next = newMin > 0 ? now + newMin * 60 : 0;
+
+      // Optimistically render, then debounce the POST.
+      renderDisableCell(deviceId, next);
+      const existing = pendingDisableWrites.get(deviceId);
+      if (existing) {
+        clearTimeout(existing.timer);
+      }
+      const seq = ++disableWriteSeq;
+      const timer = setTimeout(() => {
+        setDeviceDisabledUntil(deviceId, next, seq);
+      }, DISABLE_WRITE_DEBOUNCE_MS);
+      pendingDisableWrites.set(deviceId, { timer, seq });
+    });
+  });
+}
+
+/**
+ * Update the "Disable for" cell from server data, unless a local optimistic
+ * write is pending for this device (in which case we keep showing the local
+ * target until the debounced POST resolves).
+ */
+function updateDisableForCell(dev) {
+  if (pendingDisableWrites.has(dev.device_id)) {
     return;
   }
-  const effective = Math.max(dev.disabled_until || 0, allRulesUntil || 0);
+  renderDisableCell(dev.device_id, dev.disabled_until || 0);
+}
+
+async function setDeviceDisabledUntil(deviceId, disabledUntil, seq) {
+  try {
+    await fetch("/api/v1/set_device_disabled_until", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        device_id: deviceId,
+        disabled_until: disabledUntil,
+      }),
+    });
+  } catch (e) {
+    console.error("Failed to set device disabled_until:", e);
+    alert("Error setting disable timer.");
+  } finally {
+    const entry = pendingDisableWrites.get(deviceId);
+    if (entry && entry.seq === seq) {
+      pendingDisableWrites.delete(deviceId);
+    }
+    forceRefresh = true;
+  }
+}
+
+/**
+ * Render the disable-for cell for a given device_id and disabled_until (epoch sec).
+ * @param {number} deviceId
+ * @param {number} until - 0 means re-enabled (show dash, hide buttons).
+ */
+function renderDisableCell(deviceId, until) {
+  const display = document.getElementById(`disable-display-${deviceId}`);
+  if (!display) {
+    return;
+  }
+  const cell = document.getElementById(`disable-for-${deviceId}`);
+  const buttons = cell ? cell.querySelectorAll(".disable-btn") : [];
   const now = Math.floor(Date.now() / 1000);
-  const secondsRemaining = effective - now;
+  const secondsRemaining = (until || 0) - now;
   if (secondsRemaining <= 0) {
-    cell.textContent = "—";
+    display.textContent = "—";
+    display.removeAttribute("data-disabled-until");
+    buttons.forEach((b) => b.classList.add("hidden"));
     return;
   }
   const totalMinutes = Math.ceil(secondsRemaining / 60);
   const hours = Math.floor(totalMinutes / 60);
   const minutes = totalMinutes % 60;
-  cell.textContent = `${hours}:${String(minutes).padStart(2, "0")}`;
+  display.textContent = `${hours}:${String(minutes).padStart(2, "0")}`;
+  display.setAttribute("data-disabled-until", String(until));
+  buttons.forEach((b) => b.classList.remove("hidden"));
 }
 
 /**
