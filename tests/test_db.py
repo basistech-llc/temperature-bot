@@ -6,6 +6,7 @@ import logging
 import json
 
 from app import db
+from app import aq_metrics
 from app.main import app
 from bin import runner
 
@@ -169,6 +170,87 @@ def test_get_device_metric_series_hubitat_scalar(test_database_conn_with_test_da
         series = db.get_device_metric_series(conn, "humidity", [device_id])
     values = [v for (_, v) in series[0]["data"]]
     assert 38.0 in values and 40.5 in values
+
+
+def test_coerce_metric_value_handles_malformed_input():
+    """Non-numeric and empty-value inputs must produce None, not raise.
+
+    Airthings payloads always have numeric values, but we parse whatever the
+    device returned. A single malformed row should skip cleanly so the rest
+    of the series still renders.
+    """
+    # Dict with missing or empty value key
+    assert aq_metrics.coerce_metric_value({"value": None, "unit": "%"}) is None
+    assert aq_metrics.coerce_metric_value({"value": "", "unit": "%"}) is None
+    # Non-numeric scalars and non-numeric dict values
+    assert aq_metrics.coerce_metric_value("n/a") is None
+    assert aq_metrics.coerce_metric_value({"value": "n/a"}) is None
+    # Happy paths still work alongside the error cases
+    assert aq_metrics.coerce_metric_value({"value": 3.14}) == 3.14
+    assert aq_metrics.coerce_metric_value(42) == 42.0
+
+
+def test_get_device_metric_series_filters_by_device_ids(test_database_conn_with_test_data):
+    """The device_ids filter must actually exclude other devices.
+
+    The prior happy-path test passed every device's own id; this guards the
+    branch that skips devices outside the filter list, which is relied on
+    when a user clicks a single cell and we only want that one series.
+    """
+    conn = test_database_conn_with_test_data[0]
+    c = conn.cursor()
+    c.execute("DELETE FROM devlog")
+    c.execute("DELETE FROM devices")
+    conn.commit()
+
+    keep_id = db.get_or_create_device_id(conn, "Keep Me")
+    drop_id = db.get_or_create_device_id(conn, "Filter Me Out")
+    for logtime, did in [(1000, keep_id), (1010, drop_id), (1020, keep_id)]:
+        c.execute(
+            "INSERT INTO devlog (device_id, logtime, duration, temp10x, status_json) VALUES (?, ?, ?, ?, ?)",
+            (did, logtime, 1, None, json.dumps({"co2": {"value": 500}})),
+        )
+    conn.commit()
+
+    with app.test_request_context():
+        series = db.get_device_metric_series(conn, "co2", [keep_id])
+    assert len(series) == 1
+    assert series[0]["device_id"] == keep_id
+
+
+def test_get_device_metric_series_skips_bad_json(test_database_conn_with_test_data):
+    """A single row with unparseable status_json must not poison the whole series.
+
+    Guards the except-JSONDecodeError branch. If a corrupt row ever lands in
+    devlog, the chart should still render the surrounding good points.
+    """
+    conn = test_database_conn_with_test_data[0]
+    c = conn.cursor()
+    c.execute("DELETE FROM devlog")
+    c.execute("DELETE FROM devices")
+    conn.commit()
+
+    device_id = db.get_or_create_device_id(conn, "Noisy Device")
+    # Good, bad, good
+    c.execute(
+        "INSERT INTO devlog (device_id, logtime, duration, temp10x, status_json) VALUES (?, ?, ?, ?, ?)",
+        (device_id, 1000, 1, None, json.dumps({"co2": {"value": 500}})),
+    )
+    c.execute(
+        "INSERT INTO devlog (device_id, logtime, duration, temp10x, status_json) VALUES (?, ?, ?, ?, ?)",
+        (device_id, 1010, 1, None, "{not valid json"),
+    )
+    c.execute(
+        "INSERT INTO devlog (device_id, logtime, duration, temp10x, status_json) VALUES (?, ?, ?, ?, ?)",
+        (device_id, 1020, 1, None, json.dumps({"co2": {"value": 550}})),
+    )
+    conn.commit()
+
+    with app.test_request_context():
+        series = db.get_device_metric_series(conn, "co2", [device_id])
+    assert len(series) == 1
+    values = [v for (_, v) in series[0]["data"]]
+    assert values == [500.0, 550.0]
 
 
 def test_get_device_metric_series_skips_missing(test_database_conn_with_test_data):

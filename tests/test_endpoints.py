@@ -53,10 +53,26 @@ def test_metric_endpoint_rejects_unknown_metric(flask_test_client):  # noqa: F81
     assert response.status_code == 400
 
 
+def test_metric_endpoint_rejects_invalid_device_ids(flask_test_client):  # noqa: F811
+    """Unparseable device_ids must be rejected with 400, not silently ignored.
+
+    A 200 with all devices in the response would mask a typo in a caller's
+    URL and return the wrong data.
+    """
+    response = flask_test_client.get("/api/v1/metric?metric=co2&device_ids=not-a-number")
+    assert response.status_code == 400
+
+
 def test_metric_chart_page_renders(flask_test_client):  # noqa: F811
-    """/metric_chart renders for a known metric and 400s for an unknown one."""
-    response = flask_test_client.get("/metric_chart?metric=co2")
-    assert response.status_code == 200
+    """Every entry in METRIC_CHART_CONFIG must actually render.
+
+    Loops all seven metrics so a typo or missing field in one config entry
+    fails loudly instead of silently when users click that metric's cell.
+    """
+    for metric in ("humidity", "co2", "voc", "radon", "pm25", "pm1", "pressure"):
+        response = flask_test_client.get(f"/metric_chart?metric={metric}")
+        assert response.status_code == 200, f"metric={metric} status={response.status_code}"
+        assert b"METRIC_CHART_CONFIG" in response.data
 
     response = flask_test_client.get("/metric_chart?metric=bogus")
     assert response.status_code == 400
