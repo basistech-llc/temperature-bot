@@ -42,7 +42,7 @@ def test_status_endpoint(flask_test_client):  # noqa: F811
 
 def test_metric_endpoint_accepts_known_metrics(flask_test_client):  # noqa: F811
     """/api/v1/metric returns a series payload for each supported AQ metric."""
-    for metric in ("humidity", "co2", "voc", "radon", "pm25", "pm1"):
+    for metric in ("humidity", "co2", "voc", "radon", "pm25", "pm1", "pressure"):
         response = flask_test_client.get(f"/api/v1/metric?metric={metric}")
         assert response.status_code == 200, f"metric={metric} status={response.status_code}"
         assert "series" in response.json

@@ -188,7 +188,7 @@ def test_get_device_metric_series_skips_missing(test_database_conn_with_test_dat
 
     with app.test_request_context():
         series = db.get_device_metric_series(conn, "co2", [device_id])
-    assert series == []
+    assert not series
 
 
 def test_get_device_status_sets_aq_metric_flags(test_database_conn_with_test_data):
@@ -209,6 +209,7 @@ def test_get_device_status_sets_aq_metric_flags(test_database_conn_with_test_dat
         "radonShortTermAvg": {"value": 30, "unit": "Bq/m3"},
         "pm25": {"value": 5, "unit": "ug/m3"},
         "pm1": {"value": 2, "unit": "ug/m3"},
+        "pressure": {"value": 1013.2, "unit": "hPa"},
     }
     hubitat_payload = {"humidity": 42}
 
@@ -227,12 +228,12 @@ def test_get_device_status_sets_aq_metric_flags(test_database_conn_with_test_dat
     by_id = {d["device_id"]: d for d in status}
 
     airthings = by_id[airthings_id]
-    for metric in ("humidity", "co2", "voc", "radon", "pm25", "pm1"):
+    for metric in ("humidity", "co2", "voc", "radon", "pm25", "pm1", "pressure"):
         assert airthings[f"has_{metric}"] is True, metric
 
     hubitat = by_id[hubitat_id]
     assert hubitat["has_humidity"] is True
-    for metric in ("co2", "voc", "radon", "pm25", "pm1"):
+    for metric in ("co2", "voc", "radon", "pm25", "pm1", "pressure"):
         assert hubitat[f"has_{metric}"] is False, metric
 
 

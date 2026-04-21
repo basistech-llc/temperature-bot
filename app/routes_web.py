@@ -77,6 +77,13 @@ METRIC_CHART_CONFIG = {
         "y_axis_label": "PM1 (µg/m³)",
         "title": "PM1 Time Series",
     },
+    "pressure": {
+        "label": "Pressure",
+        "unit": "hPa",
+        "decimals": 1,
+        "y_axis_label": "Pressure (hPa)",
+        "title": "Pressure Time Series",
+    },
 }
 
 

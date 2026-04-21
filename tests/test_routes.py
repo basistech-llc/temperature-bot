@@ -106,6 +106,46 @@ def test_air_quality_route(flask_test_client):  # noqa: F811
     assert b"problem" in html
 
 
+def test_air_quality_cells_are_clickable(flask_test_client):  # noqa: F811
+    """Each indoor AQ metric cell must carry a chart-url so clickable_cells.js opens the chart.
+
+    Guards against a regression where the shared click handler is still loaded but the
+    template stops emitting the data-chart-url attribute (or the URL format diverges
+    from /metric_chart's expected querystring). Uses a synthetic airmon row because
+    the test DB does not ship Airthings sample data.
+    """
+    synthetic_row = {
+        "device_id": 99,
+        "device_name": "Airthings Test",
+        "display_name": "Test Room",
+        "logtime": 1000,
+        "status": {
+            "co2": {"value": 600, "unit": "ppm"},
+            "humidity": {"value": 45, "unit": "%"},
+            "voc": {"value": 100, "unit": "ppb"},
+            "radonShortTermAvg": {"value": 25, "unit": "Bq/m3"},
+            "pm25": {"value": 3, "unit": "ug/m3"},
+            "pm1": {"value": 2, "unit": "ug/m3"},
+            "pressure": {"value": 1013, "unit": "hPa"},
+            "temp": {"value": 21.5, "unit": "degC"},
+        },
+    }
+
+    with patch("app.db.get_all_device_aqi", return_value=[synthetic_row]):
+        response = flask_test_client.get("/air-quality")
+
+    assert response.status_code == 200
+    html = response.data.decode("utf-8")
+
+    # Every metric with a dedicated chart page must be linked from its cell.
+    for metric in ("co2", "humidity", "voc", "radon", "pm25", "pm1", "pressure"):
+        assert f"/metric_chart?metric={metric}&device_ids=99" in html, metric
+    # Temperature uses the existing /chart route, not /metric_chart.
+    assert "/chart?device_ids=99" in html
+    # The shared click handler is loaded via base.html.
+    assert "clickable_cells.js" in html
+
+
 # -- _filter_speed_control_devices unit tests --
 
 _FAKE_SPEED_DEVICES = [
