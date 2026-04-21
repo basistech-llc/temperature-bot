@@ -1,0 +1,46 @@
+{% extends 'base.html' %}
+{% block title %} {{ metric_config.title }} {% endblock %}
+{% block head %}
+{% if dist %}
+   <script src="https://cdn.jsdelivr.net/npm/echarts@{{ echarts_version }}"></script>
+{% else %}
+   <script src="/static/echarts@5"></script>
+{% endif %}
+<script>
+  window.METRIC_CHART_CONFIG = {
+    metric: {{ metric|tojson }},
+    label: {{ metric_config.label|tojson }},
+    unit: {{ metric_config.unit|tojson }},
+    decimals: {{ metric_config.decimals|tojson }},
+    yAxisLabel: {{ metric_config.y_axis_label|tojson }},
+    title: {{ metric_config.title|tojson }},
+  };
+</script>
+<script src="/static/time_series_chart_core.js"></script>
+<script src="/static/metric_chart_support.js"></script>
+{% endblock %}
+{% block body %}
+
+<div class="pure-g">
+  <div id="controls">
+    <div id="checkboxes">
+      <div id="checkbox-controls">
+        <button id="selectAllBtn">Select All</button>
+        <button id="clearAllBtn">Clear All</button>
+      </div>
+    </div>
+    <div id="rangeControls" class="temporal-buttons">
+      <button id="dayBtn">day</button>
+      <button id="weekBtn">week</button>
+      <button id="monthBtn">month</button>
+      <button id="allBtn">all</button>
+      <label>Start <input type="date" id="startDate"></label>
+      <label>End <input type="date" id="endDate"></label>
+   </div>
+  </div>
+</div>
+
+<div class="pure-g"><div id="metric-chart"></div></div>
+<div class="pure-g"><span id="metric-record-count"></span></div>
+
+{% endblock %}

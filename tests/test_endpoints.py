@@ -40,6 +40,124 @@ def test_status_endpoint(flask_test_client):  # noqa: F811
     assert "devices" in response_json
 
 
+def test_metric_endpoint_accepts_known_metrics(flask_test_client):  # noqa: F811
+    """/api/v1/metric returns a series payload for each supported AQ metric."""
+    for metric in ("humidity", "co2", "voc", "radon", "pm25", "pm1", "pressure"):
+        response = flask_test_client.get(f"/api/v1/metric?metric={metric}")
+        assert response.status_code == 200, f"metric={metric} status={response.status_code}"
+        assert "series" in response.json
+
+
+def test_metric_endpoint_rejects_unknown_metric(flask_test_client):  # noqa: F811
+    response = flask_test_client.get("/api/v1/metric?metric=bogus")
+    assert response.status_code == 400
+
+
+def test_metric_endpoint_rejects_invalid_device_ids(flask_test_client):  # noqa: F811
+    """Unparseable device_ids must be rejected with 400, not silently ignored.
+
+    A 200 with all devices in the response would mask a typo in a caller's
+    URL and return the wrong data.
+    """
+    response = flask_test_client.get("/api/v1/metric?metric=co2&device_ids=not-a-number")
+    assert response.status_code == 400
+
+
+def test_metric_chart_page_renders(flask_test_client):  # noqa: F811
+    """Every entry in METRIC_CHART_CONFIG must actually render.
+
+    Loops all seven metrics so a typo or missing field in one config entry
+    fails loudly instead of silently when users click that metric's cell.
+    """
+    for metric in ("humidity", "co2", "voc", "radon", "pm25", "pm1", "pressure"):
+        response = flask_test_client.get(f"/metric_chart?metric={metric}")
+        assert response.status_code == 200, f"metric={metric} status={response.status_code}"
+        assert b"METRIC_CHART_CONFIG" in response.data
+
+    response = flask_test_client.get("/metric_chart?metric=bogus")
+    assert response.status_code == 400
+
+
+def _get_device_disabled_until(db_path: str, device_id: int) -> int:
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    try:
+        row = conn.execute(
+            "SELECT disabled_until FROM devices WHERE device_id=?", (device_id,)
+        ).fetchone()
+        return int(row["disabled_until"]) if row and row["disabled_until"] else 0
+    finally:
+        conn.close()
+
+
+def test_set_device_disabled_until_sets_future_timestamp(flask_test_client):  # noqa: F811
+    """POSTing a future absolute timestamp must persist to devices.disabled_until.
+
+    The "Disable for" UI control sends epoch-seconds; this verifies the route
+    correctly stores that timestamp so the next /status round-trips it. Guards
+    against regressions that would silently drop or truncate the value.
+    """
+    test_db_path = os.environ.get("TEST_DB_NAME")
+    assert test_db_path
+    conn = sqlite3.connect(test_db_path)
+    conn.row_factory = sqlite3.Row
+    device_id = conn.execute(
+        "SELECT device_id FROM devices LIMIT 1"
+    ).fetchone()["device_id"]
+    conn.close()
+
+    target = int(time.time()) + 1800
+    response = flask_test_client.post(
+        "/api/v1/set_device_disabled_until",
+        json={"device_id": device_id, "disabled_until": target},
+    )
+    assert response.status_code == 200
+    assert response.json["status"] == "ok"
+    assert abs(response.json["disabled_until"] - target) <= 2
+    stored = _get_device_disabled_until(test_db_path, device_id)
+    assert abs(stored - target) <= 2
+
+
+def test_set_device_disabled_until_past_reenables(flask_test_client):  # noqa: F811
+    """A past-or-equal timestamp must clamp to 0 (re-enable rules for device).
+
+    The UI clicks − until the remaining time would go negative; this path is
+    the only way to re-enable rules on a device from that control. If clamp
+    logic regressed (e.g. stored a past timestamp verbatim), the device would
+    appear disabled forever from the server's perspective.
+    """
+    test_db_path = os.environ.get("TEST_DB_NAME")
+    assert test_db_path
+    conn = sqlite3.connect(test_db_path)
+    conn.row_factory = sqlite3.Row
+    device_id = conn.execute(
+        "SELECT device_id FROM devices LIMIT 1"
+    ).fetchone()["device_id"]
+    # Pre-seed a disable so we can verify it actually gets cleared
+    conn.execute(
+        "UPDATE devices SET disabled_until=? WHERE device_id=?",
+        (int(time.time()) + 3600, device_id),
+    )
+    conn.commit()
+    conn.close()
+
+    response = flask_test_client.post(
+        "/api/v1/set_device_disabled_until",
+        json={"device_id": device_id, "disabled_until": int(time.time()) - 10},
+    )
+    assert response.status_code == 200
+    assert response.json["disabled_until"] == 0
+    assert _get_device_disabled_until(test_db_path, device_id) == 0
+
+
+def test_set_device_disabled_until_rejects_invalid(flask_test_client):  # noqa: F811
+    """Missing/non-int fields must 400, not silently write garbage to the DB."""
+    response = flask_test_client.post(
+        "/api/v1/set_device_disabled_until", json={"device_id": 1}
+    )
+    assert response.status_code == 400
+
+
 def test_status_endpoint_with_schema_validation(flask_test_client):  # noqa: F811
     """Test that the status endpoint works with a database that has all required columns.
 

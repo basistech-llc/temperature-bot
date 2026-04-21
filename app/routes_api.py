@@ -4,6 +4,7 @@ API route handlers
 
 import asyncio
 import logging
+import time
 from flask import Blueprint, request, jsonify
 from flask_pydantic import validate
 
@@ -160,6 +161,30 @@ def get_lighting(conn):
     return jsonify({"series": series})
 
 
+@api_v1.route("/metric")
+@with_db_connection
+def get_metric(conn):
+    """Get per-device time series for a single air-quality metric."""
+    metric = request.args.get("metric", "")
+    status_key = db.AQ_METRIC_STATUS_KEYS.get(metric)
+    if status_key is None:
+        return jsonify({"error": f"Unknown metric: {metric!r}"}), 400
+    device_ids = parse_device_ids()
+    if device_ids is None and request.args.get("device_ids"):
+        return jsonify({"error": "Invalid device_ids format"}), 400
+    series = db.get_device_metric_series(conn, status_key, device_ids)
+    name_to_label = hubitat.get_name_to_label()
+    for s in series:
+        raw_name = s.get("name", "")
+        hub_label = name_to_label.get(raw_name)
+        s["name"] = display_device_name(
+            raw_name,
+            hubitat_label=hub_label,
+            source="airthings",
+        )
+    return jsonify({"series": series})
+
+
 @api_v1.route("/logs")
 @with_db_connection
 def get_logs(conn):
@@ -184,6 +209,43 @@ def disable_rules(conn):
 
     rules_engine.disable_all_rules(conn, seconds)
     return jsonify({"status": "success", "seconds": seconds})
+
+
+@api_v1.route("/set_device_disabled_until", methods=["POST"])
+@with_db_connection
+def set_device_disabled_until(conn):
+    """Set the per-device rules disable timer to an absolute epoch timestamp.
+
+    Body: {"device_id": int, "disabled_until": int}
+    A disabled_until <= now re-enables rules for the device (stored as 0).
+    """
+    payload = request.get_json(silent=True) or {}
+    try:
+        device_id = int(payload["device_id"])
+        disabled_until = int(payload["disabled_until"])
+    except (KeyError, ValueError, TypeError):
+        return (
+            jsonify({"error": "device_id and disabled_until (int) are required"}),
+            400,
+        )
+
+    now = int(time.time())
+    seconds = max(0, disabled_until - now)
+    db.disable_rules_for_device(
+        conn,
+        device_id=device_id,
+        seconds=seconds,
+        ipaddr=request.remote_addr,
+        agent=request.headers.get("User-Agent"),
+        comment="set via Disable-for control",
+    )
+    return jsonify(
+        {
+            "status": "ok",
+            "device_id": device_id,
+            "disabled_until": (now + seconds) if seconds > 0 else 0,
+        }
+    )
 
 
 @api_v1.route("/rules_master", methods=["GET", "POST"])

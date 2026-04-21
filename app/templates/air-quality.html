@@ -47,14 +47,14 @@ Problem: &gt;2000.">VOC<br><small>ppb</small></th>
             {% set stale_title = 'Last updated: ' ~ row.age ~ ' ago' if row.age else '' %}
             <tr>
               <td class="cell-unit">{{ row.display_name or row.device_name }}</td>
-              <td class="{{ row.aq_classes.get('co2') if row.aq_classes is defined else '' }}{{ stale_cls }}" title="{{ stale_title }}">{{ fmt(row.status.co2.value) }}</td>
-              <td class="{{ row.aq_classes.get('humidity') if row.aq_classes is defined else '' }} cell-humidity{{ stale_cls }}" title="{{ stale_title }}">{{ fmt(row.status.humidity.value) }}</td>
-              <td class="{{ row.aq_classes.get('pm1') if row.aq_classes is defined else '' }}{{ stale_cls }}" title="{{ stale_title }}">{{ fmt(row.status.pm1.value) }}</td>
-              <td class="{{ row.aq_classes.get('pm25') if row.aq_classes is defined else '' }}{{ stale_cls }}" title="{{ stale_title }}">{{ fmt(row.status.pm25.value) }}</td>
-              <td class="{{ stale_cls }}" title="{{ stale_title }}">{{ fmt(row.status.pressure.value) }}</td>
-              <td class="radon-display {{ row.aq_classes.get('radonShortTermAvg') if row.aq_classes is defined else '' }}{{ stale_cls }}" data-radon-bqm3="{{ row.status.radonShortTermAvg.value }}" title="{{ stale_title }}">{{ fmt(row.status.radonShortTermAvg.value) }}</td>
-              <td class="{{ row.aq_classes.get('temp') if row.aq_classes is defined else '' }} cell-temp temp-display temp-display-no-unit{{ stale_cls }}" data-temp-c="{{ row.status.temp.value }}" title="{{ stale_title }}">{{ fmt(row.status.temp.value) }}</td>
-              <td class="{{ row.aq_classes.get('voc') if row.aq_classes is defined else '' }}{{ stale_cls }}" title="{{ stale_title }}">{{ fmt(row.status.voc.value) }}</td>
+              <td class="cell-metric-link {{ row.aq_classes.get('co2') if row.aq_classes is defined else '' }}{{ stale_cls }}" data-chart-url="/metric_chart?metric=co2&device_ids={{ row.device_id }}" title="{{ stale_title }}">{{ fmt(row.status.co2.value) }}</td>
+              <td class="cell-metric-link {{ row.aq_classes.get('humidity') if row.aq_classes is defined else '' }} cell-humidity{{ stale_cls }}" data-chart-url="/metric_chart?metric=humidity&device_ids={{ row.device_id }}" title="{{ stale_title }}">{{ fmt(row.status.humidity.value) }}</td>
+              <td class="cell-metric-link {{ row.aq_classes.get('pm1') if row.aq_classes is defined else '' }}{{ stale_cls }}" data-chart-url="/metric_chart?metric=pm1&device_ids={{ row.device_id }}" title="{{ stale_title }}">{{ fmt(row.status.pm1.value) }}</td>
+              <td class="cell-metric-link {{ row.aq_classes.get('pm25') if row.aq_classes is defined else '' }}{{ stale_cls }}" data-chart-url="/metric_chart?metric=pm25&device_ids={{ row.device_id }}" title="{{ stale_title }}">{{ fmt(row.status.pm25.value) }}</td>
+              <td class="cell-metric-link{{ stale_cls }}" data-chart-url="/metric_chart?metric=pressure&device_ids={{ row.device_id }}" title="{{ stale_title }}">{{ fmt(row.status.pressure.value) }}</td>
+              <td class="cell-metric-link radon-display {{ row.aq_classes.get('radonShortTermAvg') if row.aq_classes is defined else '' }}{{ stale_cls }}" data-radon-bqm3="{{ row.status.radonShortTermAvg.value }}" data-chart-url="/metric_chart?metric=radon&device_ids={{ row.device_id }}" title="{{ stale_title }}">{{ fmt(row.status.radonShortTermAvg.value) }}</td>
+              <td class="cell-temp-link {{ row.aq_classes.get('temp') if row.aq_classes is defined else '' }} cell-temp temp-display temp-display-no-unit{{ stale_cls }}" data-temp-c="{{ row.status.temp.value }}" data-chart-url="/chart?device_ids={{ row.device_id }}" title="{{ stale_title }}">{{ fmt(row.status.temp.value) }}</td>
+              <td class="cell-metric-link {{ row.aq_classes.get('voc') if row.aq_classes is defined else '' }}{{ stale_cls }}" data-chart-url="/metric_chart?metric=voc&device_ids={{ row.device_id }}" title="{{ stale_title }}">{{ fmt(row.status.voc.value) }}</td>
             </tr>
             {% endif %}
           {% endfor %}

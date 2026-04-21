@@ -118,13 +118,15 @@ body {
 }
 
 /* Set temperature: thermostat-style inline [−] value [+] — one line, no extra height */
-.settemp-thermostat {
+.settemp-thermostat,
+.disable-thermostat {
     display: inline-flex;
     align-items: center;
     gap: 0.15rem;
 }
 
-.settemp-thermostat .settemp-display {
+.settemp-thermostat .settemp-display,
+.disable-thermostat .disable-display {
     min-width: 3.5em;
     text-align: center;
     font-weight: 600;
@@ -132,7 +134,8 @@ body {
 }
 
 /* Thermostat adjust: wide tap targets, minimal look — doesn’t add row height */
-.settemp-thermostat .settemp-btn {
+.settemp-thermostat .settemp-btn,
+.disable-thermostat .disable-btn {
     /* Wide enough for touch (44px min); no min-height so row stays compact */
     min-width: 44px;
     padding: 0.2rem 0.35rem;
@@ -151,20 +154,24 @@ body {
     border-radius: 4px;
 }
 
-.settemp-thermostat .settemp-btn:hover {
+.settemp-thermostat .settemp-btn:hover,
+.disable-thermostat .disable-btn:hover {
     color: #1a202c;
     background: #f1f5f9;
 }
 
-.settemp-thermostat .settemp-btn:active {
+.settemp-thermostat .settemp-btn:active,
+.disable-thermostat .disable-btn:active {
     background: #e2e8f0;
 }
 
-.settemp-thermostat .settemp-btn:focus {
+.settemp-thermostat .settemp-btn:focus,
+.disable-thermostat .disable-btn:focus {
     outline: none;
 }
 
-.settemp-thermostat .settemp-btn:focus-visible {
+.settemp-thermostat .settemp-btn:focus-visible,
+.disable-thermostat .disable-btn:focus-visible {
     outline: 2px solid #3b82f6;
     outline-offset: 1px;
 }
@@ -242,8 +249,14 @@ button {
     display: block;
     text-align: center;
 }
-.data-table tbody td:not(.cell-unit):not(.cell-notes):not(.cell-conditions) {
+.data-table tbody td:not(.cell-unit):not(.cell-notes):not(.cell-conditions):not(.cell-disable-for) {
     text-align: right;
+    padding-left: 0.5em;
+    padding-right: 0.5em;
+}
+
+.cell-disable-for {
+    text-align: center;
     padding-left: 0.5em;
     padding-right: 0.5em;
 }
@@ -492,7 +505,8 @@ table.rules-table th  {
 
 /* Clickable data cells that link to charts */
 .cell-temp-link,
-.cell-illuminance-link {
+.cell-illuminance-link,
+.cell-metric-link {
     cursor: pointer;
 }
 .cell-temp-link:hover {
@@ -500,6 +514,9 @@ table.rules-table th  {
 }
 .cell-illuminance-link:hover {
     background-color: rgba(154, 104, 0, 0.08);
+}
+.cell-metric-link:hover {
+    background-color: rgba(52, 152, 219, 0.08);
 }
 
 /****************************************************************/
@@ -903,6 +920,12 @@ li.pure-menu-item > .rules-master-toggle {
 }
 
 #lighting-chart {
+    height: 620px;
+    width: 100%;
+    margin-top: 16px;
+}
+
+#metric-chart {
     height: 620px;
     width: 100%;
     margin-top: 16px;

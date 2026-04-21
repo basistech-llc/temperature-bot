@@ -17,6 +17,7 @@
           <thead>
             <tr>
               <th class="column-unit" rowspan="2">Unit</th>
+              <th class="column-disable-for" rowspan="2" title="Remaining time rules are disabled for this device (H:MM)">Disable<br>for</th>
               <th class="column-temp" rowspan="2">Temp<br><small id="erv-temp-unit-label">°C</small></th>
               <th class="column-speed" colspan="5">Fan Speed</th>
               <th class="column-notes" rowspan="2">Notes</th>
@@ -36,6 +37,23 @@
                   <td class="cell-unit">
                     <span title="{{ device.device_name }}">{{ device.device_label }}</span><span class="rules-disabled-superscript hidden" id="rules-disabled-{{ device.device_id }}" title=""></span>
                     <span id="device-{{ device.device_id }}-notes"></span>
+                  </td>
+                  <td class="cell-disable-for" id="disable-for-{{ device.device_id }}">
+                    <span class="disable-thermostat" role="group" aria-label="Adjust rules disable timer">
+                      <button type="button"
+                              class="disable-btn disable-btn-down hidden"
+                              data-device-id="{{ device.device_id }}"
+                              data-delta="-1"
+                              aria-label="Decrease disable time">−</button>
+                      <span class="disable-display"
+                            id="disable-display-{{ device.device_id }}"
+                            data-device-id="{{ device.device_id }}">—</span>
+                      <button type="button"
+                              class="disable-btn disable-btn-up hidden"
+                              data-device-id="{{ device.device_id }}"
+                              data-delta="1"
+                              aria-label="Increase disable time">+</button>
+                    </span>
                   </td>
                   {% if device.temp10x %}
                   <td class="cell-temp cell-temp-link temp-display-no-unit" id="temp-{{ device.device_id }}"
@@ -76,6 +94,7 @@
           <thead>
             <tr>
               <th class="column-unit" rowspan="2">Unit</th>
+              <th class="column-disable-for" rowspan="2" title="Remaining time rules are disabled for this device (H:MM)">Disable<br>for</th>
               <th class="column-temp" rowspan="2">Temp<br><small id="fcu-temp-unit-label">°C</small></th>
               <th class="column-temp column-temp-set" rowspan="2">Set Temp<br><small id="fcu-settemp-unit-label">°C</small></th>
               <th class="column-speed" colspan="5">Fan Speed</th>
@@ -96,6 +115,23 @@
                   <td class="cell-unit">
                     <span title="{{ device.device_name }}">{{ device.device_label }}</span><span class="rules-disabled-superscript hidden" id="rules-disabled-{{ device.device_id }}" title=""></span>
                     <span id="device-{{ device.device_id }}-notes"></span>
+                  </td>
+                  <td class="cell-disable-for" id="disable-for-{{ device.device_id }}">
+                    <span class="disable-thermostat" role="group" aria-label="Adjust rules disable timer">
+                      <button type="button"
+                              class="disable-btn disable-btn-down hidden"
+                              data-device-id="{{ device.device_id }}"
+                              data-delta="-1"
+                              aria-label="Decrease disable time">−</button>
+                      <span class="disable-display"
+                            id="disable-display-{{ device.device_id }}"
+                            data-device-id="{{ device.device_id }}">—</span>
+                      <button type="button"
+                              class="disable-btn disable-btn-up hidden"
+                              data-device-id="{{ device.device_id }}"
+                              data-delta="1"
+                              aria-label="Increase disable time">+</button>
+                    </span>
                   </td>
                   {% if device.temp10x %}
                   <td class="cell-temp cell-temp-link temp-display-no-unit" id="temp-{{ device.device_id }}"
@@ -181,18 +217,22 @@
                     <span title="{{ device.device_name }}">{{ device.device_label }}</span><span class="rules-disabled-superscript hidden" id="rules-disabled-{{ device.device_id }}" title=""></span>
                     <span id="device-{{ device.device_id }}-notes"></span>
                   </td>
-                  <td class="cell-humidity" id="humidity-{{ device.device_id }}">--</td>
+                  <td class="cell-humidity{% if device.has_humidity %} cell-metric-link{% endif %}" id="humidity-{{ device.device_id }}"
+                      {% if device.has_humidity %}data-chart-url="/metric_chart?metric=humidity&device_ids={{ device.device_id }}"
+                      title="Humidity chart for {{ device.device_label }}"{% endif %}>--</td>
                   <td class="cell-temp cell-temp-link temp-display temp-display-no-unit" id="temp-{{ device.device_id }}"
                       data-chart-url="/chart?device_ids={{ device.device_id }}"
                       title="Temperature chart for {{ device.device_label }}">--</td>
                   <td class="cell-illuminance{% if device.has_illuminance %} cell-illuminance-link{% endif %}" id="illuminance-{{ device.device_id }}"
                       {% if device.has_illuminance %}data-chart-url="/lighting_chart?device_ids={{ device.device_id }}"
                       title="Lighting chart for {{ device.device_label }}"{% endif %}>--</td>
-                  <td id="co2-{{ device.device_id }}">--</td>
-                  <td id="voc-{{ device.device_id }}">--</td>
-                  <td class="radon-display" id="radon-{{ device.device_id }}">--</td>
-                  <td id="pm25-{{ device.device_id }}">--</td>
-                  <td id="pm1-{{ device.device_id }}">--</td>
+                  <td {% if device.has_co2 %}class="cell-metric-link" data-chart-url="/metric_chart?metric=co2&device_ids={{ device.device_id }}" title="CO₂ chart for {{ device.device_label }}"{% endif %} id="co2-{{ device.device_id }}">--</td>
+                  <td {% if device.has_voc %}class="cell-metric-link" data-chart-url="/metric_chart?metric=voc&device_ids={{ device.device_id }}" title="VOC chart for {{ device.device_label }}"{% endif %} id="voc-{{ device.device_id }}">--</td>
+                  <td class="radon-display{% if device.has_radon %} cell-metric-link{% endif %}" id="radon-{{ device.device_id }}"
+                      {% if device.has_radon %}data-chart-url="/metric_chart?metric=radon&device_ids={{ device.device_id }}"
+                      title="Radon chart for {{ device.device_label }}"{% endif %}>--</td>
+                  <td {% if device.has_pm25 %}class="cell-metric-link" data-chart-url="/metric_chart?metric=pm25&device_ids={{ device.device_id }}" title="PM2.5 chart for {{ device.device_label }}"{% endif %} id="pm25-{{ device.device_id }}">--</td>
+                  <td {% if device.has_pm1 %}class="cell-metric-link" data-chart-url="/metric_chart?metric=pm1&device_ids={{ device.device_id }}" title="PM1 chart for {{ device.device_label }}"{% endif %} id="pm1-{{ device.device_id }}">--</td>
                   <td class="cell-notes">
                     <span class="notes editable-notes" id="notes-{{ device.device_id }}" data-device-id="{{ device.device_id }}" title="Click to edit"></span>
                   </td>

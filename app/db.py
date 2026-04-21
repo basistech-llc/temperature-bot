@@ -40,6 +40,10 @@ from .util import github_style_duration
 from . import ae200
 from . import airquality
 from . import weather
+from .aq_metrics import (
+    AQ_METRIC_STATUS_KEYS,
+    extract_metric_from_status,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -722,6 +726,57 @@ def get_temperature_series(
     return series
 
 
+def get_device_metric_series(
+    conn, status_key: str, device_ids: List[int] | None = None
+) -> List[Dict[str, Any]]:
+    """Get a per-device time series for an arbitrary status_json metric.
+
+    Mirrors get_lighting_series but parameterized on the status_json key.
+    Values may be scalars or ``{value, unit}`` dicts; see
+    ``aq_metrics.extract_metric_from_status``.
+    """
+    c = conn.cursor()
+    c.execute("SELECT device_id, device_name FROM devices")
+    devices = c.fetchall()
+
+    if not device_ids:
+        device_ids = [dev["device_id"] for dev in devices]
+
+    series: List[Dict[str, Any]] = []
+
+    for dev in devices:
+        device_id = dev["device_id"]
+        if device_id not in device_ids:
+            continue
+
+        cmd = """
+            SELECT logtime, status_json
+            FROM devlog
+            WHERE device_id = ? AND logtime IS NOT NULL AND status_json IS NOT NULL
+            """
+        args = [device_id]
+        (cmd, args) = temporal_quantification(cmd, args)
+        cmd += " ORDER BY logtime"
+        c.execute(cmd, args)
+        rows = c.fetchall()
+
+        data: List[List[float]] = []
+        for row in rows:
+            try:
+                status = json.loads(row["status_json"])
+            except (TypeError, json.JSONDecodeError):
+                continue
+            val = extract_metric_from_status(status, status_key)
+            if val is None:
+                continue
+            data.append([row["logtime"], val])
+
+        if data:
+            series.append({"name": dev["device_name"], "device_id": device_id, "data": data})
+
+    return series
+
+
 def get_lighting_series(
     conn, device_ids: List[int] | None = None
 ) -> List[Dict[str, Any]]:
@@ -801,6 +856,10 @@ def get_device_status(conn) -> List[Dict[str, Any]]:
             if illum is None:
                 illum = (status.get("attributes") or {}).get("illuminance")
             data["has_illuminance"] = illum is not None
+            for metric_name, status_key in AQ_METRIC_STATUS_KEYS.items():
+                data[f"has_{metric_name}"] = (
+                    extract_metric_from_status(status, status_key) is not None
+                )
         if "logtime" in data:
             data["age"] = github_style_duration(
                 data["logtime"] + data.get("duration", 1)

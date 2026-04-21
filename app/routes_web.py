@@ -30,6 +30,62 @@ from .routes_web_airquality_utils import (
 
 logger = logging.getLogger(__name__)
 
+# Display metadata for per-metric chart pages. Keyed on the URL-safe metric
+# name (same keys as db.AQ_METRIC_STATUS_KEYS). Radon uses its default Bq/m³
+# units here; metric_chart_support.js swaps to pCi/L when the user's site-wide
+# temperature preference is Fahrenheit.
+METRIC_CHART_CONFIG = {
+    "humidity": {
+        "label": "Humidity",
+        "unit": "%",
+        "decimals": 1,
+        "y_axis_label": "Humidity (%)",
+        "title": "Humidity Time Series",
+    },
+    "co2": {
+        "label": "CO₂",
+        "unit": "ppm",
+        "decimals": 0,
+        "y_axis_label": "CO₂ (ppm)",
+        "title": "CO₂ Time Series",
+    },
+    "voc": {
+        "label": "VOC",
+        "unit": "ppb",
+        "decimals": 0,
+        "y_axis_label": "VOC (ppb)",
+        "title": "VOC Time Series",
+    },
+    "radon": {
+        "label": "Radon",
+        "unit": "Bq/m³",
+        "decimals": 0,
+        "y_axis_label": "Radon (Bq/m³)",
+        "title": "Radon Time Series",
+    },
+    "pm25": {
+        "label": "PM2.5",
+        "unit": "µg/m³",
+        "decimals": 1,
+        "y_axis_label": "PM2.5 (µg/m³)",
+        "title": "PM2.5 Time Series",
+    },
+    "pm1": {
+        "label": "PM1",
+        "unit": "µg/m³",
+        "decimals": 1,
+        "y_axis_label": "PM1 (µg/m³)",
+        "title": "PM1 Time Series",
+    },
+    "pressure": {
+        "label": "Pressure",
+        "unit": "hPa",
+        "decimals": 1,
+        "y_axis_label": "Pressure (hPa)",
+        "title": "Pressure Time Series",
+    },
+}
+
 
 def _register_core_routes(app):
     """Register core web routes that back the main navigation."""
@@ -154,6 +210,24 @@ def _register_core_routes(app):
         """Lighting (illuminance) chart page"""
         return render_template(
             "lighting_chart.html", current_page="lighting_chart"
+        )
+
+    @app.route("/metric_chart")
+    def show_metric_chart():
+        """Time-series chart for a single air-quality metric across devices."""
+        metric = request.args.get("metric", "")
+        if metric not in db.AQ_METRIC_STATUS_KEYS:
+            return (
+                f"Unknown metric: {metric!r}. "
+                f"Expected one of: {sorted(db.AQ_METRIC_STATUS_KEYS)}",
+                400,
+            )
+        metric_config = METRIC_CHART_CONFIG[metric]
+        return render_template(
+            "metric_chart.html",
+            current_page="metric_chart",
+            metric=metric,
+            metric_config=metric_config,
         )
 
     @app.route("/chart_aqi")
