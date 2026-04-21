@@ -112,6 +112,130 @@ def test_get_lighting_series_uses_status_json_illuminance(
     assert 12.5 in values
 
 
+def test_get_device_metric_series_airthings_dict(test_database_conn_with_test_data):
+    """Airthings-style status_json stores each metric as {value, unit}; the helper must unwrap."""
+    conn = test_database_conn_with_test_data[0]
+    c = conn.cursor()
+    c.execute("DELETE FROM devlog")
+    c.execute("DELETE FROM devices")
+    conn.commit()
+
+    device_id = db.get_or_create_device_id(conn, "Airthings Office")
+    samples = [
+        (1000, {"co2": {"value": 600, "unit": "ppm"}, "humidity": {"value": 45.5, "unit": "%"}}),
+        (1010, {"co2": {"value": 650, "unit": "ppm"}, "humidity": {"value": 46.0, "unit": "%"}}),
+    ]
+    for logtime, payload in samples:
+        c.execute(
+            "INSERT INTO devlog (device_id, logtime, duration, temp10x, status_json) VALUES (?, ?, ?, ?, ?)",
+            (device_id, logtime, 1, None, json.dumps(payload)),
+        )
+    conn.commit()
+
+    with app.test_request_context():
+        co2_series = db.get_device_metric_series(conn, "co2", [device_id])
+    assert co2_series, "expected co2 series"
+    assert co2_series[0]["device_id"] == device_id
+    values = [v for (_, v) in co2_series[0]["data"]]
+    assert 600.0 in values and 650.0 in values
+
+    with app.test_request_context():
+        humidity_series = db.get_device_metric_series(conn, "humidity", [device_id])
+    values = [v for (_, v) in humidity_series[0]["data"]]
+    assert 45.5 in values and 46.0 in values
+
+
+def test_get_device_metric_series_hubitat_scalar(test_database_conn_with_test_data):
+    """Hubitat sensors store humidity as a top-level scalar or inside attributes."""
+    conn = test_database_conn_with_test_data[0]
+    c = conn.cursor()
+    c.execute("DELETE FROM devlog")
+    c.execute("DELETE FROM devices")
+    conn.commit()
+
+    device_id = db.get_or_create_device_id(conn, "Hubitat Sensor")
+    samples = [
+        (2000, {"humidity": 38}),
+        (2010, {"attributes": {"humidity": 40.5}}),
+    ]
+    for logtime, payload in samples:
+        c.execute(
+            "INSERT INTO devlog (device_id, logtime, duration, temp10x, status_json) VALUES (?, ?, ?, ?, ?)",
+            (device_id, logtime, 1, None, json.dumps(payload)),
+        )
+    conn.commit()
+
+    with app.test_request_context():
+        series = db.get_device_metric_series(conn, "humidity", [device_id])
+    values = [v for (_, v) in series[0]["data"]]
+    assert 38.0 in values and 40.5 in values
+
+
+def test_get_device_metric_series_skips_missing(test_database_conn_with_test_data):
+    """Rows without the requested metric are skipped; a device with zero samples is omitted."""
+    conn = test_database_conn_with_test_data[0]
+    c = conn.cursor()
+    c.execute("DELETE FROM devlog")
+    c.execute("DELETE FROM devices")
+    conn.commit()
+
+    device_id = db.get_or_create_device_id(conn, "No CO2 Device")
+    c.execute(
+        "INSERT INTO devlog (device_id, logtime, duration, temp10x, status_json) VALUES (?, ?, ?, ?, ?)",
+        (device_id, 3000, 1, None, json.dumps({"humidity": 50})),
+    )
+    conn.commit()
+
+    with app.test_request_context():
+        series = db.get_device_metric_series(conn, "co2", [device_id])
+    assert series == []
+
+
+def test_get_device_status_sets_aq_metric_flags(test_database_conn_with_test_data):
+    """Per-metric has_<metric> flags should reflect the latest status_json contents."""
+    conn = test_database_conn_with_test_data[0]
+    c = conn.cursor()
+    c.execute("DELETE FROM devlog")
+    c.execute("DELETE FROM devices")
+    conn.commit()
+
+    airthings_id = db.get_or_create_device_id(conn, "Airthings Lab")
+    hubitat_id = db.get_or_create_device_id(conn, "Hubitat Lab")
+
+    airthings_payload = {
+        "co2": {"value": 700, "unit": "ppm"},
+        "humidity": {"value": 44, "unit": "%"},
+        "voc": {"value": 120, "unit": "ppb"},
+        "radonShortTermAvg": {"value": 30, "unit": "Bq/m3"},
+        "pm25": {"value": 5, "unit": "ug/m3"},
+        "pm1": {"value": 2, "unit": "ug/m3"},
+    }
+    hubitat_payload = {"humidity": 42}
+
+    c.execute(
+        "INSERT INTO devlog (device_id, logtime, duration, temp10x, status_json) VALUES (?, ?, ?, ?, ?)",
+        (airthings_id, 4000, 1, None, json.dumps(airthings_payload)),
+    )
+    c.execute(
+        "INSERT INTO devlog (device_id, logtime, duration, temp10x, status_json) VALUES (?, ?, ?, ?, ?)",
+        (hubitat_id, 4000, 1, None, json.dumps(hubitat_payload)),
+    )
+    conn.commit()
+
+    with app.test_request_context():
+        status = db.get_device_status(conn)
+    by_id = {d["device_id"]: d for d in status}
+
+    airthings = by_id[airthings_id]
+    for metric in ("humidity", "co2", "voc", "radon", "pm25", "pm1"):
+        assert airthings[f"has_{metric}"] is True, metric
+
+    hubitat = by_id[hubitat_id]
+    assert hubitat["has_humidity"] is True
+    for metric in ("co2", "voc", "radon", "pm25", "pm1"):
+        assert hubitat[f"has_{metric}"] is False, metric
+
+
 def test_get_temperature_series_includes_device_id(test_database_conn_with_test_data):
     """get_temperature_series returns each series with device_id, name, and data."""
     conn = test_database_conn_with_test_data[0]

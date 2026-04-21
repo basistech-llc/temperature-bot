@@ -46,6 +46,18 @@ logger = logging.getLogger(__name__)
 DEVICE_MAP: dict[str, int] = {}
 MAX_DURATION = 3600  # don't extend more than an hour
 
+# URL-safe metric name -> top-level key in devlog.status_json.
+# Used by the Air Quality click-to-chart feature: main-page cells link to
+# /metric_chart?metric=<key>, and /api/v1/metric looks up the status_json key.
+AQ_METRIC_STATUS_KEYS: Dict[str, str] = {
+    "humidity": "humidity",
+    "co2": "co2",
+    "voc": "voc",
+    "radon": "radonShortTermAvg",
+    "pm25": "pm25",
+    "pm1": "pm1",
+}
+
 # Cache the schema file's modification time so we only re-apply the schema
 # when the file actually changes on disk. This keeps the convenient
 # auto-setup behavior without running the full schema on every request.
@@ -722,6 +734,90 @@ def get_temperature_series(
     return series
 
 
+def _coerce_metric_value(raw: Any) -> float | None:
+    """Coerce a status_json metric reading to a float.
+
+    Handles both Airthings-style ``{"value": 45, "unit": "%"}`` dicts and
+    Hubitat-style scalar readings. Returns None if the value cannot be
+    interpreted numerically.
+    """
+    if raw is None or raw == "":
+        return None
+    if isinstance(raw, dict):
+        raw = raw.get("value")
+        if raw is None or raw == "":
+            return None
+    try:
+        return float(raw)
+    except (TypeError, ValueError):
+        return None
+
+
+def _extract_metric_from_status(status: Dict[str, Any], status_key: str) -> float | None:
+    """Pull a single metric value out of a status_json dict.
+
+    Looks at the top-level key, then falls back to ``attributes.<key>`` to
+    match the pattern Hubitat devices use for humidity and illuminance.
+    """
+    val = _coerce_metric_value(status.get(status_key))
+    if val is not None:
+        return val
+    attrs = status.get("attributes")
+    if isinstance(attrs, dict):
+        return _coerce_metric_value(attrs.get(status_key))
+    return None
+
+
+def get_device_metric_series(
+    conn, status_key: str, device_ids: List[int] | None = None
+) -> List[Dict[str, Any]]:
+    """Get a per-device time series for an arbitrary status_json metric.
+
+    Mirrors get_lighting_series but parameterized on the status_json key.
+    Values may be scalars or ``{value, unit}`` dicts.
+    """
+    c = conn.cursor()
+    c.execute("SELECT device_id, device_name FROM devices")
+    devices = c.fetchall()
+
+    if not device_ids:
+        device_ids = [dev["device_id"] for dev in devices]
+
+    series: List[Dict[str, Any]] = []
+
+    for dev in devices:
+        device_id = dev["device_id"]
+        if device_id not in device_ids:
+            continue
+
+        cmd = """
+            SELECT logtime, status_json
+            FROM devlog
+            WHERE device_id = ? AND logtime IS NOT NULL AND status_json IS NOT NULL
+            """
+        args = [device_id]
+        (cmd, args) = temporal_quantification(cmd, args)
+        cmd += " ORDER BY logtime"
+        c.execute(cmd, args)
+        rows = c.fetchall()
+
+        data: List[List[float]] = []
+        for row in rows:
+            try:
+                status = json.loads(row["status_json"])
+            except (TypeError, json.JSONDecodeError):
+                continue
+            val = _extract_metric_from_status(status, status_key)
+            if val is None:
+                continue
+            data.append([row["logtime"], val])
+
+        if data:
+            series.append({"name": dev["device_name"], "device_id": device_id, "data": data})
+
+    return series
+
+
 def get_lighting_series(
     conn, device_ids: List[int] | None = None
 ) -> List[Dict[str, Any]]:
@@ -801,6 +897,10 @@ def get_device_status(conn) -> List[Dict[str, Any]]:
             if illum is None:
                 illum = (status.get("attributes") or {}).get("illuminance")
             data["has_illuminance"] = illum is not None
+            for metric_name, status_key in AQ_METRIC_STATUS_KEYS.items():
+                data[f"has_{metric_name}"] = (
+                    _extract_metric_from_status(status, status_key) is not None
+                )
         if "logtime" in data:
             data["age"] = github_style_duration(
                 data["logtime"] + data.get("duration", 1)

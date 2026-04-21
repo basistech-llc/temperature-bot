@@ -40,6 +40,28 @@ def test_status_endpoint(flask_test_client):  # noqa: F811
     assert "devices" in response_json
 
 
+def test_metric_endpoint_accepts_known_metrics(flask_test_client):  # noqa: F811
+    """/api/v1/metric returns a series payload for each supported AQ metric."""
+    for metric in ("humidity", "co2", "voc", "radon", "pm25", "pm1"):
+        response = flask_test_client.get(f"/api/v1/metric?metric={metric}")
+        assert response.status_code == 200, f"metric={metric} status={response.status_code}"
+        assert "series" in response.json
+
+
+def test_metric_endpoint_rejects_unknown_metric(flask_test_client):  # noqa: F811
+    response = flask_test_client.get("/api/v1/metric?metric=bogus")
+    assert response.status_code == 400
+
+
+def test_metric_chart_page_renders(flask_test_client):  # noqa: F811
+    """/metric_chart renders for a known metric and 400s for an unknown one."""
+    response = flask_test_client.get("/metric_chart?metric=co2")
+    assert response.status_code == 200
+
+    response = flask_test_client.get("/metric_chart?metric=bogus")
+    assert response.status_code == 400
+
+
 def _get_device_disabled_until(db_path: str, device_id: int) -> int:
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row

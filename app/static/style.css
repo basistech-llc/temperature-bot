@@ -505,7 +505,8 @@ table.rules-table th  {
 
 /* Clickable data cells that link to charts */
 .cell-temp-link,
-.cell-illuminance-link {
+.cell-illuminance-link,
+.cell-metric-link {
     cursor: pointer;
 }
 .cell-temp-link:hover {
@@ -513,6 +514,9 @@ table.rules-table th  {
 }
 .cell-illuminance-link:hover {
     background-color: rgba(154, 104, 0, 0.08);
+}
+.cell-metric-link:hover {
+    background-color: rgba(52, 152, 219, 0.08);
 }
 
 /****************************************************************/
@@ -916,6 +920,12 @@ li.pure-menu-item > .rules-master-toggle {
 }
 
 #lighting-chart {
+    height: 620px;
+    width: 100%;
+    margin-top: 16px;
+}
+
+#metric-chart {
     height: 620px;
     width: 100%;
     margin-top: 16px;

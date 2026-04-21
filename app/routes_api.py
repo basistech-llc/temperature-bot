@@ -161,6 +161,30 @@ def get_lighting(conn):
     return jsonify({"series": series})
 
 
+@api_v1.route("/metric")
+@with_db_connection
+def get_metric(conn):
+    """Get per-device time series for a single air-quality metric."""
+    metric = request.args.get("metric", "")
+    status_key = db.AQ_METRIC_STATUS_KEYS.get(metric)
+    if status_key is None:
+        return jsonify({"error": f"Unknown metric: {metric!r}"}), 400
+    device_ids = parse_device_ids()
+    if device_ids is None and request.args.get("device_ids"):
+        return jsonify({"error": "Invalid device_ids format"}), 400
+    series = db.get_device_metric_series(conn, status_key, device_ids)
+    name_to_label = hubitat.get_name_to_label()
+    for s in series:
+        raw_name = s.get("name", "")
+        hub_label = name_to_label.get(raw_name)
+        s["name"] = display_device_name(
+            raw_name,
+            hubitat_label=hub_label,
+            source="airthings",
+        )
+    return jsonify({"series": series})
+
+
 @api_v1.route("/logs")
 @with_db_connection
 def get_logs(conn):
