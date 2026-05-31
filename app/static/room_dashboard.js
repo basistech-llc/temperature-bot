@@ -110,6 +110,12 @@ function getDeviceTempElement(deviceId) {
 
 /**
  * Show/hide loading state for a device.
+ *
+ * Deliberately does NOT disable the buttons: a press landing while a previous
+ * request is still in flight would otherwise be silently dropped (a disabled
+ * button fires no click), stranding the unit in its prior state. The optimistic
+ * UI + pending reconciliation already handle rapid presses (last-press-wins),
+ * so we only show a spinner on the in-flight button for feedback.
  * @param {number} deviceId - Device ID
  * @param {boolean} isLoading - Whether to show loading state
  * @param {HTMLElement|null} activeButton - Button to show spinner on (if loading)
@@ -119,14 +125,10 @@ function setDeviceLoading(deviceId, isLoading, activeButton = null) {
     const statusEl = getDeviceStatusElement(deviceId);
 
     buttons.forEach(button => {
-        if (isLoading) {
-            if (activeButton && button === activeButton) {
-                button.classList.add('loading');
-            }
-            button.disabled = true;
-        } else {
+        if (isLoading && activeButton && button === activeButton) {
+            button.classList.add('loading');
+        } else if (!isLoading) {
             button.classList.remove('loading');
-            button.disabled = false;
         }
     });
 
