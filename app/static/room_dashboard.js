@@ -172,9 +172,12 @@ function formatTemperature(tempC) {
 
 /**
  * Update button active state based on device status.
- * Off button is active when drive is off.
- * Speed buttons are active when drive is on AND that speed is set.
- * Auto button is active when speed is -1 (regardless of drive state, as Auto can be set when off).
+ *
+ * One-dimensional control: exactly one button is highlighted. When the unit is
+ * off, only the Off button is active — the held speed (Auto included) is purely
+ * historical (shown as the "was …" note), never a second highlighted button.
+ * When on, the button matching the current speed is active; Auto is just the
+ * speed value -1, so it needs no special case.
  * @param {HTMLElement} button - Button element
  * @param {Object} device - Device data
  */
@@ -184,15 +187,13 @@ function updateButtonActiveState(button, device) {
     const isOff = device.drive === 'Off' || device.drive === 0;
     const currentSpeed = parseInt(device.fan_speed || device.speed || 0);
 
-    // Off button: active when drive is off
-    if (buttonSpeed === 0 && isOff) {
-        button.classList.add('active');
+    // Off button (speed 0): active only when the unit is off.
+    if (buttonSpeed === 0) {
+        if (isOff) {
+            button.classList.add('active');
+        }
     }
-    // Auto button: active when speed is -1 (can be set even when motor is off)
-    else if (buttonSpeed === FAN_SPEED_AUTO && currentSpeed === FAN_SPEED_AUTO) {
-        button.classList.add('active');
-    }
-    // Speed button: active when drive is on AND this speed is set
+    // Speed/Auto buttons: active only when on AND matching the current speed.
     else if (!isOff && buttonSpeed === currentSpeed) {
         button.classList.add('active');
     }
