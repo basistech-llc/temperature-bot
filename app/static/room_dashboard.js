@@ -3,6 +3,18 @@ const DEBUG = false;
 const REFRESH_INTERVAL = 10; // seconds between refreshes
 const FAN_SPEED_AUTO = -1; // Auto speed value
 
+// Optimistic UI: when the user changes a unit we reflect the intended state
+// immediately rather than waiting for a poll. The backend re-reads the AE200
+// right after issuing the command, and on real hardware that read-back can
+// still show the old state, so /status would otherwise stay stale until a
+// later poll settles. We hold the optimistic state until a poll confirms it
+// (the common case, within ~one REFRESH_INTERVAL) or until this backstop
+// elapses — covering a silently-dropped command (up to ~one runner cron cycle)
+// without pinning a wrong state indefinitely. Keyed by device_id.
+const PENDING_RECONCILE_MS = 60000;
+const pendingChanges = {};   // device_id -> {drive, fan_speed, expiresAt}
+const lastDeviceSpeed = {};  // device_id -> last known fan speed (for the "was …" note)
+
 /**
  * Make API call to control device.
  * @param {string} endpoint - API endpoint
@@ -138,8 +150,17 @@ function handleSpeedButton(button) {
 
     setDeviceLoading(deviceId, true, button);
 
-    const handleError = () => setDeviceLoading(deviceId, false);
+    // Reflect the intended state immediately; the poll loop reconciles later.
+    applyOptimisticChange(deviceId, speed);
+
     const handleSuccess = () => refreshStatus();
+    // On failure (apiCall already alerts), drop the optimistic state and let a
+    // fresh poll restore the true state rather than leaving a wrong highlight.
+    const handleError = () => {
+        delete pendingChanges[deviceId];
+        setDeviceLoading(deviceId, false);
+        refreshStatus();
+    };
 
     // Off button: turn off motor
     if (speed === 0) {
@@ -156,6 +177,29 @@ function handleSpeedButton(button) {
             .then(handleSuccess)
             .catch(handleError);
     }
+}
+
+/**
+ * Optimistically reflect a button press before the server round-trip completes.
+ * Records the intended state as pending so the poll loop won't revert it until
+ * the backend catches up (or the backstop window expires).
+ * @param {number} deviceId - Device ID
+ * @param {number} clickedSpeed - data-speed of the clicked button (0 = off)
+ */
+function applyOptimisticChange(deviceId, clickedSpeed) {
+    const drive = clickedSpeed === 0 ? 0 : 1;
+    // Turning off keeps the last running speed so the "was …" note stays right;
+    // selecting a speed sets it directly.
+    const speed = clickedSpeed === 0 ? lastDeviceSpeed[deviceId] : clickedSpeed;
+    if (drive === 1) {
+        lastDeviceSpeed[deviceId] = speed;
+    }
+    pendingChanges[deviceId] = {
+        drive,
+        fan_speed: speed,
+        expiresAt: Date.now() + PENDING_RECONCILE_MS,
+    };
+    renderDriveState(deviceId, drive, speed);
 }
 
 /**
@@ -200,6 +244,63 @@ function updateButtonActiveState(button, device) {
 }
 
 /**
+ * Render a device's one-dimensional drive/speed state: the Off-button "was …"
+ * historical note and which button is highlighted. Shared by polled updates and
+ * optimistic updates so both paths produce identical UI.
+ *
+ * In our one-dimensional model the held speed of an off unit is NOT a resume
+ * target — it's just history — so it decorates only the (selected) Off button,
+ * never a speed button.
+ * @param {number} deviceId - Device ID
+ * @param {(string|number)} drive - 'Off'/0 when off, otherwise on
+ * @param {number} speed - Fan speed (held speed when off; current speed when on)
+ */
+function renderDriveState(deviceId, drive, speed) {
+    const isOff = drive === 'Off' || drive === 0;
+
+    const offBtn = document.querySelector(
+        `button.speed-btn.speed-off[data-device-id="${deviceId}"]`);
+    if (offBtn) {
+        if (isOff && speed != null) {
+            // ERVs expose no Auto button, so name Auto directly rather than
+            // reading a label that would fall back to 'Speed -1'.
+            const wasLabel = speed === FAN_SPEED_AUTO ? 'Auto' :
+                             speedButtonLabel(deviceId, speed);
+            offBtn.innerHTML =
+                '<span class="off-label">Off</span>' +
+                `<span class="off-history">was ${wasLabel}</span>`;
+        } else {
+            offBtn.textContent = 'Off';
+        }
+    }
+
+    const buttons = document.querySelectorAll(
+        `button.speed-btn[data-device-id="${deviceId}"]`);
+    buttons.forEach(button =>
+        updateButtonActiveState(button, { drive, fan_speed: speed }));
+}
+
+/**
+ * Whether polled device data has caught up to a pending optimistic change.
+ * Off matches off regardless of the held speed (it's only historical); an
+ * on-state must also match the requested speed.
+ * @param {Object} device - Polled device data
+ * @param {Object} pending - Pending change {drive, fan_speed}
+ * @returns {boolean}
+ */
+function matchesPending(device, pending) {
+    const isOff = device.drive === 'Off' || device.drive === 0;
+    const wantOff = pending.drive === 0;
+    if (isOff !== wantOff) {
+        return false;
+    }
+    if (wantOff) {
+        return true;
+    }
+    return parseInt(device.fan_speed || device.speed || 0) === pending.fan_speed;
+}
+
+/**
  * Update device status display from API data.
  * @param {Array<Object>} devices - Array of device data from API
  */
@@ -216,28 +317,6 @@ function updateDeviceStatus(devices) {
         // speed text — that slot is reserved for the transient "Setting…" note.
         if (statusEl) {
             statusEl.textContent = '';
-        }
-
-        // When the unit is off, surface the speed it had been running at as a
-        // small historical note on the (already-selected) Off button. In our
-        // one-dimensional model the held hardware speed is NOT a resume target
-        // — it's just history — so it never decorates a speed button.
-        const offBtn = document.querySelector(
-            `button.speed-btn.speed-off[data-device-id="${deviceId}"]`);
-        if (offBtn) {
-            const isOff = device.drive === 'Off' || device.drive === 0;
-            const speed = device.fan_speed || device.speed;
-            if (isOff && speed != null) {
-                // ERVs expose no Auto button, so name Auto directly rather than
-                // reading a label that would fall back to 'Speed -1'.
-                const wasLabel = speed === FAN_SPEED_AUTO ? 'Auto' :
-                                 speedButtonLabel(deviceId, speed);
-                offBtn.innerHTML =
-                    '<span class="off-label">Off</span>' +
-                    `<span class="off-history">was ${wasLabel}</span>`;
-            } else {
-                offBtn.textContent = 'Off';
-            }
         }
 
         // Update temperature
@@ -261,9 +340,17 @@ function updateDeviceStatus(devices) {
             }
         }
 
-        // Update button active states
-        const buttons = document.querySelectorAll(`button.speed-btn[data-device-id="${deviceId}"]`);
-        buttons.forEach(button => updateButtonActiveState(button, device));
+        // Drive/speed: reconcile against any pending optimistic change so a
+        // not-yet-settled backend read doesn't revert the user's action.
+        const incomingSpeed = device.fan_speed || device.speed;
+        lastDeviceSpeed[deviceId] = incomingSpeed;
+        const pending = pendingChanges[deviceId];
+        if (pending && Date.now() < pending.expiresAt && !matchesPending(device, pending)) {
+            renderDriveState(deviceId, pending.drive, pending.fan_speed);
+        } else {
+            delete pendingChanges[deviceId];
+            renderDriveState(deviceId, device.drive, incomingSpeed);
+        }
     });
 }
 
