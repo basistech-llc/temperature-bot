@@ -69,6 +69,24 @@ function getDeviceStatusElement(deviceId) {
 }
 
 /**
+ * Friendly label for a speed, read off this device's matching speed button.
+ *
+ * The buttons are the single source of truth for speed names: they're rendered
+ * per device type (ERV vs fan), so reading from them yields the correct label
+ * (e.g. the off-button "was …" history note) without duplicating the label map.
+ *
+ * @param {number} deviceId - Device ID
+ * @param {number} speed - Speed value (matches a button's data-speed)
+ * @returns {string} Button label (e.g. 'HI', 'MED-LO', 'Auto'), or a
+ *                    'Speed N' fallback if no matching button exists
+ */
+function speedButtonLabel(deviceId, speed) {
+    const btn = document.querySelector(
+        `button.speed-btn[data-device-id="${deviceId}"][data-speed="${speed}"]`);
+    return btn ? btn.textContent.trim() : `Speed ${speed}`;
+}
+
+/**
  * Get temperature element for a device (works for both ERV and fan).
  * @param {number} deviceId - Device ID
  * @returns {HTMLElement|null} Temperature element or null
@@ -192,18 +210,32 @@ function updateDeviceStatus(devices) {
 
         setDeviceLoading(deviceId, false);
 
-        // Update status text (drive and speed are orthogonal)
+        // The button row is the one-dimensional source of truth for the
+        // current setting (whichever button glows), so the header carries no
+        // speed text — that slot is reserved for the transient "Setting…" note.
         if (statusEl) {
+            statusEl.textContent = '';
+        }
+
+        // When the unit is off, surface the speed it had been running at as a
+        // small historical note on the (already-selected) Off button. In our
+        // one-dimensional model the held hardware speed is NOT a resume target
+        // — it's just history — so it never decorates a speed button.
+        const offBtn = document.querySelector(
+            `button.speed-btn.speed-off[data-device-id="${deviceId}"]`);
+        if (offBtn) {
             const isOff = device.drive === 'Off' || device.drive === 0;
             const speed = device.fan_speed || device.speed;
-            const isAuto = speed === FAN_SPEED_AUTO;
-
-            if (isOff) {
-                statusEl.textContent = isAuto ? 'OFF (Auto)' :
-                                      (speed != null ? `OFF (Speed ${speed})` : 'OFF');
+            if (isOff && speed != null) {
+                // ERVs expose no Auto button, so name Auto directly rather than
+                // reading a label that would fall back to 'Speed -1'.
+                const wasLabel = speed === FAN_SPEED_AUTO ? 'Auto' :
+                                 speedButtonLabel(deviceId, speed);
+                offBtn.innerHTML =
+                    '<span class="off-label">Off</span>' +
+                    `<span class="off-history">was ${wasLabel}</span>`;
             } else {
-                statusEl.textContent = isAuto ? 'Auto' :
-                                      (speed != null ? `Speed ${speed}` : 'ON');
+                offBtn.textContent = 'Off';
             }
         }
 

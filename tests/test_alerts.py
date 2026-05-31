@@ -149,6 +149,9 @@ def test_get_alert_history_with_details(test_database_conn):
     assert "details" in alerts[0]
     assert alerts[0]["details"]["mode"] == "AUTO"
     assert alerts[0]["details"]["fan_speed"] == "HIGH"
+    # Pin the wiring: _attach_device_details must derive a user-facing label
+    # from the raw protocol code so the alerts table never shows 'HIGH'/'MID1'.
+    assert alerts[0]["details"]["fan_speed_display"] == "HI"
 
 
 def test_insert_or_update_alert_create_and_close(test_database_conn):

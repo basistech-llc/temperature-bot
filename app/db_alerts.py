@@ -7,7 +7,32 @@ import json
 import logging
 import time
 
+from . import ae200
+
 logger = logging.getLogger(__name__)
+
+
+def _attach_device_details(conn, alert_dict, device_id, device_name, start_time):
+    """Attach device-status details to an alert dict, in place.
+
+    Looks up the device status recorded at the alert's start time and, when
+    present, stores the diagnostic fields under ``details`` along with a
+    user-facing ``fan_speed_display`` (the raw ``fan_speed`` is the AE200
+    protocol code, which is meaningless to users).
+    """
+    status_json, status_logtime = get_alert_device_status(
+        conn, device_id, start_time
+    )
+    if not status_json:
+        return
+    details = extract_relevant_status_fields(status_json)
+    if not details:
+        return
+    details["status_timestamp"] = status_logtime
+    details["fan_speed_display"] = ae200.friendly_fan_speed_label(
+        device_name, details.get("fan_speed")
+    )
+    alert_dict["details"] = details
 
 
 def format_alert_type_display(alert_type):
@@ -205,14 +230,9 @@ def get_active_alerts(conn, device_id=None, include_details=False):
 
         # Add device status details if requested
         if include_details:
-            status_json, status_logtime = get_alert_device_status(
-                conn, device_id_val, start_time
+            _attach_device_details(
+                conn, alert_dict, device_id_val, device_name, start_time
             )
-            if status_json:
-                details = extract_relevant_status_fields(status_json)
-                if details:
-                    details["status_timestamp"] = status_logtime
-                    alert_dict["details"] = details
 
         alerts.append(alert_dict)
 
@@ -275,14 +295,9 @@ def get_alert_history(conn, device_id=None, limit=100, include_details=False):
 
         # Add device status details if requested
         if include_details:
-            status_json, status_logtime = get_alert_device_status(
-                conn, device_id_val, start_time
+            _attach_device_details(
+                conn, alert_dict, device_id_val, device_name, start_time
             )
-            if status_json:
-                details = extract_relevant_status_fields(status_json)
-                if details:
-                    details["status_timestamp"] = status_logtime
-                    alert_dict["details"] = details
 
         alerts.append(alert_dict)
 

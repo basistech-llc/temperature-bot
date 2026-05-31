@@ -35,6 +35,37 @@ FAN_SPEEDS = {-1:"AUTO", 1: "LOW", 2: "MID2", 3: "MID1", 4: "HIGH"}
 FAN_SPEED_NAMES = {value: key for key, value in FAN_SPEEDS.items()}
 DRIVE_NAMES = {value: key for key, value in DRIVES.items()}
 
+# User-facing fan-speed labels, keyed by speed number. These intentionally
+# mirror the speed-button text rendered in room_dashboard.html / index.html so
+# every surface speaks the same vocabulary (the room dashboard reads its labels
+# straight off those buttons; surfaces without buttons — e.g. the alerts table —
+# use the maps below). ERVs and plain fans expose different levels, so the label
+# for a given speed number depends on device type. Keep these in sync with the
+# template button text if either changes.
+_ERV_SPEED_LABELS = {-1: "Auto", 1: "LO", 2: "MED-LO", 3: "MED-HI", 4: "HI"}
+_FAN_SPEED_LABELS = {-1: "Auto", 2: "LO", 3: "MED", 4: "HI"}
+
+
+def friendly_fan_speed_label(device_name, raw_fan_speed):
+    """Return a user-facing fan-speed label (e.g. 'HI', 'MED-LO', 'Auto').
+
+    :param device_name: device name; ERVs (name starts with 'ERV') use a
+        different label set than plain fans.
+    :param raw_fan_speed: either the protocol string ('HIGH', 'MID1', ...) or
+        the speed number. Anything unrecognized is returned unchanged so we
+        never hide diagnostic data behind a guess.
+    """
+    if raw_fan_speed is None:
+        return None
+    # Normalize to a speed number, accepting either protocol string or int.
+    if isinstance(raw_fan_speed, str):
+        speed = FAN_SPEED_NAMES.get(raw_fan_speed)
+    else:
+        speed = raw_fan_speed
+    is_erv = (device_name or "").upper().startswith("ERV")
+    labels = _ERV_SPEED_LABELS if is_erv else _FAN_SPEED_LABELS
+    return labels.get(speed, str(raw_fan_speed))
+
 AE200_SIMULATOR = os.getenv('AE200_SIMULATOR')
 SIMULATOR_DIR = Path(join(dirname(__file__),"test_data"))
 SIMULATOR_DIR = Path(join(dirname(__file__), "test_data"))

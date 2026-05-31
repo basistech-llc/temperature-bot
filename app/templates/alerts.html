@@ -152,7 +152,7 @@ const activeTable = new Tabulator("#active-alerts-table", {
      formatter: function(cell) {
        const details = cell.getValue();
        if (!details) return '';
-       return details.mode + ' | Drive: ' + details.drive + ' | Temp: ' + details.inlet_temp + '°C / ' + details.set_temp + '°C | Fan: ' + details.fan_speed;
+       return details.mode + ' | Drive: ' + details.drive + ' | Temp: ' + details.inlet_temp + '°C / ' + details.set_temp + '°C | Fan: ' + details.fan_speed_display;
      }
     },
     {title: "Status Measured At", field: "details", width: 200,
@@ -200,7 +200,7 @@ const historyTable = new Tabulator("#history-alerts-table", {
      formatter: function(cell) {
        const details = cell.getValue();
        if (!details) return '';
-       return details.mode + ' | Drive: ' + details.drive + ' | Temp: ' + details.inlet_temp + '°C / ' + details.set_temp + '°C | Fan: ' + details.fan_speed;
+       return details.mode + ' | Drive: ' + details.drive + ' | Temp: ' + details.inlet_temp + '°C / ' + details.set_temp + '°C | Fan: ' + details.fan_speed_display;
      }
     },
     {title: "Status Measured At", field: "details", width: 200,
