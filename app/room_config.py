@@ -28,7 +28,7 @@ ROOM_CONFIGS: Dict[str, RoomConfig] = {
     "hickory": {
         "url": "/hickory",
         "ervs": ["ERV Restrooms"],
-        "fans": ["Area 51", "Restrooms/BOH", "Dungeon"],
+        "fans": ["Restrooms/BOH", "Dungeon"],
         "sensors": [
             "Hickory Sensor",
             "Dungeon Cage",

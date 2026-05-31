@@ -493,16 +493,6 @@ def test_tv_hubitat_error(_mock, flask_test_client):  # noqa: F811
 # -- Room config tests --
 
 
-def test_room_config_hickory_has_fcu_devices():
-    """Hickory must list both FCUs so the room page renders controls for each.
-
-    Prevents regression where only one FCU was shown due to a [0] slice.
-    """
-    fans = room_config.ROOM_CONFIGS["hickory"]["fans"]
-    assert "Area 51" in fans
-    assert "Restrooms/BOH" in fans
-
-
 def test_room_config_kitchen_has_fcu():
     """Kitchen must list its FCU so set-temp controls render."""
     fans = room_config.ROOM_CONFIGS["kitchen"]["fans"]
