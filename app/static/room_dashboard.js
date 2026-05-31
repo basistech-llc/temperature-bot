@@ -343,12 +343,16 @@ function updateDeviceStatus(devices) {
         // Drive/speed: reconcile against any pending optimistic change so a
         // not-yet-settled backend read doesn't revert the user's action.
         const incomingSpeed = device.fan_speed || device.speed;
-        lastDeviceSpeed[deviceId] = incomingSpeed;
         const pending = pendingChanges[deviceId];
         if (pending && Date.now() < pending.expiresAt && !matchesPending(device, pending)) {
+            // Backend hasn't caught up — keep the optimistic state. Crucially,
+            // do NOT adopt this lagging speed as lastDeviceSpeed: during fast
+            // transitions that would stale-out the Off button's "was …" note.
             renderDriveState(deviceId, pending.drive, pending.fan_speed);
         } else {
             delete pendingChanges[deviceId];
+            // Settled: this poll is the source of truth for the held speed.
+            lastDeviceSpeed[deviceId] = incomingSpeed;
             renderDriveState(deviceId, device.drive, incomingSpeed);
         }
     });
