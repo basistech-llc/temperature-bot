@@ -163,6 +163,18 @@ body {
   background: #d32f2f;
   font-size: 1.4em;
   margin-right: 0.5em;
+  flex-direction: column;   /* stack the historical "was …" note under "Off" */
+  gap: 0.1em;
+}
+
+/* Small historical note on the Off button: the speed the unit had been
+   running at before it was turned off. Deliberately secondary to "Off". */
+.off-history {
+  font-size: 0.62em;
+  font-weight: 600;
+  opacity: 0.8;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
 }
 
 /* Auto button - diagonal stripes in three green colors */
