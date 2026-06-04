@@ -112,14 +112,14 @@ body {
 .speed-controls {
   display: flex;
   gap: 1em;
-  justify-content: center;
   align-items: center;
   flex-wrap: nowrap;
   width: 100%;
 }
 
 .speed-btn {
-  width: 110px;
+  flex: 1 1 0;
+  min-width: 0;
   height: 110px;
   padding: 0;
   border: 3px solid transparent;
@@ -129,7 +129,6 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  flex-shrink: 0;
   transition: all 0.15s ease;
   color: white;
   box-shadow: 0 2px 4px rgba(0,0,0,0.15);
@@ -269,12 +268,6 @@ body {
   font: 500 0.95em sans-serif;
   color: #333;
   line-height: 1.2;
-}
-
-.sensor-room {
-  font: italic 0.75em sans-serif;
-  color: #666;
-  margin-top: 0.2em;
 }
 
 .sensor-temp {
@@ -466,7 +459,6 @@ body {
 /* Responsive */
 @media (max-width: 768px) {
   .speed-btn {
-    width: 90px;
     height: 90px;
     font-size: 1.4em;
   }
@@ -480,12 +472,6 @@ body {
   .room-controls-grid { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
 }
 
-@media (min-width: 769px) {
-  .speed-controls {
-    max-width: 600px;
-    margin: 0 auto;
-  }
-}
 </style>
 {% endblock %}
 
@@ -636,10 +622,7 @@ body {
     {% for sensor in hubitat_sensors %}
     <div class="sensor-tile{% if sensor.offline %} sensor-offline{% endif %}">
       <div class="sensor-header">
-        <div>
-          <div class="sensor-name" title="{{ sensor.name }}">{{ sensor.display_name or sensor.label or sensor.name }}</div>
-          <div class="sensor-room">{{ sensor.room or 'N/A' }}</div>
-        </div>
+        <div class="sensor-name" title="{{ sensor.name }}">{{ sensor.display_name or sensor.label or sensor.name }}</div>
       </div>
       {% if sensor.offline %}
       <div class="sensor-temp offline-label">Offline</div>

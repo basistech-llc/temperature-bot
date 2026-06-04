@@ -21,13 +21,42 @@ let lastRefreshTime = 0;
 // Refresh logic
 var start = Date.now();
 var forceRefresh = false;
-const FAN_SPEEDS = [-1, 0, 1, 2, 3, 4];
 
 // Store weather data globally so it can be re-rendered when unit changes
 let currentWeatherData = null;
 
 ////////////////////////////////////////////////////////////////
 // Shared helpers
+
+/**
+ * Decide which fan-speed radio button should be selected for a device.
+ *
+ * One-dimensional control: "Off" is a state of its own, so an off unit always
+ * shows "Off" — regardless of the fan speed it happens to be holding. The
+ * AE-200 retains a unit's last fan speed (often Auto = -1) when it is turned
+ * off, but for an off unit that held speed is historical only and must never be
+ * shown as the active selection. This is why `isOff` is checked before the
+ * Auto (-1) case — matching room_dashboard.js.
+ *
+ * @param {Object} dev - Device data object from /api/v1/status.
+ * @returns {string|null} The id of the radio to select, or null if undetermined.
+ */
+function fanRadioIdForDevice(dev) {
+  const isOff = dev.drive === "Off" || dev.drive === 0 || !dev.drive;
+  const currentSpeed = dev.fan_speed || dev.speed;
+  const speedValue = currentSpeed != null ? parseInt(currentSpeed) : null;
+
+  if (isOff) {
+    return `radio-${dev.device_id}-0`;
+  }
+  if (speedValue === -1) {
+    return `radio-${dev.device_id}-auto`;
+  }
+  if (speedValue != null) {
+    return `radio-${dev.device_id}-${speedValue}`;
+  }
+  return null;
+}
 
 /**
  * Update a temperature- or humidity-like cell with staleness and tooltip.
@@ -396,7 +425,6 @@ const refreshGridRows = () => {
 
   // If it's time to refresh, run the status api and update all of the temps, fan_speeds, and status columsn
   if (secondsUntilRefresh <= 0) {
-    const formData = new FormData();
     fetch(window.location.href + "api/v1/status", { method: "GET" })
       .then((response) => response.json())
       .then((data) => {
@@ -579,40 +607,15 @@ const refreshGridRows = () => {
                 setTempDisplay.textContent = "--";
               }
             }
-            // Update radio button selection based on drive and speed state
-            const isOff = dev.drive === "Off" || dev.drive === 0 || !dev.drive;
-            const currentSpeed = dev.fan_speed || dev.speed;
-            const speedValue =
-              currentSpeed != null ? parseInt(currentSpeed) : null;
-
-            // Auto button (-1) can be active even when drive is off
-            if (speedValue === -1) {
-              const autoRadio = document.getElementById(
-                `radio-${dev.device_id}-auto`,
-              );
-              if (autoRadio) {
-                autoRadio.checked = true;
-              }
-            }
-            // If drive is off and not auto, select the "Off" button (value 0)
-            else if (isOff) {
-              const offRadio = document.getElementById(
-                `radio-${dev.device_id}-0`,
-              );
-              if (offRadio) {
-                offRadio.checked = true;
-              }
-            }
-            // If drive is on, select the appropriate speed button
-            else if (speedValue != null) {
-              const radio = document.getElementById(
-                `radio-${dev.device_id}-${speedValue}`,
-              );
+            // Update radio button selection based on drive and speed state.
+            const radioId = fanRadioIdForDevice(dev);
+            if (radioId) {
+              const radio = document.getElementById(radioId);
               if (radio) {
                 radio.checked = true;
               } else {
                 console.warn(
-                  `Radio button not found for radio-${dev.device_id}-${speedValue}, device_id=${dev.device_id}, speed=${speedValue}`,
+                  `Radio button not found for ${radioId}, device_id=${dev.device_id}`,
                 );
               }
             }
@@ -829,14 +832,22 @@ function updateRulesDisabledBadge(dev) {
   }
 }
 
-// Make refreshGridRows and displayWeather available globally for temperature unit changes
-window.refreshGridRows = refreshGridRows;
-window.displayWeather = displayWeather;
-window.getCurrentWeatherData = function () {
-  return currentWeatherData;
-};
+// Browser-only wiring (skipped under Node.js test environment).
+if (typeof window !== "undefined") {
+  // Make refreshGridRows and displayWeather available globally for temperature unit changes
+  window.refreshGridRows = refreshGridRows;
+  window.displayWeather = displayWeather;
+  window.getCurrentWeatherData = function () {
+    return currentWeatherData;
+  };
 
-window.addEventListener("DOMContentLoaded", function () {
-  setupMatrixListeners();
-  loadWeatherAndStartRefresh();
-});
+  window.addEventListener("DOMContentLoaded", function () {
+    setupMatrixListeners();
+    loadWeatherAndStartRefresh();
+  });
+}
+
+// Node.js export for testing
+if (typeof module !== "undefined" && module.exports) {
+  module.exports = { fanRadioIdForDevice };
+}
