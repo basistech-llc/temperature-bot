@@ -139,6 +139,10 @@ def set_body_fan_speed(conn, body: SpeedControl, ipaddr, agent):
         )
         ae200.set_fan_speed(unit_id, body.fan_speed)
     data = ae200.get_device_info(unit_id)
+    # The hardware may not yet reflect the FanSpeed we just sent (the read-back
+    # can race the command), so record the commanded value rather than a
+    # possibly stale reading. The next runner poll reconciles with hardware.
+    data["FanSpeed"] = ae200.FAN_SPEEDS[body.fan_speed]
     temp = data.get("InletTemp", None)
     db.insert_devlog_entry(conn, device_id=body.device_id, temp=temp, statusdict=data)
     return {
@@ -149,7 +153,7 @@ def set_body_fan_speed(conn, body: SpeedControl, ipaddr, agent):
     }
 
 
-def set_body_drive(conn, body: SpeedControl, ipaddr, agent):
+def set_body_drive(conn, body: DriveControl, ipaddr, agent):
     """
     :param conn: SQLIte3 database conneciton
     :param body: Unit to set, and new drive
@@ -188,6 +192,11 @@ def set_body_drive(conn, body: SpeedControl, ipaddr, agent):
         )
         ae200.set_drive(unit_id, body.drive)
     data = ae200.get_device_info(unit_id)
+    # The hardware may not yet reflect the Drive we just sent (the read-back can
+    # race the command), so record the commanded value rather than a possibly
+    # stale reading. Otherwise /status can report the old drive and the UI snaps
+    # back to the prior state. The next runner poll reconciles with hardware.
+    data["Drive"] = ae200.int_to_drive(body.drive)
     temp = data.get("InletTemp", None)
     db.insert_devlog_entry(conn, device_id=body.device_id, temp=temp, statusdict=data)
     return {

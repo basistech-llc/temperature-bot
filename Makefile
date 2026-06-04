@@ -154,6 +154,7 @@ test-js: $(REQ)
 	@echo "Running JavaScript unit tests..."
 	node tests/test_time_utils.js
 	node tests/test_temperature_utils.js
+	node tests/test_unit_speed.js
 test: $(REQ)
 	@python_exit=0; js_exit=0; \
 	make pytest || python_exit=$$?; \
