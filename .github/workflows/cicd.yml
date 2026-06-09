@@ -95,6 +95,7 @@ jobs:
           tar -xzf "/tmp/${FLYWAY_TAR}" -C /tmp/flyway-install
           FLYWAY_DIR=$(find /tmp/flyway-install -mindepth 1 -maxdepth 1 -type d | head -n 1)
           echo "${FLYWAY_DIR}" >> $GITHUB_PATH
+          export PATH="${FLYWAY_DIR}:${PATH}"
           flyway -v
 
       - name: Install Flyway (macOS)
