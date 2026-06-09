@@ -82,12 +82,19 @@ jobs:
       - name: Install Flyway (Linux)
         if: runner.os == 'Linux'
         run: |
+          FLYWAY_TAG=$(curl --fail --silent --show-error --location \
+            --write-out '%{url_effective}' \
+            --output /dev/null \
+            https://github.com/flyway/flyway/releases/latest | sed 's#.*/##')
+          FLYWAY_VERSION="${FLYWAY_TAG#flyway-}"
+          FLYWAY_TAR="flyway-commandline-${FLYWAY_VERSION}-linux-x64.tar.gz"
           curl --fail --silent --show-error --location \
-            --output /tmp/flyway-commandline-linux-x64.tar.gz \
-            https://github.com/flyway/flyway/releases/latest/download/flyway-commandline-linux-x64.tar.gz
+            --output "/tmp/${FLYWAY_TAR}" \
+            "https://github.com/flyway/flyway/releases/download/${FLYWAY_TAG}/${FLYWAY_TAR}"
           mkdir -p /tmp/flyway-install
-          tar -xzf /tmp/flyway-commandline-linux-x64.tar.gz -C /tmp/flyway-install
-          echo "/tmp/flyway-install/$(ls /tmp/flyway-install)" >> $GITHUB_PATH
+          tar -xzf "/tmp/${FLYWAY_TAR}" -C /tmp/flyway-install
+          FLYWAY_DIR=$(find /tmp/flyway-install -mindepth 1 -maxdepth 1 -type d | head -n 1)
+          echo "${FLYWAY_DIR}" >> $GITHUB_PATH
           flyway -v
 
       - name: Install Flyway (macOS)
