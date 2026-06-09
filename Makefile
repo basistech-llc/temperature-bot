@@ -7,7 +7,8 @@
 # Local development:
 #    make check   - static analysis
 #    make test    - dynamic analysis
-#    make make-dev-db  - creates a local database from the schema
+#    make make-dev-db  - creates a local database via Flyway migrations
+#    make migrate-db   - applies pending Flyway migrations to the existing local DB
 #    make local-dev - Runs the web backend locally with simulator
 #    make live-dev-runner - Runs the collection agent and rules runner locally, with live collection
 #
@@ -22,6 +23,11 @@
 
 export DB_PATH ?= var/db/temperature-bot.db
 export DEV_DB  ?= var/db/temperature-bot.db
+
+# Flyway migration SQL directory
+FLYWAY_SQL_DIR := etc/flyway/sql
+# Temporary database used when regenerating etc/schema.sql
+FLYWAY_SCHEMA_TEMP := /tmp/temperature-bot-schema-temp.db
 
 # Remote host and paths used by fetch-dev-db (override as needed for your environment)
 FETCH_HOST           ?= air.basistech.net
@@ -52,11 +58,13 @@ RUFF_VERSION   ?= 0.13.2
 # Manage the local development database and configuration file.
 #
 
-# make a clean local development database from the schema file
+# make a clean local development database from scratch, using Flyway migrations
 make-dev-db:
 	/bin/rm -f $(DEV_DB)
 	mkdir -p $(dir $(DEV_DB))
-	sqlite3 $(DEV_DB) < etc/schema.sql
+	flyway migrate \
+	    -url="jdbc:sqlite:$(abspath $(DEV_DB))" \
+	    -locations="filesystem:$(FLYWAY_SQL_DIR)"
 	ls -l $(DEV_DB)
 
 # Explicit rule for the development database file so that schema generation
@@ -78,24 +86,36 @@ fetch-dev-db:
 	@echo database contents:
 	echo 'select "devices",count(*) from devices;select "devlog",count(*) from devlog;select "changelog",count(*) from changelog; select "aqi",count(*) from aqi;' | sqlite3 $(DEV_DB)
 
-# Build the etc/schema.sql file based on the local development database
-# We use this when we make changes on the production database with 'ALTER TABLE'
-# and want the schema.sql file to reflect those changes.
-# The changes need to be incorporated into schema.sql so that the CI/CD tests run
-
-etc/schema.sql: $(DEV_DB)
-	echo ".schema"| sqlite3 $(DEV_DB) \
+# Build the etc/schema.sql file by applying all Flyway migrations to a fresh
+# temp database and dumping the resulting schema. This keeps schema.sql in sync
+# with the canonical migration history. Run 'make schema' to regenerate.
+etc/schema.sql: $(wildcard $(FLYWAY_SQL_DIR)/*.sql)
+	/bin/rm -f $(FLYWAY_SCHEMA_TEMP)
+	flyway migrate \
+	    -url="jdbc:sqlite:$(FLYWAY_SCHEMA_TEMP)" \
+	    -locations="filesystem:$(FLYWAY_SQL_DIR)"
+	echo ".schema"| sqlite3 $(FLYWAY_SCHEMA_TEMP) \
 		| grep -v 'Run Time: real' \
 		| grep -v 'CREATE TABLE sqlite_sequence' \
 		| sed 's/CREATE INDEX/CREATE INDEX IF NOT EXISTS/' \
 		| sed 's/CREATE TABLE/CREATE TABLE IF NOT EXISTS/' \
 		| tee etc/schema.sql
+	/bin/rm -f $(FLYWAY_SCHEMA_TEMP)
 
 # Phony target to force regeneration of etc/schema.sql regardless of timestamps
 schema:
 	$(MAKE) --always-make etc/schema.sql
 
-.PHONY: make-dev-db fetch-dev-db schema
+# Apply any pending Flyway migrations to the existing development database.
+# Uses -baselineOnMigrate=true so databases already at V1 (but without a
+# flyway_schema_history entry) are baselined automatically before migrating.
+migrate-db: $(DEV_DB)
+	flyway migrate \
+	    -url="jdbc:sqlite:$(abspath $(DEV_DB))" \
+	    -locations="filesystem:$(FLYWAY_SQL_DIR)" \
+	    -baselineOnMigrate=true
+
+.PHONY: make-dev-db fetch-dev-db schema migrate-db
 
 ################################################################
 ## Local development targets. These use the flask built-in web server,
@@ -244,11 +264,15 @@ cleanall: clean
 	@printf "Are you sure you want to delete $(DEV_DB)? [y/N] "
 	@read -r confirm && [ "$$confirm" = "y" ] || [ "$$confirm" = "Y" ] && rm -f $(DEV_DB) || echo "Cancelled."
 
-## Installs the latest source code into the live system.
-## Run on the server (slg1.basistech.net).
+## Installs the latest source code into the live system and applies any pending
+## database migrations. Run on the server (slg1.basistech.net).
 deploy:
 	@if [ "$$(hostname)" = "slg1" ]; then \
-		cd /home/air/temperature-bot && git pull && poetry install ; \
+		cd /home/air/temperature-bot && git pull && poetry install && \
+		flyway migrate \
+		    -url="jdbc:sqlite:/var/db/temperature-bot.db" \
+		    -locations="filesystem:etc/flyway/sql" \
+		    -baselineOnMigrate=true ; \
 	else \
 		echo "Deploy skipped: not running on slg1 (current hostname: $$(hostname))"; \
 	fi
