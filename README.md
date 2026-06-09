@@ -16,6 +16,7 @@ https://github.com/dpb587/hubitat-cli
 ## Database
 - Maintains temperature and fan settings for all devices
 - Temperatures are stored with run-length encoding to prevent database explosion
+- SQL schema migrations are tracked with Flyway. See `doc/sql-migrations.md`.
 
 
 ## Rules Engine

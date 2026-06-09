@@ -79,6 +79,23 @@ jobs:
         run: |
           make install-macos
 
+      - name: Install Flyway (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          curl --fail --silent --show-error --location \
+            --output /tmp/flyway-commandline-linux-x64.tar.gz \
+            https://github.com/flyway/flyway/releases/latest/download/flyway-commandline-linux-x64.tar.gz
+          mkdir -p /tmp/flyway-install
+          tar -xzf /tmp/flyway-commandline-linux-x64.tar.gz -C /tmp/flyway-install
+          echo "/tmp/flyway-install/$(ls /tmp/flyway-install)" >> $GITHUB_PATH
+          flyway -v
+
+      - name: Install Flyway (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install flyway
+          flyway -v
+
       - name: Lint
         run: |
           make pylint
