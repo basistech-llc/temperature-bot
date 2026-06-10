@@ -28,6 +28,7 @@ export DEV_DB  ?= var/db/temperature-bot.db
 FLYWAY_SQL_DIR := etc/flyway/sql
 # Temporary database used when regenerating etc/schema.sql
 FLYWAY_SCHEMA_TEMP := /tmp/temperature-bot-schema-temp.db
+FLYWAY_SCHEMA_DUMP := /tmp/temperature-bot-schema-temp.sql
 
 # Remote host and paths used by fetch-dev-db (override as needed for your environment)
 FETCH_HOST           ?= air.basistech.net
@@ -90,16 +91,19 @@ fetch-dev-db:
 # temp database and dumping the resulting schema. This keeps schema.sql in sync
 # with the canonical migration history. Run 'make schema' to regenerate.
 etc/schema.sql: $(wildcard $(FLYWAY_SQL_DIR)/*.sql)
-	/bin/rm -f $(FLYWAY_SCHEMA_TEMP)
+	/bin/rm -f $(FLYWAY_SCHEMA_TEMP) $(FLYWAY_SCHEMA_DUMP)
 	flyway migrate \
 	    -url="jdbc:sqlite:$(FLYWAY_SCHEMA_TEMP)" \
 	    -locations="filesystem:$(FLYWAY_SQL_DIR)"
 	sqlite3 $(FLYWAY_SCHEMA_TEMP) \
-		"SELECT sql || ';' FROM sqlite_schema WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%' AND name <> 'flyway_schema_history' AND COALESCE(tbl_name, '') <> 'flyway_schema_history' ORDER BY rowid;" \
-		| sed 's/CREATE INDEX/CREATE INDEX IF NOT EXISTS/' \
+		"SELECT sql || ';' FROM sqlite_master WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%' AND name <> 'flyway_schema_history' AND COALESCE(tbl_name, '') <> 'flyway_schema_history' ORDER BY rowid;" \
+		> $(FLYWAY_SCHEMA_DUMP)
+	test -s $(FLYWAY_SCHEMA_DUMP)
+	sed 's/CREATE INDEX/CREATE INDEX IF NOT EXISTS/' $(FLYWAY_SCHEMA_DUMP) \
 		| sed 's/CREATE TABLE/CREATE TABLE IF NOT EXISTS/' \
-		| tee etc/schema.sql
-	/bin/rm -f $(FLYWAY_SCHEMA_TEMP)
+		> etc/schema.sql
+	test -s etc/schema.sql
+	/bin/rm -f $(FLYWAY_SCHEMA_TEMP) $(FLYWAY_SCHEMA_DUMP)
 
 # Phony target to force regeneration of etc/schema.sql regardless of timestamps
 schema:
