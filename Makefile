@@ -94,9 +94,8 @@ etc/schema.sql: $(wildcard $(FLYWAY_SQL_DIR)/*.sql)
 	flyway migrate \
 	    -url="jdbc:sqlite:$(FLYWAY_SCHEMA_TEMP)" \
 	    -locations="filesystem:$(FLYWAY_SQL_DIR)"
-	echo ".schema"| sqlite3 $(FLYWAY_SCHEMA_TEMP) \
-		| grep -v 'Run Time: real' \
-		| grep -v 'CREATE TABLE sqlite_sequence' \
+	sqlite3 $(FLYWAY_SCHEMA_TEMP) \
+		"SELECT sql || ';' FROM sqlite_schema WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%' AND name <> 'flyway_schema_history' AND COALESCE(tbl_name, '') <> 'flyway_schema_history' ORDER BY rowid;" \
 		| sed 's/CREATE INDEX/CREATE INDEX IF NOT EXISTS/' \
 		| sed 's/CREATE TABLE/CREATE TABLE IF NOT EXISTS/' \
 		| tee etc/schema.sql
