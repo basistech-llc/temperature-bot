@@ -1,5 +1,6 @@
 """Flyway schema tests."""
 
+from contextlib import closing
 import sqlite3
 from pathlib import Path
 
@@ -12,27 +13,27 @@ BASELINE_MIGRATION_PATH = (
 
 
 def table_names_created_by(sql_path):
-    conn = sqlite3.connect(":memory:")
-    with open(sql_path, "r", encoding="utf-8") as schema_file:
-        conn.executescript(schema_file.read())
-    return {
-        row[0]
-        for row in conn.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
-        )
-    }
+    with closing(sqlite3.connect(":memory:")) as conn:
+        with open(sql_path, "r", encoding="utf-8") as schema_file:
+            conn.executescript(schema_file.read())
+        return {
+            row[0]
+            for row in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
+            )
+        }
 
 
 def index_names_created_by(sql_path):
-    conn = sqlite3.connect(":memory:")
-    with open(sql_path, "r", encoding="utf-8") as schema_file:
-        conn.executescript(schema_file.read())
-    return {
-        row[0]
-        for row in conn.execute(
-            "SELECT name FROM sqlite_master WHERE type='index' AND name NOT LIKE 'sqlite_%'"
-        )
-    }
+    with closing(sqlite3.connect(":memory:")) as conn:
+        with open(sql_path, "r", encoding="utf-8") as schema_file:
+            conn.executescript(schema_file.read())
+        return {
+            row[0]
+            for row in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='index' AND name NOT LIKE 'sqlite_%'"
+            )
+        }
 
 
 def test_schema_file_contains_application_tables_only():
