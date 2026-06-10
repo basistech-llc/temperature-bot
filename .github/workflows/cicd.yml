@@ -19,6 +19,7 @@ jobs:
       AIRNOW_API_KEY: ${{ secrets.AIRNOW_API_KEY }}
       POETRY_VERSION: '2.1.3'
       RUFF_VERSION: '0.13.2'
+      FLYWAY_VERSION: '12.8.1'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -79,29 +80,32 @@ jobs:
         run: |
           make install-macos
 
-      - name: Install Flyway (Linux)
-        if: runner.os == 'Linux'
+      - name: Install Flyway
         run: |
-          FLYWAY_TAG=$(curl --fail --silent --show-error --location \
-            --write-out '%{url_effective}' \
-            --output /dev/null \
-            https://github.com/flyway/flyway/releases/latest | sed 's#.*/##')
-          FLYWAY_VERSION="${FLYWAY_TAG#flyway-}"
-          FLYWAY_TAR="flyway-commandline-${FLYWAY_VERSION}-linux-x64.tar.gz"
+          case "${RUNNER_OS}-$(uname -m)" in
+            Linux-x86_64)
+              FLYWAY_PLATFORM="linux-x64"
+              ;;
+            macOS-arm64)
+              FLYWAY_PLATFORM="macosx-arm64"
+              ;;
+            macOS-x86_64)
+              FLYWAY_PLATFORM="macosx-x64"
+              ;;
+            *)
+              echo "Unsupported Flyway platform: ${RUNNER_OS}-$(uname -m)"
+              exit 1
+              ;;
+          esac
+          FLYWAY_TAR="flyway-commandline-${FLYWAY_VERSION}-${FLYWAY_PLATFORM}.tar.gz"
           curl --fail --silent --show-error --location \
             --output "/tmp/${FLYWAY_TAR}" \
-            "https://github.com/flyway/flyway/releases/download/${FLYWAY_TAG}/${FLYWAY_TAR}"
+            "https://github.com/flyway/flyway/releases/download/flyway-${FLYWAY_VERSION}/${FLYWAY_TAR}"
           mkdir -p /tmp/flyway-install
           tar -xzf "/tmp/${FLYWAY_TAR}" -C /tmp/flyway-install
-          FLYWAY_DIR=$(find /tmp/flyway-install -mindepth 1 -maxdepth 1 -type d | head -n 1)
-          echo "${FLYWAY_DIR}" >> $GITHUB_PATH
+          FLYWAY_DIR="/tmp/flyway-install/flyway-${FLYWAY_VERSION}"
+          echo "${FLYWAY_DIR}" >> "$GITHUB_PATH"
           export PATH="${FLYWAY_DIR}:${PATH}"
-          flyway -v
-
-      - name: Install Flyway (macOS)
-        if: runner.os == 'macOS'
-        run: |
-          brew install flyway
           flyway -v
 
       - name: Lint

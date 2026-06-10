@@ -44,17 +44,4 @@ CREATE INDEX IF NOT EXISTS idx_alerts_active ON alerts (end_time) WHERE end_time
 CREATE INDEX IF NOT EXISTS idx_alerts_type ON alerts (alert_type);
 CREATE INDEX IF NOT EXISTS idx_alerts_start_time ON alerts (start_time);
 CREATE INDEX IF NOT EXISTS idx_changelog_logtime ON changelog (logtime);
-CREATE INDEX IF NOT EXISTS idx_changelog_device_id_logtime ON changelog (device_id, logtime);
-CREATE TABLE IF NOT EXISTS flyway_schema_history (
-    installed_rank INTEGER PRIMARY KEY,
-    version TEXT,
-    description TEXT NOT NULL,
-    type TEXT NOT NULL,
-    script TEXT NOT NULL,
-    checksum INTEGER,
-    installed_by TEXT NOT NULL,
-    installed_on TEXT NOT NULL DEFAULT (datetime('now')),
-    execution_time INTEGER NOT NULL,
-    success INTEGER NOT NULL
-);
-CREATE INDEX IF NOT EXISTS flyway_schema_history_success_idx ON flyway_schema_history (success);
+CREATE INDEX IF NOT EXISTS idx_changelog_device_id ON changelog (device_id);
