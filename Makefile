@@ -195,7 +195,7 @@ pylint-check: $(REQ)
 	$(PYTHON) -m pylint $(PYLINT_OPTS) app tests *.py
 
 djlint: $(REQ)
-	poetry run djlint $(DJLINT_FLAGS) $(TEMPLATE_DIR)/*.html | etc/djlint-reformat.bash
+	poetry run djlint $(DJLINT_FLAGS) $(TEMPLATE_DIR)/*.html
 
 eslint: $(REQ)
 	(cd app/static; make eslint)
