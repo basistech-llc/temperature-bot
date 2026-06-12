@@ -32,7 +32,7 @@ def create_app():
 
     # https://flask.palletsprojects.com/en/stable/config/
     app = Flask(__name__)
-    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1)
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1)  # type: ignore[method-assign]
     app.config["TEMPLATES_AUTO_RELOAD"] = True
 
     # Configure logging

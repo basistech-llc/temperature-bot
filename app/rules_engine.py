@@ -14,7 +14,7 @@ import logging
 from .paths import ROOT_DIR
 from . import db
 from . import ae200
-from .db import SpeedControl, DriveControl, SetTempControl
+from .models import SpeedControl, DriveControl, SetTempControl
 
 logger = logging.getLogger(__name__)
 

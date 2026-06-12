@@ -5,6 +5,7 @@ You need an API key
 
 import logging
 import json
+import os
 import requests  # type: ignore
 from app.util import get_config, get_secret
 from app.paths import TIMEOUT_SECONDS
@@ -13,6 +14,22 @@ AIRNOW_URL = "https://www.airnowapi.org/aq/observation/zipCode/current/?format=a
 GOOGLE_URL = "https://airquality.googleapis.com/v1/history:lookup?key={API_KEY}"
 
 logger = logging.getLogger(__name__)
+AQICN_SIMULATOR = os.getenv("AQICN_SIMULATOR")
+AQICN_SIMULATOR_DATA = {
+    "aqi": 45,
+    "iaqi": {
+        "co": {"v": 0.2},
+        "h": {"v": 45},
+        "no2": {"v": 3.1},
+        "o3": {"v": 22.0},
+        "p": {"v": 1012},
+        "pm10": {"v": 12},
+        "pm25": {"v": 6},
+        "so2": {"v": 1.0},
+        "t": {"v": 21},
+        "w": {"v": 2.5},
+    },
+}
 
 # https://docs.airnowapi.org/aq101
 AQI_TABLE = [
@@ -93,6 +110,8 @@ def get_aqi_google():
 # https://aqicn.org/json-api/doc/
 
 def get_aqi_aqicn_full():
+    if AQICN_SIMULATOR:
+        return AQICN_SIMULATOR_DATA
     try:
         city = get_config()['location']['city']
     except KeyError:

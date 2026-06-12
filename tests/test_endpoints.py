@@ -18,6 +18,7 @@ from app import ae200
 from app import db
 from app import rules_engine
 from app.constants import __version__
+from app.models import DriveControl, SpeedControl
 
 logger = logging.getLogger(__name__)
 
@@ -387,7 +388,7 @@ def test_set_body_drive_records_commanded_drive_when_readback_is_stale(
     ):
         rules_engine.set_body_drive(
             conn,
-            db.DriveControl(device_id=device_id, drive=0),
+            DriveControl(device_id=device_id, drive=0),
             "127.0.0.1",
             "web",
         )
@@ -415,7 +416,7 @@ def test_set_body_fan_speed_records_commanded_speed_when_readback_is_stale(
     ):
         rules_engine.set_body_fan_speed(
             conn,
-            db.SpeedControl(device_id=device_id, fan_speed=3),
+            SpeedControl(device_id=device_id, fan_speed=3),
             "127.0.0.1",
             "web",
         )

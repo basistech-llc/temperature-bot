@@ -5,6 +5,8 @@ Weather functions from the US National Weather Service
 import datetime
 import logging
 import json
+from typing import Any
+
 import requests  # type: ignore
 
 from app.util import get_config
@@ -21,8 +23,8 @@ class WeatherService:
             longitude = get_config()['location']['longitude']
         self.latitude = latitude
         self.longitude = longitude
-        self.weather_points = None
-        self.session = None
+        self.weather_points: dict[str, Any] | None = None
+        self.session: Any | None = None
 
     def ensure_points_loaded(self):
         if self.weather_points is None:
@@ -35,15 +37,22 @@ class WeatherService:
             response.raise_for_status()
             self.weather_points = response.json()
 
+    def points_and_session(self):
+        """Return loaded weather points and session."""
+        self.ensure_points_loaded()
+        assert self.weather_points is not None
+        assert self.session is not None
+        return self.weather_points, self.session
+
     def get_current_conditions(self, num_stations=2):
         """Get current weather conditions from nearest stations.
 
         Returns a list of dicts, one per station.
         """
-        self.ensure_points_loaded()
+        weather_points, session = self.points_and_session()
 
-        observation_stations_url = self.weather_points['properties']['observationStations']
-        response = self.session.get(observation_stations_url)
+        observation_stations_url = weather_points['properties']['observationStations']
+        response = session.get(observation_stations_url)
         logger.debug("get %s", observation_stations_url)
         response.raise_for_status()
         stations = response.json()
@@ -58,7 +67,7 @@ class WeatherService:
             try:
                 observations_url = f"https://api.weather.gov/stations/{station_id}/observations/latest"
                 logger.debug("get %s", observations_url)
-                response = self.session.get(observations_url)
+                response = session.get(observations_url)
                 response.raise_for_status()
                 observation = response.json()
 
@@ -76,10 +85,10 @@ class WeatherService:
 
     def get_forecast(self):
         """Get hourly forecast data"""
-        self.ensure_points_loaded()
+        weather_points, session = self.points_and_session()
 
-        forecast_hourly_url = self.weather_points['properties']['forecastHourly']
-        response = self.session.get(forecast_hourly_url)
+        forecast_hourly_url = weather_points['properties']['forecastHourly']
+        response = session.get(forecast_hourly_url)
         response.raise_for_status()
         forecasts = response.json()
 
@@ -105,10 +114,10 @@ class WeatherService:
 
     def get_daily_forecast(self, num_periods=5):
         """Get daily forecast periods (e.g. 'Tonight', 'Monday', 'Monday Night')."""
-        self.ensure_points_loaded()
+        weather_points, session = self.points_and_session()
 
-        forecast_url = self.weather_points['properties']['forecast']
-        response = self.session.get(forecast_url)
+        forecast_url = weather_points['properties']['forecast']
+        response = session.get(forecast_url)
         logger.debug("get %s", forecast_url)
         response.raise_for_status()
         forecasts = response.json()

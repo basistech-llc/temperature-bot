@@ -29,11 +29,20 @@ FLYWAY_SQL_DIR := etc/flyway/sql
 # Temporary database used when regenerating etc/schema.sql
 FLYWAY_SCHEMA_TEMP := /tmp/temperature-bot-schema-temp.db
 FLYWAY_SCHEMA_DUMP := /tmp/temperature-bot-schema-temp.sql
+# Temporary database used by the read-only migration validation gate.
+FLYWAY_VALIDATE_TEMP := /tmp/temperature-bot-flyway-validate.db
 
 # Remote host and paths used by fetch-dev-db (override as needed for your environment)
 FETCH_HOST           ?= air.basistech.net
 FETCH_REMOTE_DB_DIR  ?= /var/db/
 FETCH_REMOTE_CONFIG  ?= /home/air/temperature-bot/temperature-bot-config.yaml
+
+# Production deploy defaults. Override only when intentionally targeting a
+# different checked-out installation or database.
+PROD_HOSTNAME   ?= slg1
+PROD_APP_DIR    ?= /home/air/temperature-bot
+PROD_DB         ?= /var/db/temperature-bot.db
+PROD_BACKUP_DIR ?= /var/db/temperature-bot-backups
 
 REQ := .venv/pyvenv.cfg
 PYTHON := .venv/bin/python
@@ -44,7 +53,11 @@ export PLAYWRIGHT_BROWSERS_PATH := .playwright
 
 # Pin tool versions (helps avoid "invisible" cache invalidations)
 POETRY_VERSION ?= 2.1.3
-RUFF_VERSION   ?= 0.13.2
+RUFF_VERSION   ?= 0.15.15
+
+# Test selection override, e.g.
+#   make PYTEST_ARGS=tests/test_db.py::test_name pytest
+PYTEST_ARGS ?= .
 
 
 
@@ -118,7 +131,20 @@ migrate-db: $(DEV_DB)
 	    -locations="filesystem:$(FLYWAY_SQL_DIR)" \
 	    -baselineOnMigrate=true
 
-.PHONY: make-dev-db fetch-dev-db schema migrate-db
+# Validate that all versioned migrations apply cleanly from scratch and that
+# Flyway accepts the resulting schema history. This is safe for CI and local
+# checks because it uses only a temporary database under /tmp.
+validate-migrations:
+	/bin/rm -f $(FLYWAY_VALIDATE_TEMP)
+	flyway migrate \
+	    -url="jdbc:sqlite:$(FLYWAY_VALIDATE_TEMP)" \
+	    -locations="filesystem:$(FLYWAY_SQL_DIR)"
+	flyway validate \
+	    -url="jdbc:sqlite:$(FLYWAY_VALIDATE_TEMP)" \
+	    -locations="filesystem:$(FLYWAY_SQL_DIR)"
+	/bin/rm -f $(FLYWAY_VALIDATE_TEMP)
+
+.PHONY: make-dev-db fetch-dev-db schema migrate-db validate-migrations
 
 ################################################################
 ## Local development targets. These use the flask built-in web server,
@@ -150,13 +176,22 @@ PYLINT_OPTS :=--output-format=parseable --rcfile .pylintrc --fail-under=$(PYLINT
 
 lint: check
 check: $(REQ)
-	make pylint
-	make djlint
-	make eslint
-	echo make check-types
+	$(MAKE) ruff-check
+	$(MAKE) pylint-check
+	$(MAKE) djlint
+	$(MAKE) eslint
+	$(MAKE) check-types
+	$(MAKE) validate-migrations
 
-pylint: $(REQ)
+format: $(REQ)
 	poetry run ruff check --fix app | etc/ruff-reformat.bash
+
+pylint: ruff-check pylint-check
+
+ruff-check: $(REQ)
+	poetry run ruff check app | etc/ruff-reformat.bash
+
+pylint-check: $(REQ)
 	$(PYTHON) -m pylint $(PYLINT_OPTS) app tests *.py
 
 djlint: $(REQ)
@@ -171,7 +206,7 @@ check-types: $(REQ)
 ## Dynamic Analysis
 pytest: $(REQ)
 	make pylint
-	$(PYTHON) -m pytest . -v --cov=. --cov-report=xml --cov-report=html --log-cli-level=WARNING --log-file-level=DEBUG
+	$(PYTHON) -m pytest $(PYTEST_ARGS) -v --cov=. --cov-report=xml --cov-report=html --log-cli-level=WARNING --log-file-level=DEBUG
 	@echo coverage report in htmlcov/
 test-js: $(REQ)
 	@echo "Running JavaScript unit tests..."
@@ -193,7 +228,7 @@ outdated: $(REQ)
 	@echo "=== CDN libraries (in templates) ==="
 	bash etc/check-cdn-versions.bash
 
-.PHONY: lint check pylint djlint eslint check-types pytest test-js test outdated
+.PHONY: lint check format pylint ruff-check pylint-check djlint eslint check-types pytest test-js test outdated
 
 ################################################################
 ## Cron targets
@@ -270,14 +305,24 @@ cleanall: clean
 ## Installs the latest source code into the live system and applies any pending
 ## database migrations. Run on the server (slg1.basistech.net).
 deploy:
-	@if [ "$$(hostname)" = "slg1" ]; then \
-		cd /home/air/temperature-bot && git pull && poetry install && \
+	@if [ "$$(hostname)" = "$(PROD_HOSTNAME)" ]; then \
+		cd $(PROD_APP_DIR) && \
+		git pull && \
+		poetry install && \
+		flyway validate \
+		    -url="jdbc:sqlite:$(PROD_DB)" \
+		    -locations="filesystem:etc/flyway/sql" && \
+		/bin/mkdir -p $(PROD_BACKUP_DIR) && \
+		/bin/cp -f $(PROD_DB) $(PROD_BACKUP_DIR)/temperature-bot.$$(date -u +%Y%m%dT%H%M%SZ).db && \
 		flyway migrate \
-		    -url="jdbc:sqlite:/var/db/temperature-bot.db" \
+		    -url="jdbc:sqlite:$(PROD_DB)" \
 		    -locations="filesystem:etc/flyway/sql" \
-		    -baselineOnMigrate=true ; \
+		    -baselineOnMigrate=true && \
+		flyway validate \
+		    -url="jdbc:sqlite:$(PROD_DB)" \
+		    -locations="filesystem:etc/flyway/sql" ; \
 	else \
-		echo "Deploy skipped: not running on slg1 (current hostname: $$(hostname))"; \
+		echo "Deploy skipped: not running on $(PROD_HOSTNAME) (current hostname: $$(hostname))"; \
 	fi
 
 

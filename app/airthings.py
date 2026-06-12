@@ -5,7 +5,7 @@ Interface to the airthings api
 import os
 import json
 from pathlib import Path
-import requests
+import requests  # type: ignore[import-untyped]
 from app.util import get_secret
 from app.paths import TIMEOUT_SECONDS
 

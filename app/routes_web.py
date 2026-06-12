@@ -130,7 +130,10 @@ def _register_core_routes(app):
     def show_rules(conn):
         """Rules page"""
         # Check if we should run the rules or skip them
-        run_rules = request.args.get("run_rules", "1", type=int)
+        try:
+            run_rules = int(request.args.get("run_rules", "1"))
+        except ValueError:
+            run_rules = 1
         hour_now = datetime.datetime.now().replace(minute=0, second=0, microsecond=0)
 
         # If requests, see how the rules will render for the next seven days
