@@ -6,7 +6,9 @@ You need an API key
 import logging
 import json
 import os
-import requests  # type: ignore
+from typing import Any
+
+import requests
 from app.util import get_config, get_secret
 from app.paths import TIMEOUT_SECONDS
 
@@ -79,11 +81,13 @@ def get_aqi_airnow():
 def get_aqi_google():
     """Get AQI data from Google API"""
     try:
-        params = {'hours':1,
-                  'location':{
-                      'longitude':get_config()['location']['longitude'],
-                      'latitude':get_config()['location']['latitude'] }
-                  }
+        params: dict[str, Any] = {
+            'hours': 1,
+            'location': {
+                'longitude': get_config()['location']['longitude'],
+                'latitude': get_config()['location']['latitude'],
+            },
+        }
     except KeyError:
         print(f"longitude and latitude missing from location:\n{json.dumps(get_config(),indent=4)}")
         raise

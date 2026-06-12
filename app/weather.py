@@ -7,7 +7,7 @@ import logging
 import json
 from typing import Any
 
-import requests  # type: ignore
+import requests
 
 from app.util import get_config
 from app.paths import TIMEOUT_SECONDS
@@ -30,10 +30,9 @@ class WeatherService:
         if self.weather_points is None:
             if self.session is None:
                 self.session = requests.Session()
-                self.session.timeout = TIMEOUT_SECONDS
 
             weather_points_url = f'https://api.weather.gov/points/{self.latitude},{self.longitude}'
-            response = self.session.get(weather_points_url)
+            response = self.session.get(weather_points_url, timeout=TIMEOUT_SECONDS)
             response.raise_for_status()
             self.weather_points = response.json()
 
@@ -52,7 +51,7 @@ class WeatherService:
         weather_points, session = self.points_and_session()
 
         observation_stations_url = weather_points['properties']['observationStations']
-        response = session.get(observation_stations_url)
+        response = session.get(observation_stations_url, timeout=TIMEOUT_SECONDS)
         logger.debug("get %s", observation_stations_url)
         response.raise_for_status()
         stations = response.json()
@@ -67,7 +66,7 @@ class WeatherService:
             try:
                 observations_url = f"https://api.weather.gov/stations/{station_id}/observations/latest"
                 logger.debug("get %s", observations_url)
-                response = session.get(observations_url)
+                response = session.get(observations_url, timeout=TIMEOUT_SECONDS)
                 response.raise_for_status()
                 observation = response.json()
 
@@ -88,7 +87,7 @@ class WeatherService:
         weather_points, session = self.points_and_session()
 
         forecast_hourly_url = weather_points['properties']['forecastHourly']
-        response = session.get(forecast_hourly_url)
+        response = session.get(forecast_hourly_url, timeout=TIMEOUT_SECONDS)
         response.raise_for_status()
         forecasts = response.json()
 
@@ -117,7 +116,7 @@ class WeatherService:
         weather_points, session = self.points_and_session()
 
         forecast_url = weather_points['properties']['forecast']
-        response = session.get(forecast_url)
+        response = session.get(forecast_url, timeout=TIMEOUT_SECONDS)
         logger.debug("get %s", forecast_url)
         response.raise_for_status()
         forecasts = response.json()
