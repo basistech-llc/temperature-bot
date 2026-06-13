@@ -20,6 +20,17 @@ def test_aqi_decode():
     }
 
 
+def test_aqicn_simulator_env_requires_enabled_value(monkeypatch):
+    """AQICN simulator mode should not treat every non-empty value as enabled."""
+    for value in ("0", "false", "False", "no", "off", ""):
+        monkeypatch.setenv(airquality.AQICN_SIMULATOR_ENV, value)
+        assert not airquality.aqicn_simulator_enabled()
+
+    for value in ("1", "true", "TRUE", "yes", "on"):
+        monkeypatch.setenv(airquality.AQICN_SIMULATOR_ENV, value)
+        assert airquality.aqicn_simulator_enabled()
+
+
 def test_aqi_rest(flask_test_client, test_database_conn_with_test_data):  # noqa: F811
     conn = test_database_conn_with_test_data[0]
     now = int(time.time()) + 10

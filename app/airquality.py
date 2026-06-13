@@ -16,7 +16,8 @@ AIRNOW_URL = "https://www.airnowapi.org/aq/observation/zipCode/current/?format=a
 GOOGLE_URL = "https://airquality.googleapis.com/v1/history:lookup?key={API_KEY}"
 
 logger = logging.getLogger(__name__)
-AQICN_SIMULATOR = os.getenv("AQICN_SIMULATOR")
+AQICN_SIMULATOR_ENV = "AQICN_SIMULATOR"
+TRUE_ENV_VALUES = {"1", "true", "yes", "on"}
 AQICN_SIMULATOR_DATA = {
     "aqi": 45,
     "iaqi": {
@@ -46,6 +47,10 @@ AQI_TABLE = [
 
 class AQIError(Exception):
     """Generic errors"""
+
+def aqicn_simulator_enabled() -> bool:
+    """Return True when AQICN simulator mode is explicitly enabled."""
+    return os.getenv(AQICN_SIMULATOR_ENV, "").strip().lower() in TRUE_ENV_VALUES
 
 def aqi_decode(aqi):
     aqi = int(aqi)
@@ -114,7 +119,7 @@ def get_aqi_google():
 # https://aqicn.org/json-api/doc/
 
 def get_aqi_aqicn_full():
-    if AQICN_SIMULATOR:
+    if aqicn_simulator_enabled():
         return AQICN_SIMULATOR_DATA
     try:
         city = get_config()['location']['city']

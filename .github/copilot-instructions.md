@@ -97,6 +97,8 @@ When adding schema:
   dictionary shape, define key names once as string constants instead of
   hard-coding them at each use.
 - Keep route handlers thin; move business logic into focused modules.
+- Do not add `type: ignore` comments. Fix the type contract, add precise
+  annotations, or adjust typed dependencies/configuration instead.
 - Do not use mocking unless it is necessary to isolate external hardware,
   network services, or time-sensitive behavior. Prefer local simulators and
   real SQLite test databases.

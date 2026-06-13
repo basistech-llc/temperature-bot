@@ -208,10 +208,12 @@ def test_runner_rules_test(bin_dir, temp_db):
 def test_runner_with_csv_import(bin_dir, temp_db):
     """Test runner.py CSV import functionality."""
     csv_content = "time,Broadway North\n2025-01-01T12:00:00,25.0\n"
+    csv_path = ""
 
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.csv', delete=False) as csv_file:
-        csv_file.write(csv_content)
-        csv_path = csv_file.name
+    try:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False) as csv_file:
+            csv_file.write(csv_content)
+            csv_path = csv_file.name
 
         env = os.environ.copy()
         env[TEST_DB_NAME] = temp_db
@@ -229,6 +231,9 @@ def test_runner_with_csv_import(bin_dir, temp_db):
             assert "KeyError" in result.stderr or "labelmap" in result.stderr
         else:
             assert result.returncode == 0
+    finally:
+        if csv_path:
+            Path(csv_path).unlink(missing_ok=True)
 
 
 def test_all_tools_help_consistency(bin_dir):

@@ -454,8 +454,12 @@ def debug_ae200_devices():
                 return ae200_details
             results = await asyncio.gather(*tasks, return_exceptions=True)
             for key, result in zip(ids, results):
-                if isinstance(result, BaseException):
+                if isinstance(result, asyncio.CancelledError):
+                    raise result
+                if isinstance(result, Exception):
                     ae200_details[key] = {"error": str(result)}
+                elif isinstance(result, BaseException):
+                    raise result
                 else:
                     ae200_details[key] = dict(result)
             return ae200_details

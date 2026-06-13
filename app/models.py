@@ -120,7 +120,7 @@ class DeviceStatus(BaseModel):
 def json_ready(model: BaseModel) -> Dict[str, Any]:
     """Dump a validated model to the mapping shape used by routes/templates.
 
-    ``exclude_none=True`` preserves the previous JSON behavior: absent optional
-    database columns are omitted instead of serialized as explicit nulls.
+    ``exclude_none=True`` intentionally omits optional fields whose source data
+    is unavailable instead of serializing those fields as explicit nulls.
     """
     return model.model_dump(exclude_none=True)

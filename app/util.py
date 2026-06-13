@@ -6,7 +6,7 @@ import time
 import os
 import functools
 import logging
-import yaml  # type: ignore
+import yaml
 
 from app.paths import CONFIG_YAML_PATH
 

@@ -24,7 +24,7 @@ class WeatherService:
         self.latitude = latitude
         self.longitude = longitude
         self.weather_points: dict[str, Any] | None = None
-        self.session: Any | None = None
+        self.session: requests.Session | None = None
 
     def ensure_points_loaded(self):
         if self.weather_points is None:
@@ -39,9 +39,11 @@ class WeatherService:
     def points_and_session(self):
         """Return loaded weather points and session."""
         self.ensure_points_loaded()
-        assert self.weather_points is not None
-        assert self.session is not None
-        return self.weather_points, self.session
+        weather_points = self.weather_points
+        session = self.session
+        if weather_points is None or session is None:
+            raise RuntimeError("Weather points and session were not initialized")
+        return weather_points, session
 
     def get_current_conditions(self, num_stations=2):
         """Get current weather conditions from nearest stations.

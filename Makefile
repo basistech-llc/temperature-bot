@@ -135,14 +135,15 @@ migrate-db: $(DEV_DB)
 # Flyway accepts the resulting schema history. This is safe for CI and local
 # checks because it uses only a temporary database under /tmp.
 validate-migrations:
-	/bin/rm -f $(FLYWAY_VALIDATE_TEMP)
+	@set -eu; \
+	/bin/rm -f "$(FLYWAY_VALIDATE_TEMP)"; \
+	trap '/bin/rm -f "$(FLYWAY_VALIDATE_TEMP)"' EXIT; \
 	flyway migrate \
 	    -url="jdbc:sqlite:$(FLYWAY_VALIDATE_TEMP)" \
-	    -locations="filesystem:$(FLYWAY_SQL_DIR)"
+	    -locations="filesystem:$(FLYWAY_SQL_DIR)"; \
 	flyway validate \
 	    -url="jdbc:sqlite:$(FLYWAY_VALIDATE_TEMP)" \
 	    -locations="filesystem:$(FLYWAY_SQL_DIR)"
-	/bin/rm -f $(FLYWAY_VALIDATE_TEMP)
 
 .PHONY: make-dev-db fetch-dev-db schema migrate-db validate-migrations
 
@@ -177,6 +178,7 @@ PYLINT_OPTS :=--output-format=parseable --rcfile .pylintrc --fail-under=$(PYLINT
 lint: check
 check: $(REQ)
 	$(MAKE) ruff-check
+	$(MAKE) no-type-ignore
 	$(MAKE) pylint-check
 	$(MAKE) djlint
 	$(MAKE) eslint
@@ -189,7 +191,10 @@ format: $(REQ)
 pylint: ruff-check pylint-check
 
 ruff-check: $(REQ)
-	poetry run ruff check app | etc/ruff-reformat.bash
+	poetry run ruff check app
+
+no-type-ignore:
+	@! rg -n 'type:\s*ignore|type:ignore' app bin tests *.py
 
 pylint-check: $(REQ)
 	$(PYTHON) -m pylint $(PYLINT_OPTS) app tests *.py
@@ -228,7 +233,7 @@ outdated: $(REQ)
 	@echo "=== CDN libraries (in templates) ==="
 	bash etc/check-cdn-versions.bash
 
-.PHONY: lint check format pylint ruff-check pylint-check djlint eslint check-types pytest test-js test outdated
+.PHONY: lint check format pylint ruff-check no-type-ignore pylint-check djlint eslint check-types pytest test-js test outdated
 
 ################################################################
 ## Cron targets
