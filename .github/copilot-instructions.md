@@ -159,8 +159,9 @@ committed.
 
 ## Task Tracking
 
-This repository uses `bd` (beads) for issue tracking. Do not add markdown TODO
-lists or duplicate tracking systems. See `AGENTS.md`.
+This repository does not use `bd` (beads). Do not run `bd` commands or rely on
+`.beads/` state. Follow the current request and use GitHub issue or PR workflow
+only when explicitly asked.
 
 ## External Services
 
