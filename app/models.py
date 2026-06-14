@@ -87,6 +87,8 @@ class WeatherStation(BaseModel):
 class WeatherData(BaseModel):
     """Weather payload returned by the app weather endpoint."""
 
+    model_config = ConfigDict(extra="forbid")
+
     stations: list[WeatherStation] = Field(default_factory=list)
     forecast: list[Dict[str, Any]] = Field(default_factory=list)
     daily: list[Dict[str, Any]] = Field(default_factory=list)
