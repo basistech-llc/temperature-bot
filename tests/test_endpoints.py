@@ -253,6 +253,19 @@ def test_weather_endpoint(
     assert "weather" in response_json
 
 
+@patch("app.weather.get_weather_data")
+def test_weather_endpoint_preserves_weather_errors(
+    mock_get_weather_data, flask_test_client
+):  # noqa: F811
+    """Weather service errors remain visible in the API response."""
+    mock_get_weather_data.return_value = {"error": "weather offline"}
+
+    response = flask_test_client.get("/api/v1/weather")
+
+    assert response.status_code == 200
+    assert response.json["weather"] == {"error": "weather offline"}
+
+
 # pylint: disable=too-many-arguments, disable=too-many-positional-arguments
 BROADWAY_SOUTH = 10
 

@@ -34,7 +34,16 @@ from typing import List, Dict, Any
 from flask import request
 
 from .constants import DB_PATH, TEST_DB_NAME
-from .models import AqiSummary, DeviceStatus, json_ready
+from .models import (
+    AqiSummary,
+    AqiWeatherResponse,
+    ChangelogResponse,
+    ChangelogRow,
+    DeviceStatus,
+    TimeSeries,
+    json_ready,
+    json_ready_list,
+)
 from .paths import SCHEMA_FILE_PATH
 from .util import github_style_duration
 from . import ae200
@@ -673,7 +682,7 @@ def get_temperature_series(
     if not device_ids:
         device_ids = [dev["device_id"] for dev in devices]
 
-    series = []
+    series: list[TimeSeries] = []
     for dev in devices:
         if dev["device_id"] in device_ids:
             cmd = """
@@ -685,14 +694,16 @@ def get_temperature_series(
             cmd += " ORDER BY logtime "
             c.execute(cmd, args)
             rows = c.fetchall()
-            data = [[row["logtime"], row["temp10x"] / 10] for row in rows]
+            data = [(row["logtime"], row["temp10x"] / 10) for row in rows]
             if data:
-                series.append({
-                    "device_id": dev["device_id"],
-                    "name": dev["device_name"],
-                    "data": data,
-                })
-    return series
+                series.append(
+                    TimeSeries(
+                        device_id=dev["device_id"],
+                        name=dev["device_name"],
+                        data=data,
+                    )
+                )
+    return json_ready_list(series)
 
 
 def get_device_metric_series(
@@ -711,7 +722,7 @@ def get_device_metric_series(
     if not device_ids:
         device_ids = [dev["device_id"] for dev in devices]
 
-    series: List[Dict[str, Any]] = []
+    series: list[TimeSeries] = []
 
     for dev in devices:
         device_id = dev["device_id"]
@@ -729,7 +740,7 @@ def get_device_metric_series(
         c.execute(cmd, args)
         rows = c.fetchall()
 
-        data: List[List[float]] = []
+        data: list[tuple[int, float]] = []
         for row in rows:
             try:
                 status = json.loads(row["status_json"])
@@ -738,12 +749,14 @@ def get_device_metric_series(
             val = extract_metric_from_status(status, status_key)
             if val is None:
                 continue
-            data.append([row["logtime"], val])
+            data.append((row["logtime"], val))
 
         if data:
-            series.append({"name": dev["device_name"], "device_id": device_id, "data": data})
+            series.append(
+                TimeSeries(name=dev["device_name"], device_id=device_id, data=data)
+            )
 
-    return series
+    return json_ready_list(series)
 
 
 def get_lighting_series(
@@ -762,7 +775,7 @@ def get_lighting_series(
     if not device_ids:
         device_ids = [dev["device_id"] for dev in devices]
 
-    series: List[Dict[str, Any]] = []
+    series: list[TimeSeries] = []
 
     for dev in devices:
         device_id = dev["device_id"]
@@ -780,7 +793,7 @@ def get_lighting_series(
         c.execute(cmd, args)
         rows = c.fetchall()
 
-        data: List[List[float]] = []
+        data: list[tuple[int, float]] = []
         for row in rows:
             status_json = row["status_json"]
             try:
@@ -804,12 +817,14 @@ def get_lighting_series(
             except (TypeError, ValueError):
                 continue
 
-            data.append([row["logtime"], illum_val])
+            data.append((row["logtime"], illum_val))
 
         if data:
-            series.append({"name": dev["device_name"], "device_id": device_id, "data": data})
+            series.append(
+                TimeSeries(name=dev["device_name"], device_id=device_id, data=data)
+            )
 
-    return series
+    return json_ready_list(series)
 
 
 def get_device_status(conn) -> List[Dict[str, Any]]:
@@ -875,12 +890,16 @@ def get_changelog(
         except TypeError as e:
             logging.error("e=%s data=%s", e, row)
 
-    return {
-        "draw": draw,
-        "recordsTotal": len(rows),
-        "recordsFiltered": len(rows),  # Adjust if implementing search
-        "data": rows,
-    }
+    return json_ready(
+        ChangelogResponse.model_validate(
+            {
+                "draw": draw,
+                "recordsTotal": len(rows),
+                "recordsFiltered": len(rows),  # Adjust if implementing search
+                "data": [ChangelogRow.model_validate(row) for row in rows],
+            }
+        )
+    )
 
 
 def get_device_log(conn, device_id: int) -> Dict[str, Any]:
@@ -941,7 +960,9 @@ def get_aqi_and_weather_data(conn) -> Dict[str, Any]:
     """Get combined weather and AQI data"""
     aqi_data = get_db_aqi(conn)
     weather_data = weather.get_weather_data()
-    return {"aqi": aqi_data, "weather": weather_data}
+    return json_ready(
+        AqiWeatherResponse.model_validate({"aqi": aqi_data, "weather": weather_data})
+    )
 
 def get_all_device_aqi(conn) -> List[Dict[str, Any]]:
     """
