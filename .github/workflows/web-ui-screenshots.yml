@@ -1,4 +1,4 @@
-.github/workflows/web-ui-screenshots.ymlname: Web UI Screenshots
+name: Web UI Screenshots
 
 on:
   pull_request:
