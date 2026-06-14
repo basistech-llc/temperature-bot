@@ -5,10 +5,12 @@ API route handlers
 import asyncio
 import logging
 import time
+import xml.etree.ElementTree as ET
 from typing import Any
 
 from flask import Blueprint, request, jsonify
 from flask_pydantic import validate
+from websockets.exceptions import WebSocketException
 
 from .constants import __version__
 from . import constants
@@ -444,24 +446,24 @@ def debug_ae200_devices():
             ae200_details: dict[str, dict[str, Any]] = {}
             tasks = []
             ids = []
+
+            async def fetch_device_details(device_id) -> dict[str, Any]:
+                try:
+                    return dict(await ae200.get_device_info_async(device_id))
+                except (ET.ParseError, OSError, RuntimeError, ValueError, WebSocketException) as e:
+                    return {"error": str(e)}
+
             for dev in devices:
                 device_id = dev.get("id")
                 if device_id is None:
                     continue
                 ids.append(str(device_id))
-                tasks.append(ae200.get_device_info_async(device_id))
+                tasks.append(fetch_device_details(device_id))
             if not tasks:
                 return ae200_details
-            results = await asyncio.gather(*tasks, return_exceptions=True)
+            results = await asyncio.gather(*tasks)
             for key, result in zip(ids, results):
-                if isinstance(result, asyncio.CancelledError):
-                    raise result
-                if isinstance(result, Exception):
-                    ae200_details[key] = {"error": str(result)}
-                elif isinstance(result, BaseException):
-                    raise result
-                else:
-                    ae200_details[key] = dict(result)
+                ae200_details[key] = result
             return ae200_details
 
         ae200_details = ae200.runner.run_async_safely(
