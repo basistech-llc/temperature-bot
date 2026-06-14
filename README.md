@@ -16,6 +16,7 @@ make make-dev-db        # build a fresh local DB from Flyway migrations
 make local-dev          # run Flask locally with simulated AE-200 data
 make check              # non-mutating static checks, type checks, and migration validation
 make test               # Python and JavaScript tests
+make web-screenshots    # render each web UI page to PNG screenshots
 ```
 
 To run one pytest target through the Makefile:
@@ -23,6 +24,12 @@ To run one pytest target through the Makefile:
 ```bash
 make PYTEST_ARGS=tests/test_db.py::test_name pytest
 ```
+
+`make web-screenshots` seeds a temporary SQLite database, starts Flask with
+simulated external services, and writes PNGs plus `manifest.json` and
+`gallery.md` under `var/web-ui-screenshots/`. The Ubuntu-only `Web UI
+Screenshots` pull-request workflow uploads those PNGs as an artifact and
+updates a sticky PR comment with the rendered images.
 
 ## Database
 

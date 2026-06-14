@@ -425,7 +425,7 @@ const refreshGridRows = () => {
 
   // If it's time to refresh, run the status api and update all of the temps, fan_speeds, and status columsn
   if (secondsUntilRefresh <= 0) {
-    fetch(window.location.href + "api/v1/status", { method: "GET" })
+    fetch("/api/v1/status", { method: "GET" })
       .then((response) => response.json())
       .then((data) => {
         if (DEBUG) {
@@ -437,16 +437,18 @@ const refreshGridRows = () => {
           for (const dev of data.devices) {
             if (dev.temp10x) {
               const cell = document.getElementById(`temp-${dev.device_id}`);
-              const tempC = dev.temp10x / 10;
-              // Store original Celsius value in data attribute for instant conversion
-              cell.setAttribute("data-temp-c", tempC.toString());
+              if (cell) {
+                const tempC = dev.temp10x / 10;
+                // Store original Celsius value in data attribute for instant conversion
+                cell.setAttribute("data-temp-c", tempC.toString());
 
-              // Apply shared staleness + tooltip behavior
-              updateStalenessAndTooltip(cell, dev);
+                // Apply shared staleness + tooltip behavior
+                updateStalenessAndTooltip(cell, dev);
 
-              // Display temperature; omit unit when header already shows it
-              const includeUnit = !cell.classList.contains("temp-display-no-unit");
-              cell.innerHTML = TemperatureUtils.formatTemperature(tempC, includeUnit);
+                // Display temperature; omit unit when header already shows it
+                const includeUnit = !cell.classList.contains("temp-display-no-unit");
+                cell.innerHTML = TemperatureUtils.formatTemperature(tempC, includeUnit);
+              }
             }
 
             // Update humidity where available

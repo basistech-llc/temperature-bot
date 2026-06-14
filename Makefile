@@ -224,6 +224,12 @@ test: $(REQ)
 	make test-js || js_exit=$$?; \
 	exit $$(($$python_exit + $$js_exit))
 
+playwright-install: $(REQ)
+	poetry run playwright install --with-deps chromium
+
+web-screenshots: $(REQ) playwright-install
+	$(PYTHON) bin/render_web_ui_pages.py
+
 outdated: $(REQ)
 	poetry lock
 	poetry install
@@ -233,7 +239,7 @@ outdated: $(REQ)
 	@echo "=== CDN libraries (in templates) ==="
 	bash etc/check-cdn-versions.bash
 
-.PHONY: lint check format pylint ruff-check no-type-ignore pylint-check djlint eslint check-types pytest test-js test outdated
+.PHONY: lint check format pylint ruff-check no-type-ignore pylint-check djlint eslint check-types pytest test-js test playwright-install web-screenshots outdated
 
 ################################################################
 ## Cron targets
@@ -288,6 +294,7 @@ clean:
 	rm -rf .venv
 	rm -rf .playwright
 	rm -rf htmlcov
+	rm -rf var/web-ui-screenshots
 	rm -f coverage.xml
 	rm -f .coverage
 	rm -rf .pytest_cache
