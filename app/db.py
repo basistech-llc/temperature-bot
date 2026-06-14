@@ -30,11 +30,11 @@ import os
 import sys
 
 from typing import List, Dict, Any
-from pydantic import BaseModel
 
 from flask import request
 
 from .constants import DB_PATH, TEST_DB_NAME
+from .models import AqiSummary, DeviceStatus, json_ready
 from .paths import SCHEMA_FILE_PATH
 from .util import github_style_duration
 from . import ae200
@@ -68,37 +68,6 @@ def reset_schema_mtime_cache() -> None:
 def get_schema_mtime() -> float | None:
     """Return the cached schema mtime. For use by tests only."""
     return _SCHEMA_MTIME
-
-
-class SpeedControl(BaseModel):
-    """Pydantic model for speed control requests."""
-
-    device_id: int
-    fan_speed: int
-
-
-class DriveControl(BaseModel):
-    """Pydantic model for speed control requests."""
-
-    device_id: int
-    drive: int
-
-
-class NoteControl(BaseModel):
-    """Pydantic model for note update requests."""
-
-    device_id: int
-    notes: str | None
-
-
-class SetTempControl(BaseModel):
-    """Pydantic model for set temperature update requests.
-
-    The value is always expressed in Celsius, regardless of UI units.
-    """
-
-    device_id: int
-    set_temp_c: float
 
 
 def connect_db(db_path):
@@ -865,7 +834,7 @@ def get_device_status(conn) -> List[Dict[str, Any]]:
                 data["logtime"] + data.get("duration", 1)
             )
 
-    return device_data
+    return [json_ready(DeviceStatus.model_validate(data)) for data in device_data]
 
 
 def get_changelog(
@@ -953,7 +922,7 @@ def insert_into_aqi(conn, values):
     conn.commit()
 
 
-def get_db_aqi(conn) -> dict:
+def get_db_aqi(conn) -> Dict[str, Any]:
     """
     Get AQI from database.
 
@@ -965,20 +934,20 @@ def get_db_aqi(conn) -> dict:
     c.execute("SELECT aqi FROM aqi order by logtime DESC limit 1")
     row = c.fetchone()
     aqi = row[0] if row is not None else 0
-    return airquality.aqi_decode(aqi)
+    return json_ready(AqiSummary.model_validate(airquality.aqi_decode(aqi)))
 
 
-def get_aqi_and_weather_data(conn) -> dict:
+def get_aqi_and_weather_data(conn) -> Dict[str, Any]:
     """Get combined weather and AQI data"""
     aqi_data = get_db_aqi(conn)
     weather_data = weather.get_weather_data()
     return {"aqi": aqi_data, "weather": weather_data}
 
-def get_all_device_aqi(conn) -> List[dict]:
+def get_all_device_aqi(conn) -> List[Dict[str, Any]]:
     """
     :return: list of dicts where each has device_id, device_name, and status;
              status["aqi"] is a dict of AQI values (same structure as get_db_aqi())
     """
     statuses = fetch_last_status_fixed(conn, flag=AIR_MON_DEVICES)
     statuses.append({"device_id": 0, "device_name": "Outdoor Air Quality", "status": {"aqi": get_db_aqi(conn)}})
-    return statuses
+    return [json_ready(DeviceStatus.model_validate(status)) for status in statuses]

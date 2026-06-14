@@ -1,7 +1,7 @@
 # See https://docs.github.com/en/actions/guides/building-and-testing-python
-# 2025-06-15 - slg - Complete rewrite to avoid MySQL and use DynamoDB and S3 local variants.
-#                    These are automatically configured with install-ubuntu or install-macos
-name: CI (pip)
+# Temperature Bot uses SQLite plus Flyway migrations. The Makefile owns all
+# setup, check, and test entrypoints used by CI and local development.
+name: CI
 on: [push, pull_request]
 
 jobs:
@@ -18,7 +18,7 @@ jobs:
       AQICN_TOKEN: ${{ secrets.AQICN_TOKEN }}
       AIRNOW_API_KEY: ${{ secrets.AIRNOW_API_KEY }}
       POETRY_VERSION: '2.1.3'
-      RUFF_VERSION: '0.13.2'
+      RUFF_VERSION: '0.15.15'
       FLYWAY_VERSION: '12.8.1'
     steps:
       - name: Checkout
@@ -108,9 +108,9 @@ jobs:
           export PATH="${FLYWAY_DIR}:${PATH}"
           flyway -v
 
-      - name: Lint
+      - name: Check
         run: |
-          make pylint
+          make check
 
       - name: Test with coverage
         run: |

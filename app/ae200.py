@@ -23,10 +23,12 @@ import json
 import concurrent.futures
 import websockets
 from websockets.extensions import permessage_deflate
+from websockets.typing import Origin, Subprotocol
 
 from app.util import get_config
 
 logger = logging.getLogger(__name__)
+B_XMLPROC_SUBPROTOCOL = Subprotocol("b_xmlproc")
 
 # Fan mapping speeds. Note that there is no 'OFF'
 FAN_SPEED_AUTO = -1
@@ -62,12 +64,13 @@ def friendly_fan_speed_label(device_name, raw_fan_speed):
         speed = FAN_SPEED_NAMES.get(raw_fan_speed)
     else:
         speed = raw_fan_speed
+    if speed is None:
+        return str(raw_fan_speed)
     is_erv = (device_name or "").upper().startswith("ERV")
     labels = _ERV_SPEED_LABELS if is_erv else _FAN_SPEED_LABELS
     return labels.get(speed, str(raw_fan_speed))
 
 AE200_SIMULATOR = os.getenv('AE200_SIMULATOR')
-SIMULATOR_DIR = Path(join(dirname(__file__),"test_data"))
 SIMULATOR_DIR = Path(join(dirname(__file__), "test_data"))
 
 getUnitsPayload = """<?xml version="1.0" encoding="UTF-8" ?>
@@ -196,8 +199,8 @@ class AE200Functions:
         async with websockets.connect(
             f"ws://{self.address}/b_xmlproc/",
             extensions=[permessage_deflate.ClientPerMessageDeflateFactory()],
-            origin=f"http://{self.address}",
-            subprotocols=["b_xmlproc"],
+            origin=Origin(f"http://{self.address}"),
+            subprotocols=[B_XMLPROC_SUBPROTOCOL],
         ) as websocket:
             await websocket.send(getUnitsPayload)
             unitsResultStr = await websocket.recv()
@@ -224,8 +227,8 @@ class AE200Functions:
         async with websockets.connect(
             f"ws://{self.address}/b_xmlproc/",
             extensions=[permessage_deflate.ClientPerMessageDeflateFactory()],
-            origin=f"http://{self.address}",
-            subprotocols=["b_xmlproc"],
+            origin=Origin(f"http://{self.address}"),
+            subprotocols=[B_XMLPROC_SUBPROTOCOL],
         ) as websocket:
             getMnetDetailsPayload = getMnetDetails([deviceId])
             await websocket.send(getMnetDetailsPayload)
@@ -235,6 +238,8 @@ class AE200Functions:
             # result = {}
             node = mnetDetailsResultXML.find("./DatabaseManager/Mnet")
             await websocket.close()
+            if node is None:
+                raise ValueError(f"AE-200 response omitted Mnet data for device {deviceId}")
             return cleanDeviceInfo(node.attrib) if clean else node.attrib
 
     def getDeviceInfo(self, deviceId, clean=True):
@@ -247,8 +252,8 @@ class AE200Functions:
         async with websockets.connect(
             f"ws://{self.address}/b_xmlproc/",
             extensions=[permessage_deflate.ClientPerMessageDeflateFactory()],
-            origin=f"http://{self.address}",
-            subprotocols=["b_xmlproc"],
+            origin=Origin(f"http://{self.address}"),
+            subprotocols=[B_XMLPROC_SUBPROTOCOL],
         ) as websocket:
             attrs = " ".join([f'{key}="{attributes[key]}"' for key in attributes])
             payload = setRequestPayload.format(deviceId=deviceId, attrs=attrs)
