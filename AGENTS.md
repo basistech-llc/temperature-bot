@@ -1,8 +1,9 @@
 # Agent Instructions
 
 This project does **not** use `bd` (beads). Do not run `bd` commands, create
-Beads issues, or rely on `.beads/` state for task tracking. Use the user's
-current request, Git history, and GitHub only when explicitly asked.
+Beads issues, or rely on `.beads/` state for task tracking. The `.beads/`
+content is legacy and should be ignored. Use the user's current request, Git
+history, and GitHub only when explicitly asked.
 
 ## Non-Interactive Shell Commands
 
