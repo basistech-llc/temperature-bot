@@ -97,6 +97,7 @@
               <th class="column-disable-for" rowspan="2" title="Remaining time rules are disabled for this device (H:MM)">Disabled<br>for</th>
               <th class="column-temp" rowspan="2">Temp<br><small id="fcu-temp-unit-label">°C</small></th>
               <th class="column-temp column-temp-set" rowspan="2">Set Temp<br><small id="fcu-settemp-unit-label">°C</small></th>
+              <th class="column-mode" rowspan="2">Mode</th>
               <th class="column-speed" colspan="5">Fan Speed</th>
               <th class="column-notes" rowspan="2">Notes</th>
             </tr>
@@ -157,6 +158,7 @@
                               aria-label="Increase set temperature">+</button>
                     </span>
                   </td>
+                  <td class="cell-mode" id="mode-{{ device.device_id }}">{{ device.mode|default(device.status.Mode|default('--'), true) }}</td>
                   <td class="cell-speed cell-speed-off">
                     <input type="radio" name="fan_speed-{{ device.device_id }}"
                            value="0"

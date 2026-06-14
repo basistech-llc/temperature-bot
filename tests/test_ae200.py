@@ -75,3 +75,19 @@ def test_friendly_fan_speed_label_unknown_and_none():
     None stays None so callers can distinguish 'no data'."""
     assert ae200.friendly_fan_speed_label("ERV Restrooms", "BOGUS") == "BOGUS"
     assert ae200.friendly_fan_speed_label("Restrooms/BOH", None) is None
+
+
+def test_extract_drive_and_fan_speed_promotes_mode():
+    """AE-200 Mode should be convenient at the JSON API boundary."""
+    status = {"Drive": "ON", "FanSpeed": "LOW", "Mode": "COOL"}
+    extracted = ae200.extract_drive_and_fan_speed(status)
+    assert extracted["mode"] == "COOL"
+    assert extracted["drive"] == 1
+    assert extracted["fan_speed"] == 1
+    assert extracted["has_speed_control"] is True
+
+
+def test_extract_drive_and_fan_speed_keeps_mode_without_speed_control():
+    """Mode is useful diagnostic data even when speed control is absent."""
+    extracted = ae200.extract_drive_and_fan_speed({"Mode": "HEAT"})
+    assert extracted == {"mode": "HEAT", "has_speed_control": False}

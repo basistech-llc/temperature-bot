@@ -36,6 +36,9 @@ DRIVES = {0:"OFF", 1:"ON"}
 FAN_SPEEDS = {-1:"AUTO", 1: "LOW", 2: "MID2", 3: "MID1", 4: "HIGH"}
 FAN_SPEED_NAMES = {value: key for key, value in FAN_SPEEDS.items()}
 DRIVE_NAMES = {value: key for key, value in DRIVES.items()}
+AE200_DRIVE_KEY = "Drive"
+AE200_FAN_SPEED_KEY = "FanSpeed"
+AE200_MODE_KEY = "Mode"
 
 # User-facing fan-speed labels, keyed by speed number. These intentionally
 # mirror the speed-button text rendered in room_dashboard.html / index.html so
@@ -125,16 +128,22 @@ def int_to_drive(drive):
 
 
 def extract_drive_and_fan_speed(data):
-    """Return a dict with drive/speed/has_speed_control"""
-    drive = data.get('Drive',None)
-    speed = data.get('FanSpeed',None)
+    """Return normalized AE-200 control fields for app JSON responses."""
+    ret = {}
+    mode = data.get(AE200_MODE_KEY, None)
+    if mode is not None:
+        ret["mode"] = mode
+    drive = data.get(AE200_DRIVE_KEY, None)
+    speed = data.get(AE200_FAN_SPEED_KEY, None)
     if drive is None or speed is None:
-        return {'has_speed_control':False}
-    return {
-        'drive': DRIVE_NAMES[drive],
-        'fan_speed': FAN_SPEED_NAMES[speed],
-        'has_speed_control': True
-    }
+        ret["has_speed_control"] = False
+        return ret
+    ret.update({
+        "drive": DRIVE_NAMES[drive],
+        "fan_speed": FAN_SPEED_NAMES[speed],
+        "has_speed_control": True,
+    })
+    return ret
 
 
 def get_device_fan_speed(device):

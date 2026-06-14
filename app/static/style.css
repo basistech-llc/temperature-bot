@@ -235,6 +235,12 @@ button {
     min-width: 160px;
 }
 
+.column-mode,
+.cell-mode {
+    min-width: 4.5em;
+    text-align: center;
+}
+
 .cell-temp {
     color: #000; /* Default black for fresh temperatures */
 }
@@ -259,6 +265,10 @@ button {
     text-align: center;
     padding-left: 0.5em;
     padding-right: 0.5em;
+}
+
+.data-table tbody td.cell-mode {
+    text-align: center;
 }
 
 /* All data tables match the widest table's width via grid on the form */

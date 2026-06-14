@@ -152,7 +152,7 @@ def test_database_conn_with_test_data(test_database_conn):
                 record_time,
                 60,
                 240,
-                '{"Drive": "ON", "FanSpeed": "LOW", "InletTemp": "24.0"}',
+                '{"Drive": "ON", "FanSpeed": "LOW", "Mode": "COOL", "InletTemp": "24.0"}',
             ),
         )
 

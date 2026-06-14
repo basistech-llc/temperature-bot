@@ -39,6 +39,11 @@ def test_status_endpoint(flask_test_client):  # noqa: F811
     response_json = response.json
     logging.info(" /status: %s", response_json)
     assert "devices" in response_json
+    fcu_device = next(
+        dev for dev in response_json["devices"] if dev.get("status", {}).get("Mode")
+    )
+    assert fcu_device["status"]["Mode"] == "COOL"
+    assert fcu_device["mode"] == "COOL"
 
 
 def test_metric_endpoint_accepts_known_metrics(flask_test_client):  # noqa: F811
