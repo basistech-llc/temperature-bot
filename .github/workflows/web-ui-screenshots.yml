@@ -80,7 +80,7 @@ jobs:
         run: |
           set -euo pipefail
           publish_branch="web-ui-screenshots-pr-${PR_NUMBER}"
-          run_path="runs/${RUN_ID}"
+          run_path="latest"
           publish_worktree="$(mktemp -d)"
 
           git config user.name "github-actions[bot]"
