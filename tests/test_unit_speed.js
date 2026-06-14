@@ -5,7 +5,10 @@
  * Regression coverage for the "Off jumps back to Auto" bug: an off unit that is
  * holding the Auto (-1) fan speed must select the Off radio, not Auto.
  */
-const { fanRadioIdForDevice } = require("../app/static/unit_speed.js");
+const {
+  fanRadioIdForDevice,
+  modeLabelForDevice,
+} = require("../app/static/unit_speed.js");
 
 let passed = 0;
 let failed = 0;
@@ -58,6 +61,28 @@ check(
   "no drive field -> Off",
   fanRadioIdForDevice({ device_id: 5 }),
   "radio-5-0",
+);
+
+// -- AE-200 mode display --
+check(
+  "mode from promoted field",
+  modeLabelForDevice({ mode: "COOL" }),
+  "Cool",
+);
+check(
+  "mode from raw status payload",
+  modeLabelForDevice({ status: { Mode: "HEAT" } }),
+  "Heat",
+);
+check(
+  "unknown mode passes through",
+  modeLabelForDevice({ mode: "SOMETHING_NEW" }),
+  "SOMETHING_NEW",
+);
+check(
+  "missing mode",
+  modeLabelForDevice({ status: {} }),
+  "--",
 );
 
 console.log(`\n${passed} passed, ${failed} failed`);

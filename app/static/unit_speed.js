@@ -17,6 +17,14 @@ const REFRESH_INTERVAL = 10; // seconds between refreshes
 const RUNNING_MINUTES = 10; // minutes to run before stopping
 const SHOW_REFRESH_COUNTDOWN = false;
 let lastRefreshTime = 0;
+const AE200_MODE_LABELS = {
+  COOL: "Cool",
+  HEAT: "Heat",
+  AUTO: "Auto",
+  DRY: "Dry",
+  FAN: "Fan",
+  LC_AUTO: "Auto",
+};
 
 // Refresh logic
 var start = Date.now();
@@ -56,6 +64,22 @@ function fanRadioIdForDevice(dev) {
     return `radio-${dev.device_id}-${speedValue}`;
   }
   return null;
+}
+
+/**
+ * Return a display label for the AE-200 operation mode in /api/v1/status.
+ *
+ * @param {Object} dev - Device data object from /api/v1/status.
+ * @returns {string} Human-readable mode label, or "--" when absent.
+ */
+function modeLabelForDevice(dev) {
+  const status = dev.status || {};
+  const rawMode = dev.mode || status.Mode;
+  if (rawMode == null || rawMode === "") {
+    return "--";
+  }
+  const rawModeString = String(rawMode);
+  return AE200_MODE_LABELS[rawModeString.toUpperCase()] || rawModeString;
 }
 
 /**
@@ -607,6 +631,19 @@ const refreshGridRows = () => {
                 setTempDisplay.textContent = "--";
               }
             }
+
+            const modeCell = document.getElementById(`mode-${dev.device_id}`);
+            if (modeCell) {
+              const status = dev.status || {};
+              const rawMode = dev.mode || status.Mode;
+              modeCell.textContent = modeLabelForDevice(dev);
+              if (rawMode) {
+                modeCell.setAttribute("title", `AE-200 Mode: ${rawMode}`);
+              } else {
+                modeCell.removeAttribute("title");
+              }
+            }
+
             // Update radio button selection based on drive and speed state.
             const radioId = fanRadioIdForDevice(dev);
             if (radioId) {
@@ -849,5 +886,5 @@ if (typeof window !== "undefined") {
 
 // Node.js export for testing
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { fanRadioIdForDevice };
+  module.exports = { fanRadioIdForDevice, modeLabelForDevice };
 }

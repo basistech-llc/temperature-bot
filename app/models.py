@@ -253,6 +253,10 @@ class DeviceStatus(BaseModel):
         default=None,
         description="Whether the latest status has an illuminance value.",
     )
+    mode: str | None = Field(
+        default=None,
+        description="AE-200 operation mode promoted from status.Mode, when present.",
+    )
 
 
 def json_ready(model: BaseModel) -> Dict[str, Any]:
