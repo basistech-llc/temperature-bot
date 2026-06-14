@@ -59,6 +59,7 @@ pytest-env = "==1.6.0"
 pytest-faulthandler = "==2.0.1"
 ruff = "==0.15.15"
 ruff-lsp = "==0.0.62"
+types-pyyaml = "^6.0.12.20260518"
 
 [tool.ruff]
 exclude = ["lib/"]
@@ -81,14 +82,6 @@ warn_no_return = false
 warn_unreachable = true
 strict_equality = true
 ignore_missing_imports = true
-
-[[tool.mypy.overrides]]
-module = [
-    "lib.*",
-    "tests.*"
-]
-disallow_untyped_defs = false
-disallow_incomplete_defs = false
 
 [[tool.mypy.overrides]]
 module = [

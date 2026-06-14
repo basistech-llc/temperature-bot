@@ -5,8 +5,12 @@ API route handlers
 import asyncio
 import logging
 import time
+import xml.etree.ElementTree as ET
+from typing import Any
+
 from flask import Blueprint, request, jsonify
 from flask_pydantic import validate
+from websockets.exceptions import WebSocketException
 
 from .constants import __version__
 from . import constants
@@ -20,7 +24,7 @@ from . import room_config
 from .utils.request_utils import parse_device_ids
 from .utils.db_utils import with_db_connection
 
-from .db import SpeedControl, DriveControl, NoteControl, SetTempControl
+from .models import SpeedControl, DriveControl, NoteControl, SetTempControl
 
 logger = logging.getLogger(__name__)
 
@@ -362,10 +366,12 @@ def hickory_wall_light():
     state = payload.get("state")
 
     id_map = {"inner": config.get("wall_inner_id"), "outer": config.get("wall_outer_id")}
+    if not isinstance(light, str):
+        return jsonify({"error": "light must be 'inner' or 'outer'"}), 400
     device_id = id_map.get(light)
     if not device_id:
         return jsonify({"error": "light must be 'inner' or 'outer'"}), 400
-    if state not in ("on", "off"):
+    if not isinstance(state, str) or state not in ("on", "off"):
         return jsonify({"error": "state must be 'on' or 'off'"}), 400
     try:
         hubitat.set_switch(device_id, state)
@@ -437,23 +443,27 @@ def debug_ae200_devices():
 
         # Per-device status direct from AE-200, fetched concurrently
         async def _fetch_ae200_details_async(devices):
-            ae200_details = {}
+            ae200_details: dict[str, dict[str, Any]] = {}
             tasks = []
             ids = []
+
+            async def fetch_device_details(device_id) -> dict[str, Any]:
+                try:
+                    return dict(await ae200.get_device_info_async(device_id))
+                except (ET.ParseError, OSError, RuntimeError, ValueError, WebSocketException) as e:
+                    return {"error": str(e)}
+
             for dev in devices:
                 device_id = dev.get("id")
                 if device_id is None:
                     continue
                 ids.append(str(device_id))
-                tasks.append(ae200.get_device_info_async(device_id))
+                tasks.append(fetch_device_details(device_id))
             if not tasks:
                 return ae200_details
-            results = await asyncio.gather(*tasks, return_exceptions=True)
+            results = await asyncio.gather(*tasks)
             for key, result in zip(ids, results):
-                if isinstance(result, Exception):
-                    ae200_details[key] = {"error": str(result)}
-                else:
-                    ae200_details[key] = result
+                ae200_details[key] = result
             return ae200_details
 
         ae200_details = ae200.runner.run_async_safely(

@@ -7,7 +7,8 @@
 # Local development:
 #    make check   - static analysis
 #    make test    - dynamic analysis
-#    make make-dev-db  - creates a local database from the schema
+#    make make-dev-db  - creates a local database via Flyway migrations
+#    make migrate-db   - applies pending Flyway migrations to the existing local DB
 #    make local-dev - Runs the web backend locally with simulator
 #    make live-dev-runner - Runs the collection agent and rules runner locally, with live collection
 #
@@ -23,10 +24,25 @@
 export DB_PATH ?= var/db/temperature-bot.db
 export DEV_DB  ?= var/db/temperature-bot.db
 
+# Flyway migration SQL directory
+FLYWAY_SQL_DIR := etc/flyway/sql
+# Temporary database used when regenerating etc/schema.sql
+FLYWAY_SCHEMA_TEMP := /tmp/temperature-bot-schema-temp.db
+FLYWAY_SCHEMA_DUMP := /tmp/temperature-bot-schema-temp.sql
+# Temporary database used by the read-only migration validation gate.
+FLYWAY_VALIDATE_TEMP := /tmp/temperature-bot-flyway-validate.db
+
 # Remote host and paths used by fetch-dev-db (override as needed for your environment)
 FETCH_HOST           ?= air.basistech.net
 FETCH_REMOTE_DB_DIR  ?= /var/db/
 FETCH_REMOTE_CONFIG  ?= /home/air/temperature-bot/temperature-bot-config.yaml
+
+# Production deploy defaults. Override only when intentionally targeting a
+# different checked-out installation or database.
+PROD_HOSTNAME   ?= slg1
+PROD_APP_DIR    ?= /home/air/temperature-bot
+PROD_DB         ?= /var/db/temperature-bot.db
+PROD_BACKUP_DIR ?= /var/db/temperature-bot-backups
 
 REQ := .venv/pyvenv.cfg
 PYTHON := .venv/bin/python
@@ -37,7 +53,11 @@ export PLAYWRIGHT_BROWSERS_PATH := .playwright
 
 # Pin tool versions (helps avoid "invisible" cache invalidations)
 POETRY_VERSION ?= 2.1.3
-RUFF_VERSION   ?= 0.13.2
+RUFF_VERSION   ?= 0.15.15
+
+# Test selection override, e.g.
+#   make PYTEST_ARGS=tests/test_db.py::test_name pytest
+PYTEST_ARGS ?= .
 
 
 
@@ -52,11 +72,13 @@ RUFF_VERSION   ?= 0.13.2
 # Manage the local development database and configuration file.
 #
 
-# make a clean local development database from the schema file
+# make a clean local development database from scratch, using Flyway migrations
 make-dev-db:
 	/bin/rm -f $(DEV_DB)
 	mkdir -p $(dir $(DEV_DB))
-	sqlite3 $(DEV_DB) < etc/schema.sql
+	flyway migrate \
+	    -url="jdbc:sqlite:$(abspath $(DEV_DB))" \
+	    -locations="filesystem:$(FLYWAY_SQL_DIR)"
 	ls -l $(DEV_DB)
 
 # Explicit rule for the development database file so that schema generation
@@ -78,24 +100,52 @@ fetch-dev-db:
 	@echo database contents:
 	echo 'select "devices",count(*) from devices;select "devlog",count(*) from devlog;select "changelog",count(*) from changelog; select "aqi",count(*) from aqi;' | sqlite3 $(DEV_DB)
 
-# Build the etc/schema.sql file based on the local development database
-# We use this when we make changes on the production database with 'ALTER TABLE'
-# and want the schema.sql file to reflect those changes.
-# The changes need to be incorporated into schema.sql so that the CI/CD tests run
-
-etc/schema.sql: $(DEV_DB)
-	echo ".schema"| sqlite3 $(DEV_DB) \
-		| grep -v 'Run Time: real' \
-		| grep -v 'CREATE TABLE sqlite_sequence' \
-		| sed 's/CREATE INDEX/CREATE INDEX IF NOT EXISTS/' \
+# Build the etc/schema.sql file by applying all Flyway migrations to a fresh
+# temp database and dumping the resulting schema. This keeps schema.sql in sync
+# with the canonical migration history. Run 'make schema' to regenerate.
+etc/schema.sql: $(wildcard $(FLYWAY_SQL_DIR)/*.sql)
+	/bin/rm -f $(FLYWAY_SCHEMA_TEMP) $(FLYWAY_SCHEMA_DUMP)
+	flyway migrate \
+	    -url="jdbc:sqlite:$(FLYWAY_SCHEMA_TEMP)" \
+	    -locations="filesystem:$(FLYWAY_SQL_DIR)"
+	sqlite3 $(FLYWAY_SCHEMA_TEMP) \
+		"SELECT sql || ';' FROM sqlite_master WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%' AND name <> 'flyway_schema_history' AND COALESCE(tbl_name, '') <> 'flyway_schema_history' ORDER BY rowid;" \
+		> $(FLYWAY_SCHEMA_DUMP)
+	test -s $(FLYWAY_SCHEMA_DUMP)
+	sed 's/CREATE INDEX/CREATE INDEX IF NOT EXISTS/' $(FLYWAY_SCHEMA_DUMP) \
 		| sed 's/CREATE TABLE/CREATE TABLE IF NOT EXISTS/' \
-		| tee etc/schema.sql
+		> etc/schema.sql
+	test -s etc/schema.sql
+	/bin/rm -f $(FLYWAY_SCHEMA_TEMP) $(FLYWAY_SCHEMA_DUMP)
 
 # Phony target to force regeneration of etc/schema.sql regardless of timestamps
 schema:
 	$(MAKE) --always-make etc/schema.sql
 
-.PHONY: make-dev-db fetch-dev-db schema
+# Apply any pending Flyway migrations to the existing development database.
+# Uses -baselineOnMigrate=true so databases already at V1 (but without a
+# flyway_schema_history entry) are baselined automatically before migrating.
+migrate-db: $(DEV_DB)
+	flyway migrate \
+	    -url="jdbc:sqlite:$(abspath $(DEV_DB))" \
+	    -locations="filesystem:$(FLYWAY_SQL_DIR)" \
+	    -baselineOnMigrate=true
+
+# Validate that all versioned migrations apply cleanly from scratch and that
+# Flyway accepts the resulting schema history. This is safe for CI and local
+# checks because it uses only a temporary database under /tmp.
+validate-migrations:
+	@set -eu; \
+	/bin/rm -f "$(FLYWAY_VALIDATE_TEMP)"; \
+	trap '/bin/rm -f "$(FLYWAY_VALIDATE_TEMP)"' EXIT; \
+	flyway migrate \
+	    -url="jdbc:sqlite:$(FLYWAY_VALIDATE_TEMP)" \
+	    -locations="filesystem:$(FLYWAY_SQL_DIR)"; \
+	flyway validate \
+	    -url="jdbc:sqlite:$(FLYWAY_VALIDATE_TEMP)" \
+	    -locations="filesystem:$(FLYWAY_SQL_DIR)"
+
+.PHONY: make-dev-db fetch-dev-db schema migrate-db validate-migrations
 
 ################################################################
 ## Local development targets. These use the flask built-in web server,
@@ -127,17 +177,30 @@ PYLINT_OPTS :=--output-format=parseable --rcfile .pylintrc --fail-under=$(PYLINT
 
 lint: check
 check: $(REQ)
-	make pylint
-	make djlint
-	make eslint
-	echo make check-types
+	$(MAKE) ruff-check
+	$(MAKE) no-type-ignore
+	$(MAKE) pylint-check
+	$(MAKE) djlint
+	$(MAKE) eslint
+	$(MAKE) check-types
+	$(MAKE) validate-migrations
 
-pylint: $(REQ)
+format: $(REQ)
 	poetry run ruff check --fix app | etc/ruff-reformat.bash
+
+pylint: ruff-check pylint-check
+
+ruff-check: $(REQ)
+	poetry run ruff check app
+
+no-type-ignore:
+	@! rg -n 'type:\s*ignore|type:ignore' app bin tests *.py
+
+pylint-check: $(REQ)
 	$(PYTHON) -m pylint $(PYLINT_OPTS) app tests *.py
 
 djlint: $(REQ)
-	poetry run djlint $(DJLINT_FLAGS) $(TEMPLATE_DIR)/*.html | etc/djlint-reformat.bash
+	poetry run djlint $(DJLINT_FLAGS) $(TEMPLATE_DIR)/*.html
 
 eslint: $(REQ)
 	(cd app/static; make eslint)
@@ -148,7 +211,7 @@ check-types: $(REQ)
 ## Dynamic Analysis
 pytest: $(REQ)
 	make pylint
-	$(PYTHON) -m pytest . -v --cov=. --cov-report=xml --cov-report=html --log-cli-level=WARNING --log-file-level=DEBUG
+	$(PYTHON) -m pytest $(PYTEST_ARGS) -v --cov=. --cov-report=xml --cov-report=html --log-cli-level=WARNING --log-file-level=DEBUG
 	@echo coverage report in htmlcov/
 test-js: $(REQ)
 	@echo "Running JavaScript unit tests..."
@@ -170,7 +233,7 @@ outdated: $(REQ)
 	@echo "=== CDN libraries (in templates) ==="
 	bash etc/check-cdn-versions.bash
 
-.PHONY: lint check pylint djlint eslint check-types pytest test-js test outdated
+.PHONY: lint check format pylint ruff-check no-type-ignore pylint-check djlint eslint check-types pytest test-js test outdated
 
 ################################################################
 ## Cron targets
@@ -244,13 +307,27 @@ cleanall: clean
 	@printf "Are you sure you want to delete $(DEV_DB)? [y/N] "
 	@read -r confirm && [ "$$confirm" = "y" ] || [ "$$confirm" = "Y" ] && rm -f $(DEV_DB) || echo "Cancelled."
 
-## Installs the latest source code into the live system.
-## Run on the server (slg1.basistech.net).
+## Installs the latest source code into the live system and applies any pending
+## database migrations. Run on the server (slg1.basistech.net).
 deploy:
-	@if [ "$$(hostname)" = "slg1" ]; then \
-		cd /home/air/temperature-bot && git pull && poetry install ; \
+	@if [ "$$(hostname)" = "$(PROD_HOSTNAME)" ]; then \
+		cd $(PROD_APP_DIR) && \
+		git pull && \
+		poetry install && \
+		flyway validate \
+		    -url="jdbc:sqlite:$(PROD_DB)" \
+		    -locations="filesystem:etc/flyway/sql" && \
+		/bin/mkdir -p $(PROD_BACKUP_DIR) && \
+		/bin/cp -f $(PROD_DB) $(PROD_BACKUP_DIR)/temperature-bot.$$(date -u +%Y%m%dT%H%M%SZ).db && \
+		flyway migrate \
+		    -url="jdbc:sqlite:$(PROD_DB)" \
+		    -locations="filesystem:etc/flyway/sql" \
+		    -baselineOnMigrate=true && \
+		flyway validate \
+		    -url="jdbc:sqlite:$(PROD_DB)" \
+		    -locations="filesystem:etc/flyway/sql" ; \
 	else \
-		echo "Deploy skipped: not running on slg1 (current hostname: $$(hostname))"; \
+		echo "Deploy skipped: not running on $(PROD_HOSTNAME) (current hostname: $$(hostname))"; \
 	fi
 
 
