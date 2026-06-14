@@ -35,6 +35,14 @@ Temperatures are stored as integer Celsius tenths (`temp10x`) in `devlog`.
 Consecutive readings with the same state are run-length encoded by extending
 the row duration instead of inserting duplicate rows.
 
+## Data Contracts
+
+Stable app-owned data should use Pydantic models from `app/models.py` rather
+than ad hoc dictionaries. Named models document the expected fields, make type
+and runtime validation useful, and give humans and LLM coding agents a clearer
+source of truth. External service payloads may remain dictionaries at the
+edge, but shared keys should be centralized instead of repeated inline.
+
 ## Operations
 
 The periodic runner is `bin/runner.py`; production cron/systemd entries run it

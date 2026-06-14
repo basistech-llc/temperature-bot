@@ -495,7 +495,7 @@ def test_tv_hubitat_error(_mock, flask_test_client):  # noqa: F811
 
 def test_room_config_kitchen_has_fcu():
     """Kitchen must list its FCU so set-temp controls render."""
-    fans = room_config.ROOM_CONFIGS["kitchen"]["fans"]
+    fans = room_config.ROOM_CONFIGS["kitchen"].fans
     assert "Kitchen" in fans
 
 
@@ -503,7 +503,7 @@ def test_room_config_erv_names_start_with_erv():
     """ERV device names must start with 'ERV' — the template uses device_type
     to decide whether to show set-temp controls (fans only, not ERVs)."""
     for room_key, config in room_config.ROOM_CONFIGS.items():
-        for name in config.get("ervs", []):
+        for name in config.ervs:
             assert name.startswith("ERV"), (
                 f"{room_key} ERV device '{name}' must start with 'ERV'"
             )
@@ -520,7 +520,7 @@ def test_room_config_no_erv_in_fans():
     temperature controls that send meaningless API calls.
     """
     for room_key, config in room_config.ROOM_CONFIGS.items():
-        for fan_name in config.get("fans", []):
+        for fan_name in config.fans:
             assert not fan_name.startswith("ERV"), (
                 f"{room_key} fans list contains ERV device '{fan_name}'"
             )
