@@ -47,8 +47,8 @@ class RoomConfig(BaseModel):
 class MapPoint(BaseModel):
     """One point in image-relative map coordinates."""
 
-    x: float | None = None
-    y: float | None = None
+    x: float
+    y: float
 
 
 class RoomMap(BaseModel):
