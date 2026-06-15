@@ -48,6 +48,77 @@ def test_footer_only_on_about(flask_test_client):  # noqa: F811
     assert b"BasisTech LLC" not in index_response.data
 
 
+@patch("app.routes_web.hubitat.get_name_to_label", return_value={})
+@patch("app.routes_web.db.get_device_status")
+def test_fcu_matrix_has_raw_fcu_temp_and_room_temp_columns(
+    mock_get_status, _mock_labels, flask_test_client
+):  # noqa: F811
+    """The FCU matrix must display raw FCU temperature and calculated room temperature."""
+    mock_get_status.return_value = [
+        {
+            "device_id": 12,
+            "device_name": "Area 51",
+            "has_speed_control": True,
+            "temp10x": 220,
+            "calculated_temp10x": 235,
+            "status": {"Mode": "COOL"},
+        }
+    ]
+
+    response = flask_test_client.get("/")
+    assert response.status_code == 200
+    html = response.data.decode("utf-8")
+
+    assert "FCU Temp" in html
+    assert "Room Temp" in html
+    assert 'id="fcu-temp-12"' in html
+    assert 'id="room-temp-12"' in html
+
+
+@patch("app.routes_web.hubitat.get_name_to_label", return_value={})
+@patch("app.routes_web.db.get_device_status")
+def test_fcu_matrix_room_temp_cell_opens_weight_popup(
+    mock_get_status, _mock_labels, flask_test_client
+):  # noqa: F811
+    """Room Temp cells must expose the source-weight popup contract."""
+    mock_get_status.return_value = [
+        {
+            "device_id": 12,
+            "device_name": "Area 51",
+            "has_speed_control": True,
+            "temp10x": 220,
+            "calculated_temp10x": 235,
+            "temp_source_stale_seconds": 600,
+            "status": {"Mode": "COOL"},
+        }
+    ]
+
+    response = flask_test_client.get("/")
+    assert response.status_code == 200
+    html = response.data.decode("utf-8")
+
+    assert 'id="fcu-temp-sources-popup"' in html
+    assert (
+        'data-fcu-temp-sources-url="/api/v1/fcu_temp_sources?fcu_device_id=12"'
+        in html
+    )
+    assert 'data-fcu-temp-source-update-url="/api/v1/fcu_temp_source"' in html
+    assert "Readings older than 10 minutes are ignored" in html
+
+
+def test_temperature_chart_page_has_raw_calculated_mode_switch(
+    flask_test_client,
+):  # noqa: F811
+    """The chart page must let users switch between raw and calculated temperatures."""
+    response = flask_test_client.get("/chart")
+    assert response.status_code == 200
+    html = response.data.decode("utf-8").lower()
+
+    assert "raw temps" in html
+    assert "calculated temps" in html
+    assert 'name="temperature-mode"' in html
+
+
 def test_privacy_route(flask_test_client):  # noqa: F811
     """Test the /privacy route redirects to /about"""
     response = flask_test_client.get("/privacy", follow_redirects=False)

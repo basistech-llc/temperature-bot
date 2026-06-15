@@ -20,6 +20,7 @@ Key concepts:
   - aqi - outdoor air quality
 
 """
+# pylint: disable=too-many-lines
 
 import sqlite3
 import time  # For logtime timestamps
@@ -33,13 +34,17 @@ from typing import List, Dict, Any
 
 from flask import request
 
-from .constants import DB_PATH, TEST_DB_NAME
+from .constants import DB_PATH, TEMP_SOURCE_STALE_SECONDS, TEST_DB_NAME
 from .models import (
     AqiSummary,
     AqiWeatherResponse,
     ChangelogResponse,
     ChangelogRow,
     DeviceStatus,
+    FcuTempSourceRow,
+    FcuTempSourcesResponse,
+    Room,
+    RoomMap,
     TimeSeries,
     json_ready,
     json_ready_list,
@@ -58,6 +63,7 @@ logger = logging.getLogger(__name__)
 
 DEVICE_MAP: dict[str, int] = {}
 MAX_DURATION = 3600  # don't extend more than an hour
+ROOM_MAP_JSON_KEY = "map_json"
 
 # Cache the schema file's modification time so we only re-apply the schema
 # when the file actually changes on disk. This keeps the convenient
@@ -243,6 +249,13 @@ def fetch_all_device_dicts(conn):
     return cursor.fetchall()
 
 
+def get_device(conn, device_id: int) -> dict[str, Any] | None:
+    c = conn.cursor()
+    c.execute("SELECT * FROM devices WHERE device_id=?", (device_id,))
+    row = c.fetchone()
+    return dict(row) if row else None
+
+
 def devices_to_device_id(conn):
     """Return a dictionary of device_name:device_id"""
     c = conn.cursor()
@@ -255,6 +268,99 @@ def devices_to_device_id(conn):
     return ret
 
 
+################################################################
+## Room metadata
+
+
+def _room_map_from_json(map_json: str | None) -> RoomMap | None:
+    try:
+        data = json.loads(map_json or "{}")
+    except json.JSONDecodeError:
+        data = {}
+    if not data:
+        return None
+    return RoomMap.model_validate(data)
+
+
+def _room_from_row(row: sqlite3.Row) -> Room:
+    return Room(
+        room_id=row["room_id"],
+        room_name=row["room_name"],
+        map=_room_map_from_json(row[ROOM_MAP_JSON_KEY]),
+    )
+
+
+def get_rooms(conn) -> list[Room]:
+    c = conn.cursor()
+    c.execute("SELECT * FROM rooms ORDER BY room_name")
+    return [_room_from_row(row) for row in c.fetchall()]
+
+
+def get_room(conn, room_id: int) -> Room | None:
+    c = conn.cursor()
+    c.execute("SELECT * FROM rooms WHERE room_id=?", (room_id,))
+    row = c.fetchone()
+    if row is None:
+        return None
+    return _room_from_row(row)
+
+
+def create_room(conn, room: Room) -> Room:
+    if room.room_name is None:
+        raise ValueError("room_name is required")
+    c = conn.cursor()
+    if room.map is None:
+        c.execute("INSERT INTO rooms (room_name) VALUES (?)", (room.room_name,))
+    else:
+        c.execute(
+            "INSERT INTO rooms (room_name, map_json) VALUES (?, ?)",
+            (room.room_name, room.map.model_dump_json(exclude_none=True)),
+        )
+    conn.commit()
+    created = get_room(conn, int(c.lastrowid))
+    assert created is not None
+    return created
+
+
+def update_room(conn, room: Room) -> Room | None:
+    if room.room_id is None:
+        raise ValueError("room_id is required")
+    assignments = []
+    args: list[Any] = []
+    if room.room_name is not None:
+        assignments.append("room_name=?")
+        args.append(room.room_name)
+    if room.map is not None:
+        assignments.append("map_json=?")
+        args.append(room.map.model_dump_json(exclude_none=True))
+    if not assignments:
+        return get_room(conn, room.room_id)
+    args.append(room.room_id)
+
+    c = conn.cursor()
+    c.execute(
+        f"UPDATE rooms SET {', '.join(assignments)} WHERE room_id=?",
+        args,
+    )
+    if c.rowcount == 0:
+        return None
+    conn.commit()
+    return get_room(conn, room.room_id)
+
+
+def update_device_room(conn, device_id: int, room_id: int | None) -> int:
+    c = conn.cursor()
+    if room_id is not None:
+        c.execute("SELECT 1 FROM rooms WHERE room_id=?", (room_id,))
+        if c.fetchone() is None:
+            raise ValueError(f"Unknown room_id: {room_id}")
+    c.execute("UPDATE devices SET room_id=? WHERE device_id=?", (room_id, device_id))
+    if c.rowcount == 0:
+        raise ValueError(f"Unknown device_id: {device_id}")
+    conn.commit()
+    return device_id
+
+
 EVERY_DEVICE=1
 AIR_MON_DEVICES=2
 def fetch_last_status(conn, flag=EVERY_DEVICE):
@@ -265,10 +371,11 @@ def fetch_last_status(conn, flag=EVERY_DEVICE):
         where = "1=1"
     cursor = conn.cursor()
     cursor.execute(f"""
-        SELECT a.*,b.device_name,b.notes,b.disabled_until
+        SELECT a.*,b.device_name,b.notes,b.disabled_until,b.room_id,r.room_name
         FROM (SELECT * FROM devlog GROUP BY device_id HAVING logtime=max(logtime)) AS a
-        LEFT JOIN devices b
-        WHERE a.device_id = b.device_id AND {where}
+        JOIN devices b ON a.device_id = b.device_id
+        LEFT JOIN rooms r ON b.room_id = r.room_id
+        WHERE {where}
         ORDER by b.device_name""")
     return cursor.fetchall()
 
@@ -468,13 +575,12 @@ def insert_changelog(
     *,
     ipaddr: str,
     device_id: int,
-    ae200_device_id: int,
+    ae200_device_id: int | None,
     current_values: str = "",
     new_value: str,
     agent: str = "",
     comment: str = "",
 ):
-    assert ae200_device_id is not None, "ae200_device_id must be provided"
     logtime = int(time.time())
     c = conn.cursor()
     c.execute(
@@ -668,6 +774,258 @@ def get_aqi_series(conn):
     return {key: [[row["logtime"], row[key]] for row in rows] for key in keys}
 
 
+def _is_fcu_device(device: dict[str, Any]) -> bool:
+    return bool(device.get("has_speed_control")) and not device.get(
+        "device_name", ""
+    ).lower().startswith("erv")
+
+
+def get_fcu_temp_source_weights(conn, fcu_device_id: int) -> dict[int, float]:
+    """Return source weights for one FCU, including hard-coded defaults."""
+    weights = {fcu_device_id: 1.0}
+    c = conn.cursor()
+    c.execute(
+        """
+        SELECT source_device_id, multiplier
+        FROM fcu_temp_sources
+        WHERE fcu_device_id=?
+        """,
+        (fcu_device_id,),
+    )
+    for row in c.fetchall():
+        weights[row["source_device_id"]] = float(row["multiplier"])
+    return weights
+
+
+def _latest_temperature_source_rows(conn, fcu_device_id: int, now: int):
+    weights = get_fcu_temp_source_weights(conn, fcu_device_id)
+    c = conn.cursor()
+    c.execute(
+        """
+        SELECT
+            d.device_id AS source_device_id,
+            d.device_name,
+            d.room_id,
+            r.room_name,
+            l.logtime,
+            l.duration,
+            l.temp10x
+        FROM (
+            SELECT d1.*
+            FROM devlog d1
+            JOIN (
+                SELECT device_id, MAX(logtime) AS max_logtime
+                FROM devlog
+                WHERE temp10x IS NOT NULL
+                GROUP BY device_id
+            ) latest
+                ON d1.device_id = latest.device_id
+                AND d1.logtime = latest.max_logtime
+        ) l
+        JOIN devices d ON d.device_id = l.device_id
+        LEFT JOIN rooms r ON d.room_id = r.room_id
+        ORDER BY d.device_name
+        """
+    )
+    rows = []
+    for row in c.fetchall():
+        age_seconds = now - (row["logtime"] + row["duration"])
+        is_stale = age_seconds > TEMP_SOURCE_STALE_SECONDS
+        multiplier = weights.get(row["source_device_id"], 0.0)
+        rows.append(
+            FcuTempSourceRow(
+                source_device_id=row["source_device_id"],
+                device_name=row["device_name"],
+                room_id=row["room_id"],
+                room_name=row["room_name"],
+                is_fcu_self=row["source_device_id"] == fcu_device_id,
+                temp10x=row["temp10x"],
+                age_seconds=age_seconds,
+                is_stale=is_stale,
+                multiplier=multiplier,
+                included=multiplier > 0 and not is_stale,
+            )
+        )
+    return rows
+
+
+def get_fcu_temp_sources(conn, fcu_device_id: int) -> dict[str, Any]:
+    if get_device(conn, fcu_device_id) is None:
+        raise ValueError(f"Unknown fcu_device_id: {fcu_device_id}")
+    sources = _latest_temperature_source_rows(conn, fcu_device_id, int(time.time()))
+    return json_ready(
+        FcuTempSourcesResponse(
+            fcu_device_id=fcu_device_id,
+            stale_seconds=TEMP_SOURCE_STALE_SECONDS,
+            sources=sources,
+        )
+    )
+
+
+def _temperature_row_for_source(conn, source_device_id: int, at_time: int | None):
+    c = conn.cursor()
+    if at_time is None:
+        c.execute(
+            """
+            SELECT logtime, duration, temp10x
+            FROM devlog
+            WHERE device_id=? AND temp10x IS NOT NULL
+            ORDER BY logtime DESC
+            LIMIT 1
+            """,
+            (source_device_id,),
+        )
+    else:
+        c.execute(
+            """
+            SELECT logtime, duration, temp10x
+            FROM devlog
+            WHERE device_id=? AND temp10x IS NOT NULL AND logtime <= ?
+            ORDER BY logtime DESC
+            LIMIT 1
+            """,
+            (source_device_id, at_time),
+        )
+    return c.fetchone()
+
+
+def calculate_fcu_temperature10x(
+    conn, fcu_device_id: int, at_time: int | None = None
+) -> int | None:
+    weights = get_fcu_temp_source_weights(conn, fcu_device_id)
+
+    now = int(time.time()) if at_time is None else at_time
+    weighted_total = 0.0
+    weight_total = 0.0
+    for source_device_id, multiplier in weights.items():
+        if multiplier <= 0:
+            continue
+        temp_row = _temperature_row_for_source(conn, source_device_id, at_time)
+        if temp_row is None:
+            continue
+        last_valid = temp_row["logtime"] + temp_row["duration"]
+        if now - last_valid > TEMP_SOURCE_STALE_SECONDS:
+            continue
+        weighted_total += temp_row["temp10x"] * multiplier
+        weight_total += multiplier
+
+    if weight_total <= 0:
+        return None
+    return int(math.floor((weighted_total / weight_total) + 0.5))
+
+
+def set_fcu_temp_source_multiplier(
+    conn,
+    *,
+    fcu_device_id: int,
+    source_device_id: int,
+    multiplier: float,
+    ipaddr: str | None,
+    agent: str | None,
+) -> dict[str, Any]:
+    c = conn.cursor()
+    fcu = get_device(conn, fcu_device_id)
+    source = get_device(conn, source_device_id)
+    if fcu is None:
+        raise ValueError(f"Unknown fcu_device_id: {fcu_device_id}")
+    if source is None:
+        raise ValueError(f"Unknown source_device_id: {source_device_id}")
+
+    c.execute(
+        """
+        SELECT multiplier
+        FROM fcu_temp_sources
+        WHERE fcu_device_id=? AND source_device_id=?
+        """,
+        (fcu_device_id, source_device_id),
+    )
+    row = c.fetchone()
+    old_multiplier = (
+        float(row["multiplier"])
+        if row
+        else get_fcu_temp_source_weights(conn, fcu_device_id).get(source_device_id, 0.0)
+    )
+    new_multiplier = float(multiplier)
+    if old_multiplier == new_multiplier:
+        return get_fcu_temp_sources(conn, fcu_device_id)
+
+    now = int(time.time())
+    c.execute(
+        """
+        INSERT INTO fcu_temp_sources
+            (fcu_device_id, source_device_id, multiplier, updated_at)
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT(fcu_device_id, source_device_id)
+        DO UPDATE SET multiplier=excluded.multiplier, updated_at=excluded.updated_at
+        """,
+        (fcu_device_id, source_device_id, new_multiplier, now),
+    )
+
+    insert_changelog(
+        conn,
+        ipaddr=ipaddr or "",
+        device_id=fcu_device_id,
+        ae200_device_id=fcu.get("ae200_device_id"),
+        current_values=str(old_multiplier),
+        new_value=str(new_multiplier),
+        agent=agent or "",
+        comment=(
+            "calculated temp multiplier for source "
+            f"{source_device_id} ({source['device_name']})"
+        ),
+    )
+    return get_fcu_temp_sources(conn, fcu_device_id)
+
+
+def _fcu_devices_from_current_status(conn) -> list[dict[str, Any]]:
+    devices = fetch_last_status_fixed(conn)
+    fcus: list[dict[str, Any]] = []
+    for device in devices:
+        if "status" in device:
+            device.update(ae200.extract_drive_and_fan_speed(device["status"]))
+        if _is_fcu_device(device):
+            fcus.append(device)
+    return fcus
+
+
+def get_calculated_temperature_series(
+    conn, device_ids: List[int] | None = None
+) -> List[Dict[str, Any]]:
+    fcus = _fcu_devices_from_current_status(conn)
+    if device_ids:
+        wanted = set(device_ids)
+        fcus = [fcu for fcu in fcus if fcu["device_id"] in wanted]
+
+    c = conn.cursor()
+    series: list[TimeSeries] = []
+    for fcu in fcus:
+        cmd = """
+        SELECT logtime
+        FROM devlog
+        WHERE device_id=? AND logtime IS NOT NULL AND temp10x IS NOT NULL
+        """
+        args = [fcu["device_id"]]
+        (cmd, args) = temporal_quantification(cmd, args)
+        cmd += " ORDER BY logtime "
+        c.execute(cmd, args)
+        data = []
+        for row in c.fetchall():
+            temp10x = calculate_fcu_temperature10x(
+                conn, fcu["device_id"], at_time=row["logtime"]
+            )
+            if temp10x is not None:
+                data.append((row["logtime"], temp10x / 10))
+        if data:
+            series.append(
+                TimeSeries(
+                    device_id=fcu["device_id"],
+                    name=fcu["device_name"],
+                    data=data,
+                )
+            )
+    return json_ready_list(series)
+
+
 def get_temperature_series(
     conn, device_ids: List[int] | None = None
 ) -> List[Dict[str, Any]]:
@@ -844,6 +1202,13 @@ def get_device_status(conn) -> List[Dict[str, Any]]:
                 data[f"has_{metric_name}"] = (
                     extract_metric_from_status(status, status_key) is not None
                 )
+            if _is_fcu_device(data):
+                data["temp_source_stale_seconds"] = TEMP_SOURCE_STALE_SECONDS
+                calculated_temp10x = calculate_fcu_temperature10x(
+                    conn, data["device_id"]
+                )
+                if calculated_temp10x is not None:
+                    data["calculated_temp10x"] = calculated_temp10x
         if "logtime" in data:
             data["age"] = github_style_duration(
                 data["logtime"] + data.get("duration", 1)
@@ -863,7 +1228,7 @@ def get_changelog(
     Temporal bounds (start/end) are taken directly from the current request
     via :func:`temporal_quantification`.
     """
-    cmd = """SELECT c.logtime, c.ipaddr, d.device_name as unit, c.new_value, c.agent, c.comment FROM changelog c
+    cmd = """SELECT c.logtime, c.ipaddr, d.device_name as unit, c.current_values, c.new_value, c.agent, c.comment FROM changelog c
                LEFT JOIN devices d ON c.device_id = d.device_id WHERE 1=1"""
     args: List[Any] = []
 

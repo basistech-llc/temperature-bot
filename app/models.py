@@ -44,6 +44,32 @@ class RoomConfig(BaseModel):
     wall_outer_id: str | None = Field(default=None, description="Outer wall light device id.")
 
 
+class MapPoint(BaseModel):
+    """One point in image-relative map coordinates."""
+
+    x: float | None = None
+    y: float | None = None
+
+
+class RoomMap(BaseModel):
+    """Display metadata for drawing a room polygon on the map."""
+
+    polygon: list[MapPoint] | None = None
+    color: str | None = Field(
+        default=None,
+        pattern=r"^#[0-9A-Fa-f]{6}$",
+        description="Hex RGB fill/stroke color for the room polygon.",
+    )
+
+
+class Room(BaseModel):
+    """Room metadata stored in the database and returned by the API."""
+
+    room_id: int | None = None
+    room_name: str | None = Field(default=None, min_length=1)
+    map: RoomMap | None = None
+
+
 class TimeSeries(BaseModel):
     """One chart series for a single device."""
 
@@ -58,6 +84,7 @@ class ChangelogRow(BaseModel):
     logtime: int | None = None
     ipaddr: str | None = None
     unit: str | None = None
+    current_values: Any | None = None
     new_value: Any | None = None
     agent: str | None = None
     comment: str | None = None
@@ -199,6 +226,44 @@ class SetTempControl(BaseModel):
     set_temp_c: float = Field(description="Requested set point in degrees Celsius.")
 
 
+class DeviceRoomControl(BaseModel):
+    """Request body for assigning a device to a room."""
+
+    device_id: int = Field(description="Local device id from the devices table.")
+    room_id: int | None = Field(description="Room id, or null to clear assignment.")
+
+
+class FcuTempSourceControl(BaseModel):
+    """Request body for one FCU temperature source multiplier."""
+
+    fcu_device_id: int = Field(description="FCU device id from the devices table.")
+    source_device_id: int = Field(description="Temperature source device id.")
+    multiplier: float = Field(ge=0, description="Nonnegative source weight.")
+
+
+class FcuTempSourceRow(BaseModel):
+    """One candidate source shown in the FCU temperature-source popup."""
+
+    source_device_id: int
+    device_name: str
+    room_id: int | None = None
+    room_name: str | None = None
+    is_fcu_self: bool = False
+    temp10x: int | None = None
+    age_seconds: int | None = None
+    is_stale: bool = False
+    multiplier: float = 0
+    included: bool = False
+
+
+class FcuTempSourcesResponse(BaseModel):
+    """All temperature-source multiplier rows for one FCU."""
+
+    fcu_device_id: int
+    stale_seconds: int
+    sources: list[FcuTempSourceRow]
+
+
 class CommandResponse(BaseModel):
     """Successful command response returned by control endpoints."""
 
@@ -232,7 +297,17 @@ class DeviceStatus(BaseModel):
     logtime: int | None = Field(default=None, description="Unix timestamp for the row.")
     duration: int | None = Field(default=None, description="Run-length duration in seconds.")
     temp10x: int | None = Field(default=None, description="Temperature in Celsius tenths.")
+    calculated_temp10x: int | None = Field(
+        default=None,
+        description="Weighted calculated room temperature in Celsius tenths.",
+    )
+    temp_source_stale_seconds: int | None = Field(
+        default=None,
+        description="Age cutoff for excluding stale calculated-temperature sources.",
+    )
     notes: str | None = Field(default=None, description="Operator note from the devices table.")
+    room_id: int | None = Field(default=None, description="Assigned room id.")
+    room_name: str | None = Field(default=None, description="Assigned room name.")
     disabled_until: int | None = Field(
         default=None,
         description="Unix timestamp until which automation is disabled.",
