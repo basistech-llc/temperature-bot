@@ -70,6 +70,7 @@ MAX_DURATION = 3600  # don't extend more than an hour
 ROOM_MAP_JSON_KEY = "map_json"
 FLYWAY_SCHEMA_HISTORY_TABLE = "flyway_schema_history"
 SCHEMA_UPGRADE_COMMAND = "make migrate-db"
+FCU_DEFAULT_TEMP_SOURCE_MULTIPLIER = 1.0
 
 # Cache the schema file's modification time so we only re-apply the schema
 # when the file actually changes on disk. This keeps the convenient
@@ -1022,26 +1023,13 @@ def _is_fcu_device(device: dict[str, Any]) -> bool:
 
 
 def get_fcu_temp_source_weights(conn, fcu_device_id: int) -> dict[int, float]:
-    """Return source weights for one FCU, inserting the FCU default if absent."""
-    c = conn.cursor()
+    """Return source weights for one FCU, applying the FCU default if absent."""
     rows = _fcu_temp_source_weight_rows(conn, fcu_device_id)
-    if not any(row["source_device_id"] == fcu_device_id for row in rows):
-        now = int(time.time())
-        c.execute(
-            """
-            INSERT INTO fcu_temp_sources
-                (fcu_device_id, source_device_id, multiplier, updated_at)
-            VALUES (?, ?, ?, ?)
-            ON CONFLICT(fcu_device_id, source_device_id) DO NOTHING
-            """,
-            (fcu_device_id, fcu_device_id, 1.0, now),
-        )
-        conn.commit()
-        rows = _fcu_temp_source_weight_rows(conn, fcu_device_id)
-
     weights = {}
     for row in rows:
         weights[row["source_device_id"]] = float(row["multiplier"])
+    if fcu_device_id not in weights:
+        weights[fcu_device_id] = FCU_DEFAULT_TEMP_SOURCE_MULTIPLIER
     return weights
 
 
@@ -1175,6 +1163,101 @@ def calculate_fcu_temperature10x(
     if weight_total <= 0:
         return None
     return int(math.floor((weighted_total / weight_total) + 0.5))
+
+
+def _fcu_temp_source_weights_for_fcus(
+    conn, fcu_device_ids: list[int]
+) -> dict[int, dict[int, float]]:
+    weights_by_fcu = {
+        fcu_device_id: {fcu_device_id: FCU_DEFAULT_TEMP_SOURCE_MULTIPLIER}
+        for fcu_device_id in fcu_device_ids
+    }
+    if not fcu_device_ids:
+        return weights_by_fcu
+
+    wanted_values = ",".join(["(?)"] * len(fcu_device_ids))
+    c = conn.cursor()
+    c.execute(
+        f"""
+        WITH wanted(fcu_device_id) AS (VALUES {wanted_values})
+        SELECT s.fcu_device_id, s.source_device_id, s.multiplier
+        FROM fcu_temp_sources s
+        JOIN wanted w ON s.fcu_device_id = w.fcu_device_id
+        """,
+        fcu_device_ids,
+    )
+    for row in c.fetchall():
+        weights_by_fcu[row["fcu_device_id"]][row["source_device_id"]] = float(
+            row["multiplier"]
+        )
+    return weights_by_fcu
+
+
+def _latest_temperature_rows_by_source(
+    conn, source_device_ids: list[int]
+) -> dict[int, sqlite3.Row]:
+    if not source_device_ids:
+        return {}
+
+    wanted_values = ",".join(["(?)"] * len(source_device_ids))
+    c = conn.cursor()
+    c.execute(
+        f"""
+        WITH wanted(device_id) AS (VALUES {wanted_values}),
+        latest AS (
+            SELECT d.device_id, MAX(d.logtime) AS logtime
+            FROM devlog d
+            JOIN wanted w ON d.device_id = w.device_id
+            WHERE d.temp10x IS NOT NULL
+            GROUP BY d.device_id
+        )
+        SELECT d.device_id, d.logtime, d.duration, d.temp10x
+        FROM devlog d
+        JOIN latest l
+            ON d.device_id = l.device_id
+            AND d.logtime = l.logtime
+        WHERE d.temp10x IS NOT NULL
+        """,
+        source_device_ids,
+    )
+    return {row["device_id"]: row for row in c.fetchall()}
+
+
+def calculate_fcu_temperatures10x(
+    conn, fcu_device_ids: list[int]
+) -> dict[int, int]:
+    weights_by_fcu = _fcu_temp_source_weights_for_fcus(conn, fcu_device_ids)
+    source_device_ids = sorted(
+        {
+            source_device_id
+            for weights in weights_by_fcu.values()
+            for source_device_id, multiplier in weights.items()
+            if multiplier > 0
+        }
+    )
+    source_rows = _latest_temperature_rows_by_source(conn, source_device_ids)
+    now = int(time.time())
+
+    calculated: dict[int, int] = {}
+    for fcu_device_id, weights in weights_by_fcu.items():
+        weighted_total = 0.0
+        weight_total = 0.0
+        for source_device_id, multiplier in weights.items():
+            if multiplier <= 0:
+                continue
+            temp_row = source_rows.get(source_device_id)
+            if temp_row is None:
+                continue
+            last_valid = temp_row["logtime"] + temp_row["duration"]
+            if now - last_valid > TEMP_SOURCE_STALE_SECONDS:
+                continue
+            weighted_total += temp_row["temp10x"] * multiplier
+            weight_total += multiplier
+        if weight_total > 0:
+            calculated[fcu_device_id] = int(
+                math.floor((weighted_total / weight_total) + 0.5)
+            )
+    return calculated
 
 
 def _temperature_rows_by_source_for_window(
@@ -1542,6 +1625,7 @@ def get_lighting_series(
 def get_device_status(conn) -> List[Dict[str, Any]]:
     """Get device status with annotations"""
     device_data = fetch_last_status_fixed(conn)
+    fcu_device_ids = []
 
     # Extract and convert the top-level drive, speed, and other items
     for data in device_data:
@@ -1558,11 +1642,13 @@ def get_device_status(conn) -> List[Dict[str, Any]]:
                 )
             if _is_fcu_device(data):
                 data["temp_source_stale_seconds"] = TEMP_SOURCE_STALE_SECONDS
-                calculated_temp10x = calculate_fcu_temperature10x(
-                    conn, data["device_id"]
-                )
-                if calculated_temp10x is not None:
-                    data["calculated_temp10x"] = calculated_temp10x
+                fcu_device_ids.append(data["device_id"])
+
+    calculated_temps = calculate_fcu_temperatures10x(conn, fcu_device_ids)
+    for data in device_data:
+        calculated_temp10x = calculated_temps.get(data["device_id"])
+        if calculated_temp10x is not None:
+            data["calculated_temp10x"] = calculated_temp10x
         if "logtime" in data:
             data["logtime"] = int(data["logtime"])
             if data.get("duration") is not None:

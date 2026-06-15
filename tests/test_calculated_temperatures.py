@@ -119,10 +119,21 @@ def test_default_fcu_weight_used_when_no_source_rows(test_database_conn):
         """,
         (fcu_id,),
     ).fetchall()
-    assert [(row["source_device_id"], row["multiplier"]) for row in rows] == [
-        (fcu_id, 1.0)
-    ]
+    assert rows == []
     assert db.calculate_fcu_temperature10x(conn, fcu_id) == 215
+
+    status = db.get_device_status(conn)
+    fcu = next(device for device in status if device["device_id"] == fcu_id)
+    assert fcu["calculated_temp10x"] == 215
+    rows = conn.execute(
+        """
+        SELECT source_device_id, multiplier
+        FROM fcu_temp_sources
+        WHERE fcu_device_id=?
+        """,
+        (fcu_id,),
+    ).fetchall()
+    assert rows == []
 
     response = db.get_fcu_temp_sources(conn, fcu_id)
     by_id = {source["source_device_id"]: source for source in response["sources"]}
@@ -130,10 +141,15 @@ def test_default_fcu_weight_used_when_no_source_rows(test_database_conn):
     assert by_id[fcu_id]["included"] is True
     assert by_id[sensor_id]["multiplier"] == 0.0
     assert by_id[sensor_id]["included"] is False
-
-    status = db.get_device_status(conn)
-    fcu = next(device for device in status if device["device_id"] == fcu_id)
-    assert fcu["calculated_temp10x"] == 215
+    rows = conn.execute(
+        """
+        SELECT source_device_id, multiplier
+        FROM fcu_temp_sources
+        WHERE fcu_device_id=?
+        """,
+        (fcu_id,),
+    ).fetchall()
+    assert rows == []
 
 
 def test_explicit_zero_fcu_weight_overrides_default(test_database_conn):
@@ -459,6 +475,22 @@ def test_room_omits_none_values_and_updates_only_supplied_fields(flask_test_clie
     assert no_op_response.status_code == 200
     assert no_op_response.json == patch_response.json
 
+    invalid_create_response = flask_test_client.post(
+        "/api/v1/rooms",
+        json={"room_name": "Bad Color", "map": {"color": "blue"}},
+    )
+    assert invalid_create_response.status_code == 400
+    assert invalid_create_response.json["error"] == "validation error"
+    assert isinstance(invalid_create_response.json["details"], list)
+
+    invalid_patch_response = flask_test_client.patch(
+        f"/api/v1/rooms/{room['room_id']}",
+        json={"map": {"color": "blue"}},
+    )
+    assert invalid_patch_response.status_code == 400
+    assert invalid_patch_response.json["error"] == "validation error"
+    assert isinstance(invalid_patch_response.json["details"], list)
+
     missing_name_response = flask_test_client.post(
         "/api/v1/rooms",
         json={"map": {"color": "#abcdef"}},
@@ -551,9 +583,7 @@ def test_fcu_temp_sources_api_returns_default_weights(
             """,
             (fcu_id,),
         ).fetchall()
-    assert [(row["source_device_id"], row["multiplier"]) for row in rows] == [
-        (fcu_id, 1.0)
-    ]
+    assert rows == []
 
 
 def test_fcu_temp_sources_api_handles_fractional_source_age(

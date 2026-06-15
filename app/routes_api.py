@@ -45,6 +45,10 @@ logger = logging.getLogger(__name__)
 api_v1 = Blueprint("api_v1", __name__)
 
 
+def _validation_error_response(error: ValidationError):
+    return jsonify({"error": "validation error", "details": error.errors()}), 400
+
+
 @api_v1.route("/version")
 def get_version_json():
     return jsonify({"version": __version__})
@@ -282,7 +286,7 @@ def rooms(conn):
         body = Room.model_validate(request.get_json(silent=True) or {})
         room = db.create_room(conn, body)
     except ValidationError as e:
-        return jsonify({"error": e.errors()}), 400
+        return _validation_error_response(e)
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
     except sqlite3.IntegrityError as e:
@@ -310,7 +314,7 @@ def update_room(conn, room_id: int):
         )
         room = db.update_room(conn, body)
     except ValidationError as e:
-        return jsonify({"error": e.errors()}), 400
+        return _validation_error_response(e)
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
     except sqlite3.IntegrityError as e:
