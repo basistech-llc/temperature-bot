@@ -261,6 +261,24 @@ class SetTempControl(BaseModel):
     set_temp_c: float = Field(description="Requested set point in degrees Celsius.")
 
 
+class SetRangeControl(BaseModel):
+    """Request body for changing an FCU temperature set range."""
+
+    device_id: int = Field(description="Local device id from the devices table.")
+    set_range_low_c: float = Field(description="Lower range end in degrees Celsius.")
+    set_range_high_c: float = Field(description="Upper range end in degrees Celsius.")
+
+
+class FcuSetRange(BaseModel):
+    """Persisted FCU temperature range in degrees Celsius."""
+
+    device_id: int = Field(description="Local FCU device id from the devices table.")
+    set_range_low_c: float
+    set_range_high_c: float
+    min_set_range_c: float
+    updated_at: int | None = None
+
+
 class DeviceRoomControl(BaseModel):
     """Request body for assigning a device to a room."""
 
@@ -366,6 +384,18 @@ class DeviceStatus(BaseModel):
     mode: str | None = Field(
         default=None,
         description="AE-200 operation mode promoted from status.Mode, when present.",
+    )
+    set_range_low_c: float | None = Field(
+        default=None,
+        description="Lower configured FCU set-range end in degrees Celsius.",
+    )
+    set_range_high_c: float | None = Field(
+        default=None,
+        description="Upper configured FCU set-range end in degrees Celsius.",
+    )
+    min_set_range_c: float | None = Field(
+        default=None,
+        description="System-wide minimum FCU set-range width in degrees Celsius.",
     )
 
 

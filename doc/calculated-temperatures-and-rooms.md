@@ -7,6 +7,8 @@ Each FCU has two temperature values:
 - **FCU Temp** is the raw inlet/device temperature stored in `devlog.temp10x`.
 - **Temp** is the calculated room temperature used by display, reporting, and
   automation.
+- **Set Range** is the persisted allowed temperature band for an FCU. The
+  system-wide minimum width is 3.0 °C; individual FCUs can use a wider range.
 
 Calculated temperature is a weighted average of the FCU's own raw temperature
 and any configured temperature-reporting devices:
@@ -76,6 +78,23 @@ CREATE TABLE fcu_temp_sources (
 All temperature-reporting devices are eligible sources, not only `aqi_mon`
 devices. Eligibility is determined by having a latest `devlog.temp10x` reading.
 
+FCU set ranges are stored in `fcu_set_ranges`:
+
+```sql
+CREATE TABLE fcu_set_ranges (
+    fcu_device_id INTEGER PRIMARY KEY,
+    set_range_low_c REAL NOT NULL,
+    set_range_high_c REAL NOT NULL,
+    updated_at INTEGER NOT NULL,
+    CHECK (set_range_high_c >= set_range_low_c + 3.0)
+);
+```
+
+When no row exists yet, the effective default range is centered on the AE-200
+`SetTemp` value and uses the 3.0 °C minimum width. If `SetTemp` is unavailable,
+the default center is 21.0 °C. Saving a range persists the low/high Celsius
+endpoints for that FCU.
+
 ## API
 
 `GET /api/v1/status` includes room and calculated-temperature fields where
@@ -88,7 +107,10 @@ available:
   "room_name": "Hickory",
   "temp10x": 224,
   "calculated_temp10x": 231,
-  "temp_source_stale_seconds": 600
+  "temp_source_stale_seconds": 600,
+  "set_range_low_c": 20.0,
+  "set_range_high_c": 23.5,
+  "min_set_range_c": 3.0
 }
 ```
 
@@ -168,6 +190,21 @@ including the FCU itself:
 
 Changes are written to `changelog` with old and new multiplier values. The log
 API includes `current_values` and `new_value` so old/new values are visible.
+
+FCU set range endpoint:
+
+- `POST /api/v1/set_range`
+
+```json
+{
+  "device_id": 12,
+  "set_range_low_c": 20.0,
+  "set_range_high_c": 23.5
+}
+```
+
+The endpoint rejects ranges narrower than 3.0 °C, persists accepted ranges in
+`fcu_set_ranges`, and writes old/new effective values to `changelog`.
 
 Temperature chart modes:
 
