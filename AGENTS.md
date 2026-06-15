@@ -5,6 +5,19 @@ Beads issues, or rely on `.beads/` state for task tracking. The `.beads/`
 content is legacy and should be ignored. Use the user's current request, Git
 history, and GitHub only when explicitly asked.
 
+## Git Commit Signing
+
+When the user asks you to make a signed commit, look for a Codex-specific GPG
+signing key rather than using the user's personal signing key. Do not hard-code
+a specific fingerprint in these instructions; different machines may have
+different Codex keys.
+
+Use `gpg -k` or the local Git signing configuration to identify a key whose UID
+is clearly for Codex, such as `Codex AI Assistant` or an address containing
+`+codex`. Sign the commit explicitly with that key. If no Codex-specific key is
+available, tell the user before committing and ask whether to use the configured
+default signing key or make an unsigned commit.
+
 ## Non-Interactive Shell Commands
 
 **ALWAYS use non-interactive flags** with file operations to avoid hanging on confirmation prompts.
