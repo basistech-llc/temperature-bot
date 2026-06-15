@@ -95,7 +95,8 @@
             <tr>
               <th class="column-unit" rowspan="2">Unit</th>
               <th class="column-disable-for" rowspan="2" title="Remaining time rules are disabled for this device (H:MM)">Disabled<br>for</th>
-              <th class="column-temp" rowspan="2">Temp<br><small id="fcu-temp-unit-label">°C</small></th>
+              <th class="column-temp" rowspan="2">FCU Temp<br><small id="fcu-temp-unit-label">°C</small></th>
+              <th class="column-temp" rowspan="2">Room Temp<br><small id="fcu-room-temp-unit-label">°C</small></th>
               <th class="column-temp column-temp-set" rowspan="2">Set Temp<br><small id="fcu-settemp-unit-label">°C</small></th>
               <th class="column-mode" rowspan="2">Mode</th>
               <th class="column-speed" colspan="5">Fan Speed</th>
@@ -134,13 +135,17 @@
                               aria-label="Increase disable time">+</button>
                     </span>
                   </td>
-                  {% if device.temp10x %}
-                  <td class="cell-temp cell-temp-link temp-display-no-unit" id="temp-{{ device.device_id }}"
+                  {% if device.temp10x is not none %}
+                  <td class="cell-temp cell-temp-link temp-display temp-display-no-unit" id="fcu-temp-{{ device.device_id }}"
                       data-chart-url="/chart?device_ids={{ device.device_id }}"
                       title="Temperature chart for {{ device.device_label }}">--</td>
                   {% else %}
                   <td class="cell-temp cell-temp-na">n/a</td>
                   {% endif %}
+                  <td class="cell-temp cell-temp-link room-temp-link temp-display temp-display-no-unit" id="room-temp-{{ device.device_id }}"
+                      data-fcu-temp-sources-url="/api/v1/fcu_temp_sources?fcu_device_id={{ device.device_id }}"
+                      data-fcu-temp-source-update-url="/api/v1/fcu_temp_source"
+                      title="Calculated room temperature for {{ device.device_label }}">--</td>
                   <td class="cell-temp cell-temp-set" id="settemp-{{ device.device_id }}">
                     <span class="settemp-thermostat" role="group" aria-label="Set temperature">
                       <button type="button"
@@ -245,6 +250,30 @@
         </table>
       </form>
     </div> <!-- main-grid -->
+  </div>
+</div>
+
+<div id="fcu-temp-sources-popup" class="fcu-temp-sources-popup hidden" role="dialog" aria-modal="true" aria-labelledby="fcu-temp-sources-title">
+  <div class="fcu-temp-sources-dialog">
+    <div class="fcu-temp-sources-header">
+      <h3 id="fcu-temp-sources-title">Temperature Sources</h3>
+      <button type="button" class="fcu-temp-sources-close" data-action="close-fcu-temp-sources" aria-label="Close">×</button>
+    </div>
+    <p class="fcu-temp-sources-note">Readings older than 10 minutes are ignored.</p>
+    <div class="fcu-temp-sources-message" data-role="message" aria-live="polite"></div>
+    <table class="pure-table pure-table-horizontal fcu-temp-sources-table">
+      <thead>
+        <tr>
+          <th>Source</th>
+          <th>Temp</th>
+          <th>Age</th>
+          <th>Weight</th>
+        </tr>
+      </thead>
+      <tbody data-role="sources-body">
+        <tr><td colspan="4">Loading...</td></tr>
+      </tbody>
+    </table>
   </div>
 </div>
 

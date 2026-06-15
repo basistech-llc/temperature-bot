@@ -111,6 +111,220 @@ function updateStalenessAndTooltip(cell, dev) {
   }
 }
 
+/**
+ * Render a temperature cell from a tenths-Celsius value.
+ *
+ * @param {HTMLElement|null} cell - Table cell to update.
+ * @param {number|null|undefined} temp10x - Temperature in tenths Celsius.
+ * @param {Object|null} dev - Device data object from /api/v1/status.
+ */
+function updateTemperatureCell(cell, temp10x, dev = null) {
+  if (!cell) {
+    return;
+  }
+  if (temp10x === null || temp10x === undefined) {
+    cell.removeAttribute("data-temp-c");
+    cell.classList.remove("temp-stale");
+    cell.textContent = "--";
+    return;
+  }
+  const tempC = parseFloat(temp10x) / 10;
+  if (!Number.isFinite(tempC)) {
+    cell.removeAttribute("data-temp-c");
+    cell.classList.remove("temp-stale");
+    cell.textContent = "--";
+    return;
+  }
+
+  cell.setAttribute("data-temp-c", tempC.toString());
+  if (dev) {
+    updateStalenessAndTooltip(cell, dev);
+  } else {
+    cell.classList.remove("temp-stale");
+  }
+
+  const includeUnit = !cell.classList.contains("temp-display-no-unit");
+  cell.innerHTML = TemperatureUtils.formatTemperature(tempC, includeUnit);
+}
+
+function formatAgeSeconds(seconds) {
+  if (seconds === null || seconds === undefined) {
+    return "--";
+  }
+  if (seconds < 60) {
+    return `${Math.max(0, seconds)}s`;
+  }
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) {
+    return `${minutes}m`;
+  }
+  const hours = Math.floor(minutes / 60);
+  const remainder = minutes % 60;
+  return remainder ? `${hours}h ${remainder}m` : `${hours}h`;
+}
+
+function fcuTempSourceLabel(source) {
+  const suffix = [];
+  if (source.is_fcu_self) {
+    suffix.push("FCU");
+  }
+  if (source.room_name) {
+    suffix.push(source.room_name);
+  }
+  return suffix.length > 0
+    ? `${source.device_name} (${suffix.join(", ")})`
+    : source.device_name;
+}
+
+function setFcuTempSourcesMessage(popup, message, isError = false) {
+  const messageElement = popup.querySelector("[data-role='message']");
+  if (!messageElement) {
+    return;
+  }
+  messageElement.textContent = message || "";
+  messageElement.classList.toggle("error", isError);
+}
+
+function closeFcuTempSourcesPopup() {
+  const popup = document.getElementById("fcu-temp-sources-popup");
+  if (popup) {
+    popup.classList.add("hidden");
+  }
+}
+
+function renderFcuTempSources(popup, data, updateUrl) {
+  const tbody = popup.querySelector("[data-role='sources-body']");
+  if (!tbody) {
+    return;
+  }
+  tbody.innerHTML = "";
+
+  if (!data.sources || data.sources.length === 0) {
+    const row = document.createElement("tr");
+    const cell = document.createElement("td");
+    cell.colSpan = 4;
+    cell.textContent = "No temperature-reporting sources found.";
+    row.appendChild(cell);
+    tbody.appendChild(row);
+    return;
+  }
+
+  for (const source of data.sources) {
+    const row = document.createElement("tr");
+    row.classList.toggle("temp-stale", Boolean(source.is_stale));
+
+    const labelCell = document.createElement("td");
+    labelCell.textContent = fcuTempSourceLabel(source);
+
+    const tempCell = document.createElement("td");
+    if (source.temp10x === null || source.temp10x === undefined) {
+      tempCell.textContent = "--";
+    } else {
+      tempCell.setAttribute("data-temp-c", String(source.temp10x / 10));
+      tempCell.classList.add("temp-display", "temp-display-no-unit");
+      tempCell.textContent = TemperatureUtils.formatTemperature(
+        source.temp10x / 10,
+        false,
+      );
+    }
+
+    const ageCell = document.createElement("td");
+    ageCell.textContent = source.is_stale
+      ? `${formatAgeSeconds(source.age_seconds)} stale`
+      : formatAgeSeconds(source.age_seconds);
+
+    const weightCell = document.createElement("td");
+    const input = document.createElement("input");
+    input.type = "number";
+    input.min = "0";
+    input.step = "0.1";
+    input.value = String(source.multiplier);
+    input.className = "fcu-temp-source-weight";
+    input.setAttribute("aria-label", `Weight for ${source.device_name}`);
+    input.dataset.fcuDeviceId = String(data.fcu_device_id);
+    input.dataset.sourceDeviceId = String(source.source_device_id);
+    input.dataset.updateUrl = updateUrl;
+    input.addEventListener("change", saveFcuTempSourceMultiplier);
+    weightCell.appendChild(input);
+
+    row.appendChild(labelCell);
+    row.appendChild(tempCell);
+    row.appendChild(ageCell);
+    row.appendChild(weightCell);
+    tbody.appendChild(row);
+  }
+}
+
+async function loadFcuTempSourcesForCell(cell) {
+  const popup = document.getElementById("fcu-temp-sources-popup");
+  if (!popup || !cell) {
+    return;
+  }
+  const sourcesUrl = cell.dataset.fcuTempSourcesUrl;
+  const updateUrl = cell.dataset.fcuTempSourceUpdateUrl;
+  if (!sourcesUrl || !updateUrl) {
+    return;
+  }
+
+  popup.classList.remove("hidden");
+  setFcuTempSourcesMessage(popup, "Loading...");
+  const tbody = popup.querySelector("[data-role='sources-body']");
+  if (tbody) {
+    tbody.innerHTML = '<tr><td colspan="4">Loading...</td></tr>';
+  }
+
+  try {
+    const response = await fetch(sourcesUrl);
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || "Unable to load temperature sources.");
+    }
+    renderFcuTempSources(popup, data, updateUrl);
+    setFcuTempSourcesMessage(popup, "");
+  } catch (error) {
+    console.error("Failed to load FCU temperature sources:", error);
+    setFcuTempSourcesMessage(popup, error.message, true);
+  }
+}
+
+async function saveFcuTempSourceMultiplier(event) {
+  const input = event.currentTarget;
+  const popup = document.getElementById("fcu-temp-sources-popup");
+  const multiplier = parseFloat(input.value);
+  if (!popup || !Number.isFinite(multiplier) || multiplier < 0) {
+    if (popup) {
+      setFcuTempSourcesMessage(popup, "Weight must be a nonnegative number.", true);
+    }
+    return;
+  }
+
+  input.disabled = true;
+  setFcuTempSourcesMessage(popup, "Saving...");
+  try {
+    const response = await fetch(input.dataset.updateUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        fcu_device_id: parseInt(input.dataset.fcuDeviceId, 10),
+        source_device_id: parseInt(input.dataset.sourceDeviceId, 10),
+        multiplier: multiplier,
+      }),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || "Unable to save weight.");
+    }
+    renderFcuTempSources(popup, data, input.dataset.updateUrl);
+    setFcuTempSourcesMessage(popup, "Saved.");
+    forceRefresh = true;
+  } catch (error) {
+    console.error("Failed to save FCU temperature source multiplier:", error);
+    setFcuTempSourcesMessage(popup, error.message, true);
+  } finally {
+    input.disabled = false;
+  }
+}
+
 ////////////////////////////////////////////////////////////////
 // Weather display functions
 function displayWeather(weatherInfo) {
@@ -273,6 +487,38 @@ function setupMatrixListeners() {
 
   // Add event listeners for "Disable for" ± controls
   setupDisableForControls();
+
+  // Add event listeners for calculated room-temperature source weights.
+  setupFcuTempSourcePopupControls();
+}
+
+function setupFcuTempSourcePopupControls() {
+  document.querySelectorAll(".room-temp-link").forEach((cell) => {
+    cell.addEventListener("click", function (event) {
+      event.preventDefault();
+      loadFcuTempSourcesForCell(this);
+    });
+  });
+
+  const popup = document.getElementById("fcu-temp-sources-popup");
+  if (!popup) {
+    return;
+  }
+  popup
+    .querySelectorAll("[data-action='close-fcu-temp-sources']")
+    .forEach((button) => {
+      button.addEventListener("click", closeFcuTempSourcesPopup);
+    });
+  popup.addEventListener("click", (event) => {
+    if (event.target === popup) {
+      closeFcuTempSourcesPopup();
+    }
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      closeFcuTempSourcesPopup();
+    }
+  });
 }
 
 /**
@@ -459,21 +705,21 @@ const refreshGridRows = () => {
         // Update the tables with the new data
         if (data.devices)
           for (const dev of data.devices) {
-            if (dev.temp10x) {
-              const cell = document.getElementById(`temp-${dev.device_id}`);
-              if (cell) {
-                const tempC = dev.temp10x / 10;
-                // Store original Celsius value in data attribute for instant conversion
-                cell.setAttribute("data-temp-c", tempC.toString());
-
-                // Apply shared staleness + tooltip behavior
-                updateStalenessAndTooltip(cell, dev);
-
-                // Display temperature; omit unit when header already shows it
-                const includeUnit = !cell.classList.contains("temp-display-no-unit");
-                cell.innerHTML = TemperatureUtils.formatTemperature(tempC, includeUnit);
-              }
-            }
+            updateTemperatureCell(
+              document.getElementById(`temp-${dev.device_id}`),
+              dev.temp10x,
+              dev,
+            );
+            updateTemperatureCell(
+              document.getElementById(`fcu-temp-${dev.device_id}`),
+              dev.temp10x,
+              dev,
+            );
+            updateTemperatureCell(
+              document.getElementById(`room-temp-${dev.device_id}`),
+              dev.calculated_temp10x,
+              null,
+            );
 
             // Update humidity where available
             const humidityCell = document.getElementById(

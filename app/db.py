@@ -20,6 +20,7 @@ Key concepts:
   - aqi - outdoor air quality
 
 """
+# pylint: disable=too-many-lines
 
 import sqlite3
 import time  # For logtime timestamps
@@ -33,13 +34,21 @@ from typing import List, Dict, Any
 
 from flask import request
 
-from .constants import DB_PATH, TEST_DB_NAME
+from .constants import DB_PATH, TEMP_SOURCE_STALE_SECONDS, TEST_DB_NAME
 from .models import (
     AqiSummary,
     AqiWeatherResponse,
     ChangelogResponse,
     ChangelogRow,
+    DatabaseColumn,
+    DatabaseIndex,
+    DatabaseSchemaIssue,
+    DatabaseSchemaSnapshot,
     DeviceStatus,
+    FcuTempSourceRow,
+    FcuTempSourcesResponse,
+    Room,
+    RoomMap,
     TimeSeries,
     json_ready,
     json_ready_list,
@@ -58,6 +67,10 @@ logger = logging.getLogger(__name__)
 
 DEVICE_MAP: dict[str, int] = {}
 MAX_DURATION = 3600  # don't extend more than an hour
+ROOM_MAP_JSON_KEY = "map_json"
+FLYWAY_SCHEMA_HISTORY_TABLE = "flyway_schema_history"
+SCHEMA_UPGRADE_COMMAND = "make migrate-db"
+FCU_DEFAULT_TEMP_SOURCE_MULTIPLIER = 1.0
 
 # Cache the schema file's modification time so we only re-apply the schema
 # when the file actually changes on disk. This keeps the convenient
@@ -92,6 +105,239 @@ def connect_db(db_path):
         conn.execute("PRAGMA journal_mode=WAL;")
     conn.execute("PRAGMA synchronous=NORMAL;")
     return conn
+
+
+class DatabaseSchemaMismatchError(RuntimeError):
+    """Raised when startup finds a stale or incompatible database schema."""
+
+    def __init__(
+        self,
+        db_path: str,
+        issues: list[DatabaseSchemaIssue],
+    ) -> None:
+        self.db_path = db_path
+        self.issues = issues
+        super().__init__(format_schema_mismatch_message(db_path, issues))
+
+
+def format_schema_mismatch_message(
+    db_path: str,
+    issues: list[DatabaseSchemaIssue],
+) -> str:
+    """Return a concise user-facing schema mismatch message."""
+    lines = [
+        f"Database schema does not match expected application schema: {db_path}",
+        (
+            "Please upgrade the database before starting Flask. "
+            f"Run `{SCHEMA_UPGRADE_COMMAND}`."
+        ),
+    ]
+    if issues:
+        lines.append("Schema issues:")
+        lines.extend(
+            f"- {issue.issue_type} {issue.object_name}: {issue.detail}"
+            for issue in issues
+        )
+    return "\n".join(lines)
+
+
+def _quote_sqlite_identifier(identifier: str) -> str:
+    return '"' + identifier.replace('"', '""') + '"'
+
+
+def _normalize_sqlite_type(value: str | None) -> str:
+    return (value or "").strip().upper()
+
+
+def _normalize_sqlite_default(value: object | None) -> str | None:
+    return None if value is None else str(value).strip()
+
+
+def schema_snapshot(conn) -> DatabaseSchemaSnapshot:
+    """Return current application tables, columns, and indexes for a database."""
+    tables = [
+        row[0]
+        for row in conn.execute(
+            """
+            SELECT name
+            FROM sqlite_master
+            WHERE type='table'
+              AND name NOT LIKE 'sqlite_%'
+              AND name <> ?
+            ORDER BY name
+            """,
+            (FLYWAY_SCHEMA_HISTORY_TABLE,),
+        ).fetchall()
+    ]
+
+    columns: list[DatabaseColumn] = []
+    indexes: list[DatabaseIndex] = []
+    for table_name in tables:
+        quoted_table = _quote_sqlite_identifier(table_name)
+        for row in conn.execute(f"PRAGMA table_info({quoted_table})").fetchall():
+            columns.append(
+                DatabaseColumn(
+                    table_name=table_name,
+                    column_name=row[1],
+                    column_type=_normalize_sqlite_type(row[2]),
+                    not_null=bool(row[3]),
+                    default_value=_normalize_sqlite_default(row[4]),
+                    primary_key=bool(row[5]),
+                )
+            )
+        for row in conn.execute(f"PRAGMA index_list({quoted_table})").fetchall():
+            index_name = row[1]
+            if not index_name.startswith("sqlite_"):
+                indexes.append(
+                    DatabaseIndex(
+                        table_name=table_name,
+                        index_name=index_name,
+                        is_unique=bool(row[2]),
+                    )
+                )
+
+    return DatabaseSchemaSnapshot(
+        tables=tables,
+        columns=sorted(
+            columns,
+            key=lambda column: (column.table_name, column.column_name),
+        ),
+        indexes=sorted(
+            indexes,
+            key=lambda index: (index.table_name, index.index_name),
+        ),
+    )
+
+
+def expected_schema_snapshot(schema_file: str = SCHEMA_FILE_PATH) -> DatabaseSchemaSnapshot:
+    """Build the expected schema snapshot from the checked-in schema file."""
+    with sqlite3.connect(":memory:") as conn:
+        with open(schema_file, "r", encoding="utf-8") as f:
+            conn.executescript(f.read())
+        return schema_snapshot(conn)
+
+
+def database_schema_issues(
+    conn,
+    schema_file: str = SCHEMA_FILE_PATH,
+) -> list[DatabaseSchemaIssue]:
+    """Compare a database against the checked-in expected schema."""
+    expected = expected_schema_snapshot(schema_file)
+    actual = schema_snapshot(conn)
+    issues: list[DatabaseSchemaIssue] = []
+
+    actual_tables = set(actual.tables)
+    expected_tables = set(expected.tables)
+    for table_name in sorted(expected_tables - actual_tables):
+        issues.append(
+            DatabaseSchemaIssue(
+                issue_type="missing_table",
+                object_name=table_name,
+                detail="expected table is missing",
+            )
+        )
+
+    actual_columns = {
+        (column.table_name, column.column_name): column
+        for column in actual.columns
+    }
+    for expected_column in expected.columns:
+        if expected_column.table_name not in actual_tables:
+            continue
+        actual_column = actual_columns.get(
+            (expected_column.table_name, expected_column.column_name)
+        )
+        object_name = f"{expected_column.table_name}.{expected_column.column_name}"
+        if actual_column is None:
+            issues.append(
+                DatabaseSchemaIssue(
+                    issue_type="missing_column",
+                    object_name=object_name,
+                    detail="expected column is missing",
+                )
+            )
+            continue
+
+        mismatches = []
+        if actual_column.column_type != expected_column.column_type:
+            mismatches.append(
+                f"type {actual_column.column_type!r} != {expected_column.column_type!r}"
+            )
+        if actual_column.not_null != expected_column.not_null:
+            mismatches.append(
+                f"not_null {actual_column.not_null!r} != {expected_column.not_null!r}"
+            )
+        if actual_column.default_value != expected_column.default_value:
+            mismatches.append(
+                "default "
+                f"{actual_column.default_value!r} != {expected_column.default_value!r}"
+            )
+        if actual_column.primary_key != expected_column.primary_key:
+            mismatches.append(
+                "primary_key "
+                f"{actual_column.primary_key!r} != {expected_column.primary_key!r}"
+            )
+        if mismatches:
+            issues.append(
+                DatabaseSchemaIssue(
+                    issue_type="column_mismatch",
+                    object_name=object_name,
+                    detail=", ".join(mismatches),
+                )
+            )
+
+    actual_index_names = {index.index_name for index in actual.indexes}
+    for expected_index in expected.indexes:
+        if expected_index.table_name not in actual_tables:
+            continue
+        if expected_index.index_name not in actual_index_names:
+            issues.append(
+                DatabaseSchemaIssue(
+                    issue_type="missing_index",
+                    object_name=expected_index.index_name,
+                    detail=f"expected index on {expected_index.table_name} is missing",
+                )
+            )
+
+    return issues
+
+
+def validate_database_schema(conn, schema_file: str = SCHEMA_FILE_PATH) -> None:
+    """Raise if a database does not match the expected application schema."""
+    db_path = next(
+        (
+            row[2]
+            for row in conn.execute("PRAGMA database_list").fetchall()
+            if row[1] == "main"
+        ),
+        "<unknown>",
+    )
+    issues = database_schema_issues(conn, schema_file)
+    if issues:
+        raise DatabaseSchemaMismatchError(db_path, issues)
+
+
+def validate_configured_database_schema() -> None:
+    """Validate the configured runtime database without modifying its schema."""
+    try:
+        db_path = (
+            os.environ[TEST_DB_NAME]
+            if TEST_DB_NAME in os.environ
+            else os.environ[DB_PATH]
+        )
+    except KeyError as e:
+        issue = DatabaseSchemaIssue(
+            issue_type="missing_config",
+            object_name=e.args[0],
+            detail="database path environment variable is not set",
+        )
+        raise DatabaseSchemaMismatchError("<unset>", [issue]) from e
+
+    conn = connect_db(db_path)
+    try:
+        validate_database_schema(conn)
+    finally:
+        conn.close()
 
 
 def get_db_connection():
@@ -243,6 +489,13 @@ def fetch_all_device_dicts(conn):
     return cursor.fetchall()
 
 
+def get_device(conn, device_id: int) -> dict[str, Any] | None:
+    c = conn.cursor()
+    c.execute("SELECT * FROM devices WHERE device_id=?", (device_id,))
+    row = c.fetchone()
+    return dict(row) if row else None
+
+
 def devices_to_device_id(conn):
     """Return a dictionary of device_name:device_id"""
     c = conn.cursor()
@@ -255,6 +508,99 @@ def devices_to_device_id(conn):
     return ret
 
 
+################################################################
+## Room metadata
+
+
+def _room_map_from_json(map_json: str | None) -> RoomMap | None:
+    try:
+        data = json.loads(map_json or "{}")
+    except json.JSONDecodeError:
+        data = {}
+    if not data:
+        return None
+    return RoomMap.model_validate(data)
+
+
+def _room_from_row(row: sqlite3.Row) -> Room:
+    return Room(
+        room_id=row["room_id"],
+        room_name=row["room_name"],
+        map=_room_map_from_json(row[ROOM_MAP_JSON_KEY]),
+    )
+
+
+def get_rooms(conn) -> list[Room]:
+    c = conn.cursor()
+    c.execute("SELECT * FROM rooms ORDER BY room_name")
+    return [_room_from_row(row) for row in c.fetchall()]
+
+
+def get_room(conn, room_id: int) -> Room | None:
+    c = conn.cursor()
+    c.execute("SELECT * FROM rooms WHERE room_id=?", (room_id,))
+    row = c.fetchone()
+    if row is None:
+        return None
+    return _room_from_row(row)
+
+
+def create_room(conn, room: Room) -> Room:
+    if room.room_name is None:
+        raise ValueError("room_name is required")
+    c = conn.cursor()
+    if room.map is None:
+        c.execute("INSERT INTO rooms (room_name) VALUES (?)", (room.room_name,))
+    else:
+        c.execute(
+            "INSERT INTO rooms (room_name, map_json) VALUES (?, ?)",
+            (room.room_name, room.map.model_dump_json(exclude_none=True)),
+        )
+    conn.commit()
+    created = get_room(conn, int(c.lastrowid))
+    assert created is not None
+    return created
+
+
+def update_room(conn, room: Room) -> Room | None:
+    if room.room_id is None:
+        raise ValueError("room_id is required")
+    assignments = []
+    args: list[Any] = []
+    if room.room_name is not None:
+        assignments.append("room_name=?")
+        args.append(room.room_name)
+    if room.map is not None:
+        assignments.append("map_json=?")
+        args.append(room.map.model_dump_json(exclude_none=True))
+    if not assignments:
+        return get_room(conn, room.room_id)
+    args.append(room.room_id)
+
+    c = conn.cursor()
+    c.execute(
+        f"UPDATE rooms SET {', '.join(assignments)} WHERE room_id=?",
+        args,
+    )
+    if c.rowcount == 0:
+        return None
+    conn.commit()
+    return get_room(conn, room.room_id)
+
+
+def update_device_room(conn, device_id: int, room_id: int | None) -> int:
+    c = conn.cursor()
+    if room_id is not None:
+        c.execute("SELECT 1 FROM rooms WHERE room_id=?", (room_id,))
+        if c.fetchone() is None:
+            raise ValueError(f"Unknown room_id: {room_id}")
+    c.execute("UPDATE devices SET room_id=? WHERE device_id=?", (room_id, device_id))
+    if c.rowcount == 0:
+        raise ValueError(f"Unknown device_id: {device_id}")
+    conn.commit()
+    return device_id
+
+
 EVERY_DEVICE=1
 AIR_MON_DEVICES=2
 def fetch_last_status(conn, flag=EVERY_DEVICE):
@@ -265,10 +611,11 @@ def fetch_last_status(conn, flag=EVERY_DEVICE):
         where = "1=1"
     cursor = conn.cursor()
     cursor.execute(f"""
-        SELECT a.*,b.device_name,b.notes,b.disabled_until
+        SELECT a.*,b.device_name,b.notes,b.disabled_until,b.room_id,r.room_name
         FROM (SELECT * FROM devlog GROUP BY device_id HAVING logtime=max(logtime)) AS a
-        LEFT JOIN devices b
-        WHERE a.device_id = b.device_id AND {where}
+        JOIN devices b ON a.device_id = b.device_id
+        LEFT JOIN rooms r ON b.room_id = r.room_id
+        WHERE {where}
         ORDER by b.device_name""")
     return cursor.fetchall()
 
@@ -390,6 +737,8 @@ def insert_devlog_entry(
     c = conn.cursor()
     if logtime is None:
         logtime = int(time.time())  # Use current Unix timestamp if not provided
+    else:
+        logtime = int(logtime)
     try:
         # Get or create the device_id
         if device_id is None:
@@ -468,13 +817,12 @@ def insert_changelog(
     *,
     ipaddr: str,
     device_id: int,
-    ae200_device_id: int,
+    ae200_device_id: int | None,
     current_values: str = "",
     new_value: str,
     agent: str = "",
     comment: str = "",
 ):
-    assert ae200_device_id is not None, "ae200_device_id must be provided"
     logtime = int(time.time())
     c = conn.cursor()
     c.execute(
@@ -668,6 +1016,453 @@ def get_aqi_series(conn):
     return {key: [[row["logtime"], row[key]] for row in rows] for key in keys}
 
 
+def _is_fcu_device(device: dict[str, Any]) -> bool:
+    return bool(device.get("has_speed_control")) and not device.get(
+        "device_name", ""
+    ).lower().startswith("erv")
+
+
+def get_fcu_temp_source_weights(conn, fcu_device_id: int) -> dict[int, float]:
+    """Return source weights for one FCU, applying the FCU default if absent."""
+    rows = _fcu_temp_source_weight_rows(conn, fcu_device_id)
+    weights = {}
+    for row in rows:
+        weights[row["source_device_id"]] = float(row["multiplier"])
+    if fcu_device_id not in weights:
+        weights[fcu_device_id] = FCU_DEFAULT_TEMP_SOURCE_MULTIPLIER
+    return weights
+
+
+def _fcu_temp_source_weight_rows(conn, fcu_device_id: int):
+    c = conn.cursor()
+    c.execute(
+        """
+        SELECT source_device_id, multiplier
+        FROM fcu_temp_sources
+        WHERE fcu_device_id=?
+        """,
+        (fcu_device_id,),
+    )
+    return c.fetchall()
+
+
+def _latest_temperature_source_rows(conn, fcu_device_id: int, now: int):
+    weights = get_fcu_temp_source_weights(conn, fcu_device_id)
+    c = conn.cursor()
+    c.execute(
+        """
+        SELECT
+            d.device_id AS source_device_id,
+            d.device_name,
+            d.room_id,
+            r.room_name,
+            l.logtime,
+            l.duration,
+            l.temp10x
+        FROM (
+            SELECT d1.*
+            FROM devlog d1
+            JOIN (
+                SELECT device_id, MAX(logtime) AS max_logtime
+                FROM devlog
+                WHERE temp10x IS NOT NULL
+                GROUP BY device_id
+            ) latest
+                ON d1.device_id = latest.device_id
+                AND d1.logtime = latest.max_logtime
+        ) l
+        JOIN devices d ON d.device_id = l.device_id
+        LEFT JOIN rooms r ON d.room_id = r.room_id
+        ORDER BY d.device_name
+        """
+    )
+    rows = []
+    for row in c.fetchall():
+        age_seconds = int(
+            max(0, now - (float(row["logtime"]) + float(row["duration"] or 0)))
+        )
+        is_stale = age_seconds > TEMP_SOURCE_STALE_SECONDS
+        multiplier = weights.get(row["source_device_id"], 0.0)
+        rows.append(
+            FcuTempSourceRow(
+                source_device_id=row["source_device_id"],
+                device_name=row["device_name"],
+                room_id=row["room_id"],
+                room_name=row["room_name"],
+                is_fcu_self=row["source_device_id"] == fcu_device_id,
+                temp10x=row["temp10x"],
+                age_seconds=age_seconds,
+                is_stale=is_stale,
+                multiplier=multiplier,
+                included=multiplier > 0 and not is_stale,
+            )
+        )
+    return rows
+
+
+def get_fcu_temp_sources(conn, fcu_device_id: int) -> dict[str, Any]:
+    if get_device(conn, fcu_device_id) is None:
+        raise ValueError(f"Unknown fcu_device_id: {fcu_device_id}")
+    sources = _latest_temperature_source_rows(conn, fcu_device_id, int(time.time()))
+    return json_ready(
+        FcuTempSourcesResponse(
+            fcu_device_id=fcu_device_id,
+            stale_seconds=TEMP_SOURCE_STALE_SECONDS,
+            sources=sources,
+        )
+    )
+
+
+def _temperature_row_for_source(conn, source_device_id: int, at_time: int | None):
+    c = conn.cursor()
+    if at_time is None:
+        c.execute(
+            """
+            SELECT logtime, duration, temp10x
+            FROM devlog
+            WHERE device_id=? AND temp10x IS NOT NULL
+            ORDER BY logtime DESC
+            LIMIT 1
+            """,
+            (source_device_id,),
+        )
+    else:
+        c.execute(
+            """
+            SELECT logtime, duration, temp10x
+            FROM devlog
+            WHERE device_id=? AND temp10x IS NOT NULL AND logtime <= ?
+            ORDER BY logtime DESC
+            LIMIT 1
+            """,
+            (source_device_id, at_time),
+        )
+    return c.fetchone()
+
+
+def calculate_fcu_temperature10x(
+    conn, fcu_device_id: int, at_time: int | None = None
+) -> int | None:
+    weights = get_fcu_temp_source_weights(conn, fcu_device_id)
+
+    now = int(time.time()) if at_time is None else at_time
+    weighted_total = 0.0
+    weight_total = 0.0
+    for source_device_id, multiplier in weights.items():
+        if multiplier <= 0:
+            continue
+        temp_row = _temperature_row_for_source(conn, source_device_id, at_time)
+        if temp_row is None:
+            continue
+        last_valid = temp_row["logtime"] + temp_row["duration"]
+        if now - last_valid > TEMP_SOURCE_STALE_SECONDS:
+            continue
+        weighted_total += temp_row["temp10x"] * multiplier
+        weight_total += multiplier
+
+    if weight_total <= 0:
+        return None
+    return int(math.floor((weighted_total / weight_total) + 0.5))
+
+
+def _fcu_temp_source_weights_for_fcus(
+    conn, fcu_device_ids: list[int]
+) -> dict[int, dict[int, float]]:
+    weights_by_fcu = {
+        fcu_device_id: {fcu_device_id: FCU_DEFAULT_TEMP_SOURCE_MULTIPLIER}
+        for fcu_device_id in fcu_device_ids
+    }
+    if not fcu_device_ids:
+        return weights_by_fcu
+
+    wanted_values = ",".join(["(?)"] * len(fcu_device_ids))
+    c = conn.cursor()
+    c.execute(
+        f"""
+        WITH wanted(fcu_device_id) AS (VALUES {wanted_values})
+        SELECT s.fcu_device_id, s.source_device_id, s.multiplier
+        FROM fcu_temp_sources s
+        JOIN wanted w ON s.fcu_device_id = w.fcu_device_id
+        """,
+        fcu_device_ids,
+    )
+    for row in c.fetchall():
+        weights_by_fcu[row["fcu_device_id"]][row["source_device_id"]] = float(
+            row["multiplier"]
+        )
+    return weights_by_fcu
+
+
+def _latest_temperature_rows_by_source(
+    conn, source_device_ids: list[int]
+) -> dict[int, sqlite3.Row]:
+    if not source_device_ids:
+        return {}
+
+    wanted_values = ",".join(["(?)"] * len(source_device_ids))
+    c = conn.cursor()
+    c.execute(
+        f"""
+        WITH wanted(device_id) AS (VALUES {wanted_values}),
+        latest AS (
+            SELECT d.device_id, MAX(d.logtime) AS logtime
+            FROM devlog d
+            JOIN wanted w ON d.device_id = w.device_id
+            WHERE d.temp10x IS NOT NULL
+            GROUP BY d.device_id
+        )
+        SELECT d.device_id, d.logtime, d.duration, d.temp10x
+        FROM devlog d
+        JOIN latest l
+            ON d.device_id = l.device_id
+            AND d.logtime = l.logtime
+        WHERE d.temp10x IS NOT NULL
+        """,
+        source_device_ids,
+    )
+    return {row["device_id"]: row for row in c.fetchall()}
+
+
+def calculate_fcu_temperatures10x(
+    conn, fcu_device_ids: list[int]
+) -> dict[int, int]:
+    weights_by_fcu = _fcu_temp_source_weights_for_fcus(conn, fcu_device_ids)
+    source_device_ids = sorted(
+        {
+            source_device_id
+            for weights in weights_by_fcu.values()
+            for source_device_id, multiplier in weights.items()
+            if multiplier > 0
+        }
+    )
+    source_rows = _latest_temperature_rows_by_source(conn, source_device_ids)
+    now = int(time.time())
+
+    calculated: dict[int, int] = {}
+    for fcu_device_id, weights in weights_by_fcu.items():
+        weighted_total = 0.0
+        weight_total = 0.0
+        for source_device_id, multiplier in weights.items():
+            if multiplier <= 0:
+                continue
+            temp_row = source_rows.get(source_device_id)
+            if temp_row is None:
+                continue
+            last_valid = temp_row["logtime"] + temp_row["duration"]
+            if now - last_valid > TEMP_SOURCE_STALE_SECONDS:
+                continue
+            weighted_total += temp_row["temp10x"] * multiplier
+            weight_total += multiplier
+        if weight_total > 0:
+            calculated[fcu_device_id] = int(
+                math.floor((weighted_total / weight_total) + 0.5)
+            )
+    return calculated
+
+
+def _temperature_rows_by_source_for_window(
+    conn, source_device_ids: list[int], start_logtime: int, end_logtime: int
+) -> dict[int, list[sqlite3.Row]]:
+    rows_by_source: dict[int, list[sqlite3.Row]] = {
+        source_device_id: [] for source_device_id in source_device_ids
+    }
+    if not source_device_ids:
+        return rows_by_source
+
+    wanted_values = ",".join(["(?)"] * len(source_device_ids))
+    c = conn.cursor()
+    c.execute(
+        f"""
+        WITH wanted(device_id) AS (VALUES {wanted_values}),
+        prior AS (
+            SELECT d.device_id, MAX(d.logtime) AS logtime
+            FROM devlog d
+            JOIN wanted w ON d.device_id = w.device_id
+            WHERE d.temp10x IS NOT NULL AND d.logtime <= ?
+            GROUP BY d.device_id
+        )
+        SELECT d.device_id, d.logtime, d.duration, d.temp10x
+        FROM devlog d
+        JOIN wanted w ON d.device_id = w.device_id
+        LEFT JOIN prior p ON d.device_id = p.device_id
+        WHERE d.temp10x IS NOT NULL
+            AND d.logtime <= ?
+            AND (d.logtime >= ? OR d.logtime = p.logtime)
+        ORDER BY d.device_id, d.logtime
+        """,
+        [*source_device_ids, start_logtime, end_logtime, start_logtime],
+    )
+    for row in c.fetchall():
+        rows_by_source[row["device_id"]].append(row)
+    return rows_by_source
+
+
+def _calculate_fcu_temperature10x_from_prefetched_rows(
+    weights: dict[int, float],
+    rows_by_source: dict[int, list[sqlite3.Row]],
+    row_indexes: dict[int, int],
+    at_time: int,
+) -> int | None:
+    weighted_total = 0.0
+    weight_total = 0.0
+    for source_device_id, multiplier in weights.items():
+        rows = rows_by_source.get(source_device_id, [])
+        row_index = row_indexes.get(source_device_id, -1)
+        while (
+            row_index + 1 < len(rows)
+            and rows[row_index + 1]["logtime"] <= at_time
+        ):
+            row_index += 1
+        row_indexes[source_device_id] = row_index
+        if row_index < 0:
+            continue
+
+        temp_row = rows[row_index]
+        last_valid = temp_row["logtime"] + temp_row["duration"]
+        if at_time - last_valid > TEMP_SOURCE_STALE_SECONDS:
+            continue
+        weighted_total += temp_row["temp10x"] * multiplier
+        weight_total += multiplier
+
+    if weight_total <= 0:
+        return None
+    return int(math.floor((weighted_total / weight_total) + 0.5))
+
+
+def set_fcu_temp_source_multiplier(
+    conn,
+    *,
+    fcu_device_id: int,
+    source_device_id: int,
+    multiplier: float,
+    ipaddr: str | None,
+    agent: str | None,
+) -> dict[str, Any]:
+    c = conn.cursor()
+    fcu = get_device(conn, fcu_device_id)
+    source = get_device(conn, source_device_id)
+    if fcu is None:
+        raise ValueError(f"Unknown fcu_device_id: {fcu_device_id}")
+    if source is None:
+        raise ValueError(f"Unknown source_device_id: {source_device_id}")
+
+    c.execute(
+        """
+        SELECT multiplier
+        FROM fcu_temp_sources
+        WHERE fcu_device_id=? AND source_device_id=?
+        """,
+        (fcu_device_id, source_device_id),
+    )
+    row = c.fetchone()
+    old_multiplier = (
+        float(row["multiplier"])
+        if row
+        else get_fcu_temp_source_weights(conn, fcu_device_id).get(source_device_id, 0.0)
+    )
+    new_multiplier = float(multiplier)
+    if old_multiplier == new_multiplier:
+        return get_fcu_temp_sources(conn, fcu_device_id)
+
+    now = int(time.time())
+    c.execute(
+        """
+        INSERT INTO fcu_temp_sources
+            (fcu_device_id, source_device_id, multiplier, updated_at)
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT(fcu_device_id, source_device_id)
+        DO UPDATE SET multiplier=excluded.multiplier, updated_at=excluded.updated_at
+        """,
+        (fcu_device_id, source_device_id, new_multiplier, now),
+    )
+
+    insert_changelog(
+        conn,
+        ipaddr=ipaddr or "",
+        device_id=fcu_device_id,
+        ae200_device_id=fcu.get("ae200_device_id"),
+        current_values=str(old_multiplier),
+        new_value=str(new_multiplier),
+        agent=agent or "",
+        comment=(
+            "calculated temp multiplier for source "
+            f"{source_device_id} ({source['device_name']})"
+        ),
+    )
+    return get_fcu_temp_sources(conn, fcu_device_id)
+
+
+def _fcu_devices_from_current_status(conn) -> list[dict[str, Any]]:
+    devices = fetch_last_status_fixed(conn)
+    fcus: list[dict[str, Any]] = []
+    for device in devices:
+        if "status" in device:
+            device.update(ae200.extract_drive_and_fan_speed(device["status"]))
+        if _is_fcu_device(device):
+            fcus.append(device)
+    return fcus
+
+
+def get_calculated_temperature_series(
+    conn, device_ids: List[int] | None = None
+) -> List[Dict[str, Any]]:
+    fcus = _fcu_devices_from_current_status(conn)
+    if device_ids:
+        wanted = set(device_ids)
+        fcus = [fcu for fcu in fcus if fcu["device_id"] in wanted]
+
+    c = conn.cursor()
+    series: list[TimeSeries] = []
+    for fcu in fcus:
+        cmd = """
+        SELECT logtime
+        FROM devlog
+        WHERE device_id=? AND logtime IS NOT NULL AND temp10x IS NOT NULL
+        """
+        args = [fcu["device_id"]]
+        (cmd, args) = temporal_quantification(cmd, args)
+        cmd += " ORDER BY logtime "
+        c.execute(cmd, args)
+        logtime_rows = c.fetchall()
+        if not logtime_rows:
+            continue
+
+        weights = {
+            source_device_id: multiplier
+            for source_device_id, multiplier in get_fcu_temp_source_weights(
+                conn, fcu["device_id"]
+            ).items()
+            if multiplier > 0
+        }
+        if not weights:
+            continue
+
+        source_rows = _temperature_rows_by_source_for_window(
+            conn,
+            list(weights.keys()),
+            logtime_rows[0]["logtime"],
+            logtime_rows[-1]["logtime"],
+        )
+        row_indexes = {source_device_id: -1 for source_device_id in weights}
+
+        data = []
+        for row in logtime_rows:
+            temp10x = _calculate_fcu_temperature10x_from_prefetched_rows(
+                weights, source_rows, row_indexes, row["logtime"]
+            )
+            if temp10x is not None:
+                data.append((row["logtime"], temp10x / 10))
+        if data:
+            series.append(
+                TimeSeries(
+                    device_id=fcu["device_id"],
+                    name=fcu["device_name"],
+                    data=data,
+                )
+            )
+    return json_ready_list(series)
+
+
 def get_temperature_series(
     conn, device_ids: List[int] | None = None
 ) -> List[Dict[str, Any]]:
@@ -830,6 +1625,7 @@ def get_lighting_series(
 def get_device_status(conn) -> List[Dict[str, Any]]:
     """Get device status with annotations"""
     device_data = fetch_last_status_fixed(conn)
+    fcu_device_ids = []
 
     # Extract and convert the top-level drive, speed, and other items
     for data in device_data:
@@ -844,7 +1640,19 @@ def get_device_status(conn) -> List[Dict[str, Any]]:
                 data[f"has_{metric_name}"] = (
                     extract_metric_from_status(status, status_key) is not None
                 )
+            if _is_fcu_device(data):
+                data["temp_source_stale_seconds"] = TEMP_SOURCE_STALE_SECONDS
+                fcu_device_ids.append(data["device_id"])
+
+    calculated_temps = calculate_fcu_temperatures10x(conn, fcu_device_ids)
+    for data in device_data:
+        calculated_temp10x = calculated_temps.get(data["device_id"])
+        if calculated_temp10x is not None:
+            data["calculated_temp10x"] = calculated_temp10x
         if "logtime" in data:
+            data["logtime"] = int(data["logtime"])
+            if data.get("duration") is not None:
+                data["duration"] = int(data["duration"])
             data["age"] = github_style_duration(
                 data["logtime"] + data.get("duration", 1)
             )
@@ -863,7 +1671,7 @@ def get_changelog(
     Temporal bounds (start/end) are taken directly from the current request
     via :func:`temporal_quantification`.
     """
-    cmd = """SELECT c.logtime, c.ipaddr, d.device_name as unit, c.new_value, c.agent, c.comment FROM changelog c
+    cmd = """SELECT c.logtime, c.ipaddr, d.device_name as unit, c.current_values, c.new_value, c.agent, c.comment FROM changelog c
                LEFT JOIN devices d ON c.device_id = d.device_id WHERE 1=1"""
     args: List[Any] = []
 

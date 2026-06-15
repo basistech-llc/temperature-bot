@@ -77,6 +77,31 @@ def test_temperature_insert(test_database_conn_with_test_data):
     assert rows[0]['temp10x']==210 # 1 seconds at 20, 1 second at 21, 1 second at 22
 
 
+def test_insert_devlog_entry_normalizes_float_logtime(
+    test_database_conn_with_test_data,
+):
+    conn = test_database_conn_with_test_data[0]
+
+    db.insert_devlog_entry(
+        conn,
+        device_name="float-logtime-device",
+        temp=20,
+        logtime=100.75,
+        force=True,
+    )
+
+    device_id = db.get_or_create_device_id(conn, "float-logtime-device")
+    row = conn.execute(
+        "SELECT logtime FROM devlog WHERE device_id=? ORDER BY logtime DESC LIMIT 1",
+        (device_id,),
+    ).fetchone()
+    assert row["logtime"] == 100
+
+    status = db.get_device_status(conn)
+    device = next(item for item in status if item["device_id"] == device_id)
+    assert device["logtime"] == 100
+
+
 def test_get_lighting_series_uses_status_json_illuminance(
     test_database_conn_with_test_data,
 ):  # noqa: F811

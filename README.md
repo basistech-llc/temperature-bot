@@ -42,6 +42,11 @@ Temperatures are stored as integer Celsius tenths (`temp10x`) in `devlog`.
 Consecutive readings with the same state are run-length encoded by extending
 the row duration instead of inserting duplicate rows.
 
+FCUs can also report a calculated room temperature: a weighted average of the
+FCU's own raw temperature and configured temperature-reporting devices. Room
+metadata, map polygons, source multipliers, API payloads, and rule semantics are
+documented in `doc/calculated-temperatures-and-rooms.md`.
+
 ## Data Contracts
 
 Stable app-owned data should use Pydantic models from `app/models.py` rather

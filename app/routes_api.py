@@ -4,12 +4,14 @@ API route handlers
 
 import asyncio
 import logging
+import sqlite3
 import time
 import xml.etree.ElementTree as ET
 from typing import Any
 
 from flask import Blueprint, request, jsonify
 from flask_pydantic import validate
+from pydantic import ValidationError
 from websockets.exceptions import WebSocketException
 
 from .constants import __version__
@@ -26,17 +28,25 @@ from .utils.db_utils import with_db_connection
 
 from .models import (
     CommandResponse,
+    DeviceRoomControl,
     DriveControl,
+    FcuTempSourceControl,
     NoteControl,
+    Room,
     SetTempControl,
     SpeedControl,
     json_ready,
+    json_ready_list,
 )
 
 logger = logging.getLogger(__name__)
 
 # Create API blueprint
 api_v1 = Blueprint("api_v1", __name__)
+
+
+def _validation_error_response(error: ValidationError):
+    return jsonify({"error": "validation error", "details": error.errors()}), 400
 
 
 @api_v1.route("/version")
@@ -125,10 +135,16 @@ def get_weather(conn):
 @with_db_connection
 def get_temperature(conn):
     """Get temperature series data"""
+    mode = request.args.get("mode", "raw")
     device_ids = parse_device_ids()
     if device_ids is None and request.args.get("device_ids"):
         return jsonify({"error": "Invalid device_ids format"}), 400
-    series = db.get_temperature_series(conn, device_ids)
+    if mode == "raw":
+        series = db.get_temperature_series(conn, device_ids)
+    elif mode == "calculated":
+        series = db.get_calculated_temperature_series(conn, device_ids)
+    else:
+        return jsonify({"error": "mode must be 'raw' or 'calculated'"}), 400
     # Use centralized helper for series display names, preferring Hubitat label when available
     # and applying display-only transforms.
     name_to_label = hubitat.get_name_to_label()
@@ -257,6 +273,99 @@ def set_device_disabled_until(conn):
             "disabled_until": (now + seconds) if seconds > 0 else 0,
         }
     )
+
+
+@api_v1.route("/rooms", methods=["GET", "POST"])
+@with_db_connection
+def rooms(conn):
+    """List or create rooms with map polygon metadata."""
+    if request.method == "GET":
+        return jsonify({"rooms": json_ready_list(db.get_rooms(conn))})
+
+    try:
+        body = Room.model_validate(request.get_json(silent=True) or {})
+        room = db.create_room(conn, body)
+    except ValidationError as e:
+        return _validation_error_response(e)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    except sqlite3.IntegrityError as e:
+        return jsonify({"error": str(e)}), 409
+    return jsonify(json_ready(room)), 201
+
+
+@api_v1.get("/rooms/<int:room_id>")
+@with_db_connection
+def room_detail(conn, room_id: int):
+    """Return one room."""
+    room = db.get_room(conn, room_id)
+    if room is None:
+        return jsonify({"error": "room not found"}), 404
+    return jsonify(json_ready(room))
+
+
+@api_v1.patch("/rooms/<int:room_id>")
+@with_db_connection
+def update_room(conn, room_id: int):
+    """Update one room."""
+    try:
+        body = Room.model_validate(
+            {**(request.get_json(silent=True) or {}), "room_id": room_id}
+        )
+        room = db.update_room(conn, body)
+    except ValidationError as e:
+        return _validation_error_response(e)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    except sqlite3.IntegrityError as e:
+        return jsonify({"error": str(e)}), 409
+    if room is None:
+        return jsonify({"error": "room not found"}), 404
+    return jsonify(json_ready(room))
+
+
+@api_v1.route("/update_device_room", methods=["POST"])
+@validate()
+@with_db_connection
+def update_device_room(conn, body: DeviceRoomControl):
+    """Assign a device to a room, or clear the assignment with room_id=null."""
+    try:
+        device_id = db.update_device_room(conn, body.device_id, body.room_id)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 404
+    return jsonify(json_ready(CommandResponse(device_id=device_id)))
+
+
+@api_v1.route("/fcu_temp_sources")
+@with_db_connection
+def get_fcu_temp_sources(conn):
+    """Return all temperature-reporting source candidates for one FCU."""
+    fcu_device_id = request.args.get("fcu_device_id", type=int)
+    if fcu_device_id is None:
+        return jsonify({"error": "fcu_device_id is required"}), 400
+    try:
+        return jsonify(db.get_fcu_temp_sources(conn, fcu_device_id))
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 404
+
+
+@api_v1.route("/fcu_temp_source", methods=["POST"])
+@validate()
+@with_db_connection
+def set_fcu_temp_source(conn, body: FcuTempSourceControl):
+    """Persist one FCU temperature-source multiplier and log old/new values."""
+    try:
+        response = db.set_fcu_temp_source_multiplier(
+            conn,
+            fcu_device_id=body.fcu_device_id,
+            source_device_id=body.source_device_id,
+            multiplier=body.multiplier,
+            ipaddr=request.remote_addr,
+            agent=request.headers.get("User-Agent"),
+        )
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 404
+    return jsonify(response)
 
 
 @api_v1.route("/rules_master", methods=["GET", "POST"])
