@@ -9,6 +9,7 @@ jobs:
     permissions:
       contents: write
       issues: write
+      pull-requests: write
     env:
       TEMPERATURE_BOT_CONFIG: "tests/temperature-bot-config-test.yaml"
       AE200_SIMULATOR: 1
