@@ -433,6 +433,7 @@ document.addEventListener("DOMContentLoaded", async function () {
       .split(",")
       .map((id) => parseInt(id.trim(), 10))
       .filter((n) => !isNaN(n));
+    currentDeviceIds = preSelectedDeviceIds.slice();
   }
 
   await loadAllSensors();
