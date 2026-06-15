@@ -10,6 +10,7 @@ import time
 
 from app import db, rules_engine
 from app.constants import TEMP_SOURCE_STALE_SECONDS
+from app.main import app
 from app.models import Room
 
 
@@ -23,6 +24,17 @@ class TempDeviceSpec:
     duration: int = 60
     status: dict | None = None
     aqi_mon: int = 0
+
+
+@dataclass(frozen=True)
+class TempRowSpec:
+    """One devlog row for calculated-temperature history tests."""
+
+    device_id: int
+    logtime: int
+    temp10x: int
+    duration: int = 60
+    status: dict | None = None
 
 
 def _clear_devices(conn):
@@ -57,6 +69,22 @@ def _device(conn, spec: TempDeviceSpec):
     return device_id
 
 
+def _insert_temp_row(conn, spec: TempRowSpec):
+    conn.execute(
+        """
+        INSERT INTO devlog (device_id, logtime, duration, temp10x, status_json)
+        VALUES (?, ?, ?, ?, ?)
+        """,
+        (
+            spec.device_id,
+            spec.logtime,
+            spec.duration,
+            spec.temp10x,
+            json.dumps(spec.status or {}),
+        ),
+    )
+
+
 def _fcu_status():
     return {"Drive": "ON", "FanSpeed": "LOW", "Mode": "COOL", "InletTemp": "20.0"}
 
@@ -79,7 +107,10 @@ def test_default_fcu_weight_used_when_no_source_rows(test_database_conn):
         conn, TempDeviceSpec(name="Default Wall Sensor", temp10x=260, logtime=now - 30)
     )
 
-    assert db.get_fcu_temp_source_weights(conn, fcu_id) == {fcu_id: 1.0}
+    first_weights = db.get_fcu_temp_source_weights(conn, fcu_id)
+    second_weights = db.get_fcu_temp_source_weights(conn, fcu_id)
+    assert first_weights == {fcu_id: 1.0}
+    assert second_weights == first_weights
     rows = conn.execute(
         """
         SELECT source_device_id, multiplier
@@ -605,6 +636,87 @@ def test_fcu_temp_source_api_rejects_missing_and_unknown_devices(flask_test_clie
         },
     )
     assert unknown_source.status_code == 404
+
+
+def test_calculated_temperature_series_uses_source_history_and_staleness(
+    test_database_conn,
+):
+    conn = test_database_conn
+    _clear_devices(conn)
+    base = 1_700_000_000
+
+    fcu_id = db.get_or_create_device_id(conn, "Series FCU", use_cache=False)
+    sensor_id = db.get_or_create_device_id(conn, "Series Wall Sensor", use_cache=False)
+    _insert_temp_row(
+        conn,
+        TempRowSpec(
+            device_id=fcu_id,
+            logtime=base + 100,
+            temp10x=200,
+            status=_fcu_status(),
+        ),
+    )
+    _insert_temp_row(
+        conn,
+        TempRowSpec(
+            device_id=fcu_id,
+            logtime=base + 200,
+            temp10x=220,
+            status=_fcu_status(),
+        ),
+    )
+    _insert_temp_row(
+        conn,
+        TempRowSpec(
+            device_id=fcu_id,
+            logtime=base + 900,
+            temp10x=240,
+            status=_fcu_status(),
+        ),
+    )
+    _insert_temp_row(
+        conn,
+        TempRowSpec(
+            device_id=sensor_id,
+            logtime=base + 50,
+            temp10x=300,
+            duration=100,
+        ),
+    )
+    _insert_temp_row(
+        conn,
+        TempRowSpec(
+            device_id=sensor_id,
+            logtime=base + 180,
+            temp10x=260,
+        ),
+    )
+    conn.executemany(
+        """
+        INSERT INTO fcu_temp_sources
+            (fcu_device_id, source_device_id, multiplier, updated_at)
+        VALUES (?, ?, ?, ?)
+        """,
+        [(fcu_id, fcu_id, 1.0, base), (fcu_id, sensor_id, 1.0, base)],
+    )
+    conn.commit()
+
+    with app.test_request_context(
+        f"/api/v1/temperature?start={base + 100}&end={base + 900}"
+    ):
+        series = db.get_calculated_temperature_series(conn, [fcu_id])
+
+    assert series == [
+        {
+            "device_id": fcu_id,
+            "name": "Series FCU",
+            "data": [
+                [base + 100, 25.0],
+                [base + 200, 24.0],
+                [base + 900, 24.0],
+            ],
+        }
+    ]
 
 
 def test_temperature_api_calculated_mode_returns_only_fcus(

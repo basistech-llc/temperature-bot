@@ -116,9 +116,9 @@ function updateStalenessAndTooltip(cell, dev) {
  *
  * @param {HTMLElement|null} cell - Table cell to update.
  * @param {number|null|undefined} temp10x - Temperature in tenths Celsius.
- * @param {Object} dev - Device data object from /api/v1/status.
+ * @param {Object|null} dev - Device data object from /api/v1/status.
  */
-function updateTemperatureCell(cell, temp10x, dev) {
+function updateTemperatureCell(cell, temp10x, dev = null) {
   if (!cell) {
     return;
   }
@@ -137,7 +137,11 @@ function updateTemperatureCell(cell, temp10x, dev) {
   }
 
   cell.setAttribute("data-temp-c", tempC.toString());
-  updateStalenessAndTooltip(cell, dev);
+  if (dev) {
+    updateStalenessAndTooltip(cell, dev);
+  } else {
+    cell.classList.remove("temp-stale");
+  }
 
   const includeUnit = !cell.classList.contains("temp-display-no-unit");
   cell.innerHTML = TemperatureUtils.formatTemperature(tempC, includeUnit);
@@ -714,7 +718,7 @@ const refreshGridRows = () => {
             updateTemperatureCell(
               document.getElementById(`room-temp-${dev.device_id}`),
               dev.calculated_temp10x,
-              dev,
+              null,
             );
 
             // Update humidity where available

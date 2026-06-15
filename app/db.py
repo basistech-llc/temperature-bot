@@ -1024,6 +1024,29 @@ def _is_fcu_device(device: dict[str, Any]) -> bool:
 def get_fcu_temp_source_weights(conn, fcu_device_id: int) -> dict[int, float]:
     """Return source weights for one FCU, inserting the FCU default if absent."""
     c = conn.cursor()
+    rows = _fcu_temp_source_weight_rows(conn, fcu_device_id)
+    if not any(row["source_device_id"] == fcu_device_id for row in rows):
+        now = int(time.time())
+        c.execute(
+            """
+            INSERT INTO fcu_temp_sources
+                (fcu_device_id, source_device_id, multiplier, updated_at)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(fcu_device_id, source_device_id) DO NOTHING
+            """,
+            (fcu_device_id, fcu_device_id, 1.0, now),
+        )
+        conn.commit()
+        rows = _fcu_temp_source_weight_rows(conn, fcu_device_id)
+
+    weights = {}
+    for row in rows:
+        weights[row["source_device_id"]] = float(row["multiplier"])
+    return weights
+
+
+def _fcu_temp_source_weight_rows(conn, fcu_device_id: int):
+    c = conn.cursor()
     c.execute(
         """
         SELECT source_device_id, multiplier
@@ -1032,24 +1055,7 @@ def get_fcu_temp_source_weights(conn, fcu_device_id: int) -> dict[int, float]:
         """,
         (fcu_device_id,),
     )
-    rows = c.fetchall()
-    if not any(row["source_device_id"] == fcu_device_id for row in rows):
-        now = int(time.time())
-        c.execute(
-            """
-            INSERT INTO fcu_temp_sources
-                (fcu_device_id, source_device_id, multiplier, updated_at)
-            VALUES (?, ?, ?, ?)
-            """,
-            (fcu_device_id, fcu_device_id, 1.0, now),
-        )
-        conn.commit()
-        rows.append({"source_device_id": fcu_device_id, "multiplier": 1.0})
-
-    weights = {}
-    for row in rows:
-        weights[row["source_device_id"]] = float(row["multiplier"])
-    return weights
+    return c.fetchall()
 
 
 def _latest_temperature_source_rows(conn, fcu_device_id: int, now: int):
@@ -1171,6 +1177,75 @@ def calculate_fcu_temperature10x(
     return int(math.floor((weighted_total / weight_total) + 0.5))
 
 
+def _temperature_rows_by_source_for_window(
+    conn, source_device_ids: list[int], start_logtime: int, end_logtime: int
+) -> dict[int, list[sqlite3.Row]]:
+    rows_by_source: dict[int, list[sqlite3.Row]] = {
+        source_device_id: [] for source_device_id in source_device_ids
+    }
+    if not source_device_ids:
+        return rows_by_source
+
+    wanted_values = ",".join(["(?)"] * len(source_device_ids))
+    c = conn.cursor()
+    c.execute(
+        f"""
+        WITH wanted(device_id) AS (VALUES {wanted_values}),
+        prior AS (
+            SELECT d.device_id, MAX(d.logtime) AS logtime
+            FROM devlog d
+            JOIN wanted w ON d.device_id = w.device_id
+            WHERE d.temp10x IS NOT NULL AND d.logtime <= ?
+            GROUP BY d.device_id
+        )
+        SELECT d.device_id, d.logtime, d.duration, d.temp10x
+        FROM devlog d
+        JOIN wanted w ON d.device_id = w.device_id
+        LEFT JOIN prior p ON d.device_id = p.device_id
+        WHERE d.temp10x IS NOT NULL
+            AND d.logtime <= ?
+            AND (d.logtime >= ? OR d.logtime = p.logtime)
+        ORDER BY d.device_id, d.logtime
+        """,
+        [*source_device_ids, start_logtime, end_logtime, start_logtime],
+    )
+    for row in c.fetchall():
+        rows_by_source[row["device_id"]].append(row)
+    return rows_by_source
+
+
+def _calculate_fcu_temperature10x_from_prefetched_rows(
+    weights: dict[int, float],
+    rows_by_source: dict[int, list[sqlite3.Row]],
+    row_indexes: dict[int, int],
+    at_time: int,
+) -> int | None:
+    weighted_total = 0.0
+    weight_total = 0.0
+    for source_device_id, multiplier in weights.items():
+        rows = rows_by_source.get(source_device_id, [])
+        row_index = row_indexes.get(source_device_id, -1)
+        while (
+            row_index + 1 < len(rows)
+            and rows[row_index + 1]["logtime"] <= at_time
+        ):
+            row_index += 1
+        row_indexes[source_device_id] = row_index
+        if row_index < 0:
+            continue
+
+        temp_row = rows[row_index]
+        last_valid = temp_row["logtime"] + temp_row["duration"]
+        if at_time - last_valid > TEMP_SOURCE_STALE_SECONDS:
+            continue
+        weighted_total += temp_row["temp10x"] * multiplier
+        weight_total += multiplier
+
+    if weight_total <= 0:
+        return None
+    return int(math.floor((weighted_total / weight_total) + 0.5))
+
+
 def set_fcu_temp_source_multiplier(
     conn,
     *,
@@ -1265,10 +1340,32 @@ def get_calculated_temperature_series(
         (cmd, args) = temporal_quantification(cmd, args)
         cmd += " ORDER BY logtime "
         c.execute(cmd, args)
+        logtime_rows = c.fetchall()
+        if not logtime_rows:
+            continue
+
+        weights = {
+            source_device_id: multiplier
+            for source_device_id, multiplier in get_fcu_temp_source_weights(
+                conn, fcu["device_id"]
+            ).items()
+            if multiplier > 0
+        }
+        if not weights:
+            continue
+
+        source_rows = _temperature_rows_by_source_for_window(
+            conn,
+            list(weights.keys()),
+            logtime_rows[0]["logtime"],
+            logtime_rows[-1]["logtime"],
+        )
+        row_indexes = {source_device_id: -1 for source_device_id in weights}
+
         data = []
-        for row in c.fetchall():
-            temp10x = calculate_fcu_temperature10x(
-                conn, fcu["device_id"], at_time=row["logtime"]
+        for row in logtime_rows:
+            temp10x = _calculate_fcu_temperature10x_from_prefetched_rows(
+                weights, source_rows, row_indexes, row["logtime"]
             )
             if temp10x is not None:
                 data.append((row["logtime"], temp10x / 10))
