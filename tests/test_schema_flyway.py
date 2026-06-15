@@ -4,6 +4,11 @@ from contextlib import closing
 import sqlite3
 from pathlib import Path
 
+import pytest
+
+from app import db
+from app import main
+from app.constants import DB_PATH, TEST_DB_NAME
 from app.paths import ROOT_DIR, SCHEMA_FILE_PATH
 
 BASELINE_APP_TABLES = {"devices", "devlog", "changelog", "aqi", "alerts"}
@@ -86,3 +91,52 @@ def test_schema_file_contains_rooms_and_fcu_temp_source_columns():
         "multiplier",
         "updated_at",
     } <= source_columns
+
+
+def test_runtime_schema_validator_accepts_current_schema_with_flyway_history():
+    with closing(sqlite3.connect(":memory:")) as conn:
+        with open(SCHEMA_FILE_PATH, "r", encoding="utf-8") as schema_file:
+            conn.executescript(schema_file.read())
+        conn.execute(
+            """
+            CREATE TABLE flyway_schema_history (
+                installed_rank INTEGER NOT NULL,
+                version TEXT,
+                description TEXT
+            )
+            """
+        )
+
+        db.validate_database_schema(conn)
+
+
+def test_runtime_schema_validator_rejects_baseline_schema():
+    with closing(sqlite3.connect(":memory:")) as conn:
+        with open(BASELINE_MIGRATION_PATH, "r", encoding="utf-8") as schema_file:
+            conn.executescript(schema_file.read())
+
+        with pytest.raises(db.DatabaseSchemaMismatchError) as excinfo:
+            db.validate_database_schema(conn)
+
+    message = str(excinfo.value)
+    assert "make migrate-db" in message
+    assert "missing_table rooms" in message
+    assert "missing_table fcu_temp_sources" in message
+    assert "devices.room_id" in message
+    assert "idx_changelog_device_id_logtime" in message
+
+
+def test_flask_startup_schema_check_stops_for_stale_database(tmp_path, monkeypatch):
+    stale_db = tmp_path / "stale.db"
+    with closing(sqlite3.connect(stale_db)) as conn:
+        with open(BASELINE_MIGRATION_PATH, "r", encoding="utf-8") as schema_file:
+            conn.executescript(schema_file.read())
+
+    monkeypatch.delenv("PYTEST", raising=False)
+    monkeypatch.delenv(TEST_DB_NAME, raising=False)
+    monkeypatch.setenv(DB_PATH, str(stale_db))
+
+    with pytest.raises(db.DatabaseSchemaMismatchError) as excinfo:
+        main.validate_database_schema_on_startup()
+
+    assert "Please upgrade the database" in str(excinfo.value)

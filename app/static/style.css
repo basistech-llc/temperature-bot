@@ -529,6 +529,64 @@ table.rules-table th  {
     background-color: rgba(52, 152, 219, 0.08);
 }
 
+.fcu-temp-sources-popup {
+    position: fixed;
+    inset: 0;
+    z-index: 1200;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 10vh 1rem 1rem;
+    background: rgba(0, 0, 0, 0.25);
+}
+
+.fcu-temp-sources-dialog {
+    width: min(760px, 100%);
+    max-height: 80vh;
+    overflow: auto;
+    padding: 1rem;
+    border: 1px solid #bbb;
+    border-radius: 4px;
+    background: #fff;
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.25);
+}
+
+.fcu-temp-sources-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.fcu-temp-sources-header h3 {
+    margin: 0;
+}
+
+.fcu-temp-sources-close {
+    border: 0;
+    background: transparent;
+    cursor: pointer;
+    font-size: 1.5rem;
+    line-height: 1;
+}
+
+.fcu-temp-sources-note,
+.fcu-temp-sources-message {
+    margin: 0.6rem 0;
+}
+
+.fcu-temp-sources-message.error {
+    color: #c62828;
+}
+
+.fcu-temp-sources-table {
+    width: 100%;
+}
+
+.fcu-temp-source-weight {
+    width: 5rem;
+}
+
 /****************************************************************/
 
 /* optional: avoid a hard fixed width on the header */

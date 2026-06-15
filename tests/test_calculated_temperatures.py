@@ -80,6 +80,17 @@ def test_default_fcu_weight_used_when_no_source_rows(test_database_conn):
     )
 
     assert db.get_fcu_temp_source_weights(conn, fcu_id) == {fcu_id: 1.0}
+    rows = conn.execute(
+        """
+        SELECT source_device_id, multiplier
+        FROM fcu_temp_sources
+        WHERE fcu_device_id=?
+        """,
+        (fcu_id,),
+    ).fetchall()
+    assert [(row["source_device_id"], row["multiplier"]) for row in rows] == [
+        (fcu_id, 1.0)
+    ]
     assert db.calculate_fcu_temperature10x(conn, fcu_id) == 215
 
     response = db.get_fcu_temp_sources(conn, fcu_id)
@@ -499,6 +510,44 @@ def test_fcu_temp_sources_api_returns_default_weights(
     assert by_id[fcu_id]["is_fcu_self"] is True
     assert by_id[source_id]["multiplier"] == 0.0
     assert by_id[source_id]["included"] is False
+
+    with closing(_connect_test_db()) as conn:
+        rows = conn.execute(
+            """
+            SELECT source_device_id, multiplier
+            FROM fcu_temp_sources
+            WHERE fcu_device_id=?
+            """,
+            (fcu_id,),
+        ).fetchall()
+    assert [(row["source_device_id"], row["multiplier"]) for row in rows] == [
+        (fcu_id, 1.0)
+    ]
+
+
+def test_fcu_temp_sources_api_handles_fractional_source_age(
+    flask_test_client, test_database_conn_with_test_data
+):  # noqa: F811
+    with closing(_connect_test_db()) as conn:
+        _, fcu_id, _ = test_database_conn_with_test_data
+        conn.execute("DELETE FROM fcu_temp_sources WHERE fcu_device_id=?", (fcu_id,))
+        conn.execute(
+            """
+            INSERT INTO devlog (device_id, logtime, duration, temp10x, status_json)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (fcu_id, time.time() - 112.75, 0.5, 240, json.dumps(_fcu_status())),
+        )
+        conn.commit()
+
+    response = flask_test_client.get(f"/api/v1/fcu_temp_sources?fcu_device_id={fcu_id}")
+
+    assert response.status_code == 200
+    source = next(
+        item for item in response.json["sources"] if item["source_device_id"] == fcu_id
+    )
+    assert isinstance(source["age_seconds"], int)
+    assert source["multiplier"] == 1.0
 
 
 def test_fcu_temp_source_api_persists_zero_fcu_override_and_logs_default_old_value(

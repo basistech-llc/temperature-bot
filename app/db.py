@@ -40,6 +40,10 @@ from .models import (
     AqiWeatherResponse,
     ChangelogResponse,
     ChangelogRow,
+    DatabaseColumn,
+    DatabaseIndex,
+    DatabaseSchemaIssue,
+    DatabaseSchemaSnapshot,
     DeviceStatus,
     FcuTempSourceRow,
     FcuTempSourcesResponse,
@@ -64,6 +68,8 @@ logger = logging.getLogger(__name__)
 DEVICE_MAP: dict[str, int] = {}
 MAX_DURATION = 3600  # don't extend more than an hour
 ROOM_MAP_JSON_KEY = "map_json"
+FLYWAY_SCHEMA_HISTORY_TABLE = "flyway_schema_history"
+SCHEMA_UPGRADE_COMMAND = "make migrate-db"
 
 # Cache the schema file's modification time so we only re-apply the schema
 # when the file actually changes on disk. This keeps the convenient
@@ -98,6 +104,239 @@ def connect_db(db_path):
         conn.execute("PRAGMA journal_mode=WAL;")
     conn.execute("PRAGMA synchronous=NORMAL;")
     return conn
+
+
+class DatabaseSchemaMismatchError(RuntimeError):
+    """Raised when startup finds a stale or incompatible database schema."""
+
+    def __init__(
+        self,
+        db_path: str,
+        issues: list[DatabaseSchemaIssue],
+    ) -> None:
+        self.db_path = db_path
+        self.issues = issues
+        super().__init__(format_schema_mismatch_message(db_path, issues))
+
+
+def format_schema_mismatch_message(
+    db_path: str,
+    issues: list[DatabaseSchemaIssue],
+) -> str:
+    """Return a concise user-facing schema mismatch message."""
+    lines = [
+        f"Database schema does not match expected application schema: {db_path}",
+        (
+            "Please upgrade the database before starting Flask. "
+            f"Run `{SCHEMA_UPGRADE_COMMAND}`."
+        ),
+    ]
+    if issues:
+        lines.append("Schema issues:")
+        lines.extend(
+            f"- {issue.issue_type} {issue.object_name}: {issue.detail}"
+            for issue in issues
+        )
+    return "\n".join(lines)
+
+
+def _quote_sqlite_identifier(identifier: str) -> str:
+    return '"' + identifier.replace('"', '""') + '"'
+
+
+def _normalize_sqlite_type(value: str | None) -> str:
+    return (value or "").strip().upper()
+
+
+def _normalize_sqlite_default(value: object | None) -> str | None:
+    return None if value is None else str(value).strip()
+
+
+def schema_snapshot(conn) -> DatabaseSchemaSnapshot:
+    """Return current application tables, columns, and indexes for a database."""
+    tables = [
+        row[0]
+        for row in conn.execute(
+            """
+            SELECT name
+            FROM sqlite_master
+            WHERE type='table'
+              AND name NOT LIKE 'sqlite_%'
+              AND name <> ?
+            ORDER BY name
+            """,
+            (FLYWAY_SCHEMA_HISTORY_TABLE,),
+        ).fetchall()
+    ]
+
+    columns: list[DatabaseColumn] = []
+    indexes: list[DatabaseIndex] = []
+    for table_name in tables:
+        quoted_table = _quote_sqlite_identifier(table_name)
+        for row in conn.execute(f"PRAGMA table_info({quoted_table})").fetchall():
+            columns.append(
+                DatabaseColumn(
+                    table_name=table_name,
+                    column_name=row[1],
+                    column_type=_normalize_sqlite_type(row[2]),
+                    not_null=bool(row[3]),
+                    default_value=_normalize_sqlite_default(row[4]),
+                    primary_key=bool(row[5]),
+                )
+            )
+        for row in conn.execute(f"PRAGMA index_list({quoted_table})").fetchall():
+            index_name = row[1]
+            if not index_name.startswith("sqlite_"):
+                indexes.append(
+                    DatabaseIndex(
+                        table_name=table_name,
+                        index_name=index_name,
+                        is_unique=bool(row[2]),
+                    )
+                )
+
+    return DatabaseSchemaSnapshot(
+        tables=tables,
+        columns=sorted(
+            columns,
+            key=lambda column: (column.table_name, column.column_name),
+        ),
+        indexes=sorted(
+            indexes,
+            key=lambda index: (index.table_name, index.index_name),
+        ),
+    )
+
+
+def expected_schema_snapshot(schema_file: str = SCHEMA_FILE_PATH) -> DatabaseSchemaSnapshot:
+    """Build the expected schema snapshot from the checked-in schema file."""
+    with sqlite3.connect(":memory:") as conn:
+        with open(schema_file, "r", encoding="utf-8") as f:
+            conn.executescript(f.read())
+        return schema_snapshot(conn)
+
+
+def database_schema_issues(
+    conn,
+    schema_file: str = SCHEMA_FILE_PATH,
+) -> list[DatabaseSchemaIssue]:
+    """Compare a database against the checked-in expected schema."""
+    expected = expected_schema_snapshot(schema_file)
+    actual = schema_snapshot(conn)
+    issues: list[DatabaseSchemaIssue] = []
+
+    actual_tables = set(actual.tables)
+    expected_tables = set(expected.tables)
+    for table_name in sorted(expected_tables - actual_tables):
+        issues.append(
+            DatabaseSchemaIssue(
+                issue_type="missing_table",
+                object_name=table_name,
+                detail="expected table is missing",
+            )
+        )
+
+    actual_columns = {
+        (column.table_name, column.column_name): column
+        for column in actual.columns
+    }
+    for expected_column in expected.columns:
+        if expected_column.table_name not in actual_tables:
+            continue
+        actual_column = actual_columns.get(
+            (expected_column.table_name, expected_column.column_name)
+        )
+        object_name = f"{expected_column.table_name}.{expected_column.column_name}"
+        if actual_column is None:
+            issues.append(
+                DatabaseSchemaIssue(
+                    issue_type="missing_column",
+                    object_name=object_name,
+                    detail="expected column is missing",
+                )
+            )
+            continue
+
+        mismatches = []
+        if actual_column.column_type != expected_column.column_type:
+            mismatches.append(
+                f"type {actual_column.column_type!r} != {expected_column.column_type!r}"
+            )
+        if actual_column.not_null != expected_column.not_null:
+            mismatches.append(
+                f"not_null {actual_column.not_null!r} != {expected_column.not_null!r}"
+            )
+        if actual_column.default_value != expected_column.default_value:
+            mismatches.append(
+                "default "
+                f"{actual_column.default_value!r} != {expected_column.default_value!r}"
+            )
+        if actual_column.primary_key != expected_column.primary_key:
+            mismatches.append(
+                "primary_key "
+                f"{actual_column.primary_key!r} != {expected_column.primary_key!r}"
+            )
+        if mismatches:
+            issues.append(
+                DatabaseSchemaIssue(
+                    issue_type="column_mismatch",
+                    object_name=object_name,
+                    detail=", ".join(mismatches),
+                )
+            )
+
+    actual_index_names = {index.index_name for index in actual.indexes}
+    for expected_index in expected.indexes:
+        if expected_index.table_name not in actual_tables:
+            continue
+        if expected_index.index_name not in actual_index_names:
+            issues.append(
+                DatabaseSchemaIssue(
+                    issue_type="missing_index",
+                    object_name=expected_index.index_name,
+                    detail=f"expected index on {expected_index.table_name} is missing",
+                )
+            )
+
+    return issues
+
+
+def validate_database_schema(conn, schema_file: str = SCHEMA_FILE_PATH) -> None:
+    """Raise if a database does not match the expected application schema."""
+    db_path = next(
+        (
+            row[2]
+            for row in conn.execute("PRAGMA database_list").fetchall()
+            if row[1] == "main"
+        ),
+        "<unknown>",
+    )
+    issues = database_schema_issues(conn, schema_file)
+    if issues:
+        raise DatabaseSchemaMismatchError(db_path, issues)
+
+
+def validate_configured_database_schema() -> None:
+    """Validate the configured runtime database without modifying its schema."""
+    try:
+        db_path = (
+            os.environ[TEST_DB_NAME]
+            if TEST_DB_NAME in os.environ
+            else os.environ[DB_PATH]
+        )
+    except KeyError as e:
+        issue = DatabaseSchemaIssue(
+            issue_type="missing_config",
+            object_name=e.args[0],
+            detail="database path environment variable is not set",
+        )
+        raise DatabaseSchemaMismatchError("<unset>", [issue]) from e
+
+    conn = connect_db(db_path)
+    try:
+        validate_database_schema(conn)
+    finally:
+        conn.close()
 
 
 def get_db_connection():
@@ -497,6 +736,8 @@ def insert_devlog_entry(
     c = conn.cursor()
     if logtime is None:
         logtime = int(time.time())  # Use current Unix timestamp if not provided
+    else:
+        logtime = int(logtime)
     try:
         # Get or create the device_id
         if device_id is None:
@@ -781,8 +1022,7 @@ def _is_fcu_device(device: dict[str, Any]) -> bool:
 
 
 def get_fcu_temp_source_weights(conn, fcu_device_id: int) -> dict[int, float]:
-    """Return source weights for one FCU, including hard-coded defaults."""
-    weights = {fcu_device_id: 1.0}
+    """Return source weights for one FCU, inserting the FCU default if absent."""
     c = conn.cursor()
     c.execute(
         """
@@ -792,7 +1032,22 @@ def get_fcu_temp_source_weights(conn, fcu_device_id: int) -> dict[int, float]:
         """,
         (fcu_device_id,),
     )
-    for row in c.fetchall():
+    rows = c.fetchall()
+    if not any(row["source_device_id"] == fcu_device_id for row in rows):
+        now = int(time.time())
+        c.execute(
+            """
+            INSERT INTO fcu_temp_sources
+                (fcu_device_id, source_device_id, multiplier, updated_at)
+            VALUES (?, ?, ?, ?)
+            """,
+            (fcu_device_id, fcu_device_id, 1.0, now),
+        )
+        conn.commit()
+        rows.append({"source_device_id": fcu_device_id, "multiplier": 1.0})
+
+    weights = {}
+    for row in rows:
         weights[row["source_device_id"]] = float(row["multiplier"])
     return weights
 
@@ -829,7 +1084,9 @@ def _latest_temperature_source_rows(conn, fcu_device_id: int, now: int):
     )
     rows = []
     for row in c.fetchall():
-        age_seconds = now - (row["logtime"] + row["duration"])
+        age_seconds = int(
+            max(0, now - (float(row["logtime"]) + float(row["duration"] or 0)))
+        )
         is_stale = age_seconds > TEMP_SOURCE_STALE_SECONDS
         multiplier = weights.get(row["source_device_id"], 0.0)
         rows.append(
@@ -1210,6 +1467,9 @@ def get_device_status(conn) -> List[Dict[str, Any]]:
                 if calculated_temp10x is not None:
                     data["calculated_temp10x"] = calculated_temp10x
         if "logtime" in data:
+            data["logtime"] = int(data["logtime"])
+            if data.get("duration") is not None:
+                data["duration"] = int(data["duration"])
             data["age"] = github_style_duration(
                 data["logtime"] + data.get("duration", 1)
             )

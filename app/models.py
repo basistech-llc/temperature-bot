@@ -70,6 +70,41 @@ class Room(BaseModel):
     map: RoomMap | None = None
 
 
+class DatabaseColumn(BaseModel):
+    """One SQLite column definition used by startup schema validation."""
+
+    table_name: str
+    column_name: str
+    column_type: str
+    not_null: bool
+    default_value: str | None = None
+    primary_key: bool
+
+
+class DatabaseIndex(BaseModel):
+    """One SQLite index used by startup schema validation."""
+
+    table_name: str
+    index_name: str
+    is_unique: bool
+
+
+class DatabaseSchemaSnapshot(BaseModel):
+    """Application schema objects discovered from a SQLite database."""
+
+    tables: list[str] = Field(default_factory=list)
+    columns: list[DatabaseColumn] = Field(default_factory=list)
+    indexes: list[DatabaseIndex] = Field(default_factory=list)
+
+
+class DatabaseSchemaIssue(BaseModel):
+    """One mismatch between the expected and actual database schema."""
+
+    issue_type: str
+    object_name: str
+    detail: str
+
+
 class TimeSeries(BaseModel):
     """One chart series for a single device."""
 

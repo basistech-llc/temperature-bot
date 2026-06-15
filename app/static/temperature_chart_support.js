@@ -12,6 +12,7 @@ let tempData = []; // series from /api/v1/temperature
 let currentDeviceIds = []; // devices to load; [] means all
 let preSelectedDeviceIds = []; // device IDs from URL ?device_ids=; pre-checks specific sensor(s)
 let allDevices = []; // reserved for future use
+let temperatureMode = "raw"; // raw device readings or calculated FCU room temps
 
 const TEMP_ENDPOINT = "/api/v1/temperature";
 
@@ -36,6 +37,7 @@ function loadTempData() {
   if (currentDeviceIds.length > 0) {
     params.append("device_ids", currentDeviceIds.join(","));
   }
+  params.append("mode", temperatureMode);
   params.append("start", currentStart);
   params.append("end", currentEnd);
   url += "?" + params.toString();
@@ -241,6 +243,21 @@ function updateTempChart() {
  * Controls & wiring
  ****************************************************************/
 function setupTemperatureEventListeners() {
+  document
+    .querySelectorAll('input[name="temperature-mode"]')
+    .forEach((radio) => {
+      radio.addEventListener("change", () => {
+        if (!radio.checked || radio.value === temperatureMode) {
+          return;
+        }
+        temperatureMode = radio.value;
+        currentDeviceIds = [];
+        preSelectedDeviceIds = [];
+        excludedSensorNames.clear();
+        reloadData();
+      });
+    });
+
   // Temporal buttons
   const dayBtn = document.getElementById("dayBtn");
   const weekBtn = document.getElementById("weekBtn");
@@ -400,6 +417,16 @@ document.addEventListener("DOMContentLoaded", async function () {
 
   // When navigating from a per-unit link, pre-check only that device's checkbox.
   const urlParams = new URLSearchParams(window.location.search);
+  const modeParam = urlParams.get("mode");
+  if (modeParam === "raw" || modeParam === "calculated") {
+    temperatureMode = modeParam;
+    const modeRadio = document.querySelector(
+      `input[name="temperature-mode"][value="${temperatureMode}"]`,
+    );
+    if (modeRadio) {
+      modeRadio.checked = true;
+    }
+  }
   const deviceIdsParam = urlParams.get("device_ids");
   if (deviceIdsParam) {
     preSelectedDeviceIds = deviceIdsParam
@@ -419,4 +446,3 @@ document.addEventListener("DOMContentLoaded", async function () {
 
   await reloadData();
 });
-

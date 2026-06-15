@@ -9,6 +9,7 @@ from flask import Flask, send_from_directory, jsonify
 from werkzeug.exceptions import HTTPException
 from werkzeug.middleware.proxy_fix import ProxyFix
 
+from . import db
 from . import routes_api
 from . import routes_web
 
@@ -23,6 +24,19 @@ def fix_boto_log_level():
     for name in logging.root.manager.loggerDict:  # pylint: disable=no-member
         if name.startswith("boto"):
             logging.getLogger(name).setLevel(logging.INFO)
+
+
+def should_validate_database_schema_on_startup() -> bool:
+    """Return whether this process should validate the runtime DB at startup."""
+    return "PYTEST" not in os.environ and "TEST_DB_NAME" not in os.environ
+
+
+def validate_database_schema_on_startup() -> None:
+    """Stop Flask startup when the configured database is not current."""
+    if not should_validate_database_schema_on_startup():
+        return
+    db.validate_configured_database_schema()
+
 
 def create_app():
     """Create and configure the Flask application"""
@@ -40,6 +54,7 @@ def create_app():
     logging.basicConfig(format=LOGGING_CONFIG, level=log_level, force=True)
     app.logger.info("new Flask(__name__=%s) log_level=%s", __name__, log_level)
     fix_boto_log_level()
+    validate_database_schema_on_startup()
 
     # Register blueprints
     app.register_blueprint(routes_api.api_v1, url_prefix="/api/v1")
