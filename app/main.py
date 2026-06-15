@@ -28,7 +28,7 @@ def fix_boto_log_level():
 
 def should_validate_database_schema_on_startup() -> bool:
     """Return whether this process should validate the runtime DB at startup."""
-    return "PYTEST" not in os.environ and "TEST_DB_NAME" not in os.environ
+    return "PYTEST" not in os.environ and db.TEST_DB_NAME not in os.environ
 
 
 def validate_database_schema_on_startup() -> None:
