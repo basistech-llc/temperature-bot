@@ -102,6 +102,66 @@ def test_insert_devlog_entry_normalizes_float_logtime(
     assert device["logtime"] == 100
 
 
+def test_insert_devlog_entry_extends_legacy_float_logtime_with_integer_duration(
+    test_database_conn_with_test_data,
+):
+    conn = test_database_conn_with_test_data[0]
+    c = conn.cursor()
+    c.execute("DELETE FROM devlog")
+    c.execute("DELETE FROM devices")
+    conn.commit()
+
+    device_id = db.get_or_create_device_id(conn, "legacy-float-logtime-device")
+    c.execute(
+        "INSERT INTO devlog (device_id, logtime, duration, temp10x) VALUES (?, ?, ?, ?)",
+        (device_id, 100.75, 1.25, 200),
+    )
+    conn.commit()
+
+    db.insert_devlog_entry(
+        conn,
+        device_name="legacy-float-logtime-device",
+        temp=20,
+        logtime=105.9,
+    )
+
+    row = conn.execute(
+        "SELECT duration FROM devlog WHERE device_id=? ORDER BY logtime DESC LIMIT 1",
+        (device_id,),
+    ).fetchone()
+    assert row["duration"] == 6
+
+
+def test_time_series_builders_normalize_legacy_float_logtime(
+    test_database_conn_with_test_data,
+):
+    conn = test_database_conn_with_test_data[0]
+    c = conn.cursor()
+    c.execute("DELETE FROM devlog")
+    c.execute("DELETE FROM devices")
+    conn.commit()
+
+    device_id = db.get_or_create_device_id(conn, "Airthings Legacy")
+    payload = {
+        "co2": {"value": 600, "unit": "ppm"},
+        "illuminance": 12.5,
+    }
+    c.execute(
+        "INSERT INTO devlog (device_id, logtime, duration, temp10x, status_json) VALUES (?, ?, ?, ?, ?)",
+        (device_id, 1000.75, 61.25, 219, json.dumps(payload)),
+    )
+    conn.commit()
+
+    with app.test_request_context():
+        temp_series = db.get_temperature_series(conn, [device_id])
+        metric_series = db.get_device_metric_series(conn, "co2", [device_id])
+        lighting_series = db.get_lighting_series(conn, [device_id])
+
+    assert temp_series[0]["data"] == [[1000, 21.9]]
+    assert metric_series[0]["data"] == [[1000, 600.0]]
+    assert lighting_series[0]["data"] == [[1000, 12.5]]
+
+
 def test_get_lighting_series_uses_status_json_illuminance(
     test_database_conn_with_test_data,
 ):  # noqa: F811
