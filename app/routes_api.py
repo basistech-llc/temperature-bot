@@ -31,6 +31,7 @@ from .models import (
     DeviceRoomControl,
     DriveControl,
     FcuTempSourceControl,
+    ModeControl,
     NoteControl,
     SetRangeControl,
     Room,
@@ -84,6 +85,24 @@ def set_drive(conn, body: DriveControl):
     db.disable_rules_for_device(
         conn,
         device_id=device_id,
+        seconds=constants.RULES_DISABLE_SECONDS,
+        ipaddr=request.remote_addr,
+        agent=request.headers.get("User-Agent"),
+        comment=f"rules for disabled for {constants.RULES_DISABLE_SECONDS / 60} minutes",
+    )
+    return jsonify(json_ready(CommandResponse.model_validate({"status": "ok", **ret})))
+
+
+@api_v1.route("/set_mode", methods=["POST"])
+@validate()
+@with_db_connection
+def set_mode(conn, body: ModeControl):
+    """Set an AE-200 operation mode and record the commanded state."""
+    logger.debug("/set_mode: body=[%s]", body)
+    ret = rules_engine.set_body_mode(conn, body, request.remote_addr, "web")
+    db.disable_rules_for_device(
+        conn,
+        device_id=ret["device_id"],
         seconds=constants.RULES_DISABLE_SECONDS,
         ipaddr=request.remote_addr,
         agent=request.headers.get("User-Agent"),

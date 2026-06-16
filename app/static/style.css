@@ -276,6 +276,27 @@ button {
     text-align: center;
 }
 
+.mode-select {
+    max-width: 100%;
+    min-width: 5.5em;
+    padding: 0.15rem 0.25rem;
+    font: inherit;
+    color: #1a202c;
+    background: #fff;
+    border: 1px solid #cbd5e1;
+    border-radius: 4px;
+}
+
+.mode-select:disabled {
+    color: #64748b;
+    background: #f8fafc;
+}
+
+.mode-select:focus-visible {
+    outline: 2px solid #3b82f6;
+    outline-offset: 1px;
+}
+
 .data-table tbody td.cell-temp-range {
     text-align: center;
 }

@@ -8,6 +8,7 @@
 const {
   fanRadioIdForDevice,
   modeLabelForDevice,
+  modeValueForDevice,
   moveSetRange,
   normalizeSetRange,
   resizeSetRangeEndpoint,
@@ -91,6 +92,11 @@ check(
   "mode from raw status payload",
   modeLabelForDevice({ status: { Mode: "HEAT" } }),
   "Heat",
+);
+check(
+  "mode value is canonical",
+  modeValueForDevice({ status: { Mode: "cool" } }),
+  "COOL",
 );
 check(
   "unknown mode passes through",

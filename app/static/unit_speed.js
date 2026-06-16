@@ -25,6 +25,9 @@ const AE200_MODE_LABELS = {
   FAN: "Fan",
   LC_AUTO: "Auto",
 };
+const FCU_MODE_OPTIONS = ["FAN", "COOL", "HEAT"];
+const FCU_MODE_DEVICE_ID_KEY = "device_id";
+const FCU_MODE_MODE_KEY = "mode";
 const SET_RANGE_TRACK_MIN_C = 10;
 const SET_RANGE_TRACK_MAX_C = 30;
 const SET_RANGE_STEP_C = 0.5;
@@ -80,13 +83,47 @@ function fanRadioIdForDevice(dev) {
  * @returns {string} Human-readable mode label, or "--" when absent.
  */
 function modeLabelForDevice(dev) {
+  const rawModeString = modeValueForDevice(dev);
+  if (rawModeString === "") {
+    return "--";
+  }
+  return AE200_MODE_LABELS[rawModeString] || rawModeString;
+}
+
+function modeValueForDevice(dev) {
   const status = dev.status || {};
   const rawMode = dev.mode || status.Mode;
   if (rawMode == null || rawMode === "") {
-    return "--";
+    return "";
   }
-  const rawModeString = String(rawMode);
-  return AE200_MODE_LABELS[rawModeString.toUpperCase()] || rawModeString;
+  return String(rawMode).toUpperCase();
+}
+
+function ensureModeSelectOption(select, rawMode) {
+  if (!select) {
+    return;
+  }
+  if (select.querySelector(`option[value="${rawMode}"]`)) {
+    return;
+  }
+  const option = document.createElement("option");
+  option.value = rawMode;
+  option.textContent = rawMode === "" ? "--" : AE200_MODE_LABELS[rawMode] || rawMode;
+  option.disabled = true;
+  option.dataset.extraMode = "true";
+  select.insertBefore(option, select.firstChild);
+}
+
+function updateModeControlForDevice(dev) {
+  const select = document.getElementById(`mode-${dev.device_id}`);
+  if (!select || select.dataset.saving === "true") {
+    return;
+  }
+  const rawMode = modeValueForDevice(dev);
+  ensureModeSelectOption(select, rawMode);
+  select.value = rawMode;
+  select.dataset.currentMode = rawMode;
+  select.setAttribute("title", rawMode ? `AE-200 Mode: ${rawMode}` : "AE-200 Mode");
 }
 
 /**
@@ -524,6 +561,28 @@ async function setFanSpeed(device_id, fan_speed) {
   }
 }
 
+async function setDeviceMode(deviceId, mode) {
+  try {
+    const response = await fetch("/api/v1/set_mode", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        [FCU_MODE_DEVICE_ID_KEY]: deviceId,
+        [FCU_MODE_MODE_KEY]: mode,
+      }),
+    });
+    const result = await response.json();
+    if (!response.ok) {
+      throw new Error(result.error || "Unable to set mode.");
+    }
+    forceRefresh = true;
+    return result;
+  } catch (e) {
+    console.error("Failed to set mode:", e);
+    throw e;
+  }
+}
+
 function asctime(date) {
   const zeroPad = (num, places) => String(num).padStart(places, "0");
   return (
@@ -597,11 +656,52 @@ function setupMatrixListeners() {
   // Add event listeners for FCU set ranges.
   setupSetRangeControls();
 
+  // Add event listeners for FCU operation modes.
+  setupModeControls();
+
   // Add event listeners for "Disable for" ± controls
   setupDisableForControls();
 
   // Add event listeners for calculated room-temperature source weights.
   setupFcuTempSourcePopupControls();
+}
+
+function setupModeControls() {
+  document.querySelectorAll(".mode-select").forEach((select) => {
+    select.addEventListener("change", function () {
+      const deviceId = parseInt(this.dataset.deviceId, 10);
+      const mode = this.value;
+      const previousMode = this.dataset.currentMode || "";
+      if (
+        Number.isNaN(deviceId) ||
+        !FCU_MODE_OPTIONS.includes(mode) ||
+        mode === previousMode
+      ) {
+        return;
+      }
+
+      this.dataset.saving = "true";
+      this.dataset.currentMode = mode;
+      this.disabled = true;
+      setDeviceMode(deviceId, mode)
+        .then((result) => {
+          const savedMode = result.mode || mode;
+          ensureModeSelectOption(this, savedMode);
+          this.value = savedMode;
+          this.dataset.currentMode = savedMode;
+        })
+        .catch(() => {
+          ensureModeSelectOption(this, previousMode);
+          this.value = previousMode;
+          this.dataset.currentMode = previousMode;
+          alert("Error setting mode.");
+        })
+        .finally(() => {
+          delete this.dataset.saving;
+          this.disabled = false;
+        });
+    });
+  });
 }
 
 function setupFcuTempSourcePopupControls() {
@@ -1327,17 +1427,7 @@ const refreshGridRows = () => {
 
             updateSetRangeForDevice(dev);
 
-            const modeCell = document.getElementById(`mode-${dev.device_id}`);
-            if (modeCell) {
-              const status = dev.status || {};
-              const rawMode = dev.mode || status.Mode;
-              modeCell.textContent = modeLabelForDevice(dev);
-              if (rawMode) {
-                modeCell.setAttribute("title", `AE-200 Mode: ${rawMode}`);
-              } else {
-                modeCell.removeAttribute("title");
-              }
-            }
+            updateModeControlForDevice(dev);
 
             // Update radio button selection based on drive and speed state.
             const radioId = fanRadioIdForDevice(dev);
@@ -1584,6 +1674,7 @@ if (typeof module !== "undefined" && module.exports) {
   module.exports = {
     fanRadioIdForDevice,
     modeLabelForDevice,
+    modeValueForDevice,
     moveSetRange,
     normalizeSetRange,
     resizeSetRangeEndpoint,
