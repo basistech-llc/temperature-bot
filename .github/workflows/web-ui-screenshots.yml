@@ -64,20 +64,72 @@ jobs:
         run: |
           make web-screenshots
 
-      - name: Upload web UI screenshots artifact
+      - name: Upload screenshots for PR comment
         id: upload_screenshots
-        uses: actions/upload-artifact@v4
-        with:
-          name: web-ui-screenshots-${{ github.run_id }}
-          path: var/web-ui-screenshots
-          if-no-files-found: error
+        if: github.event.pull_request.head.repo.full_name == github.repository
+        env:
+          IMGUR_CLIENT_ID: ${{ vars.IMGUR_CLIENT_ID || '546c25a59c58ad7' }}
+        run: |
+          set -euo pipefail
+          if [ -z "${IMGUR_CLIENT_ID}" ]; then
+            echo "IMGUR_CLIENT_ID is not configured."
+            exit 1
+          fi
+
+          poetry run python - <<'PY'
+          import json
+          import os
+          import subprocess
+          import sys
+          from pathlib import Path
+
+          output_dir = Path("var/web-ui-screenshots")
+          manifest = json.loads((output_dir / "manifest.json").read_text(encoding="utf-8"))
+          links: dict[str, str] = {}
+
+          for page in manifest["pages"]:
+              filename = page["filename"]
+              screenshot_path = output_dir / filename
+              print(f"Uploading {filename} to Imgur...")
+              response = subprocess.run(
+                  [
+                      "curl",
+                      "--fail",
+                      "--silent",
+                      "--show-error",
+                      "--request",
+                      "POST",
+                      "--header",
+                      f"Authorization: Client-ID {os.environ['IMGUR_CLIENT_ID']}",
+                      "--form",
+                      f"image=@{screenshot_path}",
+                      "https://api.imgur.com/3/image",
+                  ],
+                  check=False,
+                  capture_output=True,
+                  text=True,
+              )
+              if response.returncode != 0:
+                  print(response.stderr, file=sys.stderr)
+                  raise SystemExit(response.returncode)
+
+              payload = json.loads(response.stdout)
+              link = payload.get("data", {}).get("link")
+              if not payload.get("success") or not link:
+                  print(response.stdout, file=sys.stderr)
+                  raise SystemExit(f"Imgur upload did not return a link for {filename}")
+              links[filename] = link
+
+          (output_dir / "image-links.json").write_text(
+              json.dumps(links, indent=2, sort_keys=True) + "\n",
+              encoding="utf-8",
+          )
+          PY
 
       - name: Comment screenshots on PR
         if: github.event.pull_request.head.repo.full_name == github.repository
         uses: actions/github-script@v7
         env:
-          ARTIFACT_NAME: web-ui-screenshots-${{ github.run_id }}
-          ARTIFACT_URL: ${{ steps.upload_screenshots.outputs.artifact-url }}
           RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
         with:
           script: |
@@ -85,22 +137,31 @@ jobs:
             const manifest = JSON.parse(
               fs.readFileSync('var/web-ui-screenshots/manifest.json', 'utf8')
             );
+            const imageLinks = JSON.parse(
+              fs.readFileSync('var/web-ui-screenshots/image-links.json', 'utf8')
+            );
             const marker = '<!-- web-ui-screenshots -->';
-            const artifactUrl = process.env.ARTIFACT_URL || process.env.RUN_URL;
             const lines = [
               marker,
               '## Web UI Screenshots',
               '',
               `Generated ${manifest.pages.length} screenshots for this PR.`,
+              `[Workflow run](${process.env.RUN_URL})`,
               '',
-              `Download: [${process.env.ARTIFACT_NAME}](${artifactUrl})`,
-              '',
-              'Contents:',
             ];
 
             for (const page of manifest.pages) {
+              const imageUrl = imageLinks[page.filename];
+              if (!imageUrl) {
+                throw new Error(`Missing uploaded image URL for ${page.filename}`);
+              }
               lines.push(
-                `- ${page.title}: \`${page.path}\` (${page.filename})`
+                `### ${page.title}`,
+                '',
+                `Route: \`${page.path}\``,
+                '',
+                `[![${page.title}](${imageUrl})](${imageUrl})`,
+                ''
               );
             }
 
