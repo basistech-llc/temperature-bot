@@ -79,6 +79,12 @@ FLYWAY_SCHEMA_HISTORY_TABLE = "flyway_schema_history"
 SCHEMA_UPGRADE_COMMAND = "make migrate-db"
 FCU_DEFAULT_TEMP_SOURCE_MULTIPLIER = 1.0
 
+
+def _chart_logtime(row: sqlite3.Row) -> int:
+    """Return an integer timestamp for legacy rows that stored float times."""
+    return int(row["logtime"])
+
+
 # Cache the schema file's modification time so we only re-apply the schema
 # when the file actually changes on disk. This keeps the convenient
 # auto-setup behavior without running the full schema on every request.
@@ -781,13 +787,14 @@ def insert_devlog_entry(
             and r["status_json"] == status_json
             and not force
         ):
-            duration = logtime - r["logtime"] + 1
+            row_logtime = int(r["logtime"])
+            duration = logtime - row_logtime + 1
             if duration < MAX_DURATION:
                 logger.info(
                     "Updated devlog entry: device_id=%s temp10x=%s logtime=%s duration=%s",
                     device_id,
                     temp10x,
-                    time.asctime(time.localtime(r["logtime"])),
+                    time.asctime(time.localtime(row_logtime)),
                     duration,
                 )
                 c.execute(
@@ -1649,18 +1656,19 @@ def get_calculated_temperature_series(
         source_rows = _temperature_rows_by_source_for_window(
             conn,
             list(weights.keys()),
-            logtime_rows[0]["logtime"],
-            logtime_rows[-1]["logtime"],
+            _chart_logtime(logtime_rows[0]),
+            _chart_logtime(logtime_rows[-1]),
         )
         row_indexes = {source_device_id: -1 for source_device_id in weights}
 
         data = []
         for row in logtime_rows:
+            logtime = _chart_logtime(row)
             temp10x = _calculate_fcu_temperature10x_from_prefetched_rows(
-                weights, source_rows, row_indexes, row["logtime"]
+                weights, source_rows, row_indexes, logtime
             )
             if temp10x is not None:
-                data.append((row["logtime"], temp10x / 10))
+                data.append((logtime, temp10x / 10))
         if data:
             series.append(
                 TimeSeries(
@@ -1698,7 +1706,7 @@ def get_temperature_series(
             cmd += " ORDER BY logtime "
             c.execute(cmd, args)
             rows = c.fetchall()
-            data = [(row["logtime"], row["temp10x"] / 10) for row in rows]
+            data = [(_chart_logtime(row), row["temp10x"] / 10) for row in rows]
             if data:
                 series.append(
                     TimeSeries(
@@ -1753,7 +1761,7 @@ def get_device_metric_series(
             val = extract_metric_from_status(status, status_key)
             if val is None:
                 continue
-            data.append((row["logtime"], val))
+            data.append((_chart_logtime(row), val))
 
         if data:
             series.append(
@@ -1821,7 +1829,7 @@ def get_lighting_series(
             except (TypeError, ValueError):
                 continue
 
-            data.append((row["logtime"], illum_val))
+            data.append((_chart_logtime(row), illum_val))
 
         if data:
             series.append(
