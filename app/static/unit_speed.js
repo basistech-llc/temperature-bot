@@ -103,8 +103,11 @@ function ensureModeSelectOption(select, rawMode) {
   if (!select) {
     return;
   }
-  if (select.querySelector(`option[value="${rawMode}"]`)) {
-    return;
+  const options = select.options || [];
+  for (let index = 0; index < options.length; index += 1) {
+    if (options[index].value === rawMode) {
+      return;
+    }
   }
   const option = document.createElement("option");
   option.value = rawMode;
@@ -1672,6 +1675,7 @@ if (typeof window !== "undefined") {
 // Node.js export for testing
 if (typeof module !== "undefined" && module.exports) {
   module.exports = {
+    ensureModeSelectOption,
     fanRadioIdForDevice,
     modeLabelForDevice,
     modeValueForDevice,

@@ -28,8 +28,8 @@ make PYTEST_ARGS=tests/test_db.py::test_name pytest
 `make web-screenshots` seeds a temporary SQLite database, starts Flask with
 simulated external services, and writes PNGs plus `manifest.json` and
 `gallery.md` under `var/web-ui-screenshots/`. The Ubuntu-only `Web UI
-Screenshots` pull-request workflow uploads those PNGs to Imgur and updates a
-sticky PR comment with inline rendered images.
+Screenshots` pull-request workflow uploads those PNGs as GitHub release assets
+and updates a sticky PR comment with inline rendered images.
 
 ## Database
 

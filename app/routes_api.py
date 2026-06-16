@@ -51,6 +51,11 @@ def _validation_error_response(error: ValidationError):
     return jsonify({"error": "validation error", "details": error.errors()}), 400
 
 
+def _rules_disabled_comment() -> str:
+    minutes = constants.RULES_DISABLE_SECONDS / 60
+    return f"Rules disabled for {minutes:g} minutes"
+
+
 @api_v1.route("/version")
 def get_version_json():
     return jsonify({"version": __version__})
@@ -88,7 +93,7 @@ def set_drive(conn, body: DriveControl):
         seconds=constants.RULES_DISABLE_SECONDS,
         ipaddr=request.remote_addr,
         agent=request.headers.get("User-Agent"),
-        comment=f"rules for disabled for {constants.RULES_DISABLE_SECONDS / 60} minutes",
+        comment=_rules_disabled_comment(),
     )
     return jsonify(json_ready(CommandResponse.model_validate({"status": "ok", **ret})))
 
@@ -106,7 +111,7 @@ def set_mode(conn, body: ModeControl):
         seconds=constants.RULES_DISABLE_SECONDS,
         ipaddr=request.remote_addr,
         agent=request.headers.get("User-Agent"),
-        comment=f"rules for disabled for {constants.RULES_DISABLE_SECONDS / 60} minutes",
+        comment=_rules_disabled_comment(),
     )
     return jsonify(json_ready(CommandResponse.model_validate({"status": "ok", **ret})))
 
