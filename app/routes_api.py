@@ -32,6 +32,7 @@ from .models import (
     DriveControl,
     FcuTempSourceControl,
     NoteControl,
+    SetRangeControl,
     Room,
     SetTempControl,
     SpeedControl,
@@ -103,6 +104,26 @@ def set_temp(conn, body: SetTempControl):
     logger.debug("/set_temp: body=[%s]", body)
     ret = rules_engine.set_body_set_temp(conn, body, request.remote_addr, "web")
     return jsonify(json_ready(CommandResponse.model_validate({"status": "ok", **ret})))
+
+
+@api_v1.route("/set_range", methods=["POST"])
+@validate()
+@with_db_connection
+def set_range(conn, body: SetRangeControl):
+    """Persist the FCU set range in Celsius."""
+    try:
+        response = db.set_fcu_set_range(
+            conn,
+            device_id=body.device_id,
+            set_range_low_c=body.set_range_low_c,
+            set_range_high_c=body.set_range_high_c,
+            ipaddr=request.remote_addr,
+            agent=request.headers.get("User-Agent"),
+        )
+    except ValueError as e:
+        status_code = 404 if str(e).startswith("Unknown") else 400
+        return jsonify({"error": str(e)}), status_code
+    return jsonify(response)
 
 
 @api_v1.route("/status")

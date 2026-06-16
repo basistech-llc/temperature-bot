@@ -12,7 +12,11 @@ from app.constants import DB_PATH, TEST_DB_NAME
 from app.paths import ROOT_DIR, SCHEMA_FILE_PATH
 
 BASELINE_APP_TABLES = {"devices", "devlog", "changelog", "aqi", "alerts"}
-MIGRATED_APP_TABLES = BASELINE_APP_TABLES | {"rooms", "fcu_temp_sources"}
+MIGRATED_APP_TABLES = BASELINE_APP_TABLES | {
+    "rooms",
+    "fcu_temp_sources",
+    "fcu_set_ranges",
+}
 BASELINE_MIGRATION_PATH = (
     Path(ROOT_DIR) / "etc" / "flyway" / "sql" / "V1__baseline_schema.sql"
 )
@@ -53,6 +57,7 @@ def test_baseline_migration_does_not_create_flyway_history_table():
     assert BASELINE_APP_TABLES <= tables
     assert "rooms" not in tables
     assert "fcu_temp_sources" not in tables
+    assert "fcu_set_ranges" not in tables
     assert "flyway_schema_history" not in tables
 
 
@@ -68,7 +73,7 @@ def test_schema_file_contains_migrated_changelog_device_logtime_index():
     assert "idx_changelog_device_id" not in indexes
 
 
-def test_schema_file_contains_rooms_and_fcu_temp_source_columns():
+def test_schema_file_contains_rooms_fcu_temp_source_and_set_range_columns():
     with closing(sqlite3.connect(":memory:")) as conn:
         with open(SCHEMA_FILE_PATH, "r", encoding="utf-8") as schema_file:
             conn.executescript(schema_file.read())
@@ -82,6 +87,10 @@ def test_schema_file_contains_rooms_and_fcu_temp_source_columns():
             row[1]
             for row in conn.execute("PRAGMA table_info(fcu_temp_sources)").fetchall()
         }
+        range_columns = {
+            row[1]
+            for row in conn.execute("PRAGMA table_info(fcu_set_ranges)").fetchall()
+        }
 
     assert {"room_id", "room_name", "map_json"} <= room_columns
     assert "room_id" in device_columns
@@ -91,6 +100,12 @@ def test_schema_file_contains_rooms_and_fcu_temp_source_columns():
         "multiplier",
         "updated_at",
     } <= source_columns
+    assert {
+        "fcu_device_id",
+        "set_range_low_c",
+        "set_range_high_c",
+        "updated_at",
+    } <= range_columns
 
 
 def test_runtime_schema_validator_accepts_current_schema_with_flyway_history():
@@ -122,6 +137,7 @@ def test_runtime_schema_validator_rejects_baseline_schema():
     assert "make migrate-db" in message
     assert "missing_table rooms" in message
     assert "missing_table fcu_temp_sources" in message
+    assert "missing_table fcu_set_ranges" in message
     assert "devices.room_id" in message
     assert "idx_changelog_device_id_logtime" in message
 

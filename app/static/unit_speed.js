@@ -25,6 +25,13 @@ const AE200_MODE_LABELS = {
   FAN: "Fan",
   LC_AUTO: "Auto",
 };
+const SET_RANGE_TRACK_MIN_C = 10;
+const SET_RANGE_TRACK_MAX_C = 30;
+const SET_RANGE_STEP_C = 0.5;
+const DEFAULT_MIN_SET_RANGE_C = 3.0;
+const SET_RANGE_DEVICE_ID_KEY = "device_id";
+const SET_RANGE_LOW_KEY = "set_range_low_c";
+const SET_RANGE_HIGH_KEY = "set_range_high_c";
 
 // Refresh logic
 var start = Date.now();
@@ -145,6 +152,108 @@ function updateTemperatureCell(cell, temp10x, dev = null) {
 
   const includeUnit = !cell.classList.contains("temp-display-no-unit");
   cell.innerHTML = TemperatureUtils.formatTemperature(tempC, includeUnit);
+}
+
+function finiteNumber(value, fallback = null) {
+  const number = parseFloat(value);
+  return Number.isFinite(number) ? number : fallback;
+}
+
+function roundTempC(value) {
+  return Math.round(value * 10) / 10;
+}
+
+function setRangeOptions(options = {}) {
+  const minRangeC = finiteNumber(
+    options.minRangeC,
+    DEFAULT_MIN_SET_RANGE_C,
+  );
+  let trackMinC = finiteNumber(options.trackMinC, SET_RANGE_TRACK_MIN_C);
+  let trackMaxC = finiteNumber(options.trackMaxC, SET_RANGE_TRACK_MAX_C);
+  if (trackMaxC - trackMinC < minRangeC) {
+    trackMaxC = trackMinC + minRangeC;
+  }
+  return { minRangeC, trackMinC, trackMaxC };
+}
+
+function normalizeSetRange(lowC, highC, options = {}) {
+  let low = finiteNumber(lowC);
+  let high = finiteNumber(highC);
+  if (low === null || high === null) {
+    return null;
+  }
+
+  const opts = setRangeOptions(options);
+  if (high < low) {
+    [low, high] = [high, low];
+  }
+
+  const domainWidth = opts.trackMaxC - opts.trackMinC;
+  const wantedWidth = Math.min(
+    Math.max(high - low, opts.minRangeC),
+    domainWidth,
+  );
+  high = low + wantedWidth;
+  if (high > opts.trackMaxC) {
+    high = opts.trackMaxC;
+    low = high - wantedWidth;
+  }
+  if (low < opts.trackMinC) {
+    low = opts.trackMinC;
+    high = low + wantedWidth;
+  }
+
+  return { lowC: roundTempC(low), highC: roundTempC(high) };
+}
+
+function resizeSetRangeEndpoint(lowC, highC, endpoint, valueC, options = {}) {
+  const opts = setRangeOptions(options);
+  const current = normalizeSetRange(lowC, highC, opts);
+  if (!current) {
+    return null;
+  }
+
+  const value = roundTempC(finiteNumber(valueC, current[`${endpoint}C`]));
+  let low = current.lowC;
+  let high = current.highC;
+  if (endpoint === "low") {
+    low = Math.min(value, high - opts.minRangeC);
+    low = Math.max(opts.trackMinC, low);
+  } else {
+    high = Math.max(value, low + opts.minRangeC);
+    high = Math.min(opts.trackMaxC, high);
+  }
+  return normalizeSetRange(low, high, opts);
+}
+
+function moveSetRange(lowC, highC, deltaC, options = {}) {
+  const opts = setRangeOptions(options);
+  const current = normalizeSetRange(lowC, highC, opts);
+  if (!current) {
+    return null;
+  }
+
+  const width = current.highC - current.lowC;
+  let low = current.lowC + deltaC;
+  if (low < opts.trackMinC) {
+    low = opts.trackMinC;
+  }
+  if (low + width > opts.trackMaxC) {
+    low = opts.trackMaxC - width;
+  }
+  return {
+    lowC: roundTempC(low),
+    highC: roundTempC(low + width),
+  };
+}
+
+function setRangesEqual(first, second) {
+  return (
+    Boolean(first) &&
+    Boolean(second) &&
+    first.lowC === second.lowC &&
+    first.highC === second.highC
+  );
 }
 
 function formatAgeSeconds(seconds) {
@@ -485,6 +594,9 @@ function setupMatrixListeners() {
   // Add event listeners for set temperature controls
   setupSetTempControls();
 
+  // Add event listeners for FCU set ranges.
+  setupSetRangeControls();
+
   // Add event listeners for "Disable for" ± controls
   setupDisableForControls();
 
@@ -626,6 +738,339 @@ async function setDeviceSetTemp(deviceId, setTempC) {
     console.error("Failed to set temperature:", e);
     alert("Error setting temperature.");
   }
+}
+
+function getSetRangeWidgetOptions(widget, range = null) {
+  const minRangeC = finiteNumber(
+    widget.dataset.minRangeC,
+    DEFAULT_MIN_SET_RANGE_C,
+  );
+  let trackMinC = SET_RANGE_TRACK_MIN_C;
+  let trackMaxC = SET_RANGE_TRACK_MAX_C;
+  if (range) {
+    trackMinC = Math.min(trackMinC, range.lowC);
+    trackMaxC = Math.max(trackMaxC, range.highC);
+  }
+  return setRangeOptions({ minRangeC, trackMinC, trackMaxC });
+}
+
+function getSetRangeFromWidget(widget) {
+  const lowC = finiteNumber(widget.dataset.setRangeLowC);
+  const highC = finiteNumber(widget.dataset.setRangeHighC);
+  if (lowC === null || highC === null) {
+    return null;
+  }
+  return normalizeSetRange(lowC, highC, getSetRangeWidgetOptions(widget));
+}
+
+function setSetRangeSelectedPart(widget, part) {
+  widget.dataset.selectedPart = part;
+  widget
+    .querySelectorAll("[data-role='low'], [data-role='high'], [data-role='middle']")
+    .forEach((element) => {
+      element.classList.toggle("selected", element.dataset.role === part);
+    });
+}
+
+function setSetRangeUnavailable(widget) {
+  widget.removeAttribute("data-set-range-low-c");
+  widget.removeAttribute("data-set-range-high-c");
+  widget.querySelectorAll(".setrange-end-label").forEach((label) => {
+    label.removeAttribute("data-temp-c");
+    label.textContent = "--";
+  });
+}
+
+function rangeTempToPercent(valueC, options) {
+  return ((valueC - options.trackMinC) / (options.trackMaxC - options.trackMinC)) * 100;
+}
+
+function pointerEventToRangeTemp(widget, event) {
+  const track = widget.querySelector(".setrange-track");
+  const range = getSetRangeFromWidget(widget);
+  const options = getSetRangeWidgetOptions(widget, range);
+  const rect = track.getBoundingClientRect();
+  const fraction = Math.min(
+    1,
+    Math.max(0, (event.clientX - rect.left) / rect.width),
+  );
+  return roundTempC(
+    options.trackMinC + fraction * (options.trackMaxC - options.trackMinC),
+  );
+}
+
+function renderSetRangeWidget(widget, lowC, highC, minRangeC = null) {
+  if (minRangeC !== null && minRangeC !== undefined) {
+    widget.dataset.minRangeC = String(minRangeC);
+  }
+
+  const initialRange = normalizeSetRange(lowC, highC, {
+    minRangeC: finiteNumber(widget.dataset.minRangeC, DEFAULT_MIN_SET_RANGE_C),
+    trackMinC: Math.min(SET_RANGE_TRACK_MIN_C, finiteNumber(lowC, SET_RANGE_TRACK_MIN_C)),
+    trackMaxC: Math.max(SET_RANGE_TRACK_MAX_C, finiteNumber(highC, SET_RANGE_TRACK_MAX_C)),
+  });
+  if (!initialRange) {
+    setSetRangeUnavailable(widget);
+    return;
+  }
+
+  const options = getSetRangeWidgetOptions(widget, initialRange);
+  const range = normalizeSetRange(initialRange.lowC, initialRange.highC, options);
+  widget.dataset.setRangeLowC = String(range.lowC);
+  widget.dataset.setRangeHighC = String(range.highC);
+
+  const lowPercent = rangeTempToPercent(range.lowC, options);
+  const highPercent = rangeTempToPercent(range.highC, options);
+  const fill = widget.querySelector("[data-role='middle']");
+  const lowHandle = widget.querySelector("[data-role='low']");
+  const highHandle = widget.querySelector("[data-role='high']");
+  const lowLabel = widget.querySelector("[data-role='low-label']");
+  const highLabel = widget.querySelector("[data-role='high-label']");
+
+  fill.style.left = `${lowPercent}%`;
+  fill.style.width = `${highPercent - lowPercent}%`;
+  lowHandle.style.left = `${lowPercent}%`;
+  highHandle.style.left = `${highPercent}%`;
+
+  for (const [label, value] of [
+    [lowLabel, range.lowC],
+    [highLabel, range.highC],
+  ]) {
+    label.setAttribute("data-temp-c", String(value));
+    label.textContent = TemperatureUtils.formatTemperature(value, false);
+  }
+
+  for (const [handle, value, label] of [
+    [lowHandle, range.lowC, "lower"],
+    [highHandle, range.highC, "upper"],
+  ]) {
+    handle.setAttribute("title", `${label} ${TemperatureUtils.formatTemperature(value)}`);
+    handle.setAttribute("aria-valuemin", String(options.trackMinC));
+    handle.setAttribute("aria-valuemax", String(options.trackMaxC));
+    handle.setAttribute("aria-valuenow", String(value));
+  }
+  fill.setAttribute(
+    "title",
+    `${TemperatureUtils.formatTemperature(range.lowC)} - ${TemperatureUtils.formatTemperature(range.highC)}`,
+  );
+}
+
+function saveSetRangeWidget(widget) {
+  const range = getSetRangeFromWidget(widget);
+  if (!range) {
+    return Promise.resolve();
+  }
+  const deviceId = parseInt(widget.dataset.deviceId, 10);
+  const updateUrl = widget.dataset.updateUrl || "/api/v1/set_range";
+  widget.dataset.saving = "true";
+  return fetch(updateUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      [SET_RANGE_DEVICE_ID_KEY]: deviceId,
+      [SET_RANGE_LOW_KEY]: range.lowC,
+      [SET_RANGE_HIGH_KEY]: range.highC,
+    }),
+  })
+    .then(async (response) => {
+      const result = await response.json();
+      if (!response.ok) {
+        throw new Error(result.error || "Unable to save set range.");
+      }
+      renderSetRangeWidget(
+        widget,
+        result.set_range_low_c,
+        result.set_range_high_c,
+        result.min_set_range_c,
+      );
+      forceRefresh = true;
+    })
+    .catch((error) => {
+      console.error("Failed to save set range:", error);
+      alert("Error setting range.");
+    })
+    .finally(() => {
+      delete widget.dataset.saving;
+    });
+}
+
+function updateSetRangeForDevice(dev) {
+  const widget = document.getElementById(`setrange-widget-${dev.device_id}`);
+  if (!widget || widget.dataset.dragging === "true") {
+    return;
+  }
+  if (
+    dev.set_range_low_c === undefined ||
+    dev.set_range_high_c === undefined
+  ) {
+    setSetRangeUnavailable(widget);
+    return;
+  }
+  renderSetRangeWidget(
+    widget,
+    dev.set_range_low_c,
+    dev.set_range_high_c,
+    dev.min_set_range_c,
+  );
+}
+
+function applySetRangePointerValue(widget, event) {
+  const drag = widget._setRangeDrag;
+  const current = getSetRangeFromWidget(widget);
+  if (!drag || !current) {
+    return;
+  }
+
+  const options = getSetRangeWidgetOptions(widget, current);
+  let nextRange;
+  if (drag.part === "middle") {
+    const currentPointerC = pointerEventToRangeTemp(widget, event);
+    nextRange = moveSetRange(
+      drag.startLowC,
+      drag.startHighC,
+      currentPointerC - drag.startPointerC,
+      options,
+    );
+  } else {
+    nextRange = resizeSetRangeEndpoint(
+      current.lowC,
+      current.highC,
+      drag.part,
+      pointerEventToRangeTemp(widget, event),
+      options,
+    );
+  }
+  if (nextRange && !setRangesEqual(current, nextRange)) {
+    drag.changed = true;
+    renderSetRangeWidget(widget, nextRange.lowC, nextRange.highC);
+  }
+}
+
+function setRangePartFromPointerTarget(widget, event) {
+  const role = event.target.dataset.role;
+  if (role === "low" || role === "high" || role === "middle") {
+    return role;
+  }
+
+  const current = getSetRangeFromWidget(widget);
+  if (!current) {
+    return "middle";
+  }
+  const pointerC = pointerEventToRangeTemp(widget, event);
+  return Math.abs(pointerC - current.lowC) <= Math.abs(pointerC - current.highC)
+    ? "low"
+    : "high";
+}
+
+function handleSetRangePointerDown(event) {
+  const widget = event.currentTarget.closest(".setrange-widget");
+  const current = getSetRangeFromWidget(widget);
+  if (!current) {
+    return;
+  }
+  event.preventDefault();
+
+  const part = setRangePartFromPointerTarget(widget, event);
+  setSetRangeSelectedPart(widget, part);
+  if (typeof event.target.focus === "function") {
+    event.target.focus();
+  }
+
+  widget.dataset.dragging = "true";
+  widget._setRangeDrag = {
+    part,
+    changed: false,
+    startLowC: current.lowC,
+    startHighC: current.highC,
+    startPointerC: pointerEventToRangeTemp(widget, event),
+  };
+  event.currentTarget.setPointerCapture(event.pointerId);
+
+  if (event.target.dataset.role === "track") {
+    applySetRangePointerValue(widget, event);
+  }
+}
+
+function handleSetRangePointerMove(event) {
+  const widget = event.currentTarget.closest(".setrange-widget");
+  if (widget.dataset.dragging !== "true") {
+    return;
+  }
+  applySetRangePointerValue(widget, event);
+}
+
+function finishSetRangePointerDrag(event) {
+  const widget = event.currentTarget.closest(".setrange-widget");
+  if (widget.dataset.dragging !== "true") {
+    return;
+  }
+  delete widget.dataset.dragging;
+  const shouldSave = Boolean(widget._setRangeDrag?.changed);
+  delete widget._setRangeDrag;
+  event.currentTarget.releasePointerCapture(event.pointerId);
+  if (shouldSave) {
+    saveSetRangeWidget(widget);
+  }
+}
+
+function handleSetRangeKeyDown(event) {
+  const widget = event.currentTarget.closest(".setrange-widget");
+  const current = getSetRangeFromWidget(widget);
+  if (!current) {
+    return;
+  }
+
+  const keyDeltas = {
+    ArrowLeft: -SET_RANGE_STEP_C,
+    ArrowDown: -SET_RANGE_STEP_C,
+    ArrowRight: SET_RANGE_STEP_C,
+    ArrowUp: SET_RANGE_STEP_C,
+  };
+  const delta = keyDeltas[event.key];
+  if (delta === undefined) {
+    return;
+  }
+  event.preventDefault();
+
+  const part = event.currentTarget.dataset.role || widget.dataset.selectedPart;
+  setSetRangeSelectedPart(widget, part);
+  const options = getSetRangeWidgetOptions(widget, current);
+  const nextRange =
+    part === "middle"
+      ? moveSetRange(current.lowC, current.highC, delta, options)
+      : resizeSetRangeEndpoint(
+          current.lowC,
+          current.highC,
+          part,
+          current[`${part}C`] + delta,
+          options,
+        );
+  if (nextRange) {
+    renderSetRangeWidget(widget, nextRange.lowC, nextRange.highC);
+    saveSetRangeWidget(widget);
+  }
+}
+
+function setupSetRangeControls() {
+  document.querySelectorAll(".setrange-widget").forEach((widget) => {
+    const lowC = finiteNumber(widget.dataset.setRangeLowC);
+    const highC = finiteNumber(widget.dataset.setRangeHighC);
+    if (lowC !== null && highC !== null) {
+      renderSetRangeWidget(widget, lowC, highC, widget.dataset.minRangeC);
+    }
+    setSetRangeSelectedPart(widget, widget.dataset.selectedPart || "middle");
+
+    const track = widget.querySelector(".setrange-track");
+    track.addEventListener("pointerdown", handleSetRangePointerDown);
+    track.addEventListener("pointermove", handleSetRangePointerMove);
+    track.addEventListener("pointerup", finishSetRangePointerDrag);
+    track.addEventListener("pointercancel", finishSetRangePointerDrag);
+    widget
+      .querySelectorAll("[data-role='low'], [data-role='high'], [data-role='middle']")
+      .forEach((element) => {
+        element.addEventListener("keydown", handleSetRangeKeyDown);
+      });
+  });
 }
 
 /**
@@ -879,6 +1324,8 @@ const refreshGridRows = () => {
                 setTempDisplay.textContent = "--";
               }
             }
+
+            updateSetRangeForDevice(dev);
 
             const modeCell = document.getElementById(`mode-${dev.device_id}`);
             if (modeCell) {
@@ -1134,5 +1581,11 @@ if (typeof window !== "undefined") {
 
 // Node.js export for testing
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { fanRadioIdForDevice, modeLabelForDevice };
+  module.exports = {
+    fanRadioIdForDevice,
+    modeLabelForDevice,
+    moveSetRange,
+    normalizeSetRange,
+    resizeSetRangeEndpoint,
+  };
 }

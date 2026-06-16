@@ -218,6 +218,7 @@ test-js: $(REQ)
 	node tests/test_time_utils.js
 	node tests/test_temperature_utils.js
 	node tests/test_unit_speed.js
+	node tests/test_metric_chart_support.js
 test: $(REQ)
 	@python_exit=0; js_exit=0; \
 	make pytest || python_exit=$$?; \

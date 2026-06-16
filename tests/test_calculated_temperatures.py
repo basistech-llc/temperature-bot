@@ -9,7 +9,7 @@ import sqlite3
 import time
 
 from app import db, rules_engine
-from app.constants import TEMP_SOURCE_STALE_SECONDS
+from app.constants import MIN_SET_RANGE_C, TEMP_SOURCE_STALE_SECONDS
 from app.main import app
 from app.models import Room
 
@@ -38,6 +38,7 @@ class TempRowSpec:
 
 
 def _clear_devices(conn):
+    conn.execute("DELETE FROM fcu_set_ranges")
     conn.execute("DELETE FROM fcu_temp_sources")
     conn.execute("DELETE FROM devlog")
     conn.execute("DELETE FROM devices")
@@ -666,6 +667,106 @@ def test_fcu_temp_source_api_rejects_missing_and_unknown_devices(flask_test_clie
         },
     )
     assert unknown_source.status_code == 404
+
+
+def test_fcu_set_range_status_defaults_to_current_set_temp(test_database_conn):
+    conn = test_database_conn
+    _clear_devices(conn)
+    now = int(time.time())
+    fcu_id = _device(
+        conn,
+        TempDeviceSpec(
+            name="Range Default FCU",
+            temp10x=240,
+            logtime=now - 30,
+            status={
+                "Drive": "ON",
+                "FanSpeed": "LOW",
+                "Mode": "COOL",
+                "SetTemp": "24.0",
+            },
+        ),
+    )
+
+    status = db.get_device_status(conn)
+
+    fcu = next(device for device in status if device["device_id"] == fcu_id)
+    assert fcu["set_range_low_c"] == 22.5
+    assert fcu["set_range_high_c"] == 25.5
+    assert fcu["min_set_range_c"] == MIN_SET_RANGE_C
+
+
+def test_fcu_set_range_api_persists_range_and_logs_old_new_values(
+    flask_test_client, test_database_conn_with_test_data
+):  # noqa: F811
+    _, fcu_id, _ = test_database_conn_with_test_data
+
+    response = flask_test_client.post(
+        "/api/v1/set_range",
+        json={
+            "device_id": fcu_id,
+            "set_range_low_c": 20.0,
+            "set_range_high_c": 24.0,
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json["device_id"] == fcu_id
+    assert response.json["set_range_low_c"] == 20.0
+    assert response.json["set_range_high_c"] == 24.0
+    assert response.json["min_set_range_c"] == MIN_SET_RANGE_C
+
+    with closing(_connect_test_db()) as conn:
+        row = conn.execute(
+            """
+            SELECT set_range_low_c, set_range_high_c
+            FROM fcu_set_ranges
+            WHERE fcu_device_id=?
+            """,
+            (fcu_id,),
+        ).fetchone()
+    assert row["set_range_low_c"] == 20.0
+    assert row["set_range_high_c"] == 24.0
+
+    status_response = flask_test_client.get("/api/v1/status")
+    fcu_status = next(
+        item for item in status_response.json["devices"] if item["device_id"] == fcu_id
+    )
+    assert fcu_status["set_range_low_c"] == 20.0
+    assert fcu_status["set_range_high_c"] == 24.0
+
+    logs = flask_test_client.get("/api/v1/logs").json["data"]
+    range_log = next(
+        log
+        for log in logs
+        if log["current_values"] == "19.5-22.5" and log["new_value"] == "20-24"
+    )
+    assert range_log["comment"] == "set range"
+
+
+def test_fcu_set_range_api_rejects_too_narrow_range(
+    flask_test_client, test_database_conn_with_test_data
+):  # noqa: F811
+    _, fcu_id, _ = test_database_conn_with_test_data
+
+    response = flask_test_client.post(
+        "/api/v1/set_range",
+        json={
+            "device_id": fcu_id,
+            "set_range_low_c": 20.0,
+            "set_range_high_c": 22.5,
+        },
+    )
+
+    assert response.status_code == 400
+    assert "at least" in response.json["error"]
+
+    with closing(_connect_test_db()) as conn:
+        row = conn.execute(
+            "SELECT 1 FROM fcu_set_ranges WHERE fcu_device_id=?",
+            (fcu_id,),
+        ).fetchone()
+    assert row is None
 
 
 def test_calculated_temperature_series_uses_source_history_and_staleness(

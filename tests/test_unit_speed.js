@@ -8,6 +8,9 @@
 const {
   fanRadioIdForDevice,
   modeLabelForDevice,
+  moveSetRange,
+  normalizeSetRange,
+  resizeSetRangeEndpoint,
 } = require("../app/static/unit_speed.js");
 
 let passed = 0;
@@ -19,6 +22,21 @@ function check(label, actual, expected) {
   } else {
     failed++;
     console.error(`FAIL ${label}: got "${actual}", expected "${expected}"`);
+  }
+}
+
+function checkRange(label, actual, expectedLow, expectedHigh) {
+  if (
+    actual &&
+    actual.lowC === expectedLow &&
+    actual.highC === expectedHigh
+  ) {
+    passed++;
+  } else {
+    failed++;
+    console.error(
+      `FAIL ${label}: got ${JSON.stringify(actual)}, expected ${expectedLow}-${expectedHigh}`,
+    );
   }
 }
 
@@ -83,6 +101,30 @@ check(
   "missing mode",
   modeLabelForDevice({ status: {} }),
   "--",
+);
+
+// -- FCU set-range math --
+checkRange(
+  "too narrow range expands to minimum",
+  normalizeSetRange(20, 22, { minRangeC: 3, trackMinC: 10, trackMaxC: 30 }),
+  20,
+  23,
+);
+checkRange(
+  "lower endpoint cannot cross minimum width",
+  resizeSetRangeEndpoint(20, 24, "low", 23, {
+    minRangeC: 3,
+    trackMinC: 10,
+    trackMaxC: 30,
+  }),
+  21,
+  24,
+);
+checkRange(
+  "moving middle preserves width and clamps to track",
+  moveSetRange(20, 24, -20, { minRangeC: 3, trackMinC: 10, trackMaxC: 30 }),
+  10,
+  14,
 );
 
 console.log(`\n${passed} passed, ${failed} failed`);

@@ -235,6 +235,11 @@ button {
     min-width: 160px;
 }
 
+.column-temp-range,
+.cell-temp-range {
+    min-width: 210px;
+}
+
 .column-mode,
 .cell-mode {
     min-width: 4.5em;
@@ -268,6 +273,87 @@ button {
 }
 
 .data-table tbody td.cell-mode {
+    text-align: center;
+}
+
+.data-table tbody td.cell-temp-range {
+    text-align: center;
+}
+
+.setrange-widget {
+    width: 190px;
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    padding: 0.15rem 0;
+}
+
+.setrange-track {
+    position: relative;
+    width: 100%;
+    height: 20px;
+    touch-action: none;
+    cursor: pointer;
+}
+
+.setrange-track::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 7px;
+    height: 6px;
+    border-radius: 999px;
+    background: #d7dde3;
+}
+
+.setrange-fill {
+    position: absolute;
+    top: 7px;
+    height: 6px;
+    border-radius: 999px;
+    background: #2f855a;
+    cursor: grab;
+}
+
+.setrange-fill.selected {
+    outline: 2px solid #2f855a;
+    outline-offset: 4px;
+}
+
+.setrange-handle {
+    position: absolute;
+    top: 50%;
+    width: 16px;
+    height: 16px;
+    padding: 0;
+    border: 2px solid #1f2937;
+    border-radius: 50%;
+    background: #fff;
+    cursor: ew-resize;
+    transform: translate(-50%, -50%);
+}
+
+.setrange-handle.selected,
+.setrange-handle:focus-visible,
+.setrange-fill:focus-visible {
+    outline: 2px solid #3b82f6;
+    outline-offset: 2px;
+}
+
+.setrange-values {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.2rem;
+    font-size: 0.85rem;
+    font-weight: 600;
+    line-height: 1;
+    color: #1a202c;
+}
+
+.setrange-end-label {
+    min-width: 3.2em;
     text-align: center;
 }
 

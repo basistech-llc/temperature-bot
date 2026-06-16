@@ -98,6 +98,7 @@
               <th class="column-temp" rowspan="2">FCU Temp<br><small id="fcu-temp-unit-label">°C</small></th>
               <th class="column-temp" rowspan="2">Room Temp<br><small id="fcu-room-temp-unit-label">°C</small></th>
               <th class="column-temp column-temp-set" rowspan="2">Set Temp<br><small id="fcu-settemp-unit-label">°C</small></th>
+              <th class="column-temp column-temp-range" rowspan="2">Set Range<br><small id="fcu-setrange-unit-label">°C</small></th>
               <th class="column-mode" rowspan="2">Mode</th>
               <th class="column-speed" colspan="5">Fan Speed</th>
               <th class="column-notes" rowspan="2">Notes</th>
@@ -162,6 +163,26 @@
                               data-delta="0.5"
                               aria-label="Increase set temperature">+</button>
                     </span>
+                  </td>
+                  <td class="cell-temp cell-temp-range" id="setrange-{{ device.device_id }}">
+                    <div class="setrange-widget"
+                         id="setrange-widget-{{ device.device_id }}"
+                         data-device-id="{{ device.device_id }}"
+                         data-update-url="/api/v1/set_range"
+                         data-min-range-c="{{ device.min_set_range_c|default(3.0, true) }}"
+                         {% if device.set_range_low_c is defined and device.set_range_low_c is not none %}data-set-range-low-c="{{ device.set_range_low_c }}"{% endif %}
+                         {% if device.set_range_high_c is defined and device.set_range_high_c is not none %}data-set-range-high-c="{{ device.set_range_high_c }}"{% endif %}>
+                      <div class="setrange-track" data-role="track">
+                        <div class="setrange-fill" data-role="middle" tabindex="0" aria-label="Move set range"></div>
+                        <button type="button" class="setrange-handle setrange-handle-low" data-role="low" aria-label="Move lower set range"></button>
+                        <button type="button" class="setrange-handle setrange-handle-high" data-role="high" aria-label="Move upper set range"></button>
+                      </div>
+                      <div class="setrange-values">
+                        <span class="setrange-end-label temp-display temp-display-no-unit" data-role="low-label">--</span>
+                        <span class="setrange-separator">–</span>
+                        <span class="setrange-end-label temp-display temp-display-no-unit" data-role="high-label">--</span>
+                      </div>
+                    </div>
                   </td>
                   <td class="cell-mode" id="mode-{{ device.device_id }}">{{ device.mode|default(device.status.Mode|default('--'), true) }}</td>
                   <td class="cell-speed cell-speed-off">

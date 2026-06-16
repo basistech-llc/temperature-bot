@@ -44,8 +44,9 @@ the row duration instead of inserting duplicate rows.
 
 FCUs can also report a calculated room temperature: a weighted average of the
 FCU's own raw temperature and configured temperature-reporting devices. Room
-metadata, map polygons, source multipliers, API payloads, and rule semantics are
-documented in `doc/calculated-temperatures-and-rooms.md`.
+metadata, map polygons, source multipliers, persisted FCU set ranges, API
+payloads, and rule semantics are documented in
+`doc/calculated-temperatures-and-rooms.md`.
 
 ## Data Contracts
 

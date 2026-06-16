@@ -69,6 +69,50 @@ def test_metric_endpoint_rejects_invalid_device_ids(flask_test_client):  # noqa:
     assert response.status_code == 400
 
 
+def test_metric_endpoint_filters_selected_radon_device(flask_test_client):  # noqa: F811
+    """A clicked radon cell should retrieve only that device's radon series."""
+    test_db_path = os.environ.get("TEST_DB_NAME")
+    assert test_db_path
+    conn = sqlite3.connect(test_db_path)
+    conn.row_factory = sqlite3.Row
+    try:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM devlog")
+        cursor.execute("DELETE FROM devices")
+        conn.commit()
+
+        keep_id = db.get_or_create_device_id(conn, "Airthings Bamboo")
+        drop_id = db.get_or_create_device_id(conn, "Airthings Area 51")
+        for logtime, device_id, value in (
+            (1000, keep_id, 123),
+            (1010, drop_id, 99),
+            (1020, keep_id, 125),
+        ):
+            cursor.execute(
+                "INSERT INTO devlog (device_id, logtime, duration, temp10x, status_json) VALUES (?, ?, ?, ?, ?)",
+                (
+                    device_id,
+                    logtime,
+                    1,
+                    None,
+                    json.dumps({"radonShortTermAvg": {"value": value, "unit": "bq"}}),
+                ),
+            )
+        conn.commit()
+    finally:
+        conn.close()
+
+    response = flask_test_client.get(f"/api/v1/metric?metric=radon&device_ids={keep_id}")
+    assert response.status_code == 200
+    assert response.json["series"] == [
+        {
+            "name": "Bamboo",
+            "device_id": keep_id,
+            "data": [[1000, 123.0], [1020, 125.0]],
+        }
+    ]
+
+
 def test_metric_chart_page_renders(flask_test_client):  # noqa: F811
     """Every entry in METRIC_CHART_CONFIG must actually render.
 

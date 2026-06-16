@@ -17,5 +17,6 @@ The Flask application is split by integration and route surface:
 Schema changes belong in `etc/flyway/sql/`, not in this directory. Refresh the
 generated compatibility schema with `make schema`.
 
-Calculated FCU temperatures, room map metadata, and the related `/api/v1/*`
-contracts are documented in `doc/calculated-temperatures-and-rooms.md`.
+Calculated FCU temperatures, FCU set ranges, room map metadata, and the related
+`/api/v1/*` contracts are documented in
+`doc/calculated-temperatures-and-rooms.md`.

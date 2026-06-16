@@ -34,7 +34,13 @@ from typing import List, Dict, Any
 
 from flask import request
 
-from .constants import DB_PATH, TEMP_SOURCE_STALE_SECONDS, TEST_DB_NAME
+from .constants import (
+    DB_PATH,
+    DEFAULT_SET_RANGE_CENTER_C,
+    MIN_SET_RANGE_C,
+    TEMP_SOURCE_STALE_SECONDS,
+    TEST_DB_NAME,
+)
 from .models import (
     AqiSummary,
     AqiWeatherResponse,
@@ -45,6 +51,7 @@ from .models import (
     DatabaseSchemaIssue,
     DatabaseSchemaSnapshot,
     DeviceStatus,
+    FcuSetRange,
     FcuTempSourceRow,
     FcuTempSourcesResponse,
     Room,
@@ -1022,6 +1029,208 @@ def _is_fcu_device(device: dict[str, Any]) -> bool:
     ).lower().startswith("erv")
 
 
+def _float_or_none(value: object) -> float | None:
+    try:
+        if value is None or value == "":
+            return None
+        if not isinstance(value, (int, float, str)):
+            return None
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if math.isfinite(number) else None
+
+
+def _set_temp_c_from_status(status: dict[str, Any] | None) -> float | None:
+    if not isinstance(status, dict):
+        return None
+    return _float_or_none(status.get("SetTemp"))
+
+
+def _latest_set_temp_c_for_device(conn, device_id: int) -> float | None:
+    c = conn.cursor()
+    c.execute(
+        """
+        SELECT status_json
+        FROM devlog
+        WHERE device_id=?
+        ORDER BY logtime DESC
+        LIMIT 1
+        """,
+        (device_id,),
+    )
+    row = c.fetchone()
+    if row is None:
+        return None
+    try:
+        status = json.loads(row["status_json"] or "{}")
+    except json.JSONDecodeError:
+        return None
+    return _set_temp_c_from_status(status)
+
+
+def _round_temp_c(value: float) -> float:
+    return round(float(value), 1)
+
+
+def _validated_set_range_values(low_c: float, high_c: float) -> tuple[float, float]:
+    low = _round_temp_c(low_c)
+    high = _round_temp_c(high_c)
+    if not math.isfinite(low) or not math.isfinite(high):
+        raise ValueError("set range endpoints must be finite Celsius values")
+    if high - low < MIN_SET_RANGE_C:
+        raise ValueError(f"set range must be at least {MIN_SET_RANGE_C:g} C wide")
+    return low, high
+
+
+def default_fcu_set_range(device_id: int, set_temp_c: float | None) -> FcuSetRange:
+    """Return the effective default FCU set range before a row is persisted."""
+    center = set_temp_c if set_temp_c is not None else DEFAULT_SET_RANGE_CENTER_C
+    half_range = MIN_SET_RANGE_C / 2
+    return FcuSetRange(
+        device_id=device_id,
+        set_range_low_c=_round_temp_c(center - half_range),
+        set_range_high_c=_round_temp_c(center + half_range),
+        min_set_range_c=MIN_SET_RANGE_C,
+    )
+
+
+def _fcu_set_range_from_row(row: sqlite3.Row) -> FcuSetRange:
+    return FcuSetRange(
+        device_id=row["fcu_device_id"],
+        set_range_low_c=row["set_range_low_c"],
+        set_range_high_c=row["set_range_high_c"],
+        min_set_range_c=MIN_SET_RANGE_C,
+        updated_at=row["updated_at"],
+    )
+
+
+def get_fcu_set_ranges(conn, fcu_device_ids: list[int]) -> dict[int, FcuSetRange]:
+    """Return persisted set ranges keyed by FCU device id."""
+    if not fcu_device_ids:
+        return {}
+    wanted_values = ",".join(["(?)"] * len(fcu_device_ids))
+    c = conn.cursor()
+    c.execute(
+        f"""
+        WITH wanted(fcu_device_id) AS (VALUES {wanted_values})
+        SELECT r.*
+        FROM fcu_set_ranges r
+        JOIN wanted w ON r.fcu_device_id = w.fcu_device_id
+        """,
+        fcu_device_ids,
+    )
+    return {
+        row["fcu_device_id"]: _fcu_set_range_from_row(row) for row in c.fetchall()
+    }
+
+
+def get_fcu_set_range(
+    conn, device_id: int, set_temp_c: float | None = None
+) -> FcuSetRange:
+    """Return the persisted FCU set range, or the current effective default."""
+    c = conn.cursor()
+    c.execute(
+        """
+        SELECT *
+        FROM fcu_set_ranges
+        WHERE fcu_device_id=?
+        """,
+        (device_id,),
+    )
+    row = c.fetchone()
+    if row is not None:
+        return _fcu_set_range_from_row(row)
+    return default_fcu_set_range(device_id, set_temp_c)
+
+
+def _format_set_range(low_c: float, high_c: float) -> str:
+    return f"{low_c:g}-{high_c:g}"
+
+
+def set_fcu_set_range(
+    conn,
+    *,
+    device_id: int,
+    set_range_low_c: float,
+    set_range_high_c: float,
+    ipaddr: str | None,
+    agent: str | None,
+) -> dict[str, Any]:
+    """Persist one FCU set range and log effective old/new values."""
+    fcu = get_device(conn, device_id)
+    if fcu is None:
+        raise ValueError(f"Unknown device_id: {device_id}")
+
+    new_low, new_high = _validated_set_range_values(
+        set_range_low_c,
+        set_range_high_c,
+    )
+    c = conn.cursor()
+    c.execute(
+        """
+        SELECT *
+        FROM fcu_set_ranges
+        WHERE fcu_device_id=?
+        """,
+        (device_id,),
+    )
+    row = c.fetchone()
+    old_range = (
+        _fcu_set_range_from_row(row)
+        if row is not None
+        else default_fcu_set_range(device_id, _latest_set_temp_c_for_device(conn, device_id))
+    )
+    changed = (
+        old_range.set_range_low_c != new_low
+        or old_range.set_range_high_c != new_high
+    )
+    if row is not None and not changed:
+        return json_ready(old_range)
+
+    now = int(time.time())
+    c.execute(
+        """
+        INSERT INTO fcu_set_ranges
+            (fcu_device_id, set_range_low_c, set_range_high_c, updated_at)
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT(fcu_device_id)
+        DO UPDATE SET
+            set_range_low_c=excluded.set_range_low_c,
+            set_range_high_c=excluded.set_range_high_c,
+            updated_at=excluded.updated_at
+        """,
+        (device_id, new_low, new_high, now),
+    )
+
+    if changed:
+        insert_changelog(
+            conn,
+            ipaddr=ipaddr or "",
+            device_id=device_id,
+            ae200_device_id=fcu.get("ae200_device_id"),
+            current_values=_format_set_range(
+                old_range.set_range_low_c,
+                old_range.set_range_high_c,
+            ),
+            new_value=_format_set_range(new_low, new_high),
+            agent=agent or "",
+            comment="set range",
+        )
+    else:
+        conn.commit()
+
+    return json_ready(
+        FcuSetRange(
+            device_id=device_id,
+            set_range_low_c=new_low,
+            set_range_high_c=new_high,
+            min_set_range_c=MIN_SET_RANGE_C,
+            updated_at=now,
+        )
+    )
+
+
 def get_fcu_temp_source_weights(conn, fcu_device_id: int) -> dict[int, float]:
     """Return source weights for one FCU, applying the FCU default if absent."""
     rows = _fcu_temp_source_weight_rows(conn, fcu_device_id)
@@ -1644,8 +1853,17 @@ def get_device_status(conn) -> List[Dict[str, Any]]:
                 data["temp_source_stale_seconds"] = TEMP_SOURCE_STALE_SECONDS
                 fcu_device_ids.append(data["device_id"])
 
+    set_ranges = get_fcu_set_ranges(conn, fcu_device_ids)
     calculated_temps = calculate_fcu_temperatures10x(conn, fcu_device_ids)
     for data in device_data:
+        if data["device_id"] in fcu_device_ids:
+            set_range = set_ranges.get(data["device_id"]) or default_fcu_set_range(
+                data["device_id"],
+                _set_temp_c_from_status(data.get("status")),
+            )
+            data["set_range_low_c"] = set_range.set_range_low_c
+            data["set_range_high_c"] = set_range.set_range_high_c
+            data["min_set_range_c"] = set_range.min_set_range_c
         calculated_temp10x = calculated_temps.get(data["device_id"])
         if calculated_temp10x is not None:
             data["calculated_temp10x"] = calculated_temp10x
