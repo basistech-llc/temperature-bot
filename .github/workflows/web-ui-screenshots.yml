@@ -2,6 +2,9 @@ name: Web UI Screenshots
 
 on:
   pull_request:
+  push:
+    branches-ignore:
+      - main
 
 jobs:
   web-ui-screenshots:
@@ -18,12 +21,41 @@ jobs:
       POETRY_VERSION: '2.1.3'
       RUFF_VERSION: '0.15.15'
     steps:
+      - name: Resolve pull request
+        id: resolve_pr
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const repoFullName = `${owner}/${repo}`;
+            let pull = context.payload.pull_request;
+
+            if (!pull) {
+              const branch = context.ref.replace('refs/heads/', '');
+              const { data: pulls } = await github.rest.pulls.list({
+                owner,
+                repo,
+                state: 'open',
+                head: `${owner}:${branch}`,
+                per_page: 1,
+              });
+              pull = pulls[0];
+            }
+
+            core.setOutput('number', pull ? String(pull.number) : '');
+            core.setOutput(
+              'same_repo',
+              pull ? String(pull.head.repo.full_name === repoFullName) : 'false'
+            );
+
       - name: Checkout
+        if: steps.resolve_pr.outputs.number != '' && steps.resolve_pr.outputs.same_repo == 'true'
         uses: actions/checkout@v4
         with:
           submodules: true
 
       - name: Set up Python
+        if: steps.resolve_pr.outputs.number != '' && steps.resolve_pr.outputs.same_repo == 'true'
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -32,11 +64,13 @@ jobs:
             poetry.lock
 
       - name: Set up Node.js
+        if: steps.resolve_pr.outputs.number != '' && steps.resolve_pr.outputs.same_repo == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: '20'
 
       - name: Cache .venv
+        if: steps.resolve_pr.outputs.number != '' && steps.resolve_pr.outputs.same_repo == 'true'
         uses: actions/cache@v4
         with:
           path: .venv
@@ -45,6 +79,7 @@ jobs:
             screenshots-venv-${{ runner.os }}-3.12-
 
       - name: Cache Playwright browsers
+        if: steps.resolve_pr.outputs.number != '' && steps.resolve_pr.outputs.same_repo == 'true'
         uses: actions/cache@v4
         with:
           path: .playwright
@@ -53,20 +88,23 @@ jobs:
             pw-${{ runner.os }}-
 
       - name: Update GITHUB_PATH and install Python dependencies for local development
+        if: steps.resolve_pr.outputs.number != '' && steps.resolve_pr.outputs.same_repo == 'true'
         run: |
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
       - name: Configure Ubuntu
+        if: steps.resolve_pr.outputs.number != '' && steps.resolve_pr.outputs.same_repo == 'true'
         run: |
           make install-ubuntu
 
       - name: Render web UI screenshots
+        if: steps.resolve_pr.outputs.number != '' && steps.resolve_pr.outputs.same_repo == 'true'
         run: |
           make web-screenshots
 
       - name: Upload screenshots for PR comment
         id: upload_screenshots
-        if: github.event.pull_request.head.repo.full_name == github.repository
+        if: steps.resolve_pr.outputs.number != '' && steps.resolve_pr.outputs.same_repo == 'true'
         env:
           IMGUR_CLIENT_ID: ${{ vars.IMGUR_CLIENT_ID || '546c25a59c58ad7' }}
         run: |
@@ -127,9 +165,10 @@ jobs:
           PY
 
       - name: Comment screenshots on PR
-        if: github.event.pull_request.head.repo.full_name == github.repository
+        if: steps.resolve_pr.outputs.number != '' && steps.resolve_pr.outputs.same_repo == 'true'
         uses: actions/github-script@v7
         env:
+          PR_NUMBER: ${{ steps.resolve_pr.outputs.number }}
           RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
         with:
           script: |
@@ -167,7 +206,7 @@ jobs:
 
             const body = lines.join('\n');
             const { owner, repo } = context.repo;
-            const issue_number = context.issue.number;
+            const issue_number = Number(process.env.PR_NUMBER);
             const comments = await github.paginate(github.rest.issues.listComments, {
               owner,
               repo,
