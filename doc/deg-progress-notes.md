@@ -101,8 +101,8 @@ The system runs continuously: `runner.py` collects data every minute, rules adju
    make install-macos  # or install-ubuntu on Linux
    ```
    This installs Poetry, creates a virtual environment, and installs all dependencies.
-   
-   
+
+
 2. **Connect**
 
 To do anything with the live system, you will need to first login with Tailscale for access.
@@ -119,13 +119,13 @@ If it pulls the DB successfully, your connection is good.
    make make-dev-db
    ```
    Creates a fresh `var/db/temperature-bot.db` from the schema.
-   
+
    Or, and usually preferred, clone the live database
-   
+
    ```bash
    make fetch-dev-db
    ```
-   
+
    Clone a snapshot of the live DB locally.
 
 4. **Configure**:
