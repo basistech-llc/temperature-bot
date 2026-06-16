@@ -79,6 +79,16 @@ def test_set_mode_endpoint_records_mode_and_disables_rules(flask_test_client):  
             "SELECT COUNT(*) AS n FROM changelog WHERE device_id=?", (device_id,)
         )
         assert verify_cursor.fetchone()["n"] >= before_changelog + 2
+        verify_cursor.execute(
+            """
+            SELECT comment FROM changelog
+            WHERE device_id=? AND comment='Rules disabled for 180 minutes'
+            ORDER BY changelog_id DESC
+            LIMIT 1
+            """,
+            (device_id,),
+        )
+        assert verify_cursor.fetchone()["comment"] == "Rules disabled for 180 minutes"
         verify_conn.close()
     finally:
         if original_mode in ae200.AE200_ALLOWED_SET_MODES:

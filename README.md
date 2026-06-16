@@ -29,7 +29,8 @@ make PYTEST_ARGS=tests/test_db.py::test_name pytest
 simulated external services, and writes PNGs plus `manifest.json` and
 `gallery.md` under `var/web-ui-screenshots/`. The Ubuntu-only `Web UI
 Screenshots` pull-request workflow uploads those PNGs to Imgur and updates a
-sticky PR comment with inline rendered images.
+sticky PR comment with inline rendered images. Configure the repository
+variable `IMGUR_CLIENT_ID` to opt in to third-party screenshot hosting.
 
 ## Database
 

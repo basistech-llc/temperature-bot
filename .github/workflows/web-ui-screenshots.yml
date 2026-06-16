@@ -106,10 +106,10 @@ jobs:
         id: upload_screenshots
         if: steps.resolve_pr.outputs.number != '' && steps.resolve_pr.outputs.same_repo == 'true'
         env:
-          IMGUR_CLIENT_ID: ${{ vars.IMGUR_CLIENT_ID || '546c25a59c58ad7' }}
+          IMGUR_CLIENT_ID: ${{ vars.IMGUR_CLIENT_ID }}
         run: |
           set -euo pipefail
-          if [ -z "${IMGUR_CLIENT_ID}" ]; then
+          if [ -z "${IMGUR_CLIENT_ID:-}" ]; then
             echo "IMGUR_CLIENT_ID is not configured."
             exit 1
           fi

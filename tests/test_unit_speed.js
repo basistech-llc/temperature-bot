@@ -6,6 +6,7 @@
  * holding the Auto (-1) fan speed must select the Off radio, not Auto.
  */
 const {
+  ensureModeSelectOption,
   fanRadioIdForDevice,
   modeLabelForDevice,
   modeValueForDevice,
@@ -108,6 +109,56 @@ check(
   modeLabelForDevice({ status: {} }),
   "--",
 );
+
+// -- FCU mode select option updates --
+const originalDocument = global.document;
+global.document = {
+  createElement: () => ({
+    dataset: {},
+    disabled: false,
+    textContent: "",
+    value: "",
+  }),
+};
+try {
+  const unusualMode = 'FAN"] [value="COOL';
+  const existingSelect = {
+    firstChild: null,
+    inserted: false,
+    options: [{ value: unusualMode }],
+    querySelector: () => {
+      throw new Error("querySelector should not be used for mode values");
+    },
+    insertBefore: () => {
+      existingSelect.inserted = true;
+    },
+  };
+  ensureModeSelectOption(existingSelect, unusualMode);
+  check(
+    "existing unusual mode option does not insert",
+    existingSelect.inserted,
+    false,
+  );
+
+  const newSelect = {
+    firstChild: null,
+    inserted: null,
+    options: [],
+    insertBefore: (option) => {
+      newSelect.inserted = option;
+      newSelect.options.unshift(option);
+    },
+  };
+  ensureModeSelectOption(newSelect, unusualMode);
+  check(
+    "unusual mode option value is preserved",
+    newSelect.inserted.value,
+    unusualMode,
+  );
+  check("unusual mode option is disabled", newSelect.inserted.disabled, true);
+} finally {
+  global.document = originalDocument;
+}
 
 // -- FCU set-range math --
 checkRange(
