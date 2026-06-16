@@ -7,7 +7,7 @@ jobs:
   web-ui-screenshots:
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: read
       issues: write
       pull-requests: write
     env:
@@ -65,54 +65,20 @@ jobs:
           make web-screenshots
 
       - name: Upload web UI screenshots artifact
+        id: upload_screenshots
         uses: actions/upload-artifact@v4
         with:
           name: web-ui-screenshots-${{ github.run_id }}
           path: var/web-ui-screenshots
           if-no-files-found: error
 
-      - name: Publish screenshots for PR comment
-        id: publish_screenshots
-        if: github.event.pull_request.head.repo.full_name == github.repository
-        env:
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          RUN_ID: ${{ github.run_id }}
-        run: |
-          set -euo pipefail
-          publish_branch="web-ui-screenshots-pr-${PR_NUMBER}"
-          run_path="latest"
-          publish_worktree="$(mktemp -d)"
-
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
-          if git ls-remote --exit-code --heads origin "${publish_branch}" >/dev/null 2>&1; then
-            git fetch origin "${publish_branch}"
-            git worktree add -B "${publish_branch}" "${publish_worktree}" "origin/${publish_branch}"
-          else
-            git worktree add --detach "${publish_worktree}"
-            cd "${publish_worktree}"
-            git switch --orphan "${publish_branch}"
-            git rm -rf . >/dev/null 2>&1 || true
-          fi
-
-          cd "${publish_worktree}"
-          mkdir -p "${run_path}"
-          cp -R "${GITHUB_WORKSPACE}/var/web-ui-screenshots/." "${run_path}/"
-          git add .
-          git commit -m "Update web UI screenshots for PR ${PR_NUMBER} run ${RUN_ID}" || true
-          git push origin "HEAD:${publish_branch}"
-
-          echo "branch=${publish_branch}" >> "$GITHUB_OUTPUT"
-          echo "run_path=${run_path}" >> "$GITHUB_OUTPUT"
-
       - name: Comment screenshots on PR
         if: github.event.pull_request.head.repo.full_name == github.repository
         uses: actions/github-script@v7
         env:
-          PUBLISH_BRANCH: ${{ steps.publish_screenshots.outputs.branch }}
-          RUN_PATH: ${{ steps.publish_screenshots.outputs.run_path }}
           ARTIFACT_NAME: web-ui-screenshots-${{ github.run_id }}
+          ARTIFACT_URL: ${{ steps.upload_screenshots.outputs.artifact-url }}
+          RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
         with:
           script: |
             const fs = require('fs');
@@ -120,36 +86,23 @@ jobs:
               fs.readFileSync('var/web-ui-screenshots/manifest.json', 'utf8')
             );
             const marker = '<!-- web-ui-screenshots -->';
-            const imageBase = [
-              'https://github.com',
-              context.repo.owner,
-              context.repo.repo,
-              'blob',
-              process.env.PUBLISH_BRANCH,
-              process.env.RUN_PATH,
-            ].join('/');
+            const artifactUrl = process.env.ARTIFACT_URL || process.env.RUN_URL;
             const lines = [
               marker,
               '## Web UI Screenshots',
               '',
               `Generated ${manifest.pages.length} screenshots for this PR.`,
               '',
+              `Download: [${process.env.ARTIFACT_NAME}](${artifactUrl})`,
+              '',
+              'Contents:',
             ];
 
             for (const page of manifest.pages) {
               lines.push(
-                `### ${page.title}`,
-                '',
-                `Route: \`${page.path}\``,
-                '',
-                `![${page.title}](${imageBase}/${page.filename}?raw=1)`,
-                ''
+                `- ${page.title}: \`${page.path}\` (${page.filename})`
               );
             }
-
-            lines.push(
-              `The PNGs are also available in the \`${process.env.ARTIFACT_NAME}\` workflow artifact.`
-            );
 
             const body = lines.join('\n');
             const { owner, repo } = context.repo;
