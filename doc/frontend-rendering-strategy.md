@@ -243,7 +243,7 @@ These pages use Jinja2 for the “skeleton” and JS for dynamic content:
 - `app/routes_api.py` defines the `/api/v1/...` endpoints. They **never render templates**:
   - Status, weather, temperature series, AQI series.
   - Logs and alerts data.
-  - Device control (`set_fan_speed`, `set_drive`, `set_temp`, `update_note`).
+  - Device control (`set_fan_speed`, `set_drive`, `set_mode`, `set_temp`, `update_note`).
   - Debug views for DB, Hubitat, and AE‑200.
 
 ---

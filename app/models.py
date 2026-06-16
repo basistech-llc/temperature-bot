@@ -14,7 +14,7 @@ add display-only fields such as ``display_name`` and CSS annotations. Use
 actually validated before it becomes a mapping.
 """
 
-from typing import Any, Dict, Iterable
+from typing import Any, Dict, Iterable, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -241,6 +241,15 @@ class DriveControl(BaseModel):
 
     device_id: int = Field(description="Local device id from the devices table.")
     drive: int = Field(description="Requested AE-200 drive state code.")
+
+
+class ModeControl(BaseModel):
+    """Request body for changing an AE-200 operation mode."""
+
+    device_id: int = Field(description="Local device id from the devices table.")
+    mode: Literal["FAN", "COOL", "HEAT"] = Field(
+        description="Requested AE-200 operation mode."
+    )
 
 
 class NoteControl(BaseModel):

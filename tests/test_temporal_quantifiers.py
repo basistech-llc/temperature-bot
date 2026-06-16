@@ -220,7 +220,11 @@ def test_index_fcu_speeds_exclude_one(
     assert f'id="radio-{device_id}-0"' in html
     assert f'id="radio-{device_id}-auto"' in html
     assert '<th class="column-mode" rowspan="2">Mode</th>' in html
-    assert f'id="mode-{device_id}">COOL</td>' in html
+    assert 'class="mode-select"' in html
+    assert f'id="mode-{device_id}"' in html
+    assert '<option value="FAN"' in html
+    assert '<option value="COOL" selected>Cool</option>' in html
+    assert '<option value="HEAT"' in html
 
     # Speeds 2, 3, 4 should be present
     for speed in (2, 3, 4):

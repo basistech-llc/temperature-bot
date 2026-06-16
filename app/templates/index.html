@@ -184,7 +184,24 @@
                       </div>
                     </div>
                   </td>
-                  <td class="cell-mode" id="mode-{{ device.device_id }}">{{ device.mode|default(device.status.Mode|default('--'), true) }}</td>
+                  {% set current_mode = device.mode|default(device.status.Mode|default('', true), true) %}
+                  {% set current_mode_value = current_mode|upper if current_mode else '' %}
+                  <td class="cell-mode">
+                    <select class="mode-select"
+                            id="mode-{{ device.device_id }}"
+                            data-device-id="{{ device.device_id }}"
+                            data-current-mode="{{ current_mode_value }}"
+                            title="Set mode for {{ device.device_label }}">
+                      {% if not current_mode_value %}
+                      <option value="" selected disabled>--</option>
+                      {% elif current_mode_value not in ['FAN', 'COOL', 'HEAT'] %}
+                      <option value="{{ current_mode_value }}" selected disabled>{{ current_mode_value }}</option>
+                      {% endif %}
+                      <option value="FAN" {% if current_mode_value == 'FAN' %}selected{% endif %}>Fan</option>
+                      <option value="COOL" {% if current_mode_value == 'COOL' %}selected{% endif %}>Cool</option>
+                      <option value="HEAT" {% if current_mode_value == 'HEAT' %}selected{% endif %}>Heat</option>
+                    </select>
+                  </td>
                   <td class="cell-speed cell-speed-off">
                     <input type="radio" name="fan_speed-{{ device.device_id }}"
                            value="0"

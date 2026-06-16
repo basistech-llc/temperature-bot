@@ -39,6 +39,7 @@ DRIVE_NAMES = {value: key for key, value in DRIVES.items()}
 AE200_DRIVE_KEY = "Drive"
 AE200_FAN_SPEED_KEY = "FanSpeed"
 AE200_MODE_KEY = "Mode"
+AE200_ALLOWED_SET_MODES = frozenset({"FAN", "COOL", "HEAT"})
 
 # User-facing fan-speed labels, keyed by speed number. These intentionally
 # mirror the speed-button text rendered in room_dashboard.html / index.html so
@@ -156,6 +157,12 @@ def get_device_drive(device):
     """Returns the device fanspeed as a number"""
     info = get_device_info(device)
     return DRIVE_NAMES[info["Drive"]]
+
+
+def get_device_mode(device):
+    """Returns the device operation mode."""
+    info = get_device_info(device)
+    return info.get(AE200_MODE_KEY)
 
 
 class AsyncRunner:
@@ -351,6 +358,18 @@ def set_set_temp(ae200_device, set_temp_c):
     d = AE200Functions()
     # AE-200 expects SetTemp as a string (e.g. "21.0")
     d.send(ae200_device, {"SetTemp": str(set_temp_c)})
+
+
+def set_mode(ae200_device, mode):
+    mode = str(mode).upper()
+    if mode not in AE200_ALLOWED_SET_MODES:
+        raise ValueError(f"Unsupported AE-200 mode: {mode}")
+    logger.info("set_mode(%s,%s)", ae200_device, mode)
+    if AE200_SIMULATOR:
+        simulated_devices[str(ae200_device)][AE200_MODE_KEY] = mode
+        return
+    d = AE200Functions()
+    d.send(ae200_device, {AE200_MODE_KEY: mode})
 
 
 def get_device_info(device):

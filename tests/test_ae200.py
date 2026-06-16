@@ -91,3 +91,17 @@ def test_extract_drive_and_fan_speed_keeps_mode_without_speed_control():
     """Mode is useful diagnostic data even when speed control is absent."""
     extracted = ae200.extract_drive_and_fan_speed({"Mode": "HEAT"})
     assert extracted == {"mode": "HEAT", "has_speed_control": False}
+
+
+def test_set_mode_updates_simulator_and_rejects_unknown():
+    """The AE-200 simulator should reflect commanded operation modes."""
+    device_id = 10
+    original_mode = ae200.get_device_info(device_id).get(ae200.AE200_MODE_KEY)
+    try:
+        ae200.set_mode(device_id, "HEAT")
+        assert ae200.get_device_info(device_id)[ae200.AE200_MODE_KEY] == "HEAT"
+        with pytest.raises(ValueError):
+            ae200.set_mode(device_id, "AUTO")
+    finally:
+        if original_mode in ae200.AE200_ALLOWED_SET_MODES:
+            ae200.set_mode(device_id, original_mode)
