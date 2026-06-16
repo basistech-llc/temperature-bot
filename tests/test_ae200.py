@@ -32,3 +32,62 @@ def test_ae200_subprocess_get_devices():
     for device in devices:
         assert "id" in device
         assert "name" in device
+
+
+# -- friendly_fan_speed_label unit tests --
+#
+# These guard the alerts table (and any other button-less surface) against
+# showing the raw AE200 protocol code (e.g. 'MID1') to users, which is the
+# regression that prompted hvac-hml. The same speed code must resolve to a
+# different label depending on device type, so each path is covered.
+
+
+def test_friendly_fan_speed_label_erv_uses_erv_vocabulary():
+    """ERVs expose four levels; MID2/MID1 must read MED-LO/MED-HI, not the
+    plain-fan LO/MED, so the label matches the ERV's own control buttons."""
+    assert ae200.friendly_fan_speed_label("ERV Restrooms", "HIGH") == "HI"
+    assert ae200.friendly_fan_speed_label("ERV Restrooms", "MID2") == "MED-LO"
+    assert ae200.friendly_fan_speed_label("ERV Restrooms", "MID1") == "MED-HI"
+    assert ae200.friendly_fan_speed_label("ERV Restrooms", "LOW") == "LO"
+
+
+def test_friendly_fan_speed_label_fan_uses_fan_vocabulary():
+    """Plain fans collapse the middle levels: the same MID2/MID1 codes read
+    LO/MED here, matching the fan's three-speed button set."""
+    assert ae200.friendly_fan_speed_label("Restrooms/BOH", "HIGH") == "HI"
+    assert ae200.friendly_fan_speed_label("Restrooms/BOH", "MID2") == "LO"
+    assert ae200.friendly_fan_speed_label("Restrooms/BOH", "MID1") == "MED"
+
+
+def test_friendly_fan_speed_label_auto():
+    """AUTO maps to 'Auto' for both device types."""
+    assert ae200.friendly_fan_speed_label("ERV Restrooms", "AUTO") == "Auto"
+    assert ae200.friendly_fan_speed_label("Restrooms/BOH", "AUTO") == "Auto"
+
+
+def test_friendly_fan_speed_label_accepts_numeric_speed():
+    """Callers may pass the speed number rather than the protocol string."""
+    assert ae200.friendly_fan_speed_label("ERV Restrooms", 4) == "HI"
+
+
+def test_friendly_fan_speed_label_unknown_and_none():
+    """Unrecognized values pass through unchanged (never hide diagnostics);
+    None stays None so callers can distinguish 'no data'."""
+    assert ae200.friendly_fan_speed_label("ERV Restrooms", "BOGUS") == "BOGUS"
+    assert ae200.friendly_fan_speed_label("Restrooms/BOH", None) is None
+
+
+def test_extract_drive_and_fan_speed_promotes_mode():
+    """AE-200 Mode should be convenient at the JSON API boundary."""
+    status = {"Drive": "ON", "FanSpeed": "LOW", "Mode": "COOL"}
+    extracted = ae200.extract_drive_and_fan_speed(status)
+    assert extracted["mode"] == "COOL"
+    assert extracted["drive"] == 1
+    assert extracted["fan_speed"] == 1
+    assert extracted["has_speed_control"] is True
+
+
+def test_extract_drive_and_fan_speed_keeps_mode_without_speed_control():
+    """Mode is useful diagnostic data even when speed control is absent."""
+    extracted = ae200.extract_drive_and_fan_speed({"Mode": "HEAT"})
+    assert extracted == {"mode": "HEAT", "has_speed_control": False}

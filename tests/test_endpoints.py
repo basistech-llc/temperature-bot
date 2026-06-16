@@ -18,6 +18,7 @@ from app import ae200
 from app import db
 from app import rules_engine
 from app.constants import __version__
+from app.models import DriveControl, SpeedControl
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +39,173 @@ def test_status_endpoint(flask_test_client):  # noqa: F811
     response_json = response.json
     logging.info(" /status: %s", response_json)
     assert "devices" in response_json
+    fcu_device = next(
+        dev for dev in response_json["devices"] if dev.get("status", {}).get("Mode")
+    )
+    assert fcu_device["status"]["Mode"] == "COOL"
+    assert fcu_device["mode"] == "COOL"
+
+
+def test_metric_endpoint_accepts_known_metrics(flask_test_client):  # noqa: F811
+    """/api/v1/metric returns a series payload for each supported AQ metric."""
+    for metric in ("humidity", "co2", "voc", "radon", "pm25", "pm1", "pressure"):
+        response = flask_test_client.get(f"/api/v1/metric?metric={metric}")
+        assert response.status_code == 200, f"metric={metric} status={response.status_code}"
+        assert "series" in response.json
+
+
+def test_metric_endpoint_rejects_unknown_metric(flask_test_client):  # noqa: F811
+    response = flask_test_client.get("/api/v1/metric?metric=bogus")
+    assert response.status_code == 400
+
+
+def test_metric_endpoint_rejects_invalid_device_ids(flask_test_client):  # noqa: F811
+    """Unparseable device_ids must be rejected with 400, not silently ignored.
+
+    A 200 with all devices in the response would mask a typo in a caller's
+    URL and return the wrong data.
+    """
+    response = flask_test_client.get("/api/v1/metric?metric=co2&device_ids=not-a-number")
+    assert response.status_code == 400
+
+
+def test_metric_endpoint_filters_selected_radon_device(flask_test_client):  # noqa: F811
+    """A clicked radon cell should retrieve only that device's radon series."""
+    test_db_path = os.environ.get("TEST_DB_NAME")
+    assert test_db_path
+    conn = sqlite3.connect(test_db_path)
+    conn.row_factory = sqlite3.Row
+    try:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM devlog")
+        cursor.execute("DELETE FROM devices")
+        conn.commit()
+
+        keep_id = db.get_or_create_device_id(conn, "Airthings Bamboo")
+        drop_id = db.get_or_create_device_id(conn, "Airthings Area 51")
+        for logtime, device_id, value in (
+            (1000, keep_id, 123),
+            (1010, drop_id, 99),
+            (1020, keep_id, 125),
+        ):
+            cursor.execute(
+                "INSERT INTO devlog (device_id, logtime, duration, temp10x, status_json) VALUES (?, ?, ?, ?, ?)",
+                (
+                    device_id,
+                    logtime,
+                    1,
+                    None,
+                    json.dumps({"radonShortTermAvg": {"value": value, "unit": "bq"}}),
+                ),
+            )
+        conn.commit()
+    finally:
+        conn.close()
+
+    response = flask_test_client.get(f"/api/v1/metric?metric=radon&device_ids={keep_id}")
+    assert response.status_code == 200
+    assert response.json["series"] == [
+        {
+            "name": "Bamboo",
+            "device_id": keep_id,
+            "data": [[1000, 123.0], [1020, 125.0]],
+        }
+    ]
+
+
+def test_metric_chart_page_renders(flask_test_client):  # noqa: F811
+    """Every entry in METRIC_CHART_CONFIG must actually render.
+
+    Loops all seven metrics so a typo or missing field in one config entry
+    fails loudly instead of silently when users click that metric's cell.
+    """
+    for metric in ("humidity", "co2", "voc", "radon", "pm25", "pm1", "pressure"):
+        response = flask_test_client.get(f"/metric_chart?metric={metric}")
+        assert response.status_code == 200, f"metric={metric} status={response.status_code}"
+        assert b"METRIC_CHART_CONFIG" in response.data
+
+    response = flask_test_client.get("/metric_chart?metric=bogus")
+    assert response.status_code == 400
+
+
+def _get_device_disabled_until(db_path: str, device_id: int) -> int:
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    try:
+        row = conn.execute(
+            "SELECT disabled_until FROM devices WHERE device_id=?", (device_id,)
+        ).fetchone()
+        return int(row["disabled_until"]) if row and row["disabled_until"] else 0
+    finally:
+        conn.close()
+
+
+def test_set_device_disabled_until_sets_future_timestamp(flask_test_client):  # noqa: F811
+    """POSTing a future absolute timestamp must persist to devices.disabled_until.
+
+    The "Disable for" UI control sends epoch-seconds; this verifies the route
+    correctly stores that timestamp so the next /status round-trips it. Guards
+    against regressions that would silently drop or truncate the value.
+    """
+    test_db_path = os.environ.get("TEST_DB_NAME")
+    assert test_db_path
+    conn = sqlite3.connect(test_db_path)
+    conn.row_factory = sqlite3.Row
+    device_id = conn.execute(
+        "SELECT device_id FROM devices LIMIT 1"
+    ).fetchone()["device_id"]
+    conn.close()
+
+    target = int(time.time()) + 1800
+    response = flask_test_client.post(
+        "/api/v1/set_device_disabled_until",
+        json={"device_id": device_id, "disabled_until": target},
+    )
+    assert response.status_code == 200
+    assert response.json["status"] == "ok"
+    assert abs(response.json["disabled_until"] - target) <= 2
+    stored = _get_device_disabled_until(test_db_path, device_id)
+    assert abs(stored - target) <= 2
+
+
+def test_set_device_disabled_until_past_reenables(flask_test_client):  # noqa: F811
+    """A past-or-equal timestamp must clamp to 0 (re-enable rules for device).
+
+    The UI clicks − until the remaining time would go negative; this path is
+    the only way to re-enable rules on a device from that control. If clamp
+    logic regressed (e.g. stored a past timestamp verbatim), the device would
+    appear disabled forever from the server's perspective.
+    """
+    test_db_path = os.environ.get("TEST_DB_NAME")
+    assert test_db_path
+    conn = sqlite3.connect(test_db_path)
+    conn.row_factory = sqlite3.Row
+    device_id = conn.execute(
+        "SELECT device_id FROM devices LIMIT 1"
+    ).fetchone()["device_id"]
+    # Pre-seed a disable so we can verify it actually gets cleared
+    conn.execute(
+        "UPDATE devices SET disabled_until=? WHERE device_id=?",
+        (int(time.time()) + 3600, device_id),
+    )
+    conn.commit()
+    conn.close()
+
+    response = flask_test_client.post(
+        "/api/v1/set_device_disabled_until",
+        json={"device_id": device_id, "disabled_until": int(time.time()) - 10},
+    )
+    assert response.status_code == 200
+    assert response.json["disabled_until"] == 0
+    assert _get_device_disabled_until(test_db_path, device_id) == 0
+
+
+def test_set_device_disabled_until_rejects_invalid(flask_test_client):  # noqa: F811
+    """Missing/non-int fields must 400, not silently write garbage to the DB."""
+    response = flask_test_client.post(
+        "/api/v1/set_device_disabled_until", json={"device_id": 1}
+    )
+    assert response.status_code == 400
 
 
 def test_status_endpoint_with_schema_validation(flask_test_client):  # noqa: F811
@@ -134,6 +302,19 @@ def test_weather_endpoint(
     assert "weather" in response_json
 
 
+@patch("app.weather.get_weather_data")
+def test_weather_endpoint_preserves_weather_errors(
+    mock_get_weather_data, flask_test_client
+):  # noqa: F811
+    """Weather service errors remain visible in the API response."""
+    mock_get_weather_data.return_value = {"error": "weather offline"}
+
+    response = flask_test_client.get("/api/v1/weather")
+
+    assert response.status_code == 200
+    assert response.json["weather"] == {"error": "weather offline"}
+
+
 # pylint: disable=too-many-arguments, disable=too-many-positional-arguments
 BROADWAY_SOUTH = 10
 
@@ -224,6 +405,86 @@ def test_set_fan_speed_endpoint(
             assert cl["agent"].startswith("Werkzeug") or cl["agent"] == "web"
 
         test_conn_verify.close()
+
+
+def _link_device_to_unit(conn, name):
+    """Create a device linked to the BROADWAY_SOUTH simulator unit; return its id."""
+    device_id = db.get_or_create_device_id(conn, name)
+    cursor = conn.cursor()
+    cursor.execute(
+        "UPDATE devices SET ae200_device_id=? WHERE device_id=?",
+        (BROADWAY_SOUTH, device_id),
+    )
+    conn.commit()
+    return device_id
+
+
+def _latest_devlog_status(conn, device_id):
+    """Return the extracted drive/fan_speed of the most recent devlog row."""
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT status_json FROM devlog WHERE device_id=? ORDER BY logtime DESC",
+        (device_id,),
+    )
+    row = cursor.fetchone()
+    return ae200.extract_drive_and_fan_speed(json.loads(row["status_json"]))
+
+
+def test_set_body_drive_records_commanded_drive_when_readback_is_stale(
+    test_database_conn,
+):  # noqa: F811
+    """Regression: set_body_drive must record the commanded Drive even when the
+    hardware read-back still reports the old state (the read-back can race the
+    command). Otherwise /status reports the stale drive and the UI snaps back to
+    the prior selection."""
+    conn = test_database_conn
+    device_id = _link_device_to_unit(conn, "Readback Race Drive Test")
+
+    # Unit is currently ON; the post-command read-back returns a STALE status
+    # that still shows Drive=ON even though we are commanding OFF.
+    stale_status = {"Drive": "ON", "FanSpeed": "AUTO", "InletTemp": "22.0"}
+    with patch.object(ae200, "get_device_drive", return_value=1), patch.object(
+        ae200, "set_drive"
+    ) as mock_set_drive, patch.object(
+        ae200, "get_device_info", return_value=dict(stale_status)
+    ):
+        rules_engine.set_body_drive(
+            conn,
+            DriveControl(device_id=device_id, drive=0),
+            "127.0.0.1",
+            "web",
+        )
+        mock_set_drive.assert_called_once()
+
+    # The recorded status must reflect the commanded OFF, not the stale ON.
+    assert _latest_devlog_status(conn, device_id)["drive"] == 0
+
+
+def test_set_body_fan_speed_records_commanded_speed_when_readback_is_stale(
+    test_database_conn,
+):  # noqa: F811
+    """Regression: set_body_fan_speed must record the commanded FanSpeed even
+    when the hardware read-back still reports the old speed."""
+    conn = test_database_conn
+    device_id = _link_device_to_unit(conn, "Readback Race Speed Test")
+
+    # Unit is currently on LOW (1); the read-back still reports LOW even though
+    # we are commanding MID1 (3).
+    stale_status = {"Drive": "ON", "FanSpeed": "LOW", "InletTemp": "22.0"}
+    with patch.object(ae200, "get_device_fan_speed", return_value=1), patch.object(
+        ae200, "set_fan_speed"
+    ) as mock_set_speed, patch.object(
+        ae200, "get_device_info", return_value=dict(stale_status)
+    ):
+        rules_engine.set_body_fan_speed(
+            conn,
+            SpeedControl(device_id=device_id, fan_speed=3),
+            "127.0.0.1",
+            "web",
+        )
+        mock_set_speed.assert_called_once()
+
+    assert _latest_devlog_status(conn, device_id)["fan_speed"] == 3
 
 
 @pytest.mark.parametrize(

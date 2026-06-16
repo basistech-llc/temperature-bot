@@ -3,6 +3,18 @@ const DEBUG = false;
 const REFRESH_INTERVAL = 10; // seconds between refreshes
 const FAN_SPEED_AUTO = -1; // Auto speed value
 
+// Optimistic UI: when the user changes a unit we reflect the intended state
+// immediately rather than waiting for a poll. The backend re-reads the AE200
+// right after issuing the command, and on real hardware that read-back can
+// still show the old state, so /status would otherwise stay stale until a
+// later poll settles. We hold the optimistic state until a poll confirms it
+// (the common case, within ~one REFRESH_INTERVAL) or until this backstop
+// elapses — covering a silently-dropped command (up to ~one runner cron cycle)
+// without pinning a wrong state indefinitely. Keyed by device_id.
+const PENDING_RECONCILE_MS = 60000;
+const pendingChanges = {};   // device_id -> {drive, fan_speed, expiresAt}
+const lastDeviceSpeed = {};  // device_id -> last known fan speed (for the "was …" note)
+
 /**
  * Make API call to control device.
  * @param {string} endpoint - API endpoint
@@ -69,6 +81,24 @@ function getDeviceStatusElement(deviceId) {
 }
 
 /**
+ * Friendly label for a speed, read off this device's matching speed button.
+ *
+ * The buttons are the single source of truth for speed names: they're rendered
+ * per device type (ERV vs fan), so reading from them yields the correct label
+ * (e.g. the off-button "was …" history note) without duplicating the label map.
+ *
+ * @param {number} deviceId - Device ID
+ * @param {number} speed - Speed value (matches a button's data-speed)
+ * @returns {string} Button label (e.g. 'HI', 'MED-LO', 'Auto'), or a
+ *                    'Speed N' fallback if no matching button exists
+ */
+function speedButtonLabel(deviceId, speed) {
+    const btn = document.querySelector(
+        `button.speed-btn[data-device-id="${deviceId}"][data-speed="${speed}"]`);
+    return btn ? btn.textContent.trim() : `Speed ${speed}`;
+}
+
+/**
  * Get temperature element for a device (works for both ERV and fan).
  * @param {number} deviceId - Device ID
  * @returns {HTMLElement|null} Temperature element or null
@@ -80,6 +110,12 @@ function getDeviceTempElement(deviceId) {
 
 /**
  * Show/hide loading state for a device.
+ *
+ * Deliberately does NOT disable the buttons: a press landing while a previous
+ * request is still in flight would otherwise be silently dropped (a disabled
+ * button fires no click), stranding the unit in its prior state. The optimistic
+ * UI + pending reconciliation already handle rapid presses (last-press-wins),
+ * so we only show a spinner on the in-flight button for feedback.
  * @param {number} deviceId - Device ID
  * @param {boolean} isLoading - Whether to show loading state
  * @param {HTMLElement|null} activeButton - Button to show spinner on (if loading)
@@ -89,14 +125,10 @@ function setDeviceLoading(deviceId, isLoading, activeButton = null) {
     const statusEl = getDeviceStatusElement(deviceId);
 
     buttons.forEach(button => {
-        if (isLoading) {
-            if (activeButton && button === activeButton) {
-                button.classList.add('loading');
-            }
-            button.disabled = true;
-        } else {
+        if (isLoading && activeButton && button === activeButton) {
+            button.classList.add('loading');
+        } else if (!isLoading) {
             button.classList.remove('loading');
-            button.disabled = false;
         }
     });
 
@@ -120,8 +152,17 @@ function handleSpeedButton(button) {
 
     setDeviceLoading(deviceId, true, button);
 
-    const handleError = () => setDeviceLoading(deviceId, false);
+    // Reflect the intended state immediately; the poll loop reconciles later.
+    applyOptimisticChange(deviceId, speed);
+
     const handleSuccess = () => refreshStatus();
+    // On failure (apiCall already alerts), drop the optimistic state and let a
+    // fresh poll restore the true state rather than leaving a wrong highlight.
+    const handleError = () => {
+        delete pendingChanges[deviceId];
+        setDeviceLoading(deviceId, false);
+        refreshStatus();
+    };
 
     // Off button: turn off motor
     if (speed === 0) {
@@ -141,6 +182,29 @@ function handleSpeedButton(button) {
 }
 
 /**
+ * Optimistically reflect a button press before the server round-trip completes.
+ * Records the intended state as pending so the poll loop won't revert it until
+ * the backend catches up (or the backstop window expires).
+ * @param {number} deviceId - Device ID
+ * @param {number} clickedSpeed - data-speed of the clicked button (0 = off)
+ */
+function applyOptimisticChange(deviceId, clickedSpeed) {
+    const drive = clickedSpeed === 0 ? 0 : 1;
+    // Turning off keeps the last running speed so the "was …" note stays right;
+    // selecting a speed sets it directly.
+    const speed = clickedSpeed === 0 ? lastDeviceSpeed[deviceId] : clickedSpeed;
+    if (drive === 1) {
+        lastDeviceSpeed[deviceId] = speed;
+    }
+    pendingChanges[deviceId] = {
+        drive,
+        fan_speed: speed,
+        expiresAt: Date.now() + PENDING_RECONCILE_MS,
+    };
+    renderDriveState(deviceId, drive, speed);
+}
+
+/**
  * Format temperature using TemperatureUtils if available.
  * @param {number} tempC - Temperature in Celsius
  * @returns {string} Formatted temperature string
@@ -154,9 +218,12 @@ function formatTemperature(tempC) {
 
 /**
  * Update button active state based on device status.
- * Off button is active when drive is off.
- * Speed buttons are active when drive is on AND that speed is set.
- * Auto button is active when speed is -1 (regardless of drive state, as Auto can be set when off).
+ *
+ * One-dimensional control: exactly one button is highlighted. When the unit is
+ * off, only the Off button is active — the held speed (Auto included) is purely
+ * historical (shown as the "was …" note), never a second highlighted button.
+ * When on, the button matching the current speed is active; Auto is just the
+ * speed value -1, so it needs no special case.
  * @param {HTMLElement} button - Button element
  * @param {Object} device - Device data
  */
@@ -166,18 +233,73 @@ function updateButtonActiveState(button, device) {
     const isOff = device.drive === 'Off' || device.drive === 0;
     const currentSpeed = parseInt(device.fan_speed || device.speed || 0);
 
-    // Off button: active when drive is off
-    if (buttonSpeed === 0 && isOff) {
-        button.classList.add('active');
+    // Off button (speed 0): active only when the unit is off.
+    if (buttonSpeed === 0) {
+        if (isOff) {
+            button.classList.add('active');
+        }
     }
-    // Auto button: active when speed is -1 (can be set even when motor is off)
-    else if (buttonSpeed === FAN_SPEED_AUTO && currentSpeed === FAN_SPEED_AUTO) {
-        button.classList.add('active');
-    }
-    // Speed button: active when drive is on AND this speed is set
+    // Speed/Auto buttons: active only when on AND matching the current speed.
     else if (!isOff && buttonSpeed === currentSpeed) {
         button.classList.add('active');
     }
+}
+
+/**
+ * Render a device's one-dimensional drive/speed state: the Off-button "was …"
+ * historical note and which button is highlighted. Shared by polled updates and
+ * optimistic updates so both paths produce identical UI.
+ *
+ * In our one-dimensional model the held speed of an off unit is NOT a resume
+ * target — it's just history — so it decorates only the (selected) Off button,
+ * never a speed button.
+ * @param {number} deviceId - Device ID
+ * @param {(string|number)} drive - 'Off'/0 when off, otherwise on
+ * @param {number} speed - Fan speed (held speed when off; current speed when on)
+ */
+function renderDriveState(deviceId, drive, speed) {
+    const isOff = drive === 'Off' || drive === 0;
+
+    const offBtn = document.querySelector(
+        `button.speed-btn.speed-off[data-device-id="${deviceId}"]`);
+    if (offBtn) {
+        if (isOff && speed != null) {
+            // ERVs expose no Auto button, so name Auto directly rather than
+            // reading a label that would fall back to 'Speed -1'.
+            const wasLabel = speed === FAN_SPEED_AUTO ? 'Auto' :
+                             speedButtonLabel(deviceId, speed);
+            offBtn.innerHTML =
+                '<span class="off-label">Off</span>' +
+                `<span class="off-history">was ${wasLabel}</span>`;
+        } else {
+            offBtn.textContent = 'Off';
+        }
+    }
+
+    const buttons = document.querySelectorAll(
+        `button.speed-btn[data-device-id="${deviceId}"]`);
+    buttons.forEach(button =>
+        updateButtonActiveState(button, { drive, fan_speed: speed }));
+}
+
+/**
+ * Whether polled device data has caught up to a pending optimistic change.
+ * Off matches off regardless of the held speed (it's only historical); an
+ * on-state must also match the requested speed.
+ * @param {Object} device - Polled device data
+ * @param {Object} pending - Pending change {drive, fan_speed}
+ * @returns {boolean}
+ */
+function matchesPending(device, pending) {
+    const isOff = device.drive === 'Off' || device.drive === 0;
+    const wantOff = pending.drive === 0;
+    if (isOff !== wantOff) {
+        return false;
+    }
+    if (wantOff) {
+        return true;
+    }
+    return parseInt(device.fan_speed || device.speed || 0) === pending.fan_speed;
 }
 
 /**
@@ -192,19 +314,11 @@ function updateDeviceStatus(devices) {
 
         setDeviceLoading(deviceId, false);
 
-        // Update status text (drive and speed are orthogonal)
+        // The button row is the one-dimensional source of truth for the
+        // current setting (whichever button glows), so the header carries no
+        // speed text — that slot is reserved for the transient "Setting…" note.
         if (statusEl) {
-            const isOff = device.drive === 'Off' || device.drive === 0;
-            const speed = device.fan_speed || device.speed;
-            const isAuto = speed === FAN_SPEED_AUTO;
-
-            if (isOff) {
-                statusEl.textContent = isAuto ? 'OFF (Auto)' :
-                                      (speed != null ? `OFF (Speed ${speed})` : 'OFF');
-            } else {
-                statusEl.textContent = isAuto ? 'Auto' :
-                                      (speed != null ? `Speed ${speed}` : 'ON');
-            }
+            statusEl.textContent = '';
         }
 
         // Update temperature
@@ -214,9 +328,35 @@ function updateDeviceStatus(devices) {
             tempEl.textContent = formatTemperature(tempC);
         }
 
-        // Update button active states
-        const buttons = document.querySelectorAll(`button.speed-btn[data-device-id="${deviceId}"]`);
-        buttons.forEach(button => updateButtonActiveState(button, device));
+        // Update set temperature from AE-200 status
+        const setTempDisplay = document.getElementById(`settemp-display-${deviceId}`);
+        if (setTempDisplay) {
+            const status = device.status || {};
+            const rawSetTemp = status.SetTemp;
+            if (rawSetTemp !== undefined && rawSetTemp !== '' && rawSetTemp !== '0') {
+                const setTempC = parseFloat(rawSetTemp);
+                if (!isNaN(setTempC)) {
+                    setTempDisplay.setAttribute('data-temp-c', setTempC.toString());
+                    setTempDisplay.textContent = formatTemperature(setTempC);
+                }
+            }
+        }
+
+        // Drive/speed: reconcile against any pending optimistic change so a
+        // not-yet-settled backend read doesn't revert the user's action.
+        const incomingSpeed = device.fan_speed || device.speed;
+        const pending = pendingChanges[deviceId];
+        if (pending && Date.now() < pending.expiresAt && !matchesPending(device, pending)) {
+            // Backend hasn't caught up — keep the optimistic state. Crucially,
+            // do NOT adopt this lagging speed as lastDeviceSpeed: during fast
+            // transitions that would stale-out the Off button's "was …" note.
+            renderDriveState(deviceId, pending.drive, pending.fan_speed);
+        } else {
+            delete pendingChanges[deviceId];
+            // Settled: this poll is the source of truth for the held speed.
+            lastDeviceSpeed[deviceId] = incomingSpeed;
+            renderDriveState(deviceId, device.drive, incomingSpeed);
+        }
     });
 }
 
@@ -286,6 +426,192 @@ function setupTemperatureToggle() {
 }
 
 /**
+ * Debounce helper — calls fn at most once per delay ms.
+ */
+function debounce(fn, delay) {
+    let timer = null;
+    return function(...args) {
+        clearTimeout(timer);
+        timer = setTimeout(() => fn.apply(this, args), delay);
+    };
+}
+
+/**
+ * Set the dimmer level via API.
+ * @param {number} level - 0-100
+ */
+function setDimmerLevel(level) {
+    apiCall(
+        '/api/v1/hickory/dimmer',
+        { level },
+        'Error setting dimmer.'
+    );
+}
+
+/**
+ * Fetch room control status and update UI.
+ */
+function refreshRoomStatus() {
+    fetch('/api/v1/hickory/room_status')
+        .then(response => response.json())
+        .then(data => {
+            if (data.dimmer) {
+                const slider = document.getElementById('dimmer-slider');
+                const valueEl = document.getElementById('dimmer-value');
+                if (slider && !slider.matches(':active')) {
+                    slider.value = data.dimmer.level;
+                }
+                if (valueEl) {
+                    valueEl.textContent = data.dimmer.level + '%';
+                }
+            }
+            if (data.wall_inner) {
+                updateWallButton('inner', data.wall_inner.switch);
+            }
+            if (data.wall_outer) {
+                updateWallButton('outer', data.wall_outer.switch);
+            }
+        })
+        .catch(error => {
+            if (DEBUG) {
+                console.error('Failed to refresh room status:', error);
+            }
+        });
+}
+
+/**
+ * Set up dimmer slider interaction.
+ */
+function setupDimmer() {
+    const slider = document.getElementById('dimmer-slider');
+    if (!slider) {
+        return;
+    }
+
+    const valueEl = document.getElementById('dimmer-value');
+    const debouncedSet = debounce(setDimmerLevel, 300);
+
+    slider.addEventListener('input', () => {
+        const level = parseInt(slider.value);
+        if (valueEl) {
+            valueEl.textContent = level + '%';
+        }
+        debouncedSet(level);
+    });
+}
+
+/**
+ * Update a wall light button to reflect current state.
+ * @param {string} light - 'inner' or 'outer'
+ * @param {string} state - 'on' or 'off'
+ */
+function updateWallButton(light, state) {
+    const btn = document.getElementById('wall-' + light + '-btn');
+    if (!btn) {
+        return;
+    }
+    const isOn = state === 'on';
+    btn.textContent = isOn ? 'ON' : 'OFF';
+    btn.classList.toggle('is-on', isOn);
+}
+
+/**
+ * Handle wall light button click — toggle on/off.
+ * @param {HTMLElement} button - Clicked button element
+ */
+function handleWallButton(button) {
+    const light = button.getAttribute('data-light');
+    const isOn = button.classList.contains('is-on');
+    const newState = isOn ? 'off' : 'on';
+
+    button.disabled = true;
+    apiCall(
+        '/api/v1/hickory/wall_light',
+        { light, state: newState },
+        'Error toggling wall light.'
+    ).then(() => {
+        updateWallButton(light, newState);
+        button.disabled = false;
+    }).catch(() => {
+        button.disabled = false;
+    });
+}
+
+/**
+ * Handle TV control button click.
+ * @param {HTMLElement} button - Clicked button element
+ */
+function handleTvButton(button) {
+    const direction = button.getAttribute('data-direction');
+    const buttons = document.querySelectorAll('.tv-btn');
+    buttons.forEach(b => { b.disabled = true; });
+
+    apiCall(
+        '/api/v1/hickory/tv',
+        { direction },
+        'Error controlling TV.'
+    ).then(() => {
+        buttons.forEach(b => { b.disabled = false; });
+    }).catch(() => {
+        buttons.forEach(b => { b.disabled = false; });
+    });
+}
+
+/**
+ * Initialize set temperature controls using compact up/down buttons.
+ * Buttons operate in the currently selected UI unit but send Celsius to backend.
+ */
+function setupSetTempControls() {
+    document.querySelectorAll('.settemp-btn').forEach(button => {
+        button.addEventListener('click', function() {
+            const deviceId = parseInt(this.getAttribute('data-device-id'));
+            const delta = parseFloat(this.getAttribute('data-delta') || '0');
+            const display = document.getElementById(`settemp-display-${deviceId}`);
+            if (!display) return;
+
+            const currentCAttr = display.getAttribute('data-temp-c');
+            let currentC = currentCAttr ? parseFloat(currentCAttr) : NaN;
+            if (isNaN(currentC)) currentC = 21.0;
+
+            const useFahrenheit = window.TemperatureUtils && window.TemperatureUtils.getTemperatureUnitPreference();
+            let currentUI = currentC;
+            if (useFahrenheit) currentUI = window.TemperatureUtils.celsiusToFahrenheit(currentC);
+
+            let newUI = currentUI + delta;
+            const minUI = useFahrenheit ? 50 : 10;
+            const maxUI = useFahrenheit ? 86 : 30;
+            newUI = Math.max(minUI, Math.min(maxUI, newUI));
+
+            let newC = useFahrenheit ? window.TemperatureUtils.fahrenheitToCelsius(newUI) : newUI;
+            newC = Math.round(newC * 10) / 10;
+
+            display.setAttribute('data-temp-c', newC.toString());
+            display.textContent = formatTemperature(newC);
+
+            setDeviceSetTemp(deviceId, newC);
+        });
+    });
+}
+
+/**
+ * Call backend API to set device set temperature in Celsius.
+ * @param {number} deviceId
+ * @param {number} setTempC
+ */
+async function setDeviceSetTemp(deviceId, setTempC) {
+    try {
+        await apiCall(
+            '/api/v1/set_temp',
+            { device_id: deviceId, set_temp_c: setTempC },
+            'Error setting temperature.'
+        );
+        refreshStatus();
+    } catch (e) {
+        // Error already handled by apiCall
+    }
+}
+
+/**
  * Initialize room dashboard functionality.
  */
 function setupRoomDashboard() {
@@ -294,14 +620,32 @@ function setupRoomDashboard() {
         button.addEventListener('click', () => handleSpeedButton(button));
     });
 
+    // Set up TV control buttons
+    document.querySelectorAll('.tv-btn[data-direction]').forEach(button => {
+        button.addEventListener('click', () => handleTvButton(button));
+    });
+
+    // Set up set temperature controls
+    setupSetTempControls();
+
+    // Set up dimmer
+    setupDimmer();
+
+    // Set up wall light buttons
+    document.querySelectorAll('.wall-btn[data-light]').forEach(button => {
+        button.addEventListener('click', () => handleWallButton(button));
+    });
+
     initializeSensorTemperatures();
     setupTemperatureToggle();
 
     // Initial status refresh
     refreshStatus();
+    refreshRoomStatus();
 
     // Set up periodic refresh
     setInterval(refreshStatus, REFRESH_INTERVAL * 1000);
+    setInterval(refreshRoomStatus, REFRESH_INTERVAL * 1000);
 }
 
 window.addEventListener('DOMContentLoaded', setupRoomDashboard);

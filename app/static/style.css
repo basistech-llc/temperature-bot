@@ -118,13 +118,15 @@ body {
 }
 
 /* Set temperature: thermostat-style inline [−] value [+] — one line, no extra height */
-.settemp-thermostat {
+.settemp-thermostat,
+.disable-thermostat {
     display: inline-flex;
     align-items: center;
     gap: 0.15rem;
 }
 
-.settemp-thermostat .settemp-display {
+.settemp-thermostat .settemp-display,
+.disable-thermostat .disable-display {
     min-width: 3.5em;
     text-align: center;
     font-weight: 600;
@@ -132,7 +134,8 @@ body {
 }
 
 /* Thermostat adjust: wide tap targets, minimal look — doesn’t add row height */
-.settemp-thermostat .settemp-btn {
+.settemp-thermostat .settemp-btn,
+.disable-thermostat .disable-btn {
     /* Wide enough for touch (44px min); no min-height so row stays compact */
     min-width: 44px;
     padding: 0.2rem 0.35rem;
@@ -151,20 +154,24 @@ body {
     border-radius: 4px;
 }
 
-.settemp-thermostat .settemp-btn:hover {
+.settemp-thermostat .settemp-btn:hover,
+.disable-thermostat .disable-btn:hover {
     color: #1a202c;
     background: #f1f5f9;
 }
 
-.settemp-thermostat .settemp-btn:active {
+.settemp-thermostat .settemp-btn:active,
+.disable-thermostat .disable-btn:active {
     background: #e2e8f0;
 }
 
-.settemp-thermostat .settemp-btn:focus {
+.settemp-thermostat .settemp-btn:focus,
+.disable-thermostat .disable-btn:focus {
     outline: none;
 }
 
-.settemp-thermostat .settemp-btn:focus-visible {
+.settemp-thermostat .settemp-btn:focus-visible,
+.disable-thermostat .disable-btn:focus-visible {
     outline: 2px solid #3b82f6;
     outline-offset: 1px;
 }
@@ -176,6 +183,9 @@ body {
   padding-bottom: 10px;
   min-height: 200px; /* Ensure it takes up space for grid layout */
 }
+#main-grid form {
+  display: grid;
+}
 
 .pure-g {
     overflow:hidden;
@@ -185,14 +195,6 @@ body {
 
 th {
     background-color: beige;
-}
-
-#unit-header {
-    width: 200px;
-}
-
-td.speed {
-    text-align: center;
 }
 
 button {
@@ -225,12 +227,23 @@ button {
 }
 
 .column-temp {
-    min-width: 80px;
+    min-width: 60px;
 }
 
 .column-temp-set,
 .cell-temp-set {
     min-width: 160px;
+}
+
+.column-temp-range,
+.cell-temp-range {
+    min-width: 210px;
+}
+
+.column-mode,
+.cell-mode {
+    min-width: 4.5em;
+    text-align: center;
 }
 
 .cell-temp {
@@ -240,27 +253,123 @@ button {
 /* Shared data-table styling: centered headers with unit sub-labels */
 .data-table thead th:not(.column-unit):not(.column-notes) {
     text-align: center;
+    padding-left: 0.5em;
+    padding-right: 0.5em;
 }
 .data-table thead th small {
     display: block;
     text-align: center;
 }
-.data-table tbody td:not(.cell-unit):not(.cell-notes) {
+.data-table tbody td:not(.cell-unit):not(.cell-notes):not(.cell-conditions):not(.cell-disable-for) {
     text-align: right;
+    padding-left: 0.5em;
+    padding-right: 0.5em;
 }
 
-/* [TODO] Per-table min-widths are a kludge to give Notes more space in tables
-   with fewer columns. CSS auto table layout has no way to direct leftover space
-   to a single column. Refactoring from <table> to Flexbox or CSS Grid would
-   allow a clean "Notes fills remaining width" layout. */
+.cell-disable-for {
+    text-align: center;
+    padding-left: 0.5em;
+    padding-right: 0.5em;
+}
+
+.data-table tbody td.cell-mode {
+    text-align: center;
+}
+
+.data-table tbody td.cell-temp-range {
+    text-align: center;
+}
+
+.setrange-widget {
+    width: 190px;
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    padding: 0.15rem 0;
+}
+
+.setrange-track {
+    position: relative;
+    width: 100%;
+    height: 20px;
+    touch-action: none;
+    cursor: pointer;
+}
+
+.setrange-track::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 7px;
+    height: 6px;
+    border-radius: 999px;
+    background: #d7dde3;
+}
+
+.setrange-fill {
+    position: absolute;
+    top: 7px;
+    height: 6px;
+    border-radius: 999px;
+    background: #2f855a;
+    cursor: grab;
+}
+
+.setrange-fill.selected {
+    outline: 2px solid #2f855a;
+    outline-offset: 4px;
+}
+
+.setrange-handle {
+    position: absolute;
+    top: 50%;
+    width: 16px;
+    height: 16px;
+    padding: 0;
+    border: 2px solid #1f2937;
+    border-radius: 50%;
+    background: #fff;
+    cursor: ew-resize;
+    transform: translate(-50%, -50%);
+}
+
+.setrange-handle.selected,
+.setrange-handle:focus-visible,
+.setrange-fill:focus-visible {
+    outline: 2px solid #3b82f6;
+    outline-offset: 2px;
+}
+
+.setrange-values {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.2rem;
+    font-size: 0.85rem;
+    font-weight: 600;
+    line-height: 1;
+    color: #1a202c;
+}
+
+.setrange-end-label {
+    min-width: 3.2em;
+    text-align: center;
+}
+
+/* All data tables match the widest table's width via grid on the form */
 td.cell-notes {
-    min-width: 300px;
+    min-width: 400px;
 }
-.erv-table td.cell-notes {
-    min-width: 600px;
+.data-table td:not(.cell-notes):not(.cell-conditions) {
+    width: 1px;
+    white-space: nowrap;
+    vertical-align: middle;
 }
-.fcu-table td.cell-notes {
-    min-width: 430px;
+
+.data-table td.cell-conditions {
+    text-align: left;
+    vertical-align: middle;
 }
 
 .last-refresh-inline {
@@ -270,8 +379,20 @@ td.cell-notes {
     font-size: 0.85em;
 }
 
-#weather {
-    width: 300px;
+.weather-loading {
+    color: #999;
+    font-style: italic;
+}
+
+#main-grid.weather-grid {
+    max-width: none;
+}
+
+.forecast-pair {
+    display: flex;
+    gap: 1.5em;
+    align-items: flex-start;
+    flex-wrap: wrap;
 }
 
 .aq-legend {
@@ -470,38 +591,18 @@ table.rules-table th  {
     text-align: right;
 }
 
-/* Debug styles for the fan-status-container */
-#fan-status-container {
-    border: 1px solid #ccc;
-    margin: 10px 0;
-    padding: 10px;
-}
-
-#fan-status-container > div {
-    border: 1px dashed #999;
-    padding: 10px;
-    margin: 5px;
-}
-
 /* On small screens, use smaller margins */
 @media (max-width: 767px) {
     body {
         padding-left: 5px;
         padding-right: 5px;
     }
-    #weather {
-        margin-left: 0;
-        margin-top: 50px;
-    }
-}
-
-#fan-status-container .pure-u-1.pure-u-md-1-2:first-child {
-    max-width: 400px;
 }
 
 /* Clickable data cells that link to charts */
 .cell-temp-link,
-.cell-illuminance-link {
+.cell-illuminance-link,
+.cell-metric-link {
     cursor: pointer;
 }
 .cell-temp-link:hover {
@@ -509,6 +610,67 @@ table.rules-table th  {
 }
 .cell-illuminance-link:hover {
     background-color: rgba(154, 104, 0, 0.08);
+}
+.cell-metric-link:hover {
+    background-color: rgba(52, 152, 219, 0.08);
+}
+
+.fcu-temp-sources-popup {
+    position: fixed;
+    inset: 0;
+    z-index: 1200;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 10vh 1rem 1rem;
+    background: rgba(0, 0, 0, 0.25);
+}
+
+.fcu-temp-sources-dialog {
+    width: min(760px, 100%);
+    max-height: 80vh;
+    overflow: auto;
+    padding: 1rem;
+    border: 1px solid #bbb;
+    border-radius: 4px;
+    background: #fff;
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.25);
+}
+
+.fcu-temp-sources-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.fcu-temp-sources-header h3 {
+    margin: 0;
+}
+
+.fcu-temp-sources-close {
+    border: 0;
+    background: transparent;
+    cursor: pointer;
+    font-size: 1.5rem;
+    line-height: 1;
+}
+
+.fcu-temp-sources-note,
+.fcu-temp-sources-message {
+    margin: 0.6rem 0;
+}
+
+.fcu-temp-sources-message.error {
+    color: #c62828;
+}
+
+.fcu-temp-sources-table {
+    width: 100%;
+}
+
+.fcu-temp-source-weight {
+    width: 5rem;
 }
 
 /****************************************************************/
@@ -528,6 +690,13 @@ table.rules-table th  {
 
 .column-speed {
     text-align: center;
+    padding-left: 0.3em;
+    padding-right: 0.3em;
+}
+.data-table td.cell-speed {
+    text-align: center;
+    padding-left: 0.3em;
+    padding-right: 0.3em;
 }
 
 /* Pale red shading for Off column cells */
@@ -535,9 +704,10 @@ td.cell-speed-off {
     background-color: #ffe0e0;
 }
 
-/* Center buttons in auto column */
-.cell-speed-auto {
+/* Pale green shading for Auto column cells */
+td.cell-speed-auto {
     text-align: center;
+    background-color: #e0ffe0;
 }
 
 .cell-unit {
@@ -548,27 +718,6 @@ td.cell-speed-off {
 /* optional: make tables respect the column width instead of expanding it */
 
 /**************** Chart */
-.adder label {
-    font-weight: bold;
-    display: block;
-    margin-bottom: 5px;
-}
-
-.adder select {
-    padding: 0.3em;
-    min-width: 200px;
-}
-
-#chart-airquality {
-    width: 100%;
-    height: 400px;
-    margin-top: 16px;
-}
-
-#chart-controls {
-    margin-top: 1em;
-    font-family: sans-serif;
-}
 #checkboxes {
     display: flex;
     flex-direction: column;
@@ -680,19 +829,6 @@ td.cell-speed-off {
     padding: 0.3em 0.8em;
     margin-bottom: 1em;
 }
-#addDeviceContainer {
-    position: fixed;
-    top: 50px;
-    right: 20px;
-    z-index: 1000;
-    background: white;
-    padding: 10px;
-    border: 1px solid #ccc;
-    border-radius: 5px;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-}
-
-
 /* *************** Rules */
 .rule-result {
     padding: 5px;
@@ -839,45 +975,67 @@ li.pure-menu-item > .rules-master-toggle {
 }
 
 /* Alerts page */
+#main-grid.alerts-grid,
+#main-grid.logs-grid {
+    max-width: none;
+}
+
+.alerts-tabs {
+    display: flex;
+    gap: 0;
+    border-bottom: 2px solid #ddd;
+    margin-bottom: 12px;
+}
+
+.tab-link {
+    padding: 8px 20px;
+    border: none;
+    border-bottom: 3px solid transparent;
+    background: none;
+    color: #666;
+    font-size: 0.95em;
+    cursor: pointer;
+    margin-bottom: -2px;
+    text-decoration: none;
+}
+
+.tab-link:hover {
+    color: #0078e7;
+}
+
 .tab-link.active {
-    background-color: #0078e7;
-    color: white;
+    color: #0078e7;
+    border-bottom-color: #0078e7;
+    font-weight: 600;
 }
 
-.pure-form {
-    margin: 10px 0;
+.alerts-filter {
+    margin: 0 0 10px 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
 }
 
-.pure-form label {
-    margin-right: 10px;
+.alerts-filter label {
+    color: #555;
+    font-size: 0.9em;
 }
 
 .tab-hidden {
     display: none !important;
 }
 
-/* Alerts page: row background by alert type */
-.alert-row-filter-warning {
-    background-color: #fff5e6;
-    opacity: 0.7;
-}
-
-.alert-row-error {
-    background-color: #ffe6e6;
-}
-
-.alert-row-water-issue {
-    background-color: #fff0e6;
+/* Alerts page: still-active rows in history tab */
+.tabulator-row.alert-row-active {
+    font-weight: bold;
 }
 
 .alert-type-error {
-    color: #ff4444;
-    font-weight: bold;
+    color: #d32f2f;
 }
 
 .alert-type-water-issue {
-    color: #ff8800;
-    font-weight: bold;
+    color: #e65100;
 }
 
 /* Device log: alert status column */
@@ -919,6 +1077,44 @@ li.pure-menu-item > .rules-master-toggle {
     height: 620px;
     width: 100%;
     margin-top: 16px;
+}
+
+#metric-chart {
+    height: 620px;
+    width: 100%;
+    margin-top: 16px;
+}
+
+/* About page */
+.about-content {
+    max-width: 800px;
+    padding: 0 1em;
+}
+
+.deep-dive-toggle {
+    margin: 1em 0;
+}
+
+.deep-dive-toggle-link {
+    color: #0078e7;
+    cursor: pointer;
+    text-decoration: underline;
+}
+
+.deep-dive-toggle-link:hover {
+    color: #005bb5;
+}
+
+.deep-dive-content {
+    display: none;
+    margin-top: 1em;
+    padding: 1em;
+    background-color: #f5f5f5;
+    border-left: 3px solid #0078e7;
+}
+
+.deep-dive-content.show {
+    display: block;
 }
 
 /* Debug page */

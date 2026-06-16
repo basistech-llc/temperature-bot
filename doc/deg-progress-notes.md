@@ -11,9 +11,9 @@ open tabs here:
   - [local](http://localhost:8000/)
   - Hubitat:
     - Dashboard: http://10.2.3.51/
+      - http://10.2.3.51/dashboards insufficiently good dashboard
+      - http://10.2.3.51/installedapp/configure/520/mainPage new hickory dashboard
     - Documentation: https://docs2.hubitat.com/en/home
-- Database: Often useful to copy latest database from /var/db on server to each instance. Placed in
-  root or var/db.
 - Raw view of [Mitsubishi HVAC](http://10.2.1.20/control/index.html). Credentials in
   Bitwarden. Nominal manual [here](http://10.2.1.20/en/maintenance.html) but requires insecure Java
   browser.
@@ -41,7 +41,8 @@ open tabs here:
 1. **Flask Web Application** (`app/main.py`): Serves web UI and REST API
    - Web routes (`routes_web.py`): HTML pages (index, rules, logs, device details)
    - API routes (`routes_api.py`): JSON endpoints for status, temperature series, fan/drive control
-   - Runs via `wsgi.py` (production) or `run_local.py` (dev with auto-reload)
+   - Runs via `wsgi.py`/gunicorn (production) or `flask --app app.main:app run` (dev, auto-reload —
+     see `make live-dev-web` / `make local-dev`)
 
 2. **SQLite Database** (`app/db.py`): Central data store
    - **Run-length encoding**: Temperature data stored with `(logtime, duration)` to avoid bloat when values don't change
@@ -100,24 +101,31 @@ The system runs continuously: `runner.py` collects data every minute, rules adju
    make install-macos  # or install-ubuntu on Linux
    ```
    This installs Poetry, creates a virtual environment, and installs all dependencies.
-   
-   
+
+
 2. **Connect**
 
 To do anything with the live system, you will need to first login with Tailscale for access.
+
+The SSH password for the server is in Bitwarden (entry: `slg1.basistech.net`). Note that
+`air.basistech.net` and `slg1.basistech.net` are the **same machine** — the Makefile defaults to
+`air` (`FETCH_HOST`), but either name works.
+
+Easiest way to confirm Tailscale is actually connected: just run `make fetch-dev-db` (next step).
+If it pulls the DB successfully, your connection is good.
 
 3. **Create local database**:
    ```bash
    make make-dev-db
    ```
    Creates a fresh `var/db/temperature-bot.db` from the schema.
-   
+
    Or, and usually preferred, clone the live database
-   
+
    ```bash
    make fetch-dev-db
    ```
-   
+
    Clone a snapshot of the live DB locally.
 
 4. **Configure**:
@@ -127,63 +135,46 @@ To do anything with the live system, you will need to first login with Tailscale
 
 **Running the Web Server**
 
-```bash
-DB_PATH=var/db/temperature-bot.db make local-dev
-```
+Two flavors, both serve Flask on `http://localhost:8000` with `FLASK_DEBUG=True` and the local DB:
 
-This runs the Flask app on `http://localhost:8000` with:
-- `AE200_SIMULATOR=1` (uses test data instead of real AE200 devices)
-- `FLASK_DEBUG=True` (auto-reload on code changes)
-- Database at `var/db/temperature-bot.db`
+| Command | AE200 data | Needs Tailscale | Use when |
+|---------|-----------|-----------------|----------|
+| `make local-dev`    | simulated (`AE200_SIMULATOR=1`) | no  | UI work, no hardware needed |
+| `make live-dev-web` | live hardware                   | yes | seeing real device data |
 
-The web interface will be available but won't have real device data unless you've populated the
-database.
+The web interface needs a populated DB to show anything useful (see `make fetch-dev-db`).
 
-Alternatively, you can run against the live hardware (but still using a local copy of the DB) by
-connecting with TailScale and:
-
-```bash
-DB_PATH=var/db/temperature-bot.db make live-dev-web
-```
-
-[old?] Or: `DB_PATH=var/db/temperature-bot.db FLASK_DEBUG=True poetry run python run_local.py`
-(without `AE200_SIMULATOR`)
+**Note:** `FLASK_DEBUG` auto-reloads **Python** changes only — it does **not** reload JavaScript.
+For JS changes, hard-reload the browser (shift-reload), or use node for live JS reload.
 
 
 **Running the Data Collector/Rules Engine**
 
+This polls the devices, fetches AQI, runs the rules engine, and logs everything to the DB.
+
+Against **live hardware** (needs Tailscale):
 ```bash
-DB_PATH=var/db/temperature-bot.db make live-dev-runner
+make live-dev-runner   # runs bin/runner.py, no simulator
 ```
 
-Or manually:
+Against the **simulator** (no hardware/Tailscale needed):
 ```bash
-export DB_PATH=var/db/temperature-bot.db
-export AE200_SIMULATOR=1
-poetry run python bin/runner.py
+AE200_SIMULATOR=1 poetry run python bin/runner.py
 ```
-
-This will:
-- Poll simulated AE200 devices
-- Fetch AQI (real API call)
-- Run rules engine
-- Log everything to the database
-
-Or, you can run against the live hardware with
-
-   ```bash
-   DB_PATH=var/db/temperature-bot.db make live-dev-runner
-   ```
-   Or: `DB_PATH=var/db/temperature-bot.db poetry run python bin/runner.py` (without `AE200_SIMULATOR`)
+Note: AQI is always a real API call even in simulator mode.
 
 **Environment Variables**:
 
-- `DB_PATH`: **Required** - Database file path (e.g., `var/db/temperature-bot.db`). Must be set explicitly or the app will fail to start.
+- `DB_PATH`: Database file path. The Makefile defaults it to `var/db/temperature-bot.db` via
+  `export DB_PATH ?= ...`, so the `make` targets already have it set. Only set it explicitly to point
+  at a *different* DB, or when running the app/flask/python directly (bypassing make).
 - `AE200_SIMULATOR`: Set to `1` to use simulated AE200 devices instead of real hardware
 - `TEMPERATURE_BOT_CONFIG`: Path to config YAML (default: `temperature-bot-config.yaml` in repo root)
 - `LOG_LEVEL`: Logging level (DEBUG, INFO, etc.)
 
-**Note**: `DB_PATH` must be set explicitly for all commands. The Makefile doesn't export it automatically, so you need to prefix commands with `DB_PATH=var/db/temperature-bot.db`.
+**Note**: For the default DB location, the `DB_PATH=var/db/temperature-bot.db` prefix on `make`
+commands is redundant — the Makefile already exports that default (`Makefile:23`). Prefixing it
+anyway is harmless; it just re-sets the same value.
 
 **Fetching Real Database for Testing**:
 
@@ -191,7 +182,13 @@ To get a copy of the production database with real data:
 ```bash
 make fetch-dev-db
 ```
-This copies the database from `slg1.basistech.net` to `var/db/** and shows stats.
+This rsyncs (over Tailscale/SSH) from the server (`air.basistech.net`, aka `slg1.basistech.net`)
+and shows row-count stats. It pulls down **two** things:
+- the database → `var/db/`
+- `temperature-bot-config.yaml` (with production secrets) → repo root
+
+So this single step also covers the "Configure" step above — no separate config copy needed.
+SSH normally uses your key; if prompted for a password, it's in Bitwarden under `slg1.basistech.net`.
 
 **Mitsubishi control panel**
 
@@ -217,20 +214,11 @@ Tests automatically use `AE200_SIMULATOR=1` via `tests/conftest.py`.
 
 ### nginx config
 
-- Sites are in /etc/nginx/sites-available symlinked ti /etc/nginx/sites-enabled
+- Sites are in /etc/nginx/sites-available symlinked to /etc/nginx/sites-enabled
 - Logs are in /var/logs/nginx/
 - Test config: `sudo nginx -t`
 - Restart: `sudo systemctl restart nginx`
 - Test status: `sudo systemctl status nginx`
-
-### Local dev config
-
-- `make install-macos`
-- `make make-dev-db`
-- `make local-dev`
-- `make test` (some tests currently fail)
-
-To run the runner locally, you'll need a filled-in temerature-bot-config.yaml
 
 ### deployments config
 
@@ -256,11 +244,9 @@ sudo journalctl -u deg1_basistech_net.service -e -n 200
 
 - in /etc/nginx, what is causing default routing to air.basistech.net (e.g. of deg1, before I
     configured it). Is this desirable behavior, or more confusing than it is worth?
-- Do we have any automation for deploying <repo>/etc/_\_service to /etc/systemd/system/_.service?
+- Do we have any automation for deploying `<repo>/etc/*.service` to `/etc/systemd/system/*.service`?
 
 ## Todo
 
 - Move /etc/nginx config files to git in <repo>/etc
 - Write tooling to keep live nginx and systemctl files in sync with repo
-
-## Currently stuck on

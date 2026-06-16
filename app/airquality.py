@@ -5,7 +5,10 @@ You need an API key
 
 import logging
 import json
-import requests  # type: ignore
+import os
+from typing import Any
+
+import requests
 from app.util import get_config, get_secret
 from app.paths import TIMEOUT_SECONDS
 
@@ -13,6 +16,23 @@ AIRNOW_URL = "https://www.airnowapi.org/aq/observation/zipCode/current/?format=a
 GOOGLE_URL = "https://airquality.googleapis.com/v1/history:lookup?key={API_KEY}"
 
 logger = logging.getLogger(__name__)
+AQICN_SIMULATOR_ENV = "AQICN_SIMULATOR"
+TRUE_ENV_VALUES = {"1", "true", "yes", "on"}
+AQICN_SIMULATOR_DATA = {
+    "aqi": 45,
+    "iaqi": {
+        "co": {"v": 0.2},
+        "h": {"v": 45},
+        "no2": {"v": 3.1},
+        "o3": {"v": 22.0},
+        "p": {"v": 1012},
+        "pm10": {"v": 12},
+        "pm25": {"v": 6},
+        "so2": {"v": 1.0},
+        "t": {"v": 21},
+        "w": {"v": 2.5},
+    },
+}
 
 # https://docs.airnowapi.org/aq101
 AQI_TABLE = [
@@ -27,6 +47,10 @@ AQI_TABLE = [
 
 class AQIError(Exception):
     """Generic errors"""
+
+def aqicn_simulator_enabled() -> bool:
+    """Return True when AQICN simulator mode is explicitly enabled."""
+    return os.getenv(AQICN_SIMULATOR_ENV, "").strip().lower() in TRUE_ENV_VALUES
 
 def aqi_decode(aqi):
     aqi = int(aqi)
@@ -62,11 +86,13 @@ def get_aqi_airnow():
 def get_aqi_google():
     """Get AQI data from Google API"""
     try:
-        params = {'hours':1,
-                  'location':{
-                      'longitude':get_config()['location']['longitude'],
-                      'latitude':get_config()['location']['latitude'] }
-                  }
+        params: dict[str, Any] = {
+            'hours': 1,
+            'location': {
+                'longitude': get_config()['location']['longitude'],
+                'latitude': get_config()['location']['latitude'],
+            },
+        }
     except KeyError:
         print(f"longitude and latitude missing from location:\n{json.dumps(get_config(),indent=4)}")
         raise
@@ -93,6 +119,8 @@ def get_aqi_google():
 # https://aqicn.org/json-api/doc/
 
 def get_aqi_aqicn_full():
+    if aqicn_simulator_enabled():
+        return AQICN_SIMULATOR_DATA
     try:
         city = get_config()['location']['city']
     except KeyError:

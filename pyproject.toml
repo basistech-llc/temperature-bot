@@ -14,20 +14,20 @@ name = "temperature-bot"
 version = "0.1.0"
 requires-python = ">=3.12,<4.0.0"
 dependencies = [
-    "aiohttp (==3.13.4)",
+    "aiohttp (==3.13.5)",
     "djlint (==1.36.4)",
     "flask (==3.1.3)",
     "flask-pydantic (==0.14.0)",
-    "google-api-python-client (==2.193.0)",
-    "google-auth (==2.49.1)",
-    "google-auth-httplib2 (==0.3.0)",
-    "google-auth-oauthlib (==1.3.0)",
+    "google-api-python-client (==2.197.0)",
+    "google-auth (==2.53.0)",
+    "google-auth-httplib2 (==0.4.0)",
+    "google-auth-oauthlib (==1.4.0)",
     "gunicorn (==25.3.0)",
     "jinja2 (==3.1.6)",
-    "pymodbus (==3.12.1)",
+    "pymodbus (==3.13.0)",
     "python-dotenv (==1.2.2)",
     "pyyaml (==6.0.3)",
-    "requests (==2.33.0)",
+    "requests (==2.34.2)",
     "tabulate (==0.10.0)",
     "websockets (==16.0)",
 ]
@@ -46,19 +46,20 @@ build-backend = "poetry.core.masonry.api"
 package-mode = false
 
 [tool.poetry.group.dev.dependencies]
-coverage = "==7.13.5"
+coverage = "==7.14.1"
 djlint = "==1.36.4"
 livereload = "==2.7.1"
-mypy = "==1.19.1"
-playwright = "==1.58.0"
+mypy = "==1.20.1"
+playwright = "==1.60.0"
 pylint = "==4.0.5"
-pyright = "==1.1.408"
-pytest = "==9.0.2"
+pyright = "==1.1.409"
+pytest = "==9.0.3"
 pytest-cov = "==7.1.0"
 pytest-env = "==1.6.0"
 pytest-faulthandler = "==2.0.1"
-ruff = "==0.15.8"
+ruff = "==0.15.15"
 ruff-lsp = "==0.0.62"
+types-pyyaml = "^6.0.12.20260518"
 
 [tool.ruff]
 exclude = ["lib/"]
@@ -81,14 +82,6 @@ warn_no_return = false
 warn_unreachable = true
 strict_equality = true
 ignore_missing_imports = true
-
-[[tool.mypy.overrides]]
-module = [
-    "lib.*",
-    "tests.*"
-]
-disallow_untyped_defs = false
-disallow_incomplete_defs = false
 
 [[tool.mypy.overrides]]
 module = [

@@ -14,6 +14,10 @@
 
 <div class="pure-g">
   <div id="controls">
+    <div id="temperature-mode-controls" class="temperature-mode-controls" role="group" aria-label="Temperature mode">
+      <label><input type="radio" name="temperature-mode" value="raw" checked> raw temps</label>
+      <label><input type="radio" name="temperature-mode" value="calculated"> calculated temps</label>
+    </div>
     <div id="checkboxes">
       <div id="checkbox-controls">
         <button id="selectAllBtn">Select All</button>
@@ -37,4 +41,3 @@
 <div class="pure-g"><button id="downloadCsv">Download CSV</button></div>
 
 {% endblock %}
-

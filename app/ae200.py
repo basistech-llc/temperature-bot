@@ -23,10 +23,12 @@ import json
 import concurrent.futures
 import websockets
 from websockets.extensions import permessage_deflate
+from websockets.typing import Origin, Subprotocol
 
 from app.util import get_config
 
 logger = logging.getLogger(__name__)
+B_XMLPROC_SUBPROTOCOL = Subprotocol("b_xmlproc")
 
 # Fan mapping speeds. Note that there is no 'OFF'
 FAN_SPEED_AUTO = -1
@@ -34,9 +36,44 @@ DRIVES = {0:"OFF", 1:"ON"}
 FAN_SPEEDS = {-1:"AUTO", 1: "LOW", 2: "MID2", 3: "MID1", 4: "HIGH"}
 FAN_SPEED_NAMES = {value: key for key, value in FAN_SPEEDS.items()}
 DRIVE_NAMES = {value: key for key, value in DRIVES.items()}
+AE200_DRIVE_KEY = "Drive"
+AE200_FAN_SPEED_KEY = "FanSpeed"
+AE200_MODE_KEY = "Mode"
+
+# User-facing fan-speed labels, keyed by speed number. These intentionally
+# mirror the speed-button text rendered in room_dashboard.html / index.html so
+# every surface speaks the same vocabulary (the room dashboard reads its labels
+# straight off those buttons; surfaces without buttons — e.g. the alerts table —
+# use the maps below). ERVs and plain fans expose different levels, so the label
+# for a given speed number depends on device type. Keep these in sync with the
+# template button text if either changes.
+_ERV_SPEED_LABELS = {-1: "Auto", 1: "LO", 2: "MED-LO", 3: "MED-HI", 4: "HI"}
+_FAN_SPEED_LABELS = {-1: "Auto", 2: "LO", 3: "MED", 4: "HI"}
+
+
+def friendly_fan_speed_label(device_name, raw_fan_speed):
+    """Return a user-facing fan-speed label (e.g. 'HI', 'MED-LO', 'Auto').
+
+    :param device_name: device name; ERVs (name starts with 'ERV') use a
+        different label set than plain fans.
+    :param raw_fan_speed: either the protocol string ('HIGH', 'MID1', ...) or
+        the speed number. Anything unrecognized is returned unchanged so we
+        never hide diagnostic data behind a guess.
+    """
+    if raw_fan_speed is None:
+        return None
+    # Normalize to a speed number, accepting either protocol string or int.
+    if isinstance(raw_fan_speed, str):
+        speed = FAN_SPEED_NAMES.get(raw_fan_speed)
+    else:
+        speed = raw_fan_speed
+    if speed is None:
+        return str(raw_fan_speed)
+    is_erv = (device_name or "").upper().startswith("ERV")
+    labels = _ERV_SPEED_LABELS if is_erv else _FAN_SPEED_LABELS
+    return labels.get(speed, str(raw_fan_speed))
 
 AE200_SIMULATOR = os.getenv('AE200_SIMULATOR')
-SIMULATOR_DIR = Path(join(dirname(__file__),"test_data"))
 SIMULATOR_DIR = Path(join(dirname(__file__), "test_data"))
 
 getUnitsPayload = """<?xml version="1.0" encoding="UTF-8" ?>
@@ -91,16 +128,22 @@ def int_to_drive(drive):
 
 
 def extract_drive_and_fan_speed(data):
-    """Return a dict with drive/speed/has_speed_control"""
-    drive = data.get('Drive',None)
-    speed = data.get('FanSpeed',None)
+    """Return normalized AE-200 control fields for app JSON responses."""
+    ret = {}
+    mode = data.get(AE200_MODE_KEY, None)
+    if mode is not None:
+        ret["mode"] = mode
+    drive = data.get(AE200_DRIVE_KEY, None)
+    speed = data.get(AE200_FAN_SPEED_KEY, None)
     if drive is None or speed is None:
-        return {'has_speed_control':False}
-    return {
-        'drive': DRIVE_NAMES[drive],
-        'fan_speed': FAN_SPEED_NAMES[speed],
-        'has_speed_control': True
-    }
+        ret["has_speed_control"] = False
+        return ret
+    ret.update({
+        "drive": DRIVE_NAMES[drive],
+        "fan_speed": FAN_SPEED_NAMES[speed],
+        "has_speed_control": True,
+    })
+    return ret
 
 
 def get_device_fan_speed(device):
@@ -165,8 +208,8 @@ class AE200Functions:
         async with websockets.connect(
             f"ws://{self.address}/b_xmlproc/",
             extensions=[permessage_deflate.ClientPerMessageDeflateFactory()],
-            origin=f"http://{self.address}",
-            subprotocols=["b_xmlproc"],
+            origin=Origin(f"http://{self.address}"),
+            subprotocols=[B_XMLPROC_SUBPROTOCOL],
         ) as websocket:
             await websocket.send(getUnitsPayload)
             unitsResultStr = await websocket.recv()
@@ -193,8 +236,8 @@ class AE200Functions:
         async with websockets.connect(
             f"ws://{self.address}/b_xmlproc/",
             extensions=[permessage_deflate.ClientPerMessageDeflateFactory()],
-            origin=f"http://{self.address}",
-            subprotocols=["b_xmlproc"],
+            origin=Origin(f"http://{self.address}"),
+            subprotocols=[B_XMLPROC_SUBPROTOCOL],
         ) as websocket:
             getMnetDetailsPayload = getMnetDetails([deviceId])
             await websocket.send(getMnetDetailsPayload)
@@ -204,6 +247,8 @@ class AE200Functions:
             # result = {}
             node = mnetDetailsResultXML.find("./DatabaseManager/Mnet")
             await websocket.close()
+            if node is None:
+                raise ValueError(f"AE-200 response omitted Mnet data for device {deviceId}")
             return cleanDeviceInfo(node.attrib) if clean else node.attrib
 
     def getDeviceInfo(self, deviceId, clean=True):
@@ -216,8 +261,8 @@ class AE200Functions:
         async with websockets.connect(
             f"ws://{self.address}/b_xmlproc/",
             extensions=[permessage_deflate.ClientPerMessageDeflateFactory()],
-            origin=f"http://{self.address}",
-            subprotocols=["b_xmlproc"],
+            origin=Origin(f"http://{self.address}"),
+            subprotocols=[B_XMLPROC_SUBPROTOCOL],
         ) as websocket:
             attrs = " ".join([f'{key}="{attributes[key]}"' for key in attributes])
             payload = setRequestPayload.format(deviceId=deviceId, attrs=attrs)

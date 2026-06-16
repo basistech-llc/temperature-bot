@@ -11,7 +11,6 @@
 import logging
 import datetime
 import time
-from typing import List
 from flask import render_template, request, redirect, url_for
 
 from .constants import __version__
@@ -30,6 +29,62 @@ from .routes_web_airquality_utils import (
 )
 
 logger = logging.getLogger(__name__)
+
+# Display metadata for per-metric chart pages. Keyed on the URL-safe metric
+# name (same keys as db.AQ_METRIC_STATUS_KEYS). Radon uses its default Bq/m³
+# units here; metric_chart_support.js swaps to pCi/L when the user's site-wide
+# temperature preference is Fahrenheit.
+METRIC_CHART_CONFIG = {
+    "humidity": {
+        "label": "Humidity",
+        "unit": "%",
+        "decimals": 1,
+        "y_axis_label": "Humidity (%)",
+        "title": "Humidity Time Series",
+    },
+    "co2": {
+        "label": "CO₂",
+        "unit": "ppm",
+        "decimals": 0,
+        "y_axis_label": "CO₂ (ppm)",
+        "title": "CO₂ Time Series",
+    },
+    "voc": {
+        "label": "VOC",
+        "unit": "ppb",
+        "decimals": 0,
+        "y_axis_label": "VOC (ppb)",
+        "title": "VOC Time Series",
+    },
+    "radon": {
+        "label": "Radon",
+        "unit": "Bq/m³",
+        "decimals": 0,
+        "y_axis_label": "Radon (Bq/m³)",
+        "title": "Radon Time Series",
+    },
+    "pm25": {
+        "label": "PM2.5",
+        "unit": "µg/m³",
+        "decimals": 1,
+        "y_axis_label": "PM2.5 (µg/m³)",
+        "title": "PM2.5 Time Series",
+    },
+    "pm1": {
+        "label": "PM1",
+        "unit": "µg/m³",
+        "decimals": 1,
+        "y_axis_label": "PM1 (µg/m³)",
+        "title": "PM1 Time Series",
+    },
+    "pressure": {
+        "label": "Pressure",
+        "unit": "hPa",
+        "decimals": 1,
+        "y_axis_label": "Pressure (hPa)",
+        "title": "Pressure Time Series",
+    },
+}
 
 
 def _register_core_routes(app):
@@ -75,7 +130,10 @@ def _register_core_routes(app):
     def show_rules(conn):
         """Rules page"""
         # Check if we should run the rules or skip them
-        run_rules = request.args.get("run_rules", "1", type=int)
+        try:
+            run_rules = int(request.args.get("run_rules", "1"))
+        except ValueError:
+            run_rules = 1
         hour_now = datetime.datetime.now().replace(minute=0, second=0, microsecond=0)
 
         # If requests, see how the rules will render for the next seven days
@@ -155,6 +213,24 @@ def _register_core_routes(app):
         """Lighting (illuminance) chart page"""
         return render_template(
             "lighting_chart.html", current_page="lighting_chart"
+        )
+
+    @app.route("/metric_chart")
+    def show_metric_chart():
+        """Time-series chart for a single air-quality metric across devices."""
+        metric = request.args.get("metric", "")
+        if metric not in db.AQ_METRIC_STATUS_KEYS:
+            return (
+                f"Unknown metric: {metric!r}. "
+                f"Expected one of: {sorted(db.AQ_METRIC_STATUS_KEYS)}",
+                400,
+            )
+        metric_config = METRIC_CHART_CONFIG[metric]
+        return render_template(
+            "metric_chart.html",
+            current_page="metric_chart",
+            metric=metric,
+            metric_config=metric_config,
         )
 
     @app.route("/chart_aqi")
@@ -262,21 +338,35 @@ def _filter_speed_control_devices(devices, device_names):
 
 
 def _get_hubitat_sensors(sensor_names):
-    """Fetch and filter Hubitat temperature sensors by exact name match."""
+    """Fetch and filter Hubitat temperature sensors by exact name match.
+
+    Returns an entry for every configured name.  Sensors not found in
+    Hubitat (or unreachable) are represented as placeholder dicts with
+    ``offline=True`` so the template can still render them.
+    """
     if not sensor_names:
         return []
 
     try:
         all_hubitat = hubitat.get_all_devices()
-        return [
-            dev
-            for dev in all_hubitat
-            if "TemperatureMeasurement" in dev.get("capabilities", [])
-            and dev.get("name") in sensor_names
-        ]
     except (ValueError, RuntimeError, OSError) as e:
         logger.warning("Failed to fetch Hubitat sensors: %s", e)
-        return []
+        all_hubitat = []
+
+    found = [
+        dev
+        for dev in all_hubitat
+        if "TemperatureMeasurement" in dev.get("capabilities", [])
+        and dev.get("name") in sensor_names
+    ]
+    found_names = {dev.get("name") for dev in found}
+
+    for name in sensor_names:
+        if name not in found_names:
+            logger.warning("Configured sensor %r not found in Hubitat", name)
+            found.append({"name": name, "label": name, "offline": True, "attributes": {}})
+
+    return found
 
 
 def _collect_device_notes(devices):
@@ -292,23 +382,17 @@ def _collect_device_notes(devices):
 def _render_room_dashboard_with_data(conn, location: str):
     """Render room dashboard with device data filtered by configuration."""
     room_key = location.lower()
-    config = room_config.ROOM_CONFIGS.get(room_key, {})
+    config = room_config.get_room_config(room_key)
 
     all_devices = db.get_device_status(conn)
 
     # Filter ERVs and fans
-    erv_devices = _filter_speed_control_devices(all_devices, config.get("ervs", []))
+    erv_devices = _filter_speed_control_devices(all_devices, config.ervs)
 
-    # For fans, take first available match
-    fan_names: List[str] = config.get("fans", [])
-    fan_devices = []
-    if fan_names:
-        filtered = _filter_speed_control_devices(all_devices, fan_names)
-        if filtered:
-            fan_devices = [filtered[0]]  # Only first match
+    fan_devices = _filter_speed_control_devices(all_devices, config.fans)
 
     # Get Hubitat sensors
-    hubitat_sensors = _get_hubitat_sensors(config.get("sensors", []))
+    hubitat_sensors = _get_hubitat_sensors(config.sensors)
 
     # Attach display names for sensors using the centralized helper. We prefer
     # Hubitat labels when available and then apply generic display transforms.
@@ -324,14 +408,21 @@ def _render_room_dashboard_with_data(conn, location: str):
     # Collect notes
     notes = _collect_device_notes(erv_devices + fan_devices)
 
+    embedded = "embedded" in request.args
+
     return render_template(
         "room_dashboard.html",
         location=location,
         hide_nav=True,
+        embedded=embedded,
         erv_devices=erv_devices,
         fan_devices=fan_devices,
         hubitat_sensors=hubitat_sensors,
         notes=notes,
+        show_tv_control=config.tv_control,
+        dimmer_id=config.dimmer_id,
+        wall_inner_id=config.wall_inner_id,
+        wall_outer_id=config.wall_outer_id,
     )
 
 

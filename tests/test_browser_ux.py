@@ -5,8 +5,10 @@ Fan speed and page-load checks were migrated to pytest (test_temporal_quantifier
 
 import os
 import time
+import json
 import logging
 import threading
+from urllib.parse import parse_qs, urlparse
 
 import requests
 import pytest
@@ -32,6 +34,55 @@ def wait_for_server(url: str, timeout: float = 20.0) -> None:
 
 # pylint: disable=too-many-arguments, disable=too-many-positional-arguments, disable=too-many-statements
 SKIP_BROWSER_TEST = "SKIP_BROWSER_TEST" in os.environ
+
+
+def seed_air_quality_temperature_device(conn, samples: int = 10) -> int:
+    """Create one AQ device with enough recent temperature history for chart tests."""
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM devlog")
+    cursor.execute("DELETE FROM devices")
+    cursor.execute(
+        "INSERT INTO devices (device_name, aqi_mon) VALUES (?, ?)",
+        ("Airthings Browser Temp Probe", 1),
+    )
+    device_id = cursor.lastrowid
+    now = int(time.time())
+    for i in range(samples):
+        temp_c = 22.0 + i / 10
+        payload = {
+            "co2": {"unit": "ppm", "value": 700 + i},
+            "humidity": {"unit": "pct", "value": 45.0},
+            "pm1": {"unit": "ug/m3", "value": 1.0},
+            "pm25": {"unit": "ug/m3", "value": 2.0},
+            "pressure": {"unit": "hPa", "value": 1010.0},
+            "radonShortTermAvg": {"unit": "bq", "value": 75.0},
+            "temp": {"unit": "c", "value": temp_c},
+            "voc": {"unit": "ppb", "value": 120.0},
+        }
+        cursor.execute(
+            """
+            INSERT INTO devlog (device_id, logtime, duration, temp10x, status_json)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (
+                device_id,
+                now - (samples - i) * 60,
+                60,
+                round(temp_c * 10),
+                json.dumps(payload),
+            ),
+        )
+    conn.commit()
+    return device_id
+
+
+def is_temperature_response_for_device(response, base_url: str, device_id: int) -> bool:
+    parsed_base = urlparse(base_url)
+    parsed = urlparse(response.url)
+    if parsed.netloc != parsed_base.netloc or parsed.path != "/api/v1/temperature":
+        return False
+    query = parse_qs(parsed.query)
+    return query.get("device_ids") == [str(device_id)]
 
 
 @pytest.mark.skipif(os.getenv("SKIP_BROWSER_TEST"), reason="SKIP_BROWSER_TEST is set")
@@ -79,6 +130,53 @@ def test_chart_page_no_dom_errors(test_database_conn_with_test_data):  # noqa: F
         )
 
         browser.close()
+
+
+@pytest.mark.skipif(SKIP_BROWSER_TEST, reason="SKIP_BROWSER_TEST is set")
+@skip_on_github
+def test_air_quality_temperature_click_fetches_selected_device(
+    test_database_conn_with_test_data,
+):  # noqa: F811
+    """Clicking an AQ temperature cell should chart only that device's data."""
+    conn = test_database_conn_with_test_data[0]
+    device_id = seed_air_quality_temperature_device(conn, samples=10)
+    base_url = "http://127.0.0.1:5007"
+
+    def run_app():
+        app.run(host="127.0.0.1", port=5007, debug=False, use_reloader=False)
+
+    server_thread = threading.Thread(target=run_app, daemon=True)
+    server_thread.start()
+    wait_for_server(f"{base_url}/health", timeout=20)
+
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page()
+        try:
+            page.goto(f"{base_url}/air-quality", wait_until="networkidle")
+            row = page.locator("tr", has_text="Browser Temp Probe")
+            temp_cell = row.locator(".cell-temp-link").first
+            expect(temp_cell).to_be_visible()
+            expect(temp_cell).to_contain_text("22.")
+
+            with page.expect_response(
+                lambda response: is_temperature_response_for_device(
+                    response, base_url, device_id
+                ),
+                timeout=15_000,
+            ) as response_info:
+                temp_cell.click()
+
+            expect(page).to_have_url(f"{base_url}/chart?device_ids={device_id}")
+            response = response_info.value
+            assert response.ok
+            payload = response.json()
+            assert len(payload["series"]) == 1
+            series = payload["series"][0]
+            assert series["device_id"] == device_id
+            assert len(series["data"]) == 10
+        finally:
+            browser.close()
 
 
 @pytest.mark.skipif(SKIP_BROWSER_TEST, reason="SKIP_BROWSER_TEST is set")

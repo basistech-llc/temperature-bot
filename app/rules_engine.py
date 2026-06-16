@@ -14,7 +14,7 @@ import logging
 from .paths import ROOT_DIR
 from . import db
 from . import ae200
-from .db import SpeedControl, DriveControl, SetTempControl
+from .models import SpeedControl, DriveControl, SetTempControl
 
 logger = logging.getLogger(__name__)
 
@@ -139,6 +139,10 @@ def set_body_fan_speed(conn, body: SpeedControl, ipaddr, agent):
         )
         ae200.set_fan_speed(unit_id, body.fan_speed)
     data = ae200.get_device_info(unit_id)
+    # The hardware may not yet reflect the FanSpeed we just sent (the read-back
+    # can race the command), so record the commanded value rather than a
+    # possibly stale reading. The next runner poll reconciles with hardware.
+    data["FanSpeed"] = ae200.FAN_SPEEDS[body.fan_speed]
     temp = data.get("InletTemp", None)
     db.insert_devlog_entry(conn, device_id=body.device_id, temp=temp, statusdict=data)
     return {
@@ -149,7 +153,7 @@ def set_body_fan_speed(conn, body: SpeedControl, ipaddr, agent):
     }
 
 
-def set_body_drive(conn, body: SpeedControl, ipaddr, agent):
+def set_body_drive(conn, body: DriveControl, ipaddr, agent):
     """
     :param conn: SQLIte3 database conneciton
     :param body: Unit to set, and new drive
@@ -188,6 +192,11 @@ def set_body_drive(conn, body: SpeedControl, ipaddr, agent):
         )
         ae200.set_drive(unit_id, body.drive)
     data = ae200.get_device_info(unit_id)
+    # The hardware may not yet reflect the Drive we just sent (the read-back can
+    # race the command), so record the commanded value rather than a possibly
+    # stale reading. Otherwise /status can report the old drive and the UI snaps
+    # back to the prior state. The next runner poll reconciles with hardware.
+    data["Drive"] = ae200.int_to_drive(body.drive)
     temp = data.get("InletTemp", None)
     db.insert_devlog_entry(conn, device_id=body.device_id, temp=temp, statusdict=data)
     return {
@@ -251,6 +260,7 @@ def rules_results(conn, when=None, aqi=50):
     logger.debug("when=%s", when)
 
     results = []
+    temps = _temperature_context(conn)
 
     def set_drive_verbose(device_id, value):
         results.append(f"Device {device_id} drive set to {value}")
@@ -263,9 +273,34 @@ def rules_results(conn, when=None, aqi=50):
     local_vars = {
         "set_drive": set_drive_verbose,
         "set_fan_speed": set_fan_speed_verbose,
+        "get_temp": temps["get_temp"],
+        "get_fcu_temp": temps["get_fcu_temp"],
     }
     exec(get_rules(), global_vars, local_vars)  # pylint: disable=exec-used
     return "\n".join(results)
+
+
+def _temperature_context(conn):
+    status = db.get_device_status(conn)
+    effective_by_id = {}
+    raw_by_id = {}
+    for device in status:
+        raw = device.get("temp10x")
+        calculated = device.get("calculated_temp10x")
+        if raw is not None:
+            raw_by_id[device["device_id"]] = raw / 10
+        if calculated is not None:
+            effective_by_id[device["device_id"]] = calculated / 10
+        elif raw is not None:
+            effective_by_id[device["device_id"]] = raw / 10
+
+    def get_temp(device_id):
+        return effective_by_id.get(device_id)
+
+    def get_fcu_temp(device_id):
+        return raw_by_id.get(device_id)
+
+    return {"get_temp": get_temp, "get_fcu_temp": get_fcu_temp}
 
 
 def run_rules(conn, when=None):
@@ -306,9 +341,15 @@ def run_rules(conn, when=None):
             conn, SpeedControl(device_id=device_id, fan_speed=fan_speed), "n/a", "rule"
         )
 
+    temps = _temperature_context(conn)
     v1 = {**db.devices_to_device_id(conn), **get_time_dict(when)}
     v1["AQI"] = db.get_last_aqi(conn)
-    v2 = {"set_drive": set_drive, "set_fan_speed": set_fan_speed}
+    v2 = {
+        "set_drive": set_drive,
+        "set_fan_speed": set_fan_speed,
+        "get_temp": temps["get_temp"],
+        "get_fcu_temp": temps["get_fcu_temp"],
+    }
     exec(get_rules(), v1, v2)  # pylint: disable=exec-used
 
     # finally, if the time has passed for any rule, set to 0

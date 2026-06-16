@@ -1,33 +1,6 @@
 {% extends 'base.html' %}
 {% block title %} About {% endblock%}
 {% block head %}
-<style>
-  .about-content {
-    max-width: 800px;
-    padding: 0 1em;
-  }
-  .deep-dive-toggle {
-    margin: 1em 0;
-  }
-  .deep-dive-toggle-link {
-    color: #0078e7;
-    cursor: pointer;
-    text-decoration: underline;
-  }
-  .deep-dive-toggle-link:hover {
-    color: #005bb5;
-  }
-  .deep-dive-content {
-    display: none;
-    margin-top: 1em;
-    padding: 1em;
-    background-color: #f5f5f5;
-    border-left: 3px solid #0078e7;
-  }
-  .deep-dive-content.show {
-    display: block;
-  }
-</style>
 <script>
   function toggleDeepDiveOptions() {
     const content = document.getElementById('deep-dive-options-content');
@@ -45,7 +18,7 @@
 {% block body %}
 <div class="pure-g">
   <div class="pure-u-1 about-content">
-    <h1>About</h1>
+    <h2>About</h2>
     <p>
       This application monitors and controls the BasisTech HVAC system, providing
       real-time visibility and control over your heating, cooling, and air quality

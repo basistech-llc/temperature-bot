@@ -2,9 +2,13 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-**Read `.github/copilot-instructions.md` for full coding conventions, project structure, and workflow details.**
+**Read `AGENTS.md` and `.github/copilot-instructions.md` for full coding conventions, project structure, and workflow details.**
 
-To run a single test: `poetry run pytest tests/test_db.py::test_function_name -v`
+Run tests through the Makefile. For a single pytest target:
+
+```bash
+make PYTEST_ARGS=tests/test_db.py::test_function_name pytest
+```
 
 ## Architecture
 
@@ -20,7 +24,7 @@ To run a single test: `poetry run pytest tests/test_db.py::test_function_name -v
 - Temperatures stored as `temp10x` (integer = temp × 10 Celsius) in `devlog` table
 - Run-length encoding: consecutive readings at same temperature are merged into a single row with extended `duration`. `bin/runner.py:combine_temp_measurements()` handles this.
 - `changelog` table provides audit trail for all manual HVAC changes
-- Schema lives in `etc/schema.sql`; no migration framework — production changes are manual ALTER statements
+- Flyway migrations in `etc/flyway/sql/` are the canonical schema history. `etc/schema.sql` is generated from those migrations with `make schema`; do not hand-edit it for schema changes.
 
 **Rules engine** (`app/rules_engine.py`, `bin/rules.py`): Auto-controls HVAC based on temperature, AQI, and time-of-day. Rules are Python code evaluated at runtime. Can be disabled globally or per-device (default: 3 hours via `RULES_DISABLE_SECONDS`). Virtual device `"rules_engine"` in `devices` table controls global enable/disable.
 
@@ -28,4 +32,7 @@ To run a single test: `poetry run pytest tests/test_db.py::test_function_name -v
 
 ## Task Tracking
 
-Use `bd` (beads) for all task tracking — never markdown TODOs. See `AGENTS.md` for workflow details.
+This project does not use `bd` (beads). Do not run `bd` commands or rely on
+`.beads/` state; follow the current user request and Git/GitHub workflow only
+when explicitly asked.
+Any `.beads/` documentation in the repository is legacy and should be ignored.
