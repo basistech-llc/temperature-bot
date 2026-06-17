@@ -251,6 +251,10 @@ button {
 }
 
 /* Shared data-table styling: centered headers with unit sub-labels */
+.data-table tbody tr:nth-child(even) td:not(.cell-speed-off):not(.cell-speed-auto):not(.aq-elevated):not(.aq-problem) {
+    background-color: rgba(0, 0, 0, 0.05);
+}
+
 .data-table thead th:not(.column-unit):not(.column-notes) {
     text-align: center;
     padding-left: 0.5em;
