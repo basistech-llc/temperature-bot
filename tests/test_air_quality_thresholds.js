@@ -44,8 +44,8 @@ check("humidity below poorBelow is poor", airQualityClassForValue("humidity", 29
 check("humidity equal poorBelow is good", airQualityClassForValue("humidity", 30, thresholds), "air-good");
 check("humidity above fair threshold is fair", airQualityClassForValue("humidity", 51, thresholds), "air-fair");
 check("humidity above poor threshold is poor", airQualityClassForValue("humidity", 61, thresholds), "air-poor");
-check("PM2.5 AQI moderate starts fair", airQualityClassForValue("pm25", 9.1, thresholds), "air-fair");
-check("PM2.5 AQI USG starts poor", airQualityClassForValue("pm25", 35.5, thresholds), "air-poor");
+check("PM2.5 concentration moderate starts fair", airQualityClassForValue("pm25", 9.1, thresholds), "air-fair");
+check("PM2.5 concentration USG starts poor", airQualityClassForValue("pm25", 35.5, thresholds), "air-poor");
 check("unconfigured metric has no class", airQualityClassForValue("illuminance", 500, thresholds), "");
 
 const cell = fakeCell("voc", "2001");

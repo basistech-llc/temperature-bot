@@ -251,7 +251,7 @@ button {
 }
 
 /* Shared data-table styling: centered headers with unit sub-labels */
-.data-table tbody tr:nth-child(even) td:not(.cell-speed-off):not(.cell-speed-auto):not(.air-good):not(.air-fair):not(.air-poor) {
+.data-table tbody tr:nth-child(even) td:not(.cell-speed-off):not(.cell-speed-auto):not(.air-fair):not(.air-poor) {
     background-color: rgba(0, 0, 0, 0.05);
 }
 
@@ -424,10 +424,6 @@ td.cell-notes {
     margin-top: 4px;
     color: #666;
     font-size: 0.8em;
-}
-
-.pure-table td.air-good {
-    background-color: #fff;
 }
 
 .pure-table td.air-fair {
