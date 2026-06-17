@@ -1,0 +1,33 @@
+{
+  "humidity": {
+    "unit": "%",
+    "fairAbove": 50,
+    "poorAbove": 60,
+    "poorBelow": 30
+  },
+  "co2": {
+    "unit": "ppm",
+    "fairAbove": 600,
+    "poorAbove": 1000
+  },
+  "voc": {
+    "unit": "ppb",
+    "fairAbove": 500,
+    "poorAbove": 2000
+  },
+  "radonShortTermAvg": {
+    "unit": "Bq/m3",
+    "fairAbove": 75,
+    "poorAbove": 150
+  },
+  "pm25": {
+    "unit": "ug/m3",
+    "fairAbove": 9,
+    "poorAbove": 35.4
+  },
+  "pm1": {
+    "unit": "ug/m3",
+    "fairAbove": 9,
+    "poorAbove": 35.4
+  }
+}

@@ -243,14 +243,14 @@
           <thead>
             <tr>
               <th class="column-unit">Unit</th>
-              <th class="column-humidity" title="Relative humidity (%). Elevated: 30–35 or 55–60. Problem: &lt;30 or &gt;60.">Humidity<br><small>%</small></th>
+              <th class="column-humidity" title="Relative humidity (%). Fair: &gt;50. Poor: &lt;30 or &gt;60.">Humidity<br><small>%</small></th>
               <th class="column-temp" title="Temperature. Unit follows site C/F toggle. Elevated: 18–20 or 25–27 °C. Problem: &lt;18 or &gt;27 °C.">Temp<br><small id="aq-index-temp-unit-label">°C</small></th>
               <th class="column-illuminance" title="Illuminance (lux).">Illuminance<br><small>lx</small></th>
-              <th title="Carbon dioxide (ppm). Elevated: 801–1200. Problem: &gt;1200.">CO₂<br><small>ppm</small></th>
-              <th title="Volatile organic compounds (ppb). Elevated: 501–2000. Problem: &gt;2000.">VOC<br><small>ppb</small></th>
-              <th title="Short-term average radon level (Bq/m³). Elevated: 100–150. Problem: &gt;150.">Radon<br><small id="aq-index-radon-unit-label">Bq/m³</small></th>
-              <th title="Fine particles &lt;2.5µm (µg/m³). Elevated: 13–35. Problem: &gt;35.">PM2.5<br><small>µg/m³</small></th>
-              <th title="Fine particles &lt;1µm (µg/m³). Elevated: 13–35. Problem: &gt;35.">PM1<br><small>µg/m³</small></th>
+              <th title="Carbon dioxide (ppm). Fair: &gt;600. Poor: &gt;1000.">CO₂<br><small>ppm</small></th>
+              <th title="Volatile organic compounds (ppb). Fair: &gt;500. Poor: &gt;2000.">VOC<br><small>ppb</small></th>
+              <th title="Short-term average radon level (Bq/m³). Fair: &gt;75. Poor: &gt;150.">Radon<br><small id="aq-index-radon-unit-label">Bq/m³</small></th>
+              <th title="Fine particles &lt;2.5µm (µg/m³). Fair: &gt;9.0. Poor: &gt;35.4.">PM2.5<br><small>µg/m³</small></th>
+              <th title="Fine particles &lt;1µm (µg/m³). Fair: &gt;9.0. Poor: &gt;35.4.">PM1<br><small>µg/m³</small></th>
               <th class="column-notes">Notes</th>
             </tr>
           </thead>
@@ -263,6 +263,7 @@
                     <span id="device-{{ device.device_id }}-notes"></span>
                   </td>
                   <td class="cell-humidity{% if device.has_humidity %} cell-metric-link{% endif %}" id="humidity-{{ device.device_id }}"
+                      data-air-quality-metric="humidity"
                       {% if device.has_humidity %}data-chart-url="/metric_chart?metric=humidity&device_ids={{ device.device_id }}"
                       title="Humidity chart for {{ device.device_label }}"{% endif %}>--</td>
                   <td class="cell-temp cell-temp-link temp-display temp-display-no-unit" id="temp-{{ device.device_id }}"
@@ -271,13 +272,14 @@
                   <td class="cell-illuminance{% if device.has_illuminance %} cell-illuminance-link{% endif %}" id="illuminance-{{ device.device_id }}"
                       {% if device.has_illuminance %}data-chart-url="/lighting_chart?device_ids={{ device.device_id }}"
                       title="Lighting chart for {{ device.device_label }}"{% endif %}>--</td>
-                  <td {% if device.has_co2 %}class="cell-metric-link" data-chart-url="/metric_chart?metric=co2&device_ids={{ device.device_id }}" title="CO₂ chart for {{ device.device_label }}"{% endif %} id="co2-{{ device.device_id }}">--</td>
-                  <td {% if device.has_voc %}class="cell-metric-link" data-chart-url="/metric_chart?metric=voc&device_ids={{ device.device_id }}" title="VOC chart for {{ device.device_label }}"{% endif %} id="voc-{{ device.device_id }}">--</td>
+                  <td {% if device.has_co2 %}class="cell-metric-link" data-chart-url="/metric_chart?metric=co2&device_ids={{ device.device_id }}" title="CO₂ chart for {{ device.device_label }}"{% endif %} data-air-quality-metric="co2" id="co2-{{ device.device_id }}">--</td>
+                  <td {% if device.has_voc %}class="cell-metric-link" data-chart-url="/metric_chart?metric=voc&device_ids={{ device.device_id }}" title="VOC chart for {{ device.device_label }}"{% endif %} data-air-quality-metric="voc" id="voc-{{ device.device_id }}">--</td>
                   <td class="radon-display{% if device.has_radon %} cell-metric-link{% endif %}" id="radon-{{ device.device_id }}"
+                      data-air-quality-metric="radonShortTermAvg"
                       {% if device.has_radon %}data-chart-url="/metric_chart?metric=radon&device_ids={{ device.device_id }}"
                       title="Radon chart for {{ device.device_label }}"{% endif %}>--</td>
-                  <td {% if device.has_pm25 %}class="cell-metric-link" data-chart-url="/metric_chart?metric=pm25&device_ids={{ device.device_id }}" title="PM2.5 chart for {{ device.device_label }}"{% endif %} id="pm25-{{ device.device_id }}">--</td>
-                  <td {% if device.has_pm1 %}class="cell-metric-link" data-chart-url="/metric_chart?metric=pm1&device_ids={{ device.device_id }}" title="PM1 chart for {{ device.device_label }}"{% endif %} id="pm1-{{ device.device_id }}">--</td>
+                  <td {% if device.has_pm25 %}class="cell-metric-link" data-chart-url="/metric_chart?metric=pm25&device_ids={{ device.device_id }}" title="PM2.5 chart for {{ device.device_label }}"{% endif %} data-air-quality-metric="pm25" id="pm25-{{ device.device_id }}">--</td>
+                  <td {% if device.has_pm1 %}class="cell-metric-link" data-chart-url="/metric_chart?metric=pm1&device_ids={{ device.device_id }}" title="PM1 chart for {{ device.device_label }}"{% endif %} data-air-quality-metric="pm1" id="pm1-{{ device.device_id }}">--</td>
                   <td class="cell-notes">
                     <span class="notes editable-notes" id="notes-{{ device.device_id }}" data-device-id="{{ device.device_id }}" title="Click to edit"></span>
                   </td>

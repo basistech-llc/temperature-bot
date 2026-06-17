@@ -251,7 +251,7 @@ button {
 }
 
 /* Shared data-table styling: centered headers with unit sub-labels */
-.data-table tbody tr:nth-child(even) td:not(.cell-speed-off):not(.cell-speed-auto):not(.aq-elevated):not(.aq-problem) {
+.data-table tbody tr:nth-child(even) td:not(.cell-speed-off):not(.cell-speed-auto):not(.air-good):not(.air-fair):not(.air-poor) {
     background-color: rgba(0, 0, 0, 0.05);
 }
 
@@ -426,12 +426,16 @@ td.cell-notes {
     font-size: 0.8em;
 }
 
-.pure-table td.aq-elevated {
-    background-color: #fff7e0;
-    border: 1px dashed #e0b600;
+.pure-table td.air-good {
+    background-color: #fff;
 }
 
-.pure-table td.aq-problem {
+.pure-table td.air-fair {
+    background-color: #fff59d;
+    border: 1px dashed #d6aa00;
+}
+
+.pure-table td.air-poor {
     background-color: #fce8e6;
     border: 1px solid #d93025;
 }
@@ -443,12 +447,17 @@ td.cell-notes {
     margin: 0 2px;
 }
 
-.legend-swatch.aq-elevated {
-    background-color: #fff7e0;
-    border: 1px dashed #e0b600;
+.legend-swatch.air-good {
+    background-color: #fff;
+    border: 1px solid #ccc;
 }
 
-.legend-swatch.aq-problem {
+.legend-swatch.air-fair {
+    background-color: #fff59d;
+    border: 1px dashed #d6aa00;
+}
+
+.legend-swatch.air-poor {
     background-color: #fce8e6;
     border: 1px solid #d93025;
 }

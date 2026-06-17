@@ -158,6 +158,16 @@ function updateStalenessAndTooltip(cell, dev) {
   }
 }
 
+function refreshAirQualityClass(cell) {
+  if (
+    cell &&
+    typeof window !== "undefined" &&
+    window.AirQualityThresholds
+  ) {
+    window.AirQualityThresholds.applyAirQualityClass(cell);
+  }
+}
+
 /**
  * Render a temperature cell from a tenths-Celsius value.
  *
@@ -1311,8 +1321,12 @@ const refreshGridRows = () => {
                 updateStalenessAndTooltip(humidityCell, dev);
 
                 humidityCell.textContent = `${rounded.toFixed(1)}`;
+                humidityCell.setAttribute("data-air-quality-value", rounded.toString());
+                refreshAirQualityClass(humidityCell);
               } else {
                 humidityCell.textContent = "--";
+                humidityCell.removeAttribute("data-air-quality-value");
+                refreshAirQualityClass(humidityCell);
               }
             }
 
@@ -1379,14 +1393,18 @@ const refreshGridRows = () => {
               }
               if (val != null && !Number.isNaN(val) && Number.isFinite(val)) {
                 updateStalenessAndTooltip(aqCell, dev);
+                aqCell.setAttribute("data-air-quality-value", val.toString());
                 if (key === "radonShortTermAvg") {
                   aqCell.setAttribute("data-radon-bqm3", val.toString());
                   aqCell.textContent = TemperatureUtils.formatRadon(val);
                 } else {
                   aqCell.textContent = val.toFixed(decimals);
                 }
+                refreshAirQualityClass(aqCell);
               } else {
                 aqCell.textContent = "--";
+                aqCell.removeAttribute("data-air-quality-value");
+                refreshAirQualityClass(aqCell);
               }
             }
 

@@ -156,49 +156,6 @@ class WeatherData(BaseModel):
     daily: list[Dict[str, Any]] = Field(default_factory=list)
 
 
-class AirMetricThreshold(BaseModel):
-    """Threshold rule for an indoor air-quality metric."""
-
-    limit: float
-    score: int
-    label: str
-
-
-class AirMetricRange(BaseModel):
-    """Range rule for metrics scored by acceptable bands."""
-
-    problem_min: float
-    problem_max: float
-    elevated_min: float
-    elevated_max: float
-
-
-class AirMetricRule(BaseModel):
-    """Scoring configuration for one indoor air-quality metric."""
-
-    short_name: str
-    thresholds: list[AirMetricThreshold] = Field(default_factory=list)
-    ranges: AirMetricRange | None = None
-
-
-class AirMetricScore(BaseModel):
-    """Scored indoor air-quality reading."""
-
-    severity_score: int
-    label: str
-    short_name: str
-
-    def as_tuple(self) -> tuple[int, str, str]:
-        """Return the historical tuple shape used by existing callers."""
-        return (self.severity_score, self.label, self.short_name)
-
-
-class AirQualityAnnotation(BaseModel):
-    """Template annotations derived from indoor air-quality readings."""
-
-    aq_classes: dict[str, str] = Field(default_factory=dict)
-
-
 class AqiSummary(BaseModel):
     """Decoded outdoor AQI value.
 

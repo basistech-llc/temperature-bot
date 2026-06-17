@@ -173,8 +173,10 @@ def test_air_quality_route(flask_test_client):  # noqa: F811
 
     # Legend and explanatory text
     assert b"Shading:" in html
-    assert b"elevated" in html
-    assert b"problem" in html
+    assert b"air_quality_coloring.js" in html
+    assert b"good" in html
+    assert b"fair" in html
+    assert b"poor" in html
 
 
 def test_air_quality_cells_are_clickable(flask_test_client):  # noqa: F811
@@ -215,6 +217,8 @@ def test_air_quality_cells_are_clickable(flask_test_client):  # noqa: F811
     assert "/chart?device_ids=99" in html
     # The shared click handler is loaded via base.html.
     assert "clickable_cells.js" in html
+    assert 'data-air-quality-metric="co2"' in html
+    assert 'data-air-quality-metric="humidity"' in html
 
 
 # -- _filter_speed_control_devices unit tests --

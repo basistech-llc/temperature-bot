@@ -217,6 +217,7 @@ test-js: $(REQ)
 	@echo "Running JavaScript unit tests..."
 	node tests/test_time_utils.js
 	node tests/test_temperature_utils.js
+	node tests/test_air_quality_thresholds.js
 	node tests/test_unit_speed.js
 	node tests/test_metric_chart_support.js
 test: $(REQ)
