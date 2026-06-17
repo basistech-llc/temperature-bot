@@ -52,6 +52,7 @@ from .models import (
     DatabaseSchemaSnapshot,
     DeviceStatus,
     FcuSetRange,
+    FcuTempSourceControl,
     FcuTempSourceRow,
     FcuTempSourcesResponse,
     Room,
@@ -836,6 +837,7 @@ def insert_changelog(
     new_value: str,
     agent: str = "",
     comment: str = "",
+    commit: bool = True,
 ):
     logtime = int(time.time())
     c = conn.cursor()
@@ -855,7 +857,8 @@ def insert_changelog(
             comment,
         ),
     )
-    conn.commit()
+    if commit:
+        conn.commit()
 
 
 def update_devlog_map(conn, device_name: str, ae200_device_id: int):
@@ -1545,7 +1548,7 @@ def _calculate_fcu_temperature10x_from_prefetched_rows(
     return int(math.floor((weighted_total / weight_total) + 0.5))
 
 
-def set_fcu_temp_source_multiplier(
+def _set_fcu_temp_source_multiplier(
     conn,
     *,
     fcu_device_id: int,
@@ -1553,7 +1556,7 @@ def set_fcu_temp_source_multiplier(
     multiplier: float,
     ipaddr: str | None,
     agent: str | None,
-) -> dict[str, Any]:
+):
     c = conn.cursor()
     fcu = get_device(conn, fcu_device_id)
     source = get_device(conn, source_device_id)
@@ -1578,7 +1581,7 @@ def set_fcu_temp_source_multiplier(
     )
     new_multiplier = float(multiplier)
     if old_multiplier == new_multiplier:
-        return get_fcu_temp_sources(conn, fcu_device_id)
+        return
 
     now = int(time.time())
     c.execute(
@@ -1604,7 +1607,61 @@ def set_fcu_temp_source_multiplier(
             "calculated temp multiplier for source "
             f"{source_device_id} ({source['device_name']})"
         ),
+        commit=False,
     )
+
+
+def set_fcu_temp_source_multiplier(
+    conn,
+    *,
+    fcu_device_id: int,
+    source_device_id: int,
+    multiplier: float,
+    ipaddr: str | None,
+    agent: str | None,
+) -> dict[str, Any]:
+    try:
+        _set_fcu_temp_source_multiplier(
+            conn,
+            fcu_device_id=fcu_device_id,
+            source_device_id=source_device_id,
+            multiplier=multiplier,
+            ipaddr=ipaddr,
+            agent=agent,
+        )
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    return get_fcu_temp_sources(conn, fcu_device_id)
+
+
+def set_fcu_temp_source_multipliers(
+    conn,
+    *,
+    updates: list[FcuTempSourceControl],
+    ipaddr: str | None,
+    agent: str | None,
+) -> dict[str, Any]:
+    if not updates:
+        raise ValueError("At least one temperature source update is required")
+    fcu_device_id = updates[0].fcu_device_id
+    try:
+        for update in updates:
+            if update.fcu_device_id != fcu_device_id:
+                raise ValueError("All updates must use the same fcu_device_id")
+            _set_fcu_temp_source_multiplier(
+                conn,
+                fcu_device_id=update.fcu_device_id,
+                source_device_id=update.source_device_id,
+                multiplier=update.multiplier,
+                ipaddr=ipaddr,
+                agent=agent,
+            )
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
     return get_fcu_temp_sources(conn, fcu_device_id)
 
 

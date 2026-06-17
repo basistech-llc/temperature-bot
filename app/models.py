@@ -14,7 +14,7 @@ add display-only fields such as ``display_name`` and CSS annotations. Use
 actually validated before it becomes a mapping.
 """
 
-from typing import Any, Dict, Iterable, Literal
+from typing import Annotated, Any, Dict, Iterable, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -258,6 +258,12 @@ class FcuTempSourceControl(BaseModel):
     fcu_device_id: int = Field(description="FCU device id from the devices table.")
     source_device_id: int = Field(description="Temperature source device id.")
     multiplier: float = Field(ge=0, description="Nonnegative source weight.")
+
+
+FcuTempSourceBatchControl = Annotated[
+    list[FcuTempSourceControl],
+    Field(min_length=1),
+]
 
 
 class FcuTempSourceRow(BaseModel):

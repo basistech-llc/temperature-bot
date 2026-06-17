@@ -146,6 +146,7 @@
                   <td class="cell-temp cell-temp-link room-temp-link temp-display temp-display-no-unit" id="room-temp-{{ device.device_id }}"
                       data-fcu-temp-sources-url="/api/v1/fcu_temp_sources?fcu_device_id={{ device.device_id }}"
                       data-fcu-temp-source-update-url="/api/v1/fcu_temp_source"
+                      data-fcu-temp-sources-room-name="{{ device.room_name or device.device_label }}"
                       title="Calculated room temperature for {{ device.device_label }}">--</td>
                   <td class="cell-temp cell-temp-set" id="settemp-{{ device.device_id }}">
                     <span class="settemp-thermostat" role="group" aria-label="Set temperature">
@@ -296,8 +297,12 @@
 <div id="fcu-temp-sources-popup" class="fcu-temp-sources-popup hidden" role="dialog" aria-modal="true" aria-labelledby="fcu-temp-sources-title">
   <div class="fcu-temp-sources-dialog">
     <div class="fcu-temp-sources-header">
-      <h3 id="fcu-temp-sources-title">Temperature Sources</h3>
-      <button type="button" class="fcu-temp-sources-close" data-action="close-fcu-temp-sources" aria-label="Close">×</button>
+      <h3 id="fcu-temp-sources-title" data-role="title">Temperature Sources</h3>
+      <div class="fcu-temp-sources-actions">
+        <button type="button" class="pure-button pure-button-primary" data-action="save-fcu-temp-sources">Save</button>
+        <button type="button" class="pure-button" data-action="revert-fcu-temp-sources">Revert</button>
+        <button type="button" class="pure-button" data-action="cancel-fcu-temp-sources">Cancel</button>
+      </div>
     </div>
     <p class="fcu-temp-sources-note">Readings older than 10 minutes are ignored.</p>
     <div class="fcu-temp-sources-message" data-role="message" aria-live="polite"></div>

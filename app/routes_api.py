@@ -11,7 +11,7 @@ from typing import Any
 
 from flask import Blueprint, request, jsonify
 from flask_pydantic import validate
-from pydantic import ValidationError
+from pydantic import TypeAdapter, ValidationError
 from websockets.exceptions import WebSocketException
 
 from .constants import __version__
@@ -29,6 +29,7 @@ from .utils.db_utils import with_db_connection
 from .models import (
     CommandResponse,
     DeviceRoomControl,
+    FcuTempSourceBatchControl,
     DriveControl,
     FcuTempSourceControl,
     ModeControl,
@@ -45,6 +46,7 @@ logger = logging.getLogger(__name__)
 
 # Create API blueprint
 api_v1 = Blueprint("api_v1", __name__)
+FCU_TEMP_SOURCE_BATCH_ADAPTER = TypeAdapter(FcuTempSourceBatchControl)
 
 
 def _validation_error_response(error: ValidationError):
@@ -395,16 +397,26 @@ def get_fcu_temp_sources(conn):
 
 
 @api_v1.route("/fcu_temp_source", methods=["POST"])
-@validate()
 @with_db_connection
-def set_fcu_temp_source(conn, body: FcuTempSourceControl):
-    """Persist one FCU temperature-source multiplier and log old/new values."""
+def set_fcu_temp_source(conn):
+    """Persist one or more FCU temperature-source multipliers atomically."""
+    payload = request.get_json(silent=True)
     try:
-        response = db.set_fcu_temp_source_multiplier(
+        if isinstance(payload, list):
+            updates = FCU_TEMP_SOURCE_BATCH_ADAPTER.validate_python(payload)
+        else:
+            updates = [FcuTempSourceControl.model_validate(payload or {})]
+    except ValidationError as e:
+        return _validation_error_response(e)
+
+    fcu_device_ids = {update.fcu_device_id for update in updates}
+    if len(fcu_device_ids) > 1:
+        return jsonify({"error": "all updates must use the same fcu_device_id"}), 400
+
+    try:
+        response = db.set_fcu_temp_source_multipliers(
             conn,
-            fcu_device_id=body.fcu_device_id,
-            source_device_id=body.source_device_id,
-            multiplier=body.multiplier,
+            updates=updates,
             ipaddr=request.remote_addr,
             agent=request.headers.get("User-Agent"),
         )

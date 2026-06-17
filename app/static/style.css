@@ -652,15 +652,15 @@ table.rules-table th  {
     display: flex;
     align-items: flex-start;
     justify-content: center;
-    padding: 10vh 1rem 1rem;
+    padding: 6vh 1rem 1rem;
     background: rgba(0, 0, 0, 0.25);
 }
 
 .fcu-temp-sources-dialog {
     width: min(760px, 100%);
-    max-height: 80vh;
+    max-height: 88vh;
     overflow: auto;
-    padding: 1rem;
+    padding: 0.75rem;
     border: 1px solid #bbb;
     border-radius: 4px;
     background: #fff;
@@ -671,24 +671,31 @@ table.rules-table th  {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 1rem;
+    gap: 0.75rem;
 }
 
 .fcu-temp-sources-header h3 {
+    overflow: hidden;
+    flex: 1 1 auto;
     margin: 0;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
-.fcu-temp-sources-close {
-    border: 0;
-    background: transparent;
-    cursor: pointer;
-    font-size: 1.5rem;
-    line-height: 1;
+.fcu-temp-sources-actions {
+    display: flex;
+    flex: 0 0 auto;
+    gap: 0.35rem;
+}
+
+.fcu-temp-sources-actions .pure-button {
+    padding: 0.3rem 0.65rem;
+    line-height: 1.15;
 }
 
 .fcu-temp-sources-note,
 .fcu-temp-sources-message {
-    margin: 0.6rem 0;
+    margin: 0.35rem 0;
 }
 
 .fcu-temp-sources-message.error {
@@ -699,8 +706,15 @@ table.rules-table th  {
     width: 100%;
 }
 
+.fcu-temp-sources-table th,
+.fcu-temp-sources-table td {
+    padding: 0.25rem 0.65rem;
+    line-height: 1.2;
+}
+
 .fcu-temp-source-weight {
-    width: 5rem;
+    width: 4.5rem;
+    padding: 0.1rem 0.25rem;
 }
 
 /****************************************************************/

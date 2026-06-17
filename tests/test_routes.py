@@ -89,6 +89,7 @@ def test_fcu_matrix_room_temp_cell_opens_weight_popup(
             "temp10x": 220,
             "calculated_temp10x": 235,
             "temp_source_stale_seconds": 600,
+            "room_name": "Area 51",
             "status": {"Mode": "COOL"},
         }
     ]
@@ -103,7 +104,12 @@ def test_fcu_matrix_room_temp_cell_opens_weight_popup(
         in html
     )
     assert 'data-fcu-temp-source-update-url="/api/v1/fcu_temp_source"' in html
+    assert 'data-fcu-temp-sources-room-name="Area 51"' in html
     assert "Readings older than 10 minutes are ignored" in html
+    assert 'data-action="save-fcu-temp-sources"' in html
+    assert 'data-action="revert-fcu-temp-sources"' in html
+    assert 'data-action="cancel-fcu-temp-sources"' in html
+    assert 'data-action="close-fcu-temp-sources"' not in html
 
 
 def test_temperature_chart_page_has_raw_calculated_mode_switch(

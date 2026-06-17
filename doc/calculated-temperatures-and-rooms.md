@@ -178,7 +178,9 @@ including the FCU itself:
 }
 ```
 
-`POST /api/v1/fcu_temp_source` persists one multiplier:
+`POST /api/v1/fcu_temp_source` persists one multiplier, or an array of
+multipliers for one FCU. Array requests are atomic: if any row fails validation
+or references an unknown device, none of the rows are saved.
 
 ```json
 {
@@ -187,6 +189,25 @@ including the FCU itself:
   "multiplier": 0.75
 }
 ```
+
+```json
+[
+  {
+    "fcu_device_id": 12,
+    "source_device_id": 34,
+    "multiplier": 0.75
+  },
+  {
+    "fcu_device_id": 12,
+    "source_device_id": 56,
+    "multiplier": 1.25
+  }
+]
+```
+
+The main dashboard's temperature-source popup keeps multiplier edits local until
+the user clicks **Save**. **Revert** restores the loaded values, **Cancel**
+closes without saving, and stale sources are shown after current sources.
 
 Changes are written to `changelog` with old and new multiplier values. The log
 API includes `current_values` and `new_value` so old/new values are visible.

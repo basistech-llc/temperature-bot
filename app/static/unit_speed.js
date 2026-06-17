@@ -35,6 +35,10 @@ const DEFAULT_MIN_SET_RANGE_C = 3.0;
 const SET_RANGE_DEVICE_ID_KEY = "device_id";
 const SET_RANGE_LOW_KEY = "set_range_low_c";
 const SET_RANGE_HIGH_KEY = "set_range_high_c";
+const FCU_TEMP_SOURCE_FCU_DEVICE_ID_KEY = "fcu_device_id";
+const FCU_TEMP_SOURCE_SOURCE_DEVICE_ID_KEY = "source_device_id";
+const FCU_TEMP_SOURCE_MULTIPLIER_KEY = "multiplier";
+const FCU_TEMP_SOURCE_TITLE = "Temperature Sources";
 
 // Refresh logic
 var start = Date.now();
@@ -322,6 +326,27 @@ function formatAgeSeconds(seconds) {
   return remainder ? `${hours}h ${remainder}m` : `${hours}h`;
 }
 
+function fcuTempSourcesTitle(roomName) {
+  const trimmedRoomName = String(roomName || "").trim();
+  return trimmedRoomName
+    ? `${trimmedRoomName}: ${FCU_TEMP_SOURCE_TITLE}`
+    : FCU_TEMP_SOURCE_TITLE;
+}
+
+function setFcuTempSourcesTitle(popup, roomName) {
+  const title = popup.querySelector("[data-role='title']");
+  if (title) {
+    title.textContent = fcuTempSourcesTitle(roomName);
+  }
+}
+
+function sortedFcuTempSources(sources) {
+  const sourceList = Array.isArray(sources) ? sources : [];
+  return sourceList
+    .filter((source) => !source.is_stale)
+    .concat(sourceList.filter((source) => source.is_stale));
+}
+
 function fcuTempSourceLabel(source) {
   const suffix = [];
   if (source.is_fcu_self) {
@@ -335,6 +360,15 @@ function fcuTempSourceLabel(source) {
     : source.device_name;
 }
 
+function parseFcuTempSourceMultiplier(value) {
+  const trimmedValue = String(value ?? "").trim();
+  if (!trimmedValue) {
+    return null;
+  }
+  const multiplier = Number(trimmedValue);
+  return Number.isFinite(multiplier) && multiplier >= 0 ? multiplier : null;
+}
+
 function setFcuTempSourcesMessage(popup, message, isError = false) {
   const messageElement = popup.querySelector("[data-role='message']");
   if (!messageElement) {
@@ -344,21 +378,77 @@ function setFcuTempSourcesMessage(popup, message, isError = false) {
   messageElement.classList.toggle("error", isError);
 }
 
-function closeFcuTempSourcesPopup() {
+function setFcuTempSourcesControlsDisabled(popup, disabled) {
+  popup.dataset.saving = disabled ? "true" : "false";
+  popup
+    .querySelectorAll(".fcu-temp-source-weight, .fcu-temp-sources-actions button")
+    .forEach((control) => {
+      control.disabled = disabled;
+    });
+}
+
+function closeFcuTempSourcesPopup(options = {}) {
   const popup = document.getElementById("fcu-temp-sources-popup");
-  if (popup) {
+  if (popup && (options.force || popup.dataset.saving !== "true")) {
     popup.classList.add("hidden");
   }
 }
 
-function renderFcuTempSources(popup, data, updateUrl) {
+function collectFcuTempSourceChanges(popup) {
+  const changes = [];
+  const inputs = popup.querySelectorAll(".fcu-temp-source-weight");
+  for (const input of inputs) {
+    const multiplier = parseFcuTempSourceMultiplier(input.value);
+    if (multiplier === null) {
+      return {
+        changes: [],
+        error: "Weight must be a nonnegative number.",
+      };
+    }
+
+    const originalMultiplier = parseFcuTempSourceMultiplier(
+      input.dataset.initialMultiplier,
+    );
+    const fcuDeviceId = parseInt(input.dataset.fcuDeviceId, 10);
+    const sourceDeviceId = parseInt(input.dataset.sourceDeviceId, 10);
+    if (
+      originalMultiplier === null ||
+      !Number.isInteger(fcuDeviceId) ||
+      !Number.isInteger(sourceDeviceId)
+    ) {
+      return {
+        changes: [],
+        error: "Unable to read temperature source row data.",
+      };
+    }
+
+    if (multiplier !== originalMultiplier) {
+      changes.push({
+        [FCU_TEMP_SOURCE_FCU_DEVICE_ID_KEY]: fcuDeviceId,
+        [FCU_TEMP_SOURCE_SOURCE_DEVICE_ID_KEY]: sourceDeviceId,
+        [FCU_TEMP_SOURCE_MULTIPLIER_KEY]: multiplier,
+      });
+    }
+  }
+  return { changes, error: "" };
+}
+
+function revertFcuTempSourceChanges(popup) {
+  popup.querySelectorAll(".fcu-temp-source-weight").forEach((input) => {
+    input.value = input.dataset.initialMultiplier;
+  });
+  setFcuTempSourcesMessage(popup, "");
+}
+
+function renderFcuTempSources(popup, data) {
   const tbody = popup.querySelector("[data-role='sources-body']");
   if (!tbody) {
     return;
   }
   tbody.innerHTML = "";
 
-  if (!data.sources || data.sources.length === 0) {
+  const sources = sortedFcuTempSources(data.sources);
+  if (sources.length === 0) {
     const row = document.createElement("tr");
     const cell = document.createElement("td");
     cell.colSpan = 4;
@@ -368,7 +458,7 @@ function renderFcuTempSources(popup, data, updateUrl) {
     return;
   }
 
-  for (const source of data.sources) {
+  for (const source of sources) {
     const row = document.createElement("tr");
     row.classList.toggle("temp-stale", Boolean(source.is_stale));
 
@@ -394,16 +484,15 @@ function renderFcuTempSources(popup, data, updateUrl) {
 
     const weightCell = document.createElement("td");
     const input = document.createElement("input");
-    input.type = "number";
-    input.min = "0";
-    input.step = "0.1";
+    input.type = "text";
+    input.inputMode = "decimal";
+    input.autocomplete = "off";
     input.value = String(source.multiplier);
     input.className = "fcu-temp-source-weight";
     input.setAttribute("aria-label", `Weight for ${source.device_name}`);
     input.dataset.fcuDeviceId = String(data.fcu_device_id);
     input.dataset.sourceDeviceId = String(source.source_device_id);
-    input.dataset.updateUrl = updateUrl;
-    input.addEventListener("change", saveFcuTempSourceMultiplier);
+    input.dataset.initialMultiplier = String(source.multiplier);
     weightCell.appendChild(input);
 
     row.appendChild(labelCell);
@@ -425,6 +514,8 @@ async function loadFcuTempSourcesForCell(cell) {
     return;
   }
 
+  popup.dataset.updateUrl = updateUrl;
+  setFcuTempSourcesTitle(popup, cell.dataset.fcuTempSourcesRoomName);
   popup.classList.remove("hidden");
   setFcuTempSourcesMessage(popup, "Loading...");
   const tbody = popup.querySelector("[data-role='sources-body']");
@@ -438,7 +529,7 @@ async function loadFcuTempSourcesForCell(cell) {
     if (!response.ok) {
       throw new Error(data.error || "Unable to load temperature sources.");
     }
-    renderFcuTempSources(popup, data, updateUrl);
+    renderFcuTempSources(popup, data);
     setFcuTempSourcesMessage(popup, "");
   } catch (error) {
     console.error("Failed to load FCU temperature sources:", error);
@@ -446,41 +537,46 @@ async function loadFcuTempSourcesForCell(cell) {
   }
 }
 
-async function saveFcuTempSourceMultiplier(event) {
-  const input = event.currentTarget;
+async function saveFcuTempSourceMultipliers() {
   const popup = document.getElementById("fcu-temp-sources-popup");
-  const multiplier = parseFloat(input.value);
-  if (!popup || !Number.isFinite(multiplier) || multiplier < 0) {
-    if (popup) {
-      setFcuTempSourcesMessage(popup, "Weight must be a nonnegative number.", true);
-    }
+  if (!popup) {
     return;
   }
 
-  input.disabled = true;
+  const updateUrl = popup.dataset.updateUrl;
+  const { changes, error } = collectFcuTempSourceChanges(popup);
+  if (error) {
+    setFcuTempSourcesMessage(popup, error, true);
+    return;
+  }
+  if (!updateUrl) {
+    setFcuTempSourcesMessage(popup, "Unable to save without an update URL.", true);
+    return;
+  }
+  if (changes.length === 0) {
+    closeFcuTempSourcesPopup();
+    return;
+  }
+
+  setFcuTempSourcesControlsDisabled(popup, true);
   setFcuTempSourcesMessage(popup, "Saving...");
   try {
-    const response = await fetch(input.dataset.updateUrl, {
+    const response = await fetch(updateUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        fcu_device_id: parseInt(input.dataset.fcuDeviceId, 10),
-        source_device_id: parseInt(input.dataset.sourceDeviceId, 10),
-        multiplier: multiplier,
-      }),
+      body: JSON.stringify(changes),
     });
     const data = await response.json();
     if (!response.ok) {
-      throw new Error(data.error || "Unable to save weight.");
+      throw new Error(data.error || "Unable to save weights.");
     }
-    renderFcuTempSources(popup, data, input.dataset.updateUrl);
-    setFcuTempSourcesMessage(popup, "Saved.");
     forceRefresh = true;
+    closeFcuTempSourcesPopup({ force: true });
   } catch (error) {
-    console.error("Failed to save FCU temperature source multiplier:", error);
+    console.error("Failed to save FCU temperature source multipliers:", error);
     setFcuTempSourcesMessage(popup, error.message, true);
   } finally {
-    input.disabled = false;
+    setFcuTempSourcesControlsDisabled(popup, false);
   }
 }
 
@@ -729,11 +825,22 @@ function setupFcuTempSourcePopupControls() {
   if (!popup) {
     return;
   }
-  popup
-    .querySelectorAll("[data-action='close-fcu-temp-sources']")
-    .forEach((button) => {
-      button.addEventListener("click", closeFcuTempSourcesPopup);
+  const saveButton = popup.querySelector("[data-action='save-fcu-temp-sources']");
+  if (saveButton) {
+    saveButton.addEventListener("click", saveFcuTempSourceMultipliers);
+  }
+  const revertButton = popup.querySelector("[data-action='revert-fcu-temp-sources']");
+  if (revertButton) {
+    revertButton.addEventListener("click", () => {
+      revertFcuTempSourceChanges(popup);
     });
+  }
+  const cancelButton = popup.querySelector("[data-action='cancel-fcu-temp-sources']");
+  if (cancelButton) {
+    cancelButton.addEventListener("click", () => {
+      closeFcuTempSourcesPopup();
+    });
+  }
   popup.addEventListener("click", (event) => {
     if (event.target === popup) {
       closeFcuTempSourcesPopup();
@@ -1693,12 +1800,17 @@ if (typeof window !== "undefined") {
 // Node.js export for testing
 if (typeof module !== "undefined" && module.exports) {
   module.exports = {
+    collectFcuTempSourceChanges,
     ensureModeSelectOption,
     fanRadioIdForDevice,
+    fcuTempSourcesTitle,
     modeLabelForDevice,
     modeValueForDevice,
     moveSetRange,
     normalizeSetRange,
+    parseFcuTempSourceMultiplier,
     resizeSetRangeEndpoint,
+    saveFcuTempSourceMultipliers,
+    sortedFcuTempSources,
   };
 }
