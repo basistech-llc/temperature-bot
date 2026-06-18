@@ -2,12 +2,10 @@
 API route handlers
 """
 
-import asyncio
 import logging
 import sqlite3
 import time
 import xml.etree.ElementTree as ET
-from typing import Any
 
 from flask import Blueprint, request, jsonify
 from flask_pydantic import validate
@@ -58,6 +56,16 @@ def _rules_disabled_comment() -> str:
     return f"Rules disabled for {minutes:g} minutes"
 
 
+def _command_error_response(error: ValueError):
+    logger.info("Command request rejected: %s", error)
+    return jsonify({"error": str(error)}), 400
+
+
+def _ae200_error_response(error):
+    logger.warning("AE-200 request failed: %s", error)
+    return jsonify({"error": f"AE-200 request failed: {error}"}), 502
+
+
 @api_v1.route("/version")
 def get_version_json():
     return jsonify({"version": __version__})
@@ -70,7 +78,12 @@ def set_fan_speed(conn, body: SpeedControl):
     """Sets the speed, records the speed in the changelog,
     and then updates the database, so status is always up-to-date"""
     logger.debug("/set_fan_speed: body=[%s]", body)
-    ret = rules_engine.set_body_fan_speed(conn, body, request.remote_addr, "web")
+    try:
+        ret = rules_engine.set_body_fan_speed(conn, body, request.remote_addr, "web")
+    except ValueError as exc:
+        return _command_error_response(exc)
+    except (ET.ParseError, OSError, RuntimeError, WebSocketException) as exc:
+        return _ae200_error_response(exc)
     db.disable_rules_for_device(
         conn,
         device_id=ret["device_id"],
@@ -87,7 +100,12 @@ def set_fan_speed(conn, body: SpeedControl):
 def set_drive(conn, body: DriveControl):
     """Sets the speed, records the speed in the changelog, and then updates the database, so status is always up-to-date"""
     logger.debug("/set_drive: body=[%s]", body)
-    ret = rules_engine.set_body_drive(conn, body, request.remote_addr, "web")
+    try:
+        ret = rules_engine.set_body_drive(conn, body, request.remote_addr, "web")
+    except ValueError as exc:
+        return _command_error_response(exc)
+    except (ET.ParseError, OSError, RuntimeError, WebSocketException) as exc:
+        return _ae200_error_response(exc)
     device_id = ret["device_id"]
     db.disable_rules_for_device(
         conn,
@@ -106,7 +124,12 @@ def set_drive(conn, body: DriveControl):
 def set_mode(conn, body: ModeControl):
     """Set an AE-200 operation mode and record the commanded state."""
     logger.debug("/set_mode: body=[%s]", body)
-    ret = rules_engine.set_body_mode(conn, body, request.remote_addr, "web")
+    try:
+        ret = rules_engine.set_body_mode(conn, body, request.remote_addr, "web")
+    except ValueError as exc:
+        return _command_error_response(exc)
+    except (ET.ParseError, OSError, RuntimeError, WebSocketException) as exc:
+        return _ae200_error_response(exc)
     db.disable_rules_for_device(
         conn,
         device_id=ret["device_id"],
@@ -128,7 +151,12 @@ def set_temp(conn, body: SetTempControl):
     for converting from Fahrenheit if needed.
     """
     logger.debug("/set_temp: body=[%s]", body)
-    ret = rules_engine.set_body_set_temp(conn, body, request.remote_addr, "web")
+    try:
+        ret = rules_engine.set_body_set_temp(conn, body, request.remote_addr, "web")
+    except ValueError as exc:
+        return _command_error_response(exc)
+    except (ET.ParseError, OSError, RuntimeError, WebSocketException) as exc:
+        return _ae200_error_response(exc)
     return jsonify(json_ready(CommandResponse.model_validate({"status": "ok", **ret})))
 
 
@@ -616,38 +644,26 @@ def debug_ae200_devices():
         ae200_devices = ae200.get_devices()
         device_names = [dev.get("name", "Unknown") for dev in ae200_devices]
 
-        # Per-device status direct from AE-200, fetched concurrently
-        async def _fetch_ae200_details_async(devices):
-            ae200_details: dict[str, dict[str, Any]] = {}
-            tasks = []
-            ids = []
-
-            async def fetch_device_details(device_id) -> dict[str, Any]:
-                try:
-                    return dict(await ae200.get_device_info_async(device_id))
-                except (ET.ParseError, OSError, RuntimeError, ValueError, WebSocketException) as e:
-                    return {"error": str(e)}
-
-            for dev in devices:
-                device_id = dev.get("id")
-                if device_id is None:
-                    continue
-                ids.append(str(device_id))
-                tasks.append(fetch_device_details(device_id))
-            if not tasks:
-                return ae200_details
-            results = await asyncio.gather(*tasks)
-            for key, result in zip(ids, results):
-                ae200_details[key] = result
-            return ae200_details
-
-        ae200_details = ae200.runner.run_async_safely(
-            _fetch_ae200_details_async(ae200_devices)
-        )
+        ae200_details = {}
+        for dev in ae200_devices:
+            device_id = dev.get("id")
+            if device_id is None:
+                continue
+            try:
+                ae200_details[str(device_id)] = dict(ae200.get_device_info(device_id))
+            except (
+                ET.ParseError,
+                OSError,
+                RuntimeError,
+                ValueError,
+                WebSocketException,
+            ) as e:
+                ae200_details[str(device_id)] = {"error": str(e)}
 
         return jsonify(
             {"names": device_names, "devices": ae200_devices, "details": ae200_details}
         )
-    except (ValueError, RuntimeError, OSError) as e:
-        logger.warning("Failed to fetch AE-200 devices: %s", e)
-        return jsonify({"error": str(e)}), 500
+    except ValueError as e:
+        return _command_error_response(e)
+    except (ET.ParseError, OSError, RuntimeError, WebSocketException) as e:
+        return _ae200_error_response(e)

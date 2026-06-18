@@ -30,7 +30,10 @@
   {% endblock %}
 
 </head>
-<body>
+<body class="{% if ae200_simulator %}has-simulator-banner{% endif %}">
+  {% if ae200_simulator %}
+  <div class="simulator-banner" role="status" aria-live="polite">simulator</div>
+  {% endif %}
   <header>
   {% if develop %}
   <div class="top-banner">

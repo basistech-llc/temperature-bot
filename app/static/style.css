@@ -246,6 +246,26 @@ button {
     text-align: center;
 }
 
+.has-simulator-banner {
+    padding-top: 28px;
+}
+
+.simulator-banner {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 3000;
+    background: #c00000;
+    color: #fff;
+    font-size: 14pt;
+    font-weight: 700;
+    line-height: 1;
+    padding: 4px 0;
+    text-align: center;
+    text-transform: lowercase;
+}
+
 .cell-temp {
     color: #000; /* Default black for fresh temperatures */
 }

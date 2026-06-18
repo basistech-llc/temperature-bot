@@ -42,7 +42,7 @@ open tabs here:
    - Web routes (`routes_web.py`): HTML pages (index, rules, logs, device details)
    - API routes (`routes_api.py`): JSON endpoints for status, temperature series, fan/drive control
    - Runs via `wsgi.py`/gunicorn (production) or `flask --app app.main:app run` (dev, auto-reload —
-     see `make live-dev-web` / `make local-dev`)
+     see `make local-live-dev` / `make local-dev`)
 
 2. **SQLite Database** (`app/db.py`): Central data store
    - **Run-length encoding**: Temperature data stored with `(logtime, duration)` to avoid bloat when values don't change
@@ -139,8 +139,8 @@ Two flavors, both serve Flask on `http://localhost:8000` with `FLASK_DEBUG=True`
 
 | Command | AE200 data | Needs Tailscale | Use when |
 |---------|-----------|-----------------|----------|
-| `make local-dev`    | simulated (`AE200_SIMULATOR=1`) | no  | UI work, no hardware needed |
-| `make live-dev-web` | live hardware                   | yes | seeing real device data |
+| `make local-dev`      | simulated (`AE200_SIMULATOR=1`) | no  | UI work, no hardware needed |
+| `make local-live-dev` | live hardware                   | yes | seeing real device data |
 
 The web interface needs a populated DB to show anything useful (see `make fetch-dev-db`).
 

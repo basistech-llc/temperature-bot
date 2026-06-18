@@ -188,6 +188,9 @@ def test_explicit_zero_fcu_weight_overrides_default(test_database_conn):
     assert row["multiplier"] == 0.0
     assert db.get_fcu_temp_source_weights(conn, fcu_id) == {fcu_id: 0.0}
     assert db.calculate_fcu_temperature10x(conn, fcu_id) is None
+    status = db.get_device_status(conn)
+    fcu = next(device for device in status if device["device_id"] == fcu_id)
+    assert "calculated_temp10x" not in fcu
     source = next(
         item for item in response["sources"] if item["source_device_id"] == fcu_id
     )

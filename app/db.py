@@ -982,11 +982,119 @@ def update_device_notes(conn, device_id: int, notes: str | None):
 
 ################################################################
 ## AE200
+AE200_SIMULATOR_STATUS_KEYS = frozenset(
+    {
+        ae200.AE200_DRIVE_KEY,
+        ae200.AE200_FAN_SPEED_KEY,
+        ae200.AE200_MODE_KEY,
+        "InletTemp",
+        "SetTemp",
+    }
+)
+
+
+def _ae200_simulator_name_key(name: str | None) -> str:
+    return "".join(ch for ch in (name or "").casefold() if ch.isalnum())
+
+
+def _latest_status_for_device(conn, device_id: int) -> dict[str, Any] | None:
+    c = conn.cursor()
+    c.execute(
+        """
+        SELECT status_json
+        FROM devlog
+        WHERE device_id=?
+        ORDER BY logtime DESC
+        LIMIT 1
+        """,
+        (device_id,),
+    )
+    row = c.fetchone()
+    if row is None:
+        return None
+    try:
+        status = json.loads(row["status_json"] or "{}")
+    except json.JSONDecodeError:
+        return None
+    return status if isinstance(status, dict) else None
+
+
+def _looks_like_ae200_status(status: dict[str, Any] | None) -> bool:
+    return bool(status and AE200_SIMULATOR_STATUS_KEYS.intersection(status))
+
+
+def _ae200_simulator_unit_for_device(
+    conn,
+    device_id: int,
+    device_name: str,
+    ae200_device_id: int | None,
+) -> int:
+    simulator_devices = ae200.get_devices()
+    configured_id = str(ae200_device_id) if ae200_device_id is not None else None
+    simulator_ids = {str(device["id"]) for device in simulator_devices}
+    if configured_id in simulator_ids:
+        return int(configured_id)
+
+    latest_status = _latest_status_for_device(conn, device_id)
+    if configured_id is not None and _looks_like_ae200_status(latest_status):
+        ae200.register_simulated_device(
+            ae200_device=ae200_device_id,
+            name=device_name,
+            statusdict=latest_status,
+        )
+        logger.info(
+            "AE-200 simulator registered local device_id=%s name=%s configured_unit=%s",
+            device_id,
+            device_name,
+            ae200_device_id,
+        )
+        return int(configured_id)
+
+    device_name_key = _ae200_simulator_name_key(device_name)
+    for simulator_device in simulator_devices:
+        if _ae200_simulator_name_key(simulator_device.get("name")) == device_name_key:
+            simulator_id = int(simulator_device["id"])
+            logger.info(
+                "AE-200 simulator mapped device_id=%s name=%s configured_unit=%s to simulator_unit=%s",
+                device_id,
+                device_name,
+                ae200_device_id,
+                simulator_id,
+            )
+            return simulator_id
+
+    raise ValueError(
+        "AE-200 simulator has no unit for "
+        f"device_id={device_id} name={device_name!r} "
+        f"configured ae200_device_id={ae200_device_id}; "
+        f"simulator units={sorted(simulator_ids)}"
+    )
+
+
 def get_ae200_unit(conn, device_id: int):
     c = conn.cursor()
-    c.execute("select ae200_device_id from devices where device_id=?", (device_id,))
-    ret = c.fetchone()["ae200_device_id"]
-    logger.debug("device_id=%s ae200_unit=%d", device_id, ret)
+    c.execute(
+        "select device_name, ae200_device_id from devices where device_id=?",
+        (device_id,),
+    )
+    row = c.fetchone()
+    if row is None:
+        raise ValueError(f"Unknown device_id={device_id}")
+
+    ae200_device_id = row["ae200_device_id"]
+    if ae200.AE200_SIMULATOR:
+        ret = _ae200_simulator_unit_for_device(
+            conn,
+            device_id=device_id,
+            device_name=row["device_name"],
+            ae200_device_id=ae200_device_id,
+        )
+    elif ae200_device_id is None:
+        raise ValueError(f"Device {device_id} has no ae200_device_id")
+    else:
+        ret = ae200_device_id
+
+    logger.debug("device_id=%s ae200_unit=%s", device_id, ret)
     return ret
 
 
@@ -1479,6 +1587,27 @@ def calculate_fcu_temperatures10x(
     return calculated
 
 
+def _fcu_self_source_multipliers(
+    conn,
+    fcu_device_ids: list[int],
+) -> dict[int, float]:
+    if not fcu_device_ids:
+        return {}
+    wanted_values = ",".join(["(?)"] * len(fcu_device_ids))
+    c = conn.cursor()
+    c.execute(
+        f"""
+        WITH wanted(fcu_device_id) AS (VALUES {wanted_values})
+        SELECT s.fcu_device_id, s.multiplier
+        FROM fcu_temp_sources s
+        JOIN wanted w ON s.fcu_device_id = w.fcu_device_id
+        WHERE s.source_device_id = s.fcu_device_id
+        """,
+        fcu_device_ids,
+    )
+    return {row["fcu_device_id"]: float(row["multiplier"]) for row in c.fetchall()}
+
+
 def _temperature_rows_by_source_for_window(
     conn, source_device_ids: list[int], start_logtime: int, end_logtime: int
 ) -> dict[int, list[sqlite3.Row]]:
@@ -1920,6 +2049,7 @@ def get_device_status(conn) -> List[Dict[str, Any]]:
 
     set_ranges = get_fcu_set_ranges(conn, fcu_device_ids)
     calculated_temps = calculate_fcu_temperatures10x(conn, fcu_device_ids)
+    fcu_self_multipliers = _fcu_self_source_multipliers(conn, fcu_device_ids)
     for data in device_data:
         if data["device_id"] in fcu_device_ids:
             set_range = set_ranges.get(data["device_id"]) or default_fcu_set_range(
@@ -1930,6 +2060,17 @@ def get_device_status(conn) -> List[Dict[str, Any]]:
             data["set_range_high_c"] = set_range.set_range_high_c
             data["min_set_range_c"] = set_range.min_set_range_c
         calculated_temp10x = calculated_temps.get(data["device_id"])
+        if (
+            calculated_temp10x is None
+            and data["device_id"] in fcu_device_ids
+            and data.get("temp10x") is not None
+            and fcu_self_multipliers.get(
+                data["device_id"],
+                FCU_DEFAULT_TEMP_SOURCE_MULTIPLIER,
+            )
+            > 0
+        ):
+            calculated_temp10x = data["temp10x"]
         if calculated_temp10x is not None:
             data["calculated_temp10x"] = calculated_temp10x
         if "logtime" in data:

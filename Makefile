@@ -10,6 +10,7 @@
 #    make make-dev-db  - creates a local database via Flyway migrations
 #    make migrate-db   - applies pending Flyway migrations to the existing local DB
 #    make local-dev - Runs the web backend locally with simulator
+#    make local-live-dev - Runs the web backend locally against live AE-200
 #    make live-dev-runner - Runs the collection agent and rules runner locally, with live collection
 #
 # Environment variables:
@@ -153,12 +154,20 @@ validate-migrations:
 ## NOTE: It does not do JavaScript live reload; you need to use node for that
 ##       or just hit shift-reload on the web browser
 
-# Run web backend locally, with simulated data. (needs popuplated db too)
+# Run web backend locally, with simulated data. (needs populated db too)
 local-dev: $(REQ)
-	export AE200_SIMULATOR=1 && $(MAKE) live-dev-web
+	@echo Running with simulator
+	export AE200_SIMULATOR=1 && $(MAKE) _local-dev-web
 
-# Run the web backend locally, querying the hardware (assumes VPN or running in CALA)
-live-dev-web: $(REQ)
+# Run web backend locally against live AE-200 hardware.
+local-live-dev: $(REQ)
+	@echo updating database
+	make every-minute
+	@echo Running without simulator
+	AE200_SIMULATOR= $(MAKE) _local-dev-web
+
+# Shared web backend runner for local-dev and local-live-dev.
+_local-dev-web: $(REQ)
 	FLASK_DEBUG=True poetry run flask --app app.main:app run --port 8000
 
 # Run the data collection agent and rules runner locally, querying the hardware (assumes VPN or running in CALA)
@@ -168,7 +177,7 @@ live-dev-runner: $(REQ)
 tags:
 	etags */*.py
 
-.PHONY: local-dev live-dev-web live-dev-runner tags
+.PHONY: local-dev local-live-dev _local-dev-web live-dev-runner tags
 ################################################################
 ## Analysis tools
 ## Static Analysis

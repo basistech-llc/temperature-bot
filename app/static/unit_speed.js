@@ -583,51 +583,84 @@ async function saveFcuTempSourceMultipliers() {
 ////////////////////////////////////////////////////////////////
 // Weather display functions
 function displayWeather(weatherInfo) {
-  console.log("displayWeather called with:", weatherInfo);
   const weatherDiv = document.getElementById("weather");
   if (!weatherDiv || !weatherInfo) {
-    console.log(
-      "Early return - weatherDiv:",
-      !!weatherDiv,
-      "weatherInfo:",
-      !!weatherInfo,
-    );
     return;
   }
 
-  let html = "";
-  // Add weather content
-  if (weatherInfo.current) {
-    const current = weatherInfo.current;
-    const temp = current.temperature
-      ? `${TemperatureUtils.formatTemperature(current.temperature)} (Boston Logan Airport)`
-      : "N/A";
-    html += `<div><strong>Current:</strong> ${temp} `;
-    if (current.icon) {
-      html += ` <img src="${current.icon}" alt="weather icon" class="weather-icon">`;
+  const rows = [];
+  const appendIcon = (container, iconUrl) => {
+    if (!iconUrl) {
+      return;
     }
-    html += `${current.conditions}</div>`;
-    console.log("Added current weather to HTML");
+    const icon = document.createElement("img");
+    icon.src = iconUrl;
+    icon.alt = "weather icon";
+    icon.className = "weather-icon";
+    container.append(" ", icon);
+  };
+  const appendCurrent = (temperature, stationName, conditions, iconUrl) => {
+    const row = document.createElement("div");
+    const label = document.createElement("strong");
+    label.textContent = "Current:";
+    row.append(label, " ");
+    if (temperature === null || temperature === undefined) {
+      row.append("N/A");
+    } else {
+      row.append(TemperatureUtils.formatTemperature(temperature));
+      if (stationName) {
+        row.append(` (${stationName})`);
+      }
+    }
+    appendIcon(row, iconUrl);
+    if (conditions) {
+      row.append(" ", conditions);
+    }
+    rows.push(row);
+  };
+
+  if (Array.isArray(weatherInfo.stations)) {
+    weatherInfo.stations.forEach((station) => {
+      appendCurrent(
+        station.temperature,
+        station.station_name,
+        station.conditions,
+        station.icon,
+      );
+    });
+  } else if (weatherInfo.current) {
+    appendCurrent(
+      weatherInfo.current.temperature,
+      weatherInfo.current.station_name || "Boston Logan Airport",
+      weatherInfo.current.conditions,
+      weatherInfo.current.icon,
+    );
   }
 
-  // Forecast
   if (weatherInfo.forecast && weatherInfo.forecast.length > 0) {
-    html += `<div><strong>Forecast for CALA:</strong></div>`;
+    const heading = document.createElement("div");
+    const label = document.createElement("strong");
+    label.textContent = "Forecast for CALA:";
+    heading.appendChild(label);
+    rows.push(heading);
     weatherInfo.forecast.forEach((period) => {
-      // Convert forecast temp from Fahrenheit to Celsius first, then apply unit preference
       const tempF = parseFloat(period.temperature);
       const tempC = TemperatureUtils.fahrenheitToCelsius(tempF);
-      const formattedTemp = TemperatureUtils.formatTemperature(tempC);
-      html += `<div>${period.time} ${formattedTemp} `;
-      if (period.icon) {
-        html += ` <img src="${period.icon}" alt="weather icon" class="weather-icon">`;
+      const row = document.createElement("div");
+      row.append(period.time || "--", " ");
+      if (Number.isFinite(tempC)) {
+        row.append(TemperatureUtils.formatTemperature(tempC));
+      } else {
+        row.append("--");
       }
-      html += `${period.conditions}</div>`;
+      appendIcon(row, period.icon);
+      if (period.conditions) {
+        row.append(" ", period.conditions);
+      }
+      rows.push(row);
     });
-    console.log("Added forecast to HTML");
   }
-  weatherDiv.innerHTML = html;
-  // Store weather data for later re-rendering
+  weatherDiv.replaceChildren(...rows);
   currentWeatherData = weatherInfo;
 }
 
@@ -646,8 +679,8 @@ async function setDrive(device_id, drive) {
     console.log("Set drive: result=", result);
     forceRefresh = true;
   } catch (e) {
-    console.error("Failed to set fan_speed:", e);
-    alert("Error setting fan_speed.");
+    console.error("Failed to set drive:", e);
+    alert("Error setting drive.");
   }
 }
 

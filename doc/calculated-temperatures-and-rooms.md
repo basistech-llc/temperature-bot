@@ -33,6 +33,12 @@ calculation. The constant is defined once in `app/constants.py` and is currently
 10 minutes. The FCU temperature popup must tell users that readings older than
 10 minutes are ignored.
 
+For the current `/api/v1/status` display payload, the room temperature falls
+back to the raw FCU temperature when the weighted calculation has no usable
+source and the FCU's own source multiplier has not been explicitly set to `0`.
+Historical calculated series and the calculation helper still exclude stale
+rows.
+
 ## Database
 
 Schema changes belong in Flyway migrations under `etc/flyway/sql/`; after adding

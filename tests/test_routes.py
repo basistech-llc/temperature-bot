@@ -48,6 +48,14 @@ def test_footer_only_on_about(flask_test_client):  # noqa: F811
     assert b"BasisTech LLC" not in index_response.data
 
 
+def test_simulator_banner_is_rendered(flask_test_client):  # noqa: F811
+    response = flask_test_client.get("/")
+    assert response.status_code == 200
+    html = response.data.decode("utf-8")
+    assert 'class="simulator-banner"' in html
+    assert ">simulator</div>" in html
+
+
 @patch("app.routes_web.hubitat.get_name_to_label", return_value={})
 @patch("app.routes_web.db.get_device_status")
 def test_fcu_matrix_has_raw_fcu_temp_and_room_temp_columns(
