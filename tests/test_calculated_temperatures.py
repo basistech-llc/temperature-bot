@@ -188,6 +188,9 @@ def test_explicit_zero_fcu_weight_overrides_default(test_database_conn):
     assert row["multiplier"] == 0.0
     assert db.get_fcu_temp_source_weights(conn, fcu_id) == {fcu_id: 0.0}
     assert db.calculate_fcu_temperature10x(conn, fcu_id) is None
+    status = db.get_device_status(conn)
+    fcu = next(device for device in status if device["device_id"] == fcu_id)
+    assert "calculated_temp10x" not in fcu
     source = next(
         item for item in response["sources"] if item["source_device_id"] == fcu_id
     )
@@ -542,6 +545,104 @@ def test_fcu_temp_source_api_persists_multiplier_and_logs_old_new_values(
         if log["current_values"] == "1.5" and log["new_value"] == "0.75"
     )
     assert "calculated temp multiplier" in multiplier_log["comment"]
+
+
+def test_fcu_temp_source_api_persists_batch_atomically(
+    flask_test_client, test_database_conn_with_test_data
+):  # noqa: F811
+    with closing(_connect_test_db()) as conn:
+        _, fcu_id, _ = test_database_conn_with_test_data
+        now = int(time.time())
+        first_source_id = _device(
+            conn, TempDeviceSpec(name="Batch Sensor 1", temp10x=246, logtime=now - 20)
+        )
+        second_source_id = _device(
+            conn, TempDeviceSpec(name="Batch Sensor 2", temp10x=252, logtime=now - 20)
+        )
+
+    response = flask_test_client.post(
+        "/api/v1/fcu_temp_source",
+        json=[
+            {
+                "fcu_device_id": fcu_id,
+                "source_device_id": first_source_id,
+                "multiplier": 1.25,
+            },
+            {
+                "fcu_device_id": fcu_id,
+                "source_device_id": second_source_id,
+                "multiplier": 0.5,
+            },
+        ],
+    )
+
+    assert response.status_code == 200
+    by_id = {source["source_device_id"]: source for source in response.json["sources"]}
+    assert by_id[first_source_id]["multiplier"] == 1.25
+    assert by_id[second_source_id]["multiplier"] == 0.5
+
+    with closing(_connect_test_db()) as conn:
+        rows = conn.execute(
+            """
+            SELECT source_device_id, multiplier
+            FROM fcu_temp_sources
+            WHERE fcu_device_id=? AND source_device_id IN (?, ?)
+            ORDER BY source_device_id
+            """,
+            (fcu_id, first_source_id, second_source_id),
+        ).fetchall()
+    assert [(row["source_device_id"], row["multiplier"]) for row in rows] == [
+        (first_source_id, 1.25),
+        (second_source_id, 0.5),
+    ]
+
+
+def test_fcu_temp_source_api_rolls_back_batch_when_one_update_fails(
+    flask_test_client, test_database_conn_with_test_data
+):  # noqa: F811
+    with closing(_connect_test_db()) as conn:
+        _, fcu_id, _ = test_database_conn_with_test_data
+        source_id = _device(
+            conn,
+            TempDeviceSpec(
+                name="Batch Rollback Sensor",
+                temp10x=248,
+                logtime=int(time.time()) - 20,
+            ),
+        )
+        changelog_count = conn.execute("SELECT COUNT(*) FROM changelog").fetchone()[0]
+
+    response = flask_test_client.post(
+        "/api/v1/fcu_temp_source",
+        json=[
+            {
+                "fcu_device_id": fcu_id,
+                "source_device_id": source_id,
+                "multiplier": 2.0,
+            },
+            {
+                "fcu_device_id": fcu_id,
+                "source_device_id": 999999,
+                "multiplier": 1.0,
+            },
+        ],
+    )
+
+    assert response.status_code == 404
+    with closing(_connect_test_db()) as conn:
+        row = conn.execute(
+            """
+            SELECT multiplier
+            FROM fcu_temp_sources
+            WHERE fcu_device_id=? AND source_device_id=?
+            """,
+            (fcu_id, source_id),
+        ).fetchone()
+        current_changelog_count = conn.execute(
+            "SELECT COUNT(*) FROM changelog"
+        ).fetchone()[0]
+    assert row is None
+    assert current_changelog_count == changelog_count
 
 
 def test_fcu_temp_sources_api_returns_default_weights(

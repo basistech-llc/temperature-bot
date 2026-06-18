@@ -12,6 +12,8 @@ Simulator if AE200_SIMULATOR is set
 # pylint: disable=missing-function-docstring
 # pylint: disable=redefined-outer-name
 
+import contextlib
+import fcntl
 import os
 from os.path import dirname,join
 from pathlib import Path
@@ -19,6 +21,7 @@ import asyncio
 import xml.etree.ElementTree as ET
 import logging
 import json
+import threading
 
 import concurrent.futures
 import websockets
@@ -40,6 +43,7 @@ AE200_DRIVE_KEY = "Drive"
 AE200_FAN_SPEED_KEY = "FanSpeed"
 AE200_MODE_KEY = "Mode"
 AE200_ALLOWED_SET_MODES = frozenset({"FAN", "COOL", "HEAT"})
+AE200_COMMAND_LOCK_PATH = os.getenv("AE200_COMMAND_LOCK_PATH", "/tmp/temperature-bot-ae200.lock")
 
 # User-facing fan-speed labels, keyed by speed number. These intentionally
 # mirror the speed-button text rendered in room_dashboard.html / index.html so
@@ -165,32 +169,47 @@ def get_device_mode(device):
     return info.get(AE200_MODE_KEY)
 
 
-class AsyncRunner:
+class AsyncRunner:  # pylint: disable=too-few-public-methods
     """Manages async operations for the application"""
 
     def __init__(self):
-        self._loop = None
-
-    def get_loop(self):
-        """Get or create the application's event loop"""
-        if self._loop is None:
-            self._loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(self._loop)
-        return self._loop
+        self._command_semaphore = threading.BoundedSemaphore(value=1)
 
     def run_async_safely(self, coro):
         """Run an async coroutine safely, handling existing event loops"""
         try:
-            # Try to get the current running loop
-            loop = asyncio.get_running_loop()
-            # We're already in an event loop, so we need to run in a separate thread
-            with concurrent.futures.ThreadPoolExecutor() as executor:
-                future = executor.submit(asyncio.run, coro)
-                return future.result()
+            with self._command_semaphore:
+                with ae200_command_lock():
+                    return self._run_async_safely(coro)
+        except Exception:
+            coro.close()
+            raise
+
+    @staticmethod
+    def _run_async_safely(coro):
+        """Run an async coroutine from sync code without reusing event loops."""
+        try:
+            asyncio.get_running_loop()
         except RuntimeError:
-            # No event loop running, use the app's event loop
-            loop = self.get_loop()
-            return loop.run_until_complete(coro)
+            return asyncio.run(coro)
+
+        # We're already in an event loop, so run the coroutine in a separate
+        # thread with its own short-lived loop.
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(asyncio.run, coro)
+            return future.result()
+
+
+@contextlib.contextmanager
+def ae200_command_lock():
+    """Serialize AE-200 websocket commands across local processes."""
+    lock_fd = os.open(AE200_COMMAND_LOCK_PATH, os.O_CREAT | os.O_RDWR, 0o600)
+    try:
+        fcntl.flock(lock_fd, fcntl.LOCK_EX)
+        yield
+    finally:
+        fcntl.flock(lock_fd, fcntl.LOCK_UN)
+        os.close(lock_fd)
 
 
 # Singleton instance
@@ -280,35 +299,6 @@ class AE200Functions:
         return runner.run_async_safely(self.sendAsync(deviceId, attributes))
 
 
-async def get_dev_status(unit_id):
-    d = AE200Functions()
-    return await d.getDeviceInfoAsync(unit_id)
-
-
-async def get_devices_async():
-    d = AE200Functions()
-    return await d.getDevicesAsync()
-
-
-async def set_fan_speed_async(device, speed):
-    logger.info("set_fan_speed_async(%s,%s)", device, speed)
-    d = AE200Functions()
-    await d.sendAsync(device, {"FanSpeed": FAN_SPEEDS[speed]})
-
-
-async def set_drive_async(device, drive_int):
-    drive_str = int_to_drive(drive_int)
-    logger.error("set_drive_async(%s,%s,%s)", device, drive_int, drive_str)
-    d = AE200Functions()
-    await d.sendAsync(device, {"Drive": drive_str})
-
-
-async def get_device_info_async(device):
-    logger.info("get_device_info_async(%s)", device)
-    d = AE200Functions()
-    return await d.getDeviceInfoAsync(device)
-
-
 ################################################################
 ## Everything after here works with the simulator
 ################################################################
@@ -327,9 +317,23 @@ if AE200_SIMULATOR:
         )
 
 
+def register_simulated_device(ae200_device, name, statusdict=None):
+    """Register a local DB-backed virtual AE-200 simulator unit."""
+    if not AE200_SIMULATOR:
+        return
+    did = str(ae200_device)
+    if did not in {str(device["id"]) for device in simulated_devices[DEVICES]}:
+        simulated_devices[DEVICES].append({"id": did, "name": name})
+    status = dict(statusdict or {})
+    status.setdefault(AE200_DRIVE_KEY, DRIVES[1])
+    status.setdefault(AE200_FAN_SPEED_KEY, FAN_SPEEDS[FAN_SPEED_AUTO])
+    status.setdefault(AE200_MODE_KEY, "FAN")
+    simulated_devices[did] = status
+
+
 def set_drive(ae200_device, drive_int):
     drive_str = int_to_drive(drive_int)
-    logger.info("set_fan_speed(%s,%s,%s)", ae200_device, drive_int, drive_str)
+    logger.info("set_drive(%s,%s,%s)", ae200_device, drive_int, drive_str)
 
     if AE200_SIMULATOR:
         simulated_devices[str(ae200_device)]["Drive"] = drive_str

@@ -407,6 +407,26 @@ def test_set_fan_speed_endpoint(
         test_conn_verify.close()
 
 
+@patch("app.routes_api.rules_engine.set_body_fan_speed")
+def test_set_fan_speed_endpoint_reports_ae200_failure(
+    mock_set_body_fan_speed, flask_test_client
+):  # noqa: F811
+    """AE-200 connection failures should be reported as upstream failures."""
+    mock_set_body_fan_speed.side_effect = RuntimeError(
+        "timed out during opening handshake"
+    )
+
+    response = flask_test_client.post(
+        "/api/v1/set_fan_speed",
+        json={"device_id": 1, "fan_speed": 2},
+    )
+
+    assert response.status_code == 502
+    assert response.json == {
+        "error": "AE-200 request failed: timed out during opening handshake"
+    }
+
+
 def _link_device_to_unit(conn, name):
     """Create a device linked to the BROADWAY_SOUTH simulator unit; return its id."""
     device_id = db.get_or_create_device_id(conn, name)
@@ -869,21 +889,17 @@ def test_debug_hubitat_devices_endpoint_error(mock_get_all_devices, flask_test_c
     assert "error" in response_json
 
 
-@patch("app.routes_api.ae200.runner.run_async_safely")
+@patch("app.routes_api.ae200.get_device_info")
 @patch("app.routes_api.ae200.get_devices")
 def test_debug_ae200_devices_endpoint(
-    mock_get_devices, mock_run_async, flask_test_client
+    mock_get_devices, mock_get_device_info, flask_test_client
 ):  # noqa: F811
     """Test the /api/v1/debug/ae200_devices endpoint"""
     # Mock AE-200 devices
     mock_get_devices.return_value = [
         {"name": "Test AE200 Device", "id": "10"}
     ]
-    # Mock the async runner: close the coroutine to avoid "coroutine was never awaited"
-    def _mock_run_async(coro):
-        coro.close()
-        return {"10": {"Drive": "ON", "FanSpeed": "LOW"}}
-    mock_run_async.side_effect = _mock_run_async
+    mock_get_device_info.return_value = {"Drive": "ON", "FanSpeed": "LOW"}
 
     response = flask_test_client.get("/api/v1/debug/ae200_devices")
     assert response.status_code == 200
@@ -895,6 +911,8 @@ def test_debug_ae200_devices_endpoint(
     assert isinstance(response_json["devices"], list)
     assert isinstance(response_json["details"], dict)
     assert "Test AE200 Device" in response_json["names"]
+    assert response_json["details"] == {"10": {"Drive": "ON", "FanSpeed": "LOW"}}
+    mock_get_device_info.assert_called_once_with("10")
 
 
 @patch("app.routes_api.ae200.get_devices")
@@ -904,9 +922,9 @@ def test_debug_ae200_devices_endpoint_error(mock_get_devices, flask_test_client)
     mock_get_devices.side_effect = RuntimeError("AE200 connection error")
 
     response = flask_test_client.get("/api/v1/debug/ae200_devices")
-    assert response.status_code == 500
+    assert response.status_code == 502
     response_json = response.json
-    assert "error" in response_json
+    assert response_json == {"error": "AE-200 request failed: AE200 connection error"}
 
 
 def test_disable_rules_api_enable_and_disable(

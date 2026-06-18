@@ -23,7 +23,6 @@ from .display_names import display_device_name
 from .utils.request_utils import parse_device_ids
 from .utils.db_utils import with_db_connection
 from .routes_web_airquality_utils import (
-    annotate_air_quality_cells,
     annotate_staleness,
     format_unix_as_asc,
 )
@@ -255,7 +254,6 @@ def _register_core_routes(app):
     def air_quality(conn):
         """Real-time Air Quality page"""
         airmon = db.get_all_device_aqi(conn)
-        annotate_air_quality_cells(airmon)
 
         # Attach a centralized display name for each row so templates do not
         # need to know about vendor prefixes, " on " suffixes, etc.

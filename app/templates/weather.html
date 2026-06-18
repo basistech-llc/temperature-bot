@@ -92,6 +92,44 @@ function weatherIcon(conditions) {
   return "";
 }
 
+function weatherText(conditions) {
+  const text = conditions || "";
+  const icon = weatherIcon(text);
+  return icon ? icon + " " + text : text;
+}
+
+function textCell(text, className) {
+  const cell = document.createElement("td");
+  if (className) {
+    cell.className = className;
+  }
+  cell.textContent = text || "--";
+  return cell;
+}
+
+function tempCell(tempC, useDisplaySpan) {
+  const cell = document.createElement("td");
+  cell.className = "cell-temp";
+  const numericTemp = Number(tempC);
+  if (!Number.isFinite(numericTemp)) {
+    cell.textContent = "--";
+    return cell;
+  }
+
+  const target = useDisplaySpan ? document.createElement("span") : cell;
+  target.classList.add("temp-display");
+  target.dataset.tempC = String(numericTemp);
+  target.textContent = TemperatureUtils.formatTemperature(numericTemp);
+  if (useDisplaySpan) {
+    cell.appendChild(target);
+  }
+  return cell;
+}
+
+function replaceRows(tbody, rows) {
+  tbody.replaceChildren(...rows);
+}
+
 function displayWeather(weatherInfo) {
   if (!weatherInfo) return;
   currentWeatherData = weatherInfo;
@@ -99,60 +137,44 @@ function displayWeather(weatherInfo) {
   // Current conditions — multiple stations
   const currentBody = document.getElementById("weather-current-body");
   if (currentBody && weatherInfo.stations && weatherInfo.stations.length > 0) {
-    let rows = "";
-    weatherInfo.stations.forEach(function(station) {
-      const icon = weatherIcon(station.conditions);
-      const condText = icon ? icon + " " + station.conditions : station.conditions || "";
-      let tempHtml = "--";
-      if (station.temperature != null) {
-        const formatted = TemperatureUtils.formatTemperature(station.temperature);
-        tempHtml = `<span class="temp-display" data-temp-c="${station.temperature}">${formatted}</span>`;
-      }
-      rows += `<tr>
-        <td class="cell-unit">${station.station_name || "--"}</td>
-        <td class="cell-temp">${tempHtml}</td>
-        <td class="cell-conditions">${condText}</td>
-      </tr>`;
+    const rows = weatherInfo.stations.map(function(station) {
+      const row = document.createElement("tr");
+      row.appendChild(textCell(station.station_name, "cell-unit"));
+      row.appendChild(tempCell(station.temperature, true));
+      row.appendChild(textCell(weatherText(station.conditions), "cell-conditions"));
+      return row;
     });
-    currentBody.innerHTML = rows;
+    replaceRows(currentBody, rows);
   }
 
   // Forecast
   const forecastBody = document.getElementById("weather-forecast-body");
   if (forecastBody && weatherInfo.forecast && weatherInfo.forecast.length > 0) {
-    let rows = "";
-    weatherInfo.forecast.forEach(function(period) {
+    const rows = weatherInfo.forecast.map(function(period) {
       const tempF = parseFloat(period.temperature);
       const tempC = TemperatureUtils.fahrenheitToCelsius(tempF);
-      const formatted = TemperatureUtils.formatTemperature(tempC);
-      const icon = weatherIcon(period.conditions);
-      const condText = icon ? icon + " " + period.conditions : period.conditions || "";
-      rows += `<tr>
-        <td>${period.time}</td>
-        <td class="cell-temp temp-display" data-temp-c="${tempC}">${formatted}</td>
-        <td class="cell-conditions">${condText}</td>
-      </tr>`;
+      const row = document.createElement("tr");
+      row.appendChild(textCell(period.time));
+      row.appendChild(tempCell(tempC, false));
+      row.appendChild(textCell(weatherText(period.conditions), "cell-conditions"));
+      return row;
     });
-    forecastBody.innerHTML = rows;
+    replaceRows(forecastBody, rows);
   }
 
   // Daily forecast
   const dailyBody = document.getElementById("weather-daily-body");
   if (dailyBody && weatherInfo.daily && weatherInfo.daily.length > 0) {
-    let rows = "";
-    weatherInfo.daily.forEach(function(period) {
+    const rows = weatherInfo.daily.map(function(period) {
       const tempF = parseFloat(period.temperature);
       const tempC = TemperatureUtils.fahrenheitToCelsius(tempF);
-      const formatted = TemperatureUtils.formatTemperature(tempC);
-      const icon = weatherIcon(period.conditions);
-      const condText = icon ? icon + " " + period.conditions : period.conditions || "";
-      rows += `<tr>
-        <td>${period.name}</td>
-        <td class="cell-temp temp-display" data-temp-c="${tempC}">${formatted}</td>
-        <td class="cell-conditions">${condText}</td>
-      </tr>`;
+      const row = document.createElement("tr");
+      row.appendChild(textCell(period.name));
+      row.appendChild(tempCell(tempC, false));
+      row.appendChild(textCell(weatherText(period.conditions), "cell-conditions"));
+      return row;
     });
-    dailyBody.innerHTML = rows;
+    replaceRows(dailyBody, rows);
   }
 
   // Update unit labels

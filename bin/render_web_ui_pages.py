@@ -583,7 +583,7 @@ def install_offline_integrations() -> None:
             {"id": "14", "name": "Dungeon"},
         ]
 
-    async def fake_ae200_device_info(device_id: str | int) -> dict[str, str]:
+    def fake_ae200_device_info(device_id: str | int) -> dict[str, str]:
         return {
             "Group": str(device_id),
             DRIVE_KEY: "ON",
@@ -596,9 +596,9 @@ def install_offline_integrations() -> None:
         }
 
     ae200.get_devices = fake_ae200_devices
-    ae200.get_device_info_async = fake_ae200_device_info
+    ae200.get_device_info = fake_ae200_device_info
     routes_api.ae200.get_devices = fake_ae200_devices
-    routes_api.ae200.get_device_info_async = fake_ae200_device_info
+    routes_api.ae200.get_device_info = fake_ae200_device_info
 
 
 def page_specs(device_ids: dict[str, int]) -> list[PageSpec]:

@@ -16,28 +16,28 @@
           <tr>
             <th class="column-unit" scope="col" title="Indoor sensor location">Unit</th>
             <th scope="col" title="Carbon dioxide (ppm).
-Elevated: 801–1200.
-Problem: &gt;1200.">CO2<br><small>ppm</small></th>
+Fair: &gt;600.
+Poor: &gt;1000.">CO2<br><small>ppm</small></th>
             <th class="column-humidity" scope="col" title="Relative humidity (%).
-Elevated: 30–35 or 55–60.
-Problem: &lt;30 or &gt;60.">Humidity<br><small>%</small></th>
+Fair: &gt;50.
+Poor: &lt;30 or &gt;60.">Humidity<br><small>%</small></th>
             <th scope="col" title="Fine particles &lt;1µm (µg/m³).
-Elevated: 13–35.
-Problem: &gt;35.">PM1<br><small>µg/m³</small></th>
+Fair: &gt;9.0.
+Poor: &gt;35.4.">PM1<br><small>µg/m³</small></th>
             <th scope="col" title="Fine particles &lt;2.5µm (µg/m³).
-Elevated: 13–35.
-Problem: &gt;35.">PM2.5<br><small>µg/m³</small></th>
+Fair: &gt;9.0.
+Poor: &gt;35.4.">PM2.5<br><small>µg/m³</small></th>
             <th scope="col" title="Barometric pressure (hPa).
 Not used for alerts.">Pressure<br><small>hPa</small></th>
             <th scope="col" title="Short-term average radon level (Bq/m³).
-Elevated: 100–150.
-Problem: &gt;150.">Radon<br><small id="aq-radon-unit-label">Bq/m³</small></th>
+Fair: &gt;75.
+Poor: &gt;150.">Radon<br><small id="aq-radon-unit-label">Bq/m³</small></th>
             <th class="column-temp" scope="col" title="Temperature. Unit follows site C/F toggle.
 Elevated: 18–20 or 25–27 °C.
 Problem: &lt;18 or &gt;27 °C.">Temp<br><small id="aq-temp-unit-label">°C</small></th>
             <th scope="col" title="Volatile organic compounds (ppb).
-Elevated: 501–2000.
-Problem: &gt;2000.">VOC<br><small>ppb</small></th>
+Fair: &gt;500.
+Poor: &gt;2000.">VOC<br><small>ppb</small></th>
           </tr>
         </thead>
         <tbody>
@@ -47,14 +47,14 @@ Problem: &gt;2000.">VOC<br><small>ppb</small></th>
             {% set stale_title = 'Last updated: ' ~ row.age ~ ' ago' if row.age else '' %}
             <tr>
               <td class="cell-unit">{{ row.display_name or row.device_name }}</td>
-              <td class="cell-metric-link {{ row.aq_classes.get('co2') if row.aq_classes is defined else '' }}{{ stale_cls }}" data-chart-url="/metric_chart?metric=co2&device_ids={{ row.device_id }}" title="{{ stale_title }}">{{ fmt(row.status.co2.value) }}</td>
-              <td class="cell-metric-link {{ row.aq_classes.get('humidity') if row.aq_classes is defined else '' }} cell-humidity{{ stale_cls }}" data-chart-url="/metric_chart?metric=humidity&device_ids={{ row.device_id }}" title="{{ stale_title }}">{{ fmt(row.status.humidity.value) }}</td>
-              <td class="cell-metric-link {{ row.aq_classes.get('pm1') if row.aq_classes is defined else '' }}{{ stale_cls }}" data-chart-url="/metric_chart?metric=pm1&device_ids={{ row.device_id }}" title="{{ stale_title }}">{{ fmt(row.status.pm1.value) }}</td>
-              <td class="cell-metric-link {{ row.aq_classes.get('pm25') if row.aq_classes is defined else '' }}{{ stale_cls }}" data-chart-url="/metric_chart?metric=pm25&device_ids={{ row.device_id }}" title="{{ stale_title }}">{{ fmt(row.status.pm25.value) }}</td>
+              <td class="cell-metric-link{{ stale_cls }}" data-air-quality-metric="co2" data-air-quality-value="{{ row.status.co2.value }}" data-chart-url="/metric_chart?metric=co2&device_ids={{ row.device_id }}" title="{{ stale_title }}">{{ fmt(row.status.co2.value) }}</td>
+              <td class="cell-metric-link cell-humidity{{ stale_cls }}" data-air-quality-metric="humidity" data-air-quality-value="{{ row.status.humidity.value }}" data-chart-url="/metric_chart?metric=humidity&device_ids={{ row.device_id }}" title="{{ stale_title }}">{{ fmt(row.status.humidity.value) }}</td>
+              <td class="cell-metric-link{{ stale_cls }}" data-air-quality-metric="pm1" data-air-quality-value="{{ row.status.pm1.value }}" data-chart-url="/metric_chart?metric=pm1&device_ids={{ row.device_id }}" title="{{ stale_title }}">{{ fmt(row.status.pm1.value) }}</td>
+              <td class="cell-metric-link{{ stale_cls }}" data-air-quality-metric="pm25" data-air-quality-value="{{ row.status.pm25.value }}" data-chart-url="/metric_chart?metric=pm25&device_ids={{ row.device_id }}" title="{{ stale_title }}">{{ fmt(row.status.pm25.value) }}</td>
               <td class="cell-metric-link{{ stale_cls }}" data-chart-url="/metric_chart?metric=pressure&device_ids={{ row.device_id }}" title="{{ stale_title }}">{{ fmt(row.status.pressure.value) }}</td>
-              <td class="cell-metric-link radon-display {{ row.aq_classes.get('radonShortTermAvg') if row.aq_classes is defined else '' }}{{ stale_cls }}" data-radon-bqm3="{{ row.status.radonShortTermAvg.value }}" data-chart-url="/metric_chart?metric=radon&device_ids={{ row.device_id }}" title="{{ stale_title }}">{{ fmt(row.status.radonShortTermAvg.value) }}</td>
-              <td class="cell-temp-link {{ row.aq_classes.get('temp') if row.aq_classes is defined else '' }} cell-temp temp-display temp-display-no-unit{{ stale_cls }}" data-temp-c="{{ row.status.temp.value }}" data-chart-url="/chart?device_ids={{ row.device_id }}" title="{{ stale_title }}">{{ fmt(row.status.temp.value) }}</td>
-              <td class="cell-metric-link {{ row.aq_classes.get('voc') if row.aq_classes is defined else '' }}{{ stale_cls }}" data-chart-url="/metric_chart?metric=voc&device_ids={{ row.device_id }}" title="{{ stale_title }}">{{ fmt(row.status.voc.value) }}</td>
+              <td class="cell-metric-link radon-display{{ stale_cls }}" data-air-quality-metric="radonShortTermAvg" data-air-quality-value="{{ row.status.radonShortTermAvg.value }}" data-radon-bqm3="{{ row.status.radonShortTermAvg.value }}" data-chart-url="/metric_chart?metric=radon&device_ids={{ row.device_id }}" title="{{ stale_title }}">{{ fmt(row.status.radonShortTermAvg.value) }}</td>
+              <td class="cell-temp-link cell-temp temp-display temp-display-no-unit{{ stale_cls }}" data-temp-c="{{ row.status.temp.value }}" data-chart-url="/chart?device_ids={{ row.device_id }}" title="{{ stale_title }}">{{ fmt(row.status.temp.value) }}</td>
+              <td class="cell-metric-link{{ stale_cls }}" data-air-quality-metric="voc" data-air-quality-value="{{ row.status.voc.value }}" data-chart-url="/metric_chart?metric=voc&device_ids={{ row.device_id }}" title="{{ stale_title }}">{{ fmt(row.status.voc.value) }}</td>
             </tr>
             {% endif %}
           {% endfor %}
@@ -63,8 +63,9 @@ Problem: &gt;2000.">VOC<br><small>ppb</small></th>
 
       <div class="aq-legend">
         Shading:
-        <span class="legend-swatch aq-elevated">elevated</span>,
-        <span class="legend-swatch aq-problem">problem</span>
+        <span class="legend-swatch air-good">good</span>,
+        <span class="legend-swatch air-fair">fair</span>,
+        <span class="legend-swatch air-poor">poor</span>
         (see column headings for details).
       </div>
 

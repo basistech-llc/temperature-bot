@@ -13,7 +13,8 @@ Use the Makefile for setup, checks, tests, and local runs.
 make install-macos      # macOS setup
 make install-ubuntu     # Ubuntu setup
 make make-dev-db        # build a fresh local DB from Flyway migrations
-make local-dev          # run Flask locally with simulated AE-200 data
+make local-dev          # run Flask locally with simulated AE-200 data and banner
+make local-live-dev     # run Flask locally against live AE-200 hardware
 make check              # non-mutating static checks, type checks, and migration validation
 make test               # Python and JavaScript tests
 make web-screenshots    # render each web UI page to PNG screenshots
@@ -47,6 +48,10 @@ FCU's own raw temperature and configured temperature-reporting devices. Room
 metadata, map polygons, source multipliers, persisted FCU set ranges, API
 payloads, and rule semantics are documented in
 `doc/calculated-temperatures-and-rooms.md`.
+
+AE-200 control currently stays inside the Flask app behind a serialized async
+bridge. The tradeoffs for a future FastAPI/async/websocket migration are in
+`doc/fastapi-async-ae200.md`.
 
 ## Data Contracts
 

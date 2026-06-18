@@ -9,6 +9,7 @@ from flask import Flask, send_from_directory, jsonify
 from werkzeug.exceptions import HTTPException
 from werkzeug.middleware.proxy_fix import ProxyFix
 
+from . import ae200
 from . import db
 from . import routes_api
 from . import routes_web
@@ -55,6 +56,10 @@ def create_app():
     app.logger.info("new Flask(__name__=%s) log_level=%s", __name__, log_level)
     fix_boto_log_level()
     validate_database_schema_on_startup()
+
+    @app.context_processor
+    def simulator_context():
+        return {"ae200_simulator": bool(ae200.AE200_SIMULATOR)}
 
     # Register blueprints
     app.register_blueprint(routes_api.api_v1, url_prefix="/api/v1")
