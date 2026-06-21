@@ -161,6 +161,8 @@ Against the **simulator** (no hardware/Tailscale needed):
 ```bash
 AQICN_SIMULATOR=1 AE200_SIMULATOR=1 make every-minute
 ```
+`make every-minute` runs `python -m bin.runner` with Makefile defaults (e.g. `DB_PATH`)
+already set, which is why it is preferred over invoking `bin/runner.py` directly.
 Note: set `AQICN_SIMULATOR=1` to avoid a live AQICN API call.
 
 **Environment Variables**:
