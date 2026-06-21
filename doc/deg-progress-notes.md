@@ -47,7 +47,7 @@ open tabs here:
 2. **SQLite Database** (`app/db.py`): Central data store
    - **Run-length encoding**: Temperature data stored with `(logtime, duration)` to avoid bloat when values don't change
    - **Tables**: `devices`, `devlog` (temperature logs), `aqi` (air quality), `alerts`, `changelog`
-   - Schema auto-applied from `etc/schema.sql` on connection
+   - Flyway migrations in `etc/flyway/sql/` are canonical. `etc/schema.sql` is a generated compatibility schema; use `make schema`, `make validate-migrations`, and `make migrate-db` rather than hand-editing schema SQL.
 
 3. **Rules Engine** (`app/rules_engine.py` + `bin/rules.py`):
    - Python code in `bin/rules.py` executed dynamically
@@ -159,9 +159,9 @@ make live-dev-runner   # runs bin/runner.py, no simulator
 
 Against the **simulator** (no hardware/Tailscale needed):
 ```bash
-AE200_SIMULATOR=1 poetry run python bin/runner.py
+AQICN_SIMULATOR=1 AE200_SIMULATOR=1 make every-minute
 ```
-Note: AQI is always a real API call even in simulator mode.
+Note: set `AQICN_SIMULATOR=1` to avoid a live AQICN API call.
 
 **Environment Variables**:
 
@@ -201,7 +201,7 @@ make test  # Runs both Python and JavaScript tests
 make pytest  # Python tests only
 ```
 
-Tests automatically use `AE200_SIMULATOR=1` via `tests/conftest.py`.
+Tests automatically use `AE200_SIMULATOR=1` via pytest configuration.
 
 
 # Progress notes

@@ -55,7 +55,7 @@ Current behavior:
   - Remove leading `Airthings ` when present.
 - **Elide `" on "` suffixes**
   - For names of the form `XXX on YYY`, drop the suffix entirely:
-    - `Greenhouse Sensor West on Somerville Greenhouse`  
+    - `Greenhouse Sensor West on Somerville Greenhouse`
       → `Greenhouse Sensor West`.
   - This is applied generically because this pattern appears across multiple device sources and is consistently noisy for end-users.
 
@@ -85,13 +85,13 @@ To change how names are displayed across the app, edit **only** `display_device_
     - `row["display_name"] = display_device_name(row["device_name"], source="airthings")`.
   - Template displays `row.display_name`, falling back to `row.device_name` if needed.
 
-- **Temperature charts (`/api/v1/temperature` + `chart_support.js`)**
+- **Temperature charts (`/api/v1/temperature` + `temperature_chart_support.js`)**
   - API handler: `get_temperature` in `routes_api.py`.
   - For each series:
     - The series `name` is rewritten via `display_device_name(raw_name, hubitat_label=hubitat_label, source="hubitat")`.
   - Chart legends and lines show this display name.
 
-- **Chart sensor checkbox list (`chart_support.js`)**
+- **Chart sensor checkbox list (`temperature_chart_support.js`)**
   - API: `/api/v1/status`.
   - Handler: `get_status` in `routes_api.py` attaches `display_name` to each device using `display_device_name(device_name, source="db")`.
   - The JS now uses `device.display_name || device.device_name` when building the list of sensor names for checkboxes.
@@ -132,4 +132,3 @@ When adding a new place that shows a device/sensor name:
   - You may still show a display name alongside it if that aids readability, but don’t replace the system name entirely.
 
 This keeps behavior consistent and ensures future naming changes only require edits in `app/display_names.py` instead of scattered string logic across templates and routes.
-
