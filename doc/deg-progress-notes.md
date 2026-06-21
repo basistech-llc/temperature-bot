@@ -203,7 +203,7 @@ make test  # Runs both Python and JavaScript tests
 make pytest  # Python tests only
 ```
 
-Tests automatically use `AE200_SIMULATOR=1` via pytest configuration.
+Tests automatically use `AE200_SIMULATOR=1` via the `[tool.pytest.ini_options]` `env` list in `pyproject.toml` and `tests/conftest.py`.
 
 
 # Progress notes
