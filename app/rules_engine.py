@@ -14,7 +14,7 @@ import logging
 from .paths import ROOT_DIR
 from . import db
 from . import ae200
-from .models import SpeedControl, DriveControl, SetTempControl
+from .models import SpeedControl, DriveControl, ModeControl, SetTempControl
 
 logger = logging.getLogger(__name__)
 
@@ -207,6 +207,51 @@ def set_body_drive(conn, body: DriveControl, ipaddr, agent):
     }
 
 
+def set_body_mode(conn, body: ModeControl, ipaddr, agent):
+    """
+    Set the AE-200 operation mode for a unit.
+    """
+    unit_id = db.get_ae200_unit(conn, body.device_id)
+    current_mode = ae200.get_device_mode(unit_id)
+    if current_mode == body.mode:
+        logger.info(
+            "set_body_mode body=[%s] ipaddr=%s agent=%s. Mode will not change",
+            body,
+            ipaddr,
+            agent,
+        )
+    else:
+        logger.info(
+            "set_body_mode body=[%s] ipaddr=%s agent=%s. Mode changed. current_mode=%s",
+            body,
+            ipaddr,
+            agent,
+            current_mode,
+        )
+        db.insert_changelog(
+            conn,
+            ipaddr=ipaddr,
+            device_id=body.device_id,
+            ae200_device_id=unit_id,
+            current_values=str(current_mode) if current_mode is not None else "",
+            new_value=body.mode,
+            agent=agent,
+        )
+        ae200.set_mode(unit_id, body.mode)
+    data = ae200.get_device_info(unit_id)
+    # The AE-200 read-back can lag a command; keep /status aligned with the
+    # operator's selected mode until the next runner poll reconciles hardware.
+    data[ae200.AE200_MODE_KEY] = body.mode
+    temp = data.get("InletTemp", None)
+    db.insert_devlog_entry(conn, device_id=body.device_id, temp=temp, statusdict=data)
+    return {
+        "unit": unit_id,
+        "temp": temp,
+        "device_id": body.device_id,
+        "mode": body.mode,
+    }
+
+
 def set_body_set_temp(conn, body: SetTempControl, ipaddr, agent):
     """
     Set the target temperature for a unit (in Celsius).
@@ -260,6 +305,7 @@ def rules_results(conn, when=None, aqi=50):
     logger.debug("when=%s", when)
 
     results = []
+    temps = _temperature_context(conn)
 
     def set_drive_verbose(device_id, value):
         results.append(f"Device {device_id} drive set to {value}")
@@ -272,9 +318,34 @@ def rules_results(conn, when=None, aqi=50):
     local_vars = {
         "set_drive": set_drive_verbose,
         "set_fan_speed": set_fan_speed_verbose,
+        "get_temp": temps["get_temp"],
+        "get_fcu_temp": temps["get_fcu_temp"],
     }
     exec(get_rules(), global_vars, local_vars)  # pylint: disable=exec-used
     return "\n".join(results)
+
+
+def _temperature_context(conn):
+    status = db.get_device_status(conn)
+    effective_by_id = {}
+    raw_by_id = {}
+    for device in status:
+        raw = device.get("temp10x")
+        calculated = device.get("calculated_temp10x")
+        if raw is not None:
+            raw_by_id[device["device_id"]] = raw / 10
+        if calculated is not None:
+            effective_by_id[device["device_id"]] = calculated / 10
+        elif raw is not None:
+            effective_by_id[device["device_id"]] = raw / 10
+
+    def get_temp(device_id):
+        return effective_by_id.get(device_id)
+
+    def get_fcu_temp(device_id):
+        return raw_by_id.get(device_id)
+
+    return {"get_temp": get_temp, "get_fcu_temp": get_fcu_temp}
 
 
 def run_rules(conn, when=None):
@@ -315,9 +386,15 @@ def run_rules(conn, when=None):
             conn, SpeedControl(device_id=device_id, fan_speed=fan_speed), "n/a", "rule"
         )
 
+    temps = _temperature_context(conn)
     v1 = {**db.devices_to_device_id(conn), **get_time_dict(when)}
     v1["AQI"] = db.get_last_aqi(conn)
-    v2 = {"set_drive": set_drive, "set_fan_speed": set_fan_speed}
+    v2 = {
+        "set_drive": set_drive,
+        "set_fan_speed": set_fan_speed,
+        "get_temp": temps["get_temp"],
+        "get_fcu_temp": temps["get_fcu_temp"],
+    }
     exec(get_rules(), v1, v2)  # pylint: disable=exec-used
 
     # finally, if the time has passed for any rule, set to 0

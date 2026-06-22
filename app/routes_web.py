@@ -23,7 +23,6 @@ from .display_names import display_device_name
 from .utils.request_utils import parse_device_ids
 from .utils.db_utils import with_db_connection
 from .routes_web_airquality_utils import (
-    annotate_air_quality_cells,
     annotate_staleness,
     format_unix_as_asc,
 )
@@ -255,7 +254,6 @@ def _register_core_routes(app):
     def air_quality(conn):
         """Real-time Air Quality page"""
         airmon = db.get_all_device_aqi(conn)
-        annotate_air_quality_cells(airmon)
 
         # Attach a centralized display name for each row so templates do not
         # need to know about vendor prefixes, " on " suffixes, etc.
@@ -382,17 +380,17 @@ def _collect_device_notes(devices):
 def _render_room_dashboard_with_data(conn, location: str):
     """Render room dashboard with device data filtered by configuration."""
     room_key = location.lower()
-    config = room_config.ROOM_CONFIGS.get(room_key, {})
+    config = room_config.get_room_config(room_key)
 
     all_devices = db.get_device_status(conn)
 
     # Filter ERVs and fans
-    erv_devices = _filter_speed_control_devices(all_devices, config.get("ervs", []))
+    erv_devices = _filter_speed_control_devices(all_devices, config.ervs)
 
-    fan_devices = _filter_speed_control_devices(all_devices, config.get("fans", []))
+    fan_devices = _filter_speed_control_devices(all_devices, config.fans)
 
     # Get Hubitat sensors
-    hubitat_sensors = _get_hubitat_sensors(config.get("sensors", []))
+    hubitat_sensors = _get_hubitat_sensors(config.sensors)
 
     # Attach display names for sensors using the centralized helper. We prefer
     # Hubitat labels when available and then apply generic display transforms.
@@ -419,10 +417,10 @@ def _render_room_dashboard_with_data(conn, location: str):
         fan_devices=fan_devices,
         hubitat_sensors=hubitat_sensors,
         notes=notes,
-        show_tv_control=config.get("tv_control", False),
-        dimmer_id=config.get("dimmer_id"),
-        wall_inner_id=config.get("wall_inner_id"),
-        wall_outer_id=config.get("wall_outer_id"),
+        show_tv_control=config.tv_control,
+        dimmer_id=config.dimmer_id,
+        wall_inner_id=config.wall_inner_id,
+        wall_outer_id=config.wall_outer_id,
     )
 
 

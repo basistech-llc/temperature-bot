@@ -235,11 +235,46 @@ button {
     min-width: 160px;
 }
 
+.column-temp-range,
+.cell-temp-range {
+    min-width: 210px;
+}
+
+.column-mode,
+.cell-mode {
+    min-width: 4.5em;
+    text-align: center;
+}
+
+.has-simulator-banner {
+    padding-top: 28px;
+}
+
+.simulator-banner {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 3000;
+    background: #c00000;
+    color: #fff;
+    font-size: 14pt;
+    font-weight: 700;
+    line-height: 1;
+    padding: 4px 0;
+    text-align: center;
+    text-transform: lowercase;
+}
+
 .cell-temp {
     color: #000; /* Default black for fresh temperatures */
 }
 
 /* Shared data-table styling: centered headers with unit sub-labels */
+.data-table tbody tr:nth-child(even) td:not(.cell-speed-off):not(.cell-speed-auto):not(.air-fair):not(.air-poor) {
+    background-color: rgba(0, 0, 0, 0.05);
+}
+
 .data-table thead th:not(.column-unit):not(.column-notes) {
     text-align: center;
     padding-left: 0.5em;
@@ -259,6 +294,112 @@ button {
     text-align: center;
     padding-left: 0.5em;
     padding-right: 0.5em;
+}
+
+.data-table tbody td.cell-mode {
+    text-align: center;
+}
+
+.mode-select {
+    max-width: 100%;
+    min-width: 5.5em;
+    padding: 0.15rem 0.25rem;
+    font: inherit;
+    color: #1a202c;
+    background: #fff;
+    border: 1px solid #cbd5e1;
+    border-radius: 4px;
+}
+
+.mode-select:disabled {
+    color: #64748b;
+    background: #f8fafc;
+}
+
+.mode-select:focus-visible {
+    outline: 2px solid #3b82f6;
+    outline-offset: 1px;
+}
+
+.data-table tbody td.cell-temp-range {
+    text-align: center;
+}
+
+.setrange-widget {
+    width: 190px;
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    padding: 0.15rem 0;
+}
+
+.setrange-track {
+    position: relative;
+    width: 100%;
+    height: 20px;
+    touch-action: none;
+    cursor: pointer;
+}
+
+.setrange-track::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 7px;
+    height: 6px;
+    border-radius: 999px;
+    background: #d7dde3;
+}
+
+.setrange-fill {
+    position: absolute;
+    top: 7px;
+    height: 6px;
+    border-radius: 999px;
+    background: #2f855a;
+    cursor: grab;
+}
+
+.setrange-fill.selected {
+    outline: 2px solid #2f855a;
+    outline-offset: 4px;
+}
+
+.setrange-handle {
+    position: absolute;
+    top: 50%;
+    width: 16px;
+    height: 16px;
+    padding: 0;
+    border: 2px solid #1f2937;
+    border-radius: 50%;
+    background: #fff;
+    cursor: ew-resize;
+    transform: translate(-50%, -50%);
+}
+
+.setrange-handle.selected,
+.setrange-handle:focus-visible,
+.setrange-fill:focus-visible {
+    outline: 2px solid #3b82f6;
+    outline-offset: 2px;
+}
+
+.setrange-values {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.2rem;
+    font-size: 0.85rem;
+    font-weight: 600;
+    line-height: 1;
+    color: #1a202c;
+}
+
+.setrange-end-label {
+    min-width: 3.2em;
+    text-align: center;
 }
 
 /* All data tables match the widest table's width via grid on the form */
@@ -305,12 +446,12 @@ td.cell-notes {
     font-size: 0.8em;
 }
 
-.pure-table td.aq-elevated {
-    background-color: #fff7e0;
-    border: 1px dashed #e0b600;
+.pure-table td.air-fair {
+    background-color: #fff59d;
+    border: 1px dashed #d6aa00;
 }
 
-.pure-table td.aq-problem {
+.pure-table td.air-poor {
     background-color: #fce8e6;
     border: 1px solid #d93025;
 }
@@ -322,12 +463,17 @@ td.cell-notes {
     margin: 0 2px;
 }
 
-.legend-swatch.aq-elevated {
-    background-color: #fff7e0;
-    border: 1px dashed #e0b600;
+.legend-swatch.air-good {
+    background-color: #fff;
+    border: 1px solid #ccc;
 }
 
-.legend-swatch.aq-problem {
+.legend-swatch.air-fair {
+    background-color: #fff59d;
+    border: 1px dashed #d6aa00;
+}
+
+.legend-swatch.air-poor {
     background-color: #fce8e6;
     border: 1px solid #d93025;
 }
@@ -517,6 +663,78 @@ table.rules-table th  {
 }
 .cell-metric-link:hover {
     background-color: rgba(52, 152, 219, 0.08);
+}
+
+.fcu-temp-sources-popup {
+    position: fixed;
+    inset: 0;
+    z-index: 1200;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 6vh 1rem 1rem;
+    background: rgba(0, 0, 0, 0.25);
+}
+
+.fcu-temp-sources-dialog {
+    width: min(760px, 100%);
+    max-height: 88vh;
+    overflow: auto;
+    padding: 0.75rem;
+    border: 1px solid #bbb;
+    border-radius: 4px;
+    background: #fff;
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.25);
+}
+
+.fcu-temp-sources-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+}
+
+.fcu-temp-sources-header h3 {
+    overflow: hidden;
+    flex: 1 1 auto;
+    margin: 0;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.fcu-temp-sources-actions {
+    display: flex;
+    flex: 0 0 auto;
+    gap: 0.35rem;
+}
+
+.fcu-temp-sources-actions .pure-button {
+    padding: 0.3rem 0.65rem;
+    line-height: 1.15;
+}
+
+.fcu-temp-sources-note,
+.fcu-temp-sources-message {
+    margin: 0.35rem 0;
+}
+
+.fcu-temp-sources-message.error {
+    color: #c62828;
+}
+
+.fcu-temp-sources-table {
+    width: 100%;
+}
+
+.fcu-temp-sources-table th,
+.fcu-temp-sources-table td {
+    padding: 0.25rem 0.65rem;
+    line-height: 1.2;
+}
+
+.fcu-temp-source-weight {
+    width: 4.5rem;
+    padding: 0.1rem 0.25rem;
 }
 
 /****************************************************************/

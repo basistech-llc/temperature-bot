@@ -2,14 +2,14 @@
 API route handlers
 """
 
-import asyncio
 import logging
+import sqlite3
 import time
 import xml.etree.ElementTree as ET
-from typing import Any
 
 from flask import Blueprint, request, jsonify
 from flask_pydantic import validate
+from pydantic import TypeAdapter, ValidationError
 from websockets.exceptions import WebSocketException
 
 from .constants import __version__
@@ -24,12 +24,46 @@ from . import room_config
 from .utils.request_utils import parse_device_ids
 from .utils.db_utils import with_db_connection
 
-from .models import SpeedControl, DriveControl, NoteControl, SetTempControl
+from .models import (
+    CommandResponse,
+    DeviceRoomControl,
+    FcuTempSourceBatchControl,
+    DriveControl,
+    FcuTempSourceControl,
+    ModeControl,
+    NoteControl,
+    SetRangeControl,
+    Room,
+    SetTempControl,
+    SpeedControl,
+    json_ready,
+    json_ready_list,
+)
 
 logger = logging.getLogger(__name__)
 
 # Create API blueprint
 api_v1 = Blueprint("api_v1", __name__)
+FCU_TEMP_SOURCE_BATCH_ADAPTER = TypeAdapter(FcuTempSourceBatchControl)
+
+
+def _validation_error_response(error: ValidationError):
+    return jsonify({"error": "validation error", "details": error.errors()}), 400
+
+
+def _rules_disabled_comment() -> str:
+    minutes = constants.RULES_DISABLE_SECONDS / 60
+    return f"Rules disabled for {minutes:g} minutes"
+
+
+def _command_error_response(error: ValueError):
+    logger.info("Command request rejected: %s", error)
+    return jsonify({"error": str(error)}), 400
+
+
+def _ae200_error_response(error):
+    logger.warning("AE-200 request failed: %s", error)
+    return jsonify({"error": f"AE-200 request failed: {error}"}), 502
 
 
 @api_v1.route("/version")
@@ -44,7 +78,12 @@ def set_fan_speed(conn, body: SpeedControl):
     """Sets the speed, records the speed in the changelog,
     and then updates the database, so status is always up-to-date"""
     logger.debug("/set_fan_speed: body=[%s]", body)
-    ret = rules_engine.set_body_fan_speed(conn, body, request.remote_addr, "web")
+    try:
+        ret = rules_engine.set_body_fan_speed(conn, body, request.remote_addr, "web")
+    except ValueError as exc:
+        return _command_error_response(exc)
+    except (ET.ParseError, OSError, RuntimeError, WebSocketException) as exc:
+        return _ae200_error_response(exc)
     db.disable_rules_for_device(
         conn,
         device_id=ret["device_id"],
@@ -52,7 +91,7 @@ def set_fan_speed(conn, body: SpeedControl):
         ipaddr=request.remote_addr,
         agent=request.headers.get("User-Agent"),
     )
-    return jsonify({"status": "ok", **ret})
+    return jsonify(json_ready(CommandResponse.model_validate({"status": "ok", **ret})))
 
 
 @api_v1.route("/set_drive", methods=["POST"])
@@ -61,7 +100,12 @@ def set_fan_speed(conn, body: SpeedControl):
 def set_drive(conn, body: DriveControl):
     """Sets the speed, records the speed in the changelog, and then updates the database, so status is always up-to-date"""
     logger.debug("/set_drive: body=[%s]", body)
-    ret = rules_engine.set_body_drive(conn, body, request.remote_addr, "web")
+    try:
+        ret = rules_engine.set_body_drive(conn, body, request.remote_addr, "web")
+    except ValueError as exc:
+        return _command_error_response(exc)
+    except (ET.ParseError, OSError, RuntimeError, WebSocketException) as exc:
+        return _ae200_error_response(exc)
     device_id = ret["device_id"]
     db.disable_rules_for_device(
         conn,
@@ -69,9 +113,32 @@ def set_drive(conn, body: DriveControl):
         seconds=constants.RULES_DISABLE_SECONDS,
         ipaddr=request.remote_addr,
         agent=request.headers.get("User-Agent"),
-        comment=f"rules for disabled for {constants.RULES_DISABLE_SECONDS / 60} minutes",
+        comment=_rules_disabled_comment(),
     )
-    return jsonify({"status": "ok", **ret})
+    return jsonify(json_ready(CommandResponse.model_validate({"status": "ok", **ret})))
+
+
+@api_v1.route("/set_mode", methods=["POST"])
+@validate()
+@with_db_connection
+def set_mode(conn, body: ModeControl):
+    """Set an AE-200 operation mode and record the commanded state."""
+    logger.debug("/set_mode: body=[%s]", body)
+    try:
+        ret = rules_engine.set_body_mode(conn, body, request.remote_addr, "web")
+    except ValueError as exc:
+        return _command_error_response(exc)
+    except (ET.ParseError, OSError, RuntimeError, WebSocketException) as exc:
+        return _ae200_error_response(exc)
+    db.disable_rules_for_device(
+        conn,
+        device_id=ret["device_id"],
+        seconds=constants.RULES_DISABLE_SECONDS,
+        ipaddr=request.remote_addr,
+        agent=request.headers.get("User-Agent"),
+        comment=_rules_disabled_comment(),
+    )
+    return jsonify(json_ready(CommandResponse.model_validate({"status": "ok", **ret})))
 
 
 @api_v1.route("/set_temp", methods=["POST"])
@@ -84,8 +151,33 @@ def set_temp(conn, body: SetTempControl):
     for converting from Fahrenheit if needed.
     """
     logger.debug("/set_temp: body=[%s]", body)
-    ret = rules_engine.set_body_set_temp(conn, body, request.remote_addr, "web")
-    return jsonify({"status": "ok", **ret})
+    try:
+        ret = rules_engine.set_body_set_temp(conn, body, request.remote_addr, "web")
+    except ValueError as exc:
+        return _command_error_response(exc)
+    except (ET.ParseError, OSError, RuntimeError, WebSocketException) as exc:
+        return _ae200_error_response(exc)
+    return jsonify(json_ready(CommandResponse.model_validate({"status": "ok", **ret})))
+
+
+@api_v1.route("/set_range", methods=["POST"])
+@validate()
+@with_db_connection
+def set_range(conn, body: SetRangeControl):
+    """Persist the FCU set range in Celsius."""
+    try:
+        response = db.set_fcu_set_range(
+            conn,
+            device_id=body.device_id,
+            set_range_low_c=body.set_range_low_c,
+            set_range_high_c=body.set_range_high_c,
+            ipaddr=request.remote_addr,
+            agent=request.headers.get("User-Agent"),
+        )
+    except ValueError as e:
+        status_code = 404 if str(e).startswith("Unknown") else 400
+        return jsonify({"error": str(e)}), status_code
+    return jsonify(response)
 
 
 @api_v1.route("/status")
@@ -118,10 +210,16 @@ def get_weather(conn):
 @with_db_connection
 def get_temperature(conn):
     """Get temperature series data"""
+    mode = request.args.get("mode", "raw")
     device_ids = parse_device_ids()
     if device_ids is None and request.args.get("device_ids"):
         return jsonify({"error": "Invalid device_ids format"}), 400
-    series = db.get_temperature_series(conn, device_ids)
+    if mode == "raw":
+        series = db.get_temperature_series(conn, device_ids)
+    elif mode == "calculated":
+        series = db.get_calculated_temperature_series(conn, device_ids)
+    else:
+        return jsonify({"error": "mode must be 'raw' or 'calculated'"}), 400
     # Use centralized helper for series display names, preferring Hubitat label when available
     # and applying display-only transforms.
     name_to_label = hubitat.get_name_to_label()
@@ -252,6 +350,109 @@ def set_device_disabled_until(conn):
     )
 
 
+@api_v1.route("/rooms", methods=["GET", "POST"])
+@with_db_connection
+def rooms(conn):
+    """List or create rooms with map polygon metadata."""
+    if request.method == "GET":
+        return jsonify({"rooms": json_ready_list(db.get_rooms(conn))})
+
+    try:
+        body = Room.model_validate(request.get_json(silent=True) or {})
+        room = db.create_room(conn, body)
+    except ValidationError as e:
+        return _validation_error_response(e)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    except sqlite3.IntegrityError as e:
+        return jsonify({"error": str(e)}), 409
+    return jsonify(json_ready(room)), 201
+
+
+@api_v1.get("/rooms/<int:room_id>")
+@with_db_connection
+def room_detail(conn, room_id: int):
+    """Return one room."""
+    room = db.get_room(conn, room_id)
+    if room is None:
+        return jsonify({"error": "room not found"}), 404
+    return jsonify(json_ready(room))
+
+
+@api_v1.patch("/rooms/<int:room_id>")
+@with_db_connection
+def update_room(conn, room_id: int):
+    """Update one room."""
+    try:
+        body = Room.model_validate(
+            {**(request.get_json(silent=True) or {}), "room_id": room_id}
+        )
+        room = db.update_room(conn, body)
+    except ValidationError as e:
+        return _validation_error_response(e)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    except sqlite3.IntegrityError as e:
+        return jsonify({"error": str(e)}), 409
+    if room is None:
+        return jsonify({"error": "room not found"}), 404
+    return jsonify(json_ready(room))
+
+
+@api_v1.route("/update_device_room", methods=["POST"])
+@validate()
+@with_db_connection
+def update_device_room(conn, body: DeviceRoomControl):
+    """Assign a device to a room, or clear the assignment with room_id=null."""
+    try:
+        device_id = db.update_device_room(conn, body.device_id, body.room_id)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 404
+    return jsonify(json_ready(CommandResponse(device_id=device_id)))
+
+
+@api_v1.route("/fcu_temp_sources")
+@with_db_connection
+def get_fcu_temp_sources(conn):
+    """Return all temperature-reporting source candidates for one FCU."""
+    fcu_device_id = request.args.get("fcu_device_id", type=int)
+    if fcu_device_id is None:
+        return jsonify({"error": "fcu_device_id is required"}), 400
+    try:
+        return jsonify(db.get_fcu_temp_sources(conn, fcu_device_id))
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 404
+
+
+@api_v1.route("/fcu_temp_source", methods=["POST"])
+@with_db_connection
+def set_fcu_temp_source(conn):
+    """Persist one or more FCU temperature-source multipliers atomically."""
+    payload = request.get_json(silent=True)
+    try:
+        if isinstance(payload, list):
+            updates = FCU_TEMP_SOURCE_BATCH_ADAPTER.validate_python(payload)
+        else:
+            updates = [FcuTempSourceControl.model_validate(payload or {})]
+    except ValidationError as e:
+        return _validation_error_response(e)
+
+    fcu_device_ids = {update.fcu_device_id for update in updates}
+    if len(fcu_device_ids) > 1:
+        return jsonify({"error": "all updates must use the same fcu_device_id"}), 400
+
+    try:
+        response = db.set_fcu_temp_source_multipliers(
+            conn,
+            updates=updates,
+            ipaddr=request.remote_addr,
+            agent=request.headers.get("User-Agent"),
+        )
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 404
+    return jsonify(response)
+
+
 @api_v1.route("/rules_master", methods=["GET", "POST"])
 @with_db_connection
 def rules_master(conn):
@@ -306,27 +507,29 @@ def update_note(conn, body: NoteControl):
     logger.debug("/update_note: body=[%s]", body)
     notes = body.notes if body.notes else None
     device_id = db.update_device_notes(conn, body.device_id, notes)
-    return jsonify({"status": "ok", "device_id": device_id})
+    return jsonify(json_ready(CommandResponse(device_id=device_id)))
 
 
 @api_v1.route("/hickory/room_status")
 def hickory_room_status():
     """Return current state of Hickory room control devices."""
-    config = room_config.ROOM_CONFIGS.get("hickory", {})
+    config = room_config.get_room_config("hickory")
     result = {}
     try:
         all_devices = hubitat.get_all_devices()
         by_id = {str(d.get("id")): d for d in all_devices}
 
-        dimmer_id = config.get("dimmer_id")
+        dimmer_id = config.dimmer_id
         if dimmer_id and dimmer_id in by_id:
             attrs = by_id[dimmer_id].get("attributes", {})
             result["dimmer"] = {
                 "level": int(attrs.get("level", 0)),
                 "switch": attrs.get("switch", "off"),
             }
-        for key in ("wall_inner_id", "wall_outer_id"):
-            dev_id = config.get(key)
+        for key, dev_id in {
+            "wall_inner_id": config.wall_inner_id,
+            "wall_outer_id": config.wall_outer_id,
+        }.items():
             if dev_id and dev_id in by_id:
                 attrs = by_id[dev_id].get("attributes", {})
                 result[key.replace("_id", "")] = {
@@ -341,8 +544,8 @@ def hickory_room_status():
 @api_v1.route("/hickory/dimmer", methods=["POST"])
 def hickory_dimmer():
     """Set the Hickory room light dimmer level (0-100)."""
-    config = room_config.ROOM_CONFIGS.get("hickory", {})
-    device_id = config.get("dimmer_id")
+    config = room_config.get_room_config("hickory")
+    device_id = config.dimmer_id
     if not device_id:
         return jsonify({"error": "No dimmer configured"}), 404
     payload = request.get_json(silent=True) or {}
@@ -351,7 +554,7 @@ def hickory_dimmer():
         return jsonify({"error": "level must be an integer 0-100"}), 400
     try:
         hubitat.set_dimmer_level(device_id, level)
-        return jsonify({"status": "ok", "level": level})
+        return jsonify(json_ready(CommandResponse(level=level)))
     except (RuntimeError, OSError) as e:
         logger.warning("Dimmer control failed: %s", e)
         return jsonify({"error": str(e)}), 500
@@ -360,12 +563,12 @@ def hickory_dimmer():
 @api_v1.route("/hickory/wall_light", methods=["POST"])
 def hickory_wall_light():
     """Toggle a Hickory wall light on or off."""
-    config = room_config.ROOM_CONFIGS.get("hickory", {})
+    config = room_config.get_room_config("hickory")
     payload = request.get_json(silent=True) or {}
     light = payload.get("light")
     state = payload.get("state")
 
-    id_map = {"inner": config.get("wall_inner_id"), "outer": config.get("wall_outer_id")}
+    id_map = {"inner": config.wall_inner_id, "outer": config.wall_outer_id}
     if not isinstance(light, str):
         return jsonify({"error": "light must be 'inner' or 'outer'"}), 400
     device_id = id_map.get(light)
@@ -375,7 +578,7 @@ def hickory_wall_light():
         return jsonify({"error": "state must be 'on' or 'off'"}), 400
     try:
         hubitat.set_switch(device_id, state)
-        return jsonify({"status": "ok", "light": light, "state": state})
+        return jsonify(json_ready(CommandResponse(light=light, state=state)))
     except (RuntimeError, OSError) as e:
         logger.warning("Wall light control failed: %s", e)
         return jsonify({"error": str(e)}), 500
@@ -390,7 +593,7 @@ def hickory_tv():
         return jsonify({"error": "direction must be 'up' or 'down'"}), 400
     try:
         hubitat.control_hickory_tv(direction)
-        return jsonify({"status": "ok", "direction": direction})
+        return jsonify(json_ready(CommandResponse(direction=direction)))
     except (RuntimeError, OSError) as e:
         logger.warning("TV control failed: %s", e)
         return jsonify({"error": str(e)}), 500
@@ -441,38 +644,26 @@ def debug_ae200_devices():
         ae200_devices = ae200.get_devices()
         device_names = [dev.get("name", "Unknown") for dev in ae200_devices]
 
-        # Per-device status direct from AE-200, fetched concurrently
-        async def _fetch_ae200_details_async(devices):
-            ae200_details: dict[str, dict[str, Any]] = {}
-            tasks = []
-            ids = []
-
-            async def fetch_device_details(device_id) -> dict[str, Any]:
-                try:
-                    return dict(await ae200.get_device_info_async(device_id))
-                except (ET.ParseError, OSError, RuntimeError, ValueError, WebSocketException) as e:
-                    return {"error": str(e)}
-
-            for dev in devices:
-                device_id = dev.get("id")
-                if device_id is None:
-                    continue
-                ids.append(str(device_id))
-                tasks.append(fetch_device_details(device_id))
-            if not tasks:
-                return ae200_details
-            results = await asyncio.gather(*tasks)
-            for key, result in zip(ids, results):
-                ae200_details[key] = result
-            return ae200_details
-
-        ae200_details = ae200.runner.run_async_safely(
-            _fetch_ae200_details_async(ae200_devices)
-        )
+        ae200_details = {}
+        for dev in ae200_devices:
+            device_id = dev.get("id")
+            if device_id is None:
+                continue
+            try:
+                ae200_details[str(device_id)] = dict(ae200.get_device_info(device_id))
+            except (
+                ET.ParseError,
+                OSError,
+                RuntimeError,
+                ValueError,
+                WebSocketException,
+            ) as e:
+                ae200_details[str(device_id)] = {"error": str(e)}
 
         return jsonify(
             {"names": device_names, "devices": ae200_devices, "details": ae200_details}
         )
-    except (ValueError, RuntimeError, OSError) as e:
-        logger.warning("Failed to fetch AE-200 devices: %s", e)
-        return jsonify({"error": str(e)}), 500
+    except ValueError as e:
+        return _command_error_response(e)
+    except (ET.ParseError, OSError, RuntimeError, WebSocketException) as e:
+        return _ae200_error_response(e)

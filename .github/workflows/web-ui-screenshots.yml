@@ -1,0 +1,246 @@
+name: Web UI Screenshots
+
+on:
+  pull_request:
+  push:
+    branches-ignore:
+      - main
+
+concurrency:
+  group: web-ui-screenshots-${{ github.repository }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  web-ui-screenshots:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+    env:
+      TEMPERATURE_BOT_CONFIG: "tests/temperature-bot-config-test.yaml"
+      AE200_SIMULATOR: 1
+      AIRTHINGS_SIMULATOR: 1
+      AQICN_SIMULATOR: 1
+      POETRY_VERSION: '2.1.3'
+      RUFF_VERSION: '0.15.15'
+    steps:
+      - name: Resolve pull request
+        id: resolve_pr
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const repoFullName = `${owner}/${repo}`;
+            let pull = context.payload.pull_request;
+
+            if (!pull) {
+              const branch = context.ref.replace('refs/heads/', '');
+              const { data: pulls } = await github.rest.pulls.list({
+                owner,
+                repo,
+                state: 'open',
+                head: `${owner}:${branch}`,
+                per_page: 1,
+              });
+              pull = pulls[0];
+            }
+
+            core.setOutput('number', pull ? String(pull.number) : '');
+            core.setOutput(
+              'same_repo',
+              pull ? String(pull.head.repo.full_name === repoFullName) : 'false'
+            );
+
+      - name: Checkout
+        if: steps.resolve_pr.outputs.number != '' && steps.resolve_pr.outputs.same_repo == 'true'
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Set up Python
+        if: steps.resolve_pr.outputs.number != '' && steps.resolve_pr.outputs.same_repo == 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: |
+            poetry.lock
+
+      - name: Set up Node.js
+        if: steps.resolve_pr.outputs.number != '' && steps.resolve_pr.outputs.same_repo == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Cache .venv
+        if: steps.resolve_pr.outputs.number != '' && steps.resolve_pr.outputs.same_repo == 'true'
+        uses: actions/cache@v4
+        with:
+          path: .venv
+          key: screenshots-venv-${{ runner.os }}-3.12-${{ hashFiles('poetry.lock') }}
+          restore-keys: |
+            screenshots-venv-${{ runner.os }}-3.12-
+
+      - name: Cache Playwright browsers
+        if: steps.resolve_pr.outputs.number != '' && steps.resolve_pr.outputs.same_repo == 'true'
+        uses: actions/cache@v4
+        with:
+          path: .playwright
+          key: pw-${{ runner.os }}-${{ hashFiles('poetry.lock') }}
+          restore-keys: |
+            pw-${{ runner.os }}-
+
+      - name: Update GITHUB_PATH and install Python dependencies for local development
+        if: steps.resolve_pr.outputs.number != '' && steps.resolve_pr.outputs.same_repo == 'true'
+        run: |
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Configure Ubuntu
+        if: steps.resolve_pr.outputs.number != '' && steps.resolve_pr.outputs.same_repo == 'true'
+        run: |
+          make install-ubuntu
+
+      - name: Render web UI screenshots
+        if: steps.resolve_pr.outputs.number != '' && steps.resolve_pr.outputs.same_repo == 'true'
+        run: |
+          make web-screenshots
+
+      - name: Comment screenshots on PR
+        if: steps.resolve_pr.outputs.number != '' && steps.resolve_pr.outputs.same_repo == 'true'
+        uses: actions/github-script@v7
+        env:
+          PR_NUMBER: ${{ steps.resolve_pr.outputs.number }}
+          RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+            const manifest = JSON.parse(
+              fs.readFileSync('var/web-ui-screenshots/manifest.json', 'utf8')
+            );
+            const outputDir = 'var/web-ui-screenshots';
+            const marker = '<!-- web-ui-screenshots -->';
+            const { owner, repo } = context.repo;
+            const issue_number = Number(process.env.PR_NUMBER);
+            const releaseTag = `web-ui-screenshots-pr-${issue_number}`;
+            let release;
+
+            try {
+              const response = await github.rest.repos.getReleaseByTag({
+                owner,
+                repo,
+                tag: releaseTag,
+              });
+              release = response.data;
+              await github.rest.repos.updateRelease({
+                owner,
+                repo,
+                release_id: release.id,
+                name: `Web UI Screenshots for PR #${issue_number}`,
+                body: `Generated by ${process.env.RUN_URL} for ${context.sha}.`,
+                prerelease: true,
+              });
+            } catch (error) {
+              if (error.status !== 404) {
+                throw error;
+              }
+              const response = await github.rest.repos.createRelease({
+                owner,
+                repo,
+                tag_name: releaseTag,
+                target_commitish: context.sha,
+                name: `Web UI Screenshots for PR #${issue_number}`,
+                body: `Generated by ${process.env.RUN_URL} for ${context.sha}.`,
+                prerelease: true,
+                make_latest: 'false',
+              });
+              release = response.data;
+            }
+
+            const assets = await github.paginate(github.rest.repos.listReleaseAssets, {
+              owner,
+              repo,
+              release_id: release.id,
+              per_page: 100,
+            });
+            await Promise.all(
+              assets.map((asset) =>
+                github.rest.repos.deleteReleaseAsset({
+                  owner,
+                  repo,
+                  asset_id: asset.id,
+                })
+              )
+            );
+
+            const imageLinks = {};
+            for (const page of manifest.pages) {
+              const filename = page.filename;
+              const assetName = `${process.env.GITHUB_RUN_ID}-${filename}`;
+              const screenshotPath = path.join(outputDir, filename);
+              const data = fs.readFileSync(screenshotPath);
+              const response = await github.rest.repos.uploadReleaseAsset({
+                owner,
+                repo,
+                release_id: release.id,
+                name: assetName,
+                data,
+                headers: {
+                  'content-type': 'image/png',
+                  'content-length': data.length,
+                },
+              });
+              imageLinks[filename] = response.data.browser_download_url;
+            }
+
+            const lines = [
+              marker,
+              '## Web UI Screenshots',
+              '',
+              `Generated ${manifest.pages.length} screenshots for this PR.`,
+              `[Workflow run](${process.env.RUN_URL})`,
+              '',
+            ];
+
+            for (const page of manifest.pages) {
+              const imageUrl = imageLinks[page.filename];
+              if (!imageUrl) {
+                throw new Error(`Missing uploaded image URL for ${page.filename}`);
+              }
+              lines.push(
+                `### ${page.title}`,
+                '',
+                `Route: \`${page.path}\``,
+                '',
+                `[![${page.title}](${imageUrl})](${imageUrl})`,
+                ''
+              );
+            }
+
+            const body = lines.join('\n');
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner,
+              repo,
+              issue_number,
+              per_page: 100,
+            });
+            const existing = comments.find(
+              (comment) => comment.user.type === 'Bot' && comment.body?.includes(marker)
+            );
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner,
+                repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number,
+                body,
+              });
+            }

@@ -1,7 +1,11 @@
 """
 Integration tests for AE200 device communication.
 """
+import asyncio
+import concurrent.futures
 import socket
+import threading
+
 import pytest
 from app import ae200
 from app.util import get_config
@@ -75,3 +79,82 @@ def test_friendly_fan_speed_label_unknown_and_none():
     None stays None so callers can distinguish 'no data'."""
     assert ae200.friendly_fan_speed_label("ERV Restrooms", "BOGUS") == "BOGUS"
     assert ae200.friendly_fan_speed_label("Restrooms/BOH", None) is None
+
+
+def test_extract_drive_and_fan_speed_promotes_mode():
+    """AE-200 Mode should be convenient at the JSON API boundary."""
+    status = {"Drive": "ON", "FanSpeed": "LOW", "Mode": "COOL"}
+    extracted = ae200.extract_drive_and_fan_speed(status)
+    assert extracted["mode"] == "COOL"
+    assert extracted["drive"] == 1
+    assert extracted["fan_speed"] == 1
+    assert extracted["has_speed_control"] is True
+
+
+def test_extract_drive_and_fan_speed_keeps_mode_without_speed_control():
+    """Mode is useful diagnostic data even when speed control is absent."""
+    extracted = ae200.extract_drive_and_fan_speed({"Mode": "HEAT"})
+    assert extracted == {"mode": "HEAT", "has_speed_control": False}
+
+
+async def _async_value(value):
+    return value
+
+
+async def _record_active_command(state):
+    with state["lock"]:
+        state["active"] += 1
+        state["max_active"] = max(state["max_active"], state["active"])
+    await asyncio.sleep(0.05)
+    with state["lock"]:
+        state["active"] -= 1
+    return "ok"
+
+
+def test_async_runner_runs_without_current_event_loop(monkeypatch, tmp_path):
+    """Synchronous AE-200 callers should get a fresh event loop per request."""
+    monkeypatch.setattr(ae200, "AE200_COMMAND_LOCK_PATH", str(tmp_path / "ae200.lock"))
+    assert ae200.AsyncRunner().run_async_safely(_async_value("ok")) == "ok"
+
+
+def test_async_runner_runs_inside_current_event_loop(monkeypatch, tmp_path):
+    """Async callers should not reuse or nest the currently running loop."""
+    monkeypatch.setattr(ae200, "AE200_COMMAND_LOCK_PATH", str(tmp_path / "ae200.lock"))
+
+    async def call_runner():
+        return ae200.AsyncRunner().run_async_safely(_async_value("ok"))
+
+    assert asyncio.run(call_runner()) == "ok"
+
+
+def test_async_runner_serializes_commands(monkeypatch, tmp_path):
+    """AE-200 commands should not run concurrently through one runner."""
+    monkeypatch.setattr(ae200, "AE200_COMMAND_LOCK_PATH", str(tmp_path / "ae200.lock"))
+    runner = ae200.AsyncRunner()
+    state = {"active": 0, "max_active": 0, "lock": threading.Lock()}
+    start_barrier = threading.Barrier(2)
+
+    def run_command():
+        start_barrier.wait(timeout=1)
+        return runner.run_async_safely(_record_active_command(state))
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+        futures = [executor.submit(run_command) for _ in range(2)]
+        results = [future.result(timeout=2) for future in futures]
+
+    assert results == ["ok", "ok"]
+    assert state["max_active"] == 1
+
+
+def test_set_mode_updates_simulator_and_rejects_unknown():
+    """The AE-200 simulator should reflect commanded operation modes."""
+    device_id = 10
+    original_mode = ae200.get_device_info(device_id).get(ae200.AE200_MODE_KEY)
+    try:
+        ae200.set_mode(device_id, "HEAT")
+        assert ae200.get_device_info(device_id)[ae200.AE200_MODE_KEY] == "HEAT"
+        with pytest.raises(ValueError):
+            ae200.set_mode(device_id, "AUTO")
+    finally:
+        if original_mode in ae200.AE200_ALLOWED_SET_MODES:
+            ae200.set_mode(device_id, original_mode)

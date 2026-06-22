@@ -117,7 +117,7 @@ function updateTemperatureToggleUI() {
 const AQ_TEMP_THRESHOLDS_C = { lowElevated: 18, highElevated: 20, lowComfort: 25, highComfort: 27 };
 
 /** Radon thresholds in Bq/m³; converted to pCi/L when preference is Fahrenheit (US units). */
-const RADON_THRESHOLDS_BQM3 = { elevated: 100, problem: 150 };
+const RADON_THRESHOLDS_BQM3 = { fair: 75, poor: 150 };
 const BQM3_TO_PCIL = 37;
 
 /**
@@ -175,24 +175,24 @@ function updateAqTempHeader() {
       `Elevated: ${lowElevated}–${highElevated} or ${lowComfort}–${highComfort} °C.\n` +
       `Problem: <${lowElevated} or >${highComfort} °C.`;
   }
-  updateAqColumnHeader(["aq-temp-unit-label", "aq-index-temp-unit-label", "erv-temp-unit-label", "fcu-temp-unit-label", "fcu-settemp-unit-label"], getTemperatureUnit(), title);
+  updateAqColumnHeader(["aq-temp-unit-label", "aq-index-temp-unit-label", "erv-temp-unit-label", "fcu-temp-unit-label", "fcu-room-temp-unit-label", "fcu-settemp-unit-label", "fcu-setrange-unit-label"], getTemperatureUnit(), title);
 }
 
 function updateRadonHeaders() {
-  const { elevated, problem } = RADON_THRESHOLDS_BQM3;
+  const { fair, poor } = RADON_THRESHOLDS_BQM3;
   let title;
   if (USE_FAHRENHEIT) {
-    const eP = (elevated / BQM3_TO_PCIL).toFixed(1);
-    const pP = (problem / BQM3_TO_PCIL).toFixed(1);
+    const fP = (fair / BQM3_TO_PCIL).toFixed(1);
+    const pP = (poor / BQM3_TO_PCIL).toFixed(1);
     title =
       "Short-term average radon level. Unit follows site C/F toggle.\n" +
-      `Elevated: ${eP}–${pP} pCi/L.\n` +
-      `Problem: >${pP} pCi/L.`;
+      `Fair: >${fP} pCi/L.\n` +
+      `Poor: >${pP} pCi/L.`;
   } else {
     title =
       "Short-term average radon level (Bq/m³).\n" +
-      `Elevated: ${elevated}–${problem}.\n` +
-      `Problem: >${problem}.`;
+      `Fair: >${fair}.\n` +
+      `Poor: >${poor}.`;
   }
   updateAqColumnHeader(["aq-radon-unit-label", "aq-index-radon-unit-label"], getRadonUnit(), title);
 }
@@ -212,7 +212,7 @@ function updateAllTemperatureDisplays() {
     }
   });
 
-  const tempCells = document.querySelectorAll('[id^="temp-"]');
+  const tempCells = document.querySelectorAll('[id^="temp-"], [id^="fcu-temp-"], [id^="room-temp-"]');
   tempCells.forEach((element) => {
     const tempC = parseFloat(element.getAttribute("data-temp-c"));
     if (!isNaN(tempC)) {

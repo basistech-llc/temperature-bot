@@ -48,6 +48,91 @@ def test_footer_only_on_about(flask_test_client):  # noqa: F811
     assert b"BasisTech LLC" not in index_response.data
 
 
+def test_simulator_banner_is_rendered(flask_test_client):  # noqa: F811
+    response = flask_test_client.get("/")
+    assert response.status_code == 200
+    html = response.data.decode("utf-8")
+    assert 'class="simulator-banner"' in html
+    assert ">simulator</div>" in html
+
+
+@patch("app.routes_web.hubitat.get_name_to_label", return_value={})
+@patch("app.routes_web.db.get_device_status")
+def test_fcu_matrix_has_raw_fcu_temp_and_room_temp_columns(
+    mock_get_status, _mock_labels, flask_test_client
+):  # noqa: F811
+    """The FCU matrix must display raw FCU temperature and calculated room temperature."""
+    mock_get_status.return_value = [
+        {
+            "device_id": 12,
+            "device_name": "Area 51",
+            "has_speed_control": True,
+            "temp10x": 220,
+            "calculated_temp10x": 235,
+            "status": {"Mode": "COOL"},
+        }
+    ]
+
+    response = flask_test_client.get("/")
+    assert response.status_code == 200
+    html = response.data.decode("utf-8")
+
+    assert "FCU Temp" in html
+    assert "Room Temp" in html
+    assert 'id="fcu-temp-12"' in html
+    assert 'id="room-temp-12"' in html
+
+
+@patch("app.routes_web.hubitat.get_name_to_label", return_value={})
+@patch("app.routes_web.db.get_device_status")
+def test_fcu_matrix_room_temp_cell_opens_weight_popup(
+    mock_get_status, _mock_labels, flask_test_client
+):  # noqa: F811
+    """Room Temp cells must expose the source-weight popup contract."""
+    mock_get_status.return_value = [
+        {
+            "device_id": 12,
+            "device_name": "Area 51",
+            "has_speed_control": True,
+            "temp10x": 220,
+            "calculated_temp10x": 235,
+            "temp_source_stale_seconds": 600,
+            "room_name": "Area 51",
+            "status": {"Mode": "COOL"},
+        }
+    ]
+
+    response = flask_test_client.get("/")
+    assert response.status_code == 200
+    html = response.data.decode("utf-8")
+
+    assert 'id="fcu-temp-sources-popup"' in html
+    assert (
+        'data-fcu-temp-sources-url="/api/v1/fcu_temp_sources?fcu_device_id=12"'
+        in html
+    )
+    assert 'data-fcu-temp-source-update-url="/api/v1/fcu_temp_source"' in html
+    assert 'data-fcu-temp-sources-room-name="Area 51"' in html
+    assert "Readings older than 10 minutes are ignored" in html
+    assert 'data-action="save-fcu-temp-sources"' in html
+    assert 'data-action="revert-fcu-temp-sources"' in html
+    assert 'data-action="cancel-fcu-temp-sources"' in html
+    assert 'data-action="close-fcu-temp-sources"' not in html
+
+
+def test_temperature_chart_page_has_raw_calculated_mode_switch(
+    flask_test_client,
+):  # noqa: F811
+    """The chart page must let users switch between raw and calculated temperatures."""
+    response = flask_test_client.get("/chart")
+    assert response.status_code == 200
+    html = response.data.decode("utf-8").lower()
+
+    assert "raw temps" in html
+    assert "calculated temps" in html
+    assert 'name="temperature-mode"' in html
+
+
 def test_privacy_route(flask_test_client):  # noqa: F811
     """Test the /privacy route redirects to /about"""
     response = flask_test_client.get("/privacy", follow_redirects=False)
@@ -102,8 +187,10 @@ def test_air_quality_route(flask_test_client):  # noqa: F811
 
     # Legend and explanatory text
     assert b"Shading:" in html
-    assert b"elevated" in html
-    assert b"problem" in html
+    assert b"air_quality_coloring.js" in html
+    assert b"good" in html
+    assert b"fair" in html
+    assert b"poor" in html
 
 
 def test_air_quality_cells_are_clickable(flask_test_client):  # noqa: F811
@@ -144,6 +231,8 @@ def test_air_quality_cells_are_clickable(flask_test_client):  # noqa: F811
     assert "/chart?device_ids=99" in html
     # The shared click handler is loaded via base.html.
     assert "clickable_cells.js" in html
+    assert 'data-air-quality-metric="co2"' in html
+    assert 'data-air-quality-metric="humidity"' in html
 
 
 # -- _filter_speed_control_devices unit tests --
@@ -495,7 +584,7 @@ def test_tv_hubitat_error(_mock, flask_test_client):  # noqa: F811
 
 def test_room_config_kitchen_has_fcu():
     """Kitchen must list its FCU so set-temp controls render."""
-    fans = room_config.ROOM_CONFIGS["kitchen"]["fans"]
+    fans = room_config.ROOM_CONFIGS["kitchen"].fans
     assert "Kitchen" in fans
 
 
@@ -503,7 +592,7 @@ def test_room_config_erv_names_start_with_erv():
     """ERV device names must start with 'ERV' — the template uses device_type
     to decide whether to show set-temp controls (fans only, not ERVs)."""
     for room_key, config in room_config.ROOM_CONFIGS.items():
-        for name in config.get("ervs", []):
+        for name in config.ervs:
             assert name.startswith("ERV"), (
                 f"{room_key} ERV device '{name}' must start with 'ERV'"
             )
@@ -520,7 +609,7 @@ def test_room_config_no_erv_in_fans():
     temperature controls that send meaningless API calls.
     """
     for room_key, config in room_config.ROOM_CONFIGS.items():
-        for fan_name in config.get("fans", []):
+        for fan_name in config.fans:
             assert not fan_name.startswith("ERV"), (
                 f"{room_key} fans list contains ERV device '{fan_name}'"
             )

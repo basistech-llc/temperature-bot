@@ -13,9 +13,11 @@ Use the Makefile for setup, checks, tests, and local runs.
 make install-macos      # macOS setup
 make install-ubuntu     # Ubuntu setup
 make make-dev-db        # build a fresh local DB from Flyway migrations
-make local-dev          # run Flask locally with simulated AE-200 data
+make local-dev          # run Flask locally with simulated AE-200 data and banner
+make local-live-dev     # run Flask locally against live AE-200 hardware
 make check              # non-mutating static checks, type checks, and migration validation
 make test               # Python and JavaScript tests
+make web-screenshots    # render each web UI page to PNG screenshots
 ```
 
 To run one pytest target through the Makefile:
@@ -23,6 +25,12 @@ To run one pytest target through the Makefile:
 ```bash
 make PYTEST_ARGS=tests/test_db.py::test_name pytest
 ```
+
+`make web-screenshots` seeds a temporary SQLite database, starts Flask with
+simulated external services, and writes PNGs plus `manifest.json` and
+`gallery.md` under `var/web-ui-screenshots/`. The Ubuntu-only `Web UI
+Screenshots` pull-request workflow uploads those PNGs as GitHub release assets
+and updates a sticky PR comment with inline rendered images.
 
 ## Database
 
@@ -34,6 +42,24 @@ after adding a migration. See `doc/sql-migrations.md`.
 Temperatures are stored as integer Celsius tenths (`temp10x`) in `devlog`.
 Consecutive readings with the same state are run-length encoded by extending
 the row duration instead of inserting duplicate rows.
+
+FCUs can also report a calculated room temperature: a weighted average of the
+FCU's own raw temperature and configured temperature-reporting devices. Room
+metadata, map polygons, source multipliers, persisted FCU set ranges, API
+payloads, and rule semantics are documented in
+`doc/calculated-temperatures-and-rooms.md`.
+
+AE-200 control currently stays inside the Flask app behind a serialized async
+bridge. The tradeoffs for a future FastAPI/async/websocket migration are in
+`doc/fastapi-async-ae200.md`.
+
+## Data Contracts
+
+Stable app-owned data should use Pydantic models from `app/models.py` rather
+than ad hoc dictionaries. Named models document the expected fields, make type
+and runtime validation useful, and give humans and LLM coding agents a clearer
+source of truth. External service payloads may remain dictionaries at the
+edge, but shared keys should be centralized instead of repeated inline.
 
 ## Operations
 

@@ -5,7 +5,20 @@
  * Regression coverage for the "Off jumps back to Auto" bug: an off unit that is
  * holding the Auto (-1) fan speed must select the Off radio, not Auto.
  */
-const { fanRadioIdForDevice } = require("../app/static/unit_speed.js");
+const {
+  collectFcuTempSourceChanges,
+  ensureModeSelectOption,
+  fanRadioIdForDevice,
+  fcuTempSourcesTitle,
+  modeLabelForDevice,
+  modeValueForDevice,
+  moveSetRange,
+  normalizeSetRange,
+  parseFcuTempSourceMultiplier,
+  resizeSetRangeEndpoint,
+  saveFcuTempSourceMultipliers,
+  sortedFcuTempSources,
+} = require("../app/static/unit_speed.js");
 
 let passed = 0;
 let failed = 0;
@@ -16,6 +29,21 @@ function check(label, actual, expected) {
   } else {
     failed++;
     console.error(`FAIL ${label}: got "${actual}", expected "${expected}"`);
+  }
+}
+
+function checkRange(label, actual, expectedLow, expectedHigh) {
+  if (
+    actual &&
+    actual.lowC === expectedLow &&
+    actual.highC === expectedHigh
+  ) {
+    passed++;
+  } else {
+    failed++;
+    console.error(
+      `FAIL ${label}: got ${JSON.stringify(actual)}, expected ${expectedLow}-${expectedHigh}`,
+    );
   }
 }
 
@@ -60,5 +88,287 @@ check(
   "radio-5-0",
 );
 
-console.log(`\n${passed} passed, ${failed} failed`);
-process.exit(failed === 0 ? 0 : 1);
+// -- AE-200 mode display --
+check(
+  "mode from promoted field",
+  modeLabelForDevice({ mode: "COOL" }),
+  "Cool",
+);
+check(
+  "mode from raw status payload",
+  modeLabelForDevice({ status: { Mode: "HEAT" } }),
+  "Heat",
+);
+check(
+  "mode value is canonical",
+  modeValueForDevice({ status: { Mode: "cool" } }),
+  "COOL",
+);
+check(
+  "unknown mode passes through",
+  modeLabelForDevice({ mode: "SOMETHING_NEW" }),
+  "SOMETHING_NEW",
+);
+check(
+  "missing mode",
+  modeLabelForDevice({ status: {} }),
+  "--",
+);
+
+// -- FCU temperature source popup behavior --
+check(
+  "temperature source title includes room name",
+  fcuTempSourcesTitle("Area 51"),
+  "Area 51: Temperature Sources",
+);
+check(
+  "temperature source title without room name",
+  fcuTempSourcesTitle(""),
+  "Temperature Sources",
+);
+
+const unsortedSources = [
+  { source_device_id: 1, is_stale: false },
+  { source_device_id: 2, is_stale: true },
+  { source_device_id: 3, is_stale: false },
+  { source_device_id: 4, is_stale: true },
+];
+check(
+  "stale temperature sources sort to bottom",
+  sortedFcuTempSources(unsortedSources)
+    .map((source) => source.source_device_id)
+    .join(","),
+  "1,3,2,4",
+);
+check(
+  "temperature source sorting does not mutate source list",
+  unsortedSources.map((source) => source.source_device_id).join(","),
+  "1,2,3,4",
+);
+check("nonnegative multiplier parses", parseFcuTempSourceMultiplier(" 1.5 "), 1.5);
+check("negative multiplier is invalid", parseFcuTempSourceMultiplier("-0.1"), null);
+
+const popupWithChangedSource = {
+  querySelectorAll: () => [
+    {
+      value: "0",
+      dataset: {
+        fcuDeviceId: "12",
+        sourceDeviceId: "20",
+        initialMultiplier: "0",
+      },
+    },
+    {
+      value: "1.5",
+      dataset: {
+        fcuDeviceId: "12",
+        sourceDeviceId: "21",
+        initialMultiplier: "1",
+      },
+    },
+  ],
+};
+const sourceChanges = collectFcuTempSourceChanges(popupWithChangedSource);
+check("changed source collection has no error", sourceChanges.error, "");
+check("changed source collection filters unchanged rows", sourceChanges.changes.length, 1);
+check(
+  "changed source collection builds API payload",
+  JSON.stringify(sourceChanges.changes[0]),
+  JSON.stringify({ fcu_device_id: 12, source_device_id: 21, multiplier: 1.5 }),
+);
+
+const invalidSourceChanges = collectFcuTempSourceChanges({
+  querySelectorAll: () => [
+    {
+      value: "-1",
+      dataset: {
+        fcuDeviceId: "12",
+        sourceDeviceId: "20",
+        initialMultiplier: "0",
+      },
+    },
+  ],
+});
+check(
+  "invalid source collection reports validation error",
+  invalidSourceChanges.error,
+  "Weight must be a nonnegative number.",
+);
+
+async function testFcuBatchSavePost() {
+  const inputs = [
+    {
+      disabled: false,
+      value: "0",
+      dataset: {
+        fcuDeviceId: "12",
+        sourceDeviceId: "20",
+        initialMultiplier: "0",
+      },
+    },
+    {
+      disabled: false,
+      value: "1.5",
+      dataset: {
+        fcuDeviceId: "12",
+        sourceDeviceId: "21",
+        initialMultiplier: "1",
+      },
+    },
+    {
+      disabled: false,
+      value: "0.25",
+      dataset: {
+        fcuDeviceId: "12",
+        sourceDeviceId: "22",
+        initialMultiplier: "0",
+      },
+    },
+  ];
+  const buttons = [{ disabled: false }, { disabled: false }, { disabled: false }];
+  const message = {
+    textContent: "",
+    classList: {
+      toggle: () => {},
+    },
+  };
+  const popup = {
+    dataset: { updateUrl: "/api/v1/fcu_temp_source" },
+    classList: {
+      hidden: false,
+      add: (name) => {
+        popup.classList.hidden = name === "hidden";
+      },
+    },
+    querySelector: (selector) =>
+      selector === "[data-role='message']" ? message : null,
+    querySelectorAll: (selector) => {
+      if (selector === ".fcu-temp-source-weight") {
+        return inputs;
+      }
+      if (
+        selector === ".fcu-temp-source-weight, .fcu-temp-sources-actions button"
+      ) {
+        return inputs.concat(buttons);
+      }
+      return [];
+    },
+  };
+  const requests = [];
+  const originalDocumentForSave = global.document;
+  const originalFetch = global.fetch;
+  global.document = {
+    getElementById: (id) => (id === "fcu-temp-sources-popup" ? popup : null),
+  };
+  global.fetch = async (url, options) => {
+    requests.push({ url, options });
+    return {
+      ok: true,
+      json: async () => ({ sources: [] }),
+    };
+  };
+  try {
+    await saveFcuTempSourceMultipliers();
+  } finally {
+    global.document = originalDocumentForSave;
+    global.fetch = originalFetch;
+  }
+
+  const postedBody = JSON.parse(requests[0].options.body);
+  check("batch save sends one request", requests.length, 1);
+  check("batch save posts update URL", requests[0].url, "/api/v1/fcu_temp_source");
+  check("batch save sends changed rows as an array", Array.isArray(postedBody), true);
+  check("batch save omits unchanged row", postedBody.length, 2);
+  check(
+    "batch save sends all changed rows",
+    JSON.stringify(postedBody),
+    JSON.stringify([
+      { fcu_device_id: 12, source_device_id: 21, multiplier: 1.5 },
+      { fcu_device_id: 12, source_device_id: 22, multiplier: 0.25 },
+    ]),
+  );
+}
+
+// -- FCU mode select option updates --
+const originalDocument = global.document;
+global.document = {
+  createElement: () => ({
+    dataset: {},
+    disabled: false,
+    textContent: "",
+    value: "",
+  }),
+};
+try {
+  const unusualMode = 'FAN"] [value="COOL';
+  const existingSelect = {
+    firstChild: null,
+    inserted: false,
+    options: [{ value: unusualMode }],
+    querySelector: () => {
+      throw new Error("querySelector should not be used for mode values");
+    },
+    insertBefore: () => {
+      existingSelect.inserted = true;
+    },
+  };
+  ensureModeSelectOption(existingSelect, unusualMode);
+  check(
+    "existing unusual mode option does not insert",
+    existingSelect.inserted,
+    false,
+  );
+
+  const newSelect = {
+    firstChild: null,
+    inserted: null,
+    options: [],
+    insertBefore: (option) => {
+      newSelect.inserted = option;
+      newSelect.options.unshift(option);
+    },
+  };
+  ensureModeSelectOption(newSelect, unusualMode);
+  check(
+    "unusual mode option value is preserved",
+    newSelect.inserted.value,
+    unusualMode,
+  );
+  check("unusual mode option is disabled", newSelect.inserted.disabled, true);
+} finally {
+  global.document = originalDocument;
+}
+
+// -- FCU set-range math --
+checkRange(
+  "too narrow range expands to minimum",
+  normalizeSetRange(20, 22, { minRangeC: 3, trackMinC: 10, trackMaxC: 30 }),
+  20,
+  23,
+);
+checkRange(
+  "lower endpoint cannot cross minimum width",
+  resizeSetRangeEndpoint(20, 24, "low", 23, {
+    minRangeC: 3,
+    trackMinC: 10,
+    trackMaxC: 30,
+  }),
+  21,
+  24,
+);
+checkRange(
+  "moving middle preserves width and clamps to track",
+  moveSetRange(20, 24, -20, { minRangeC: 3, trackMinC: 10, trackMaxC: 30 }),
+  10,
+  14,
+);
+
+testFcuBatchSavePost()
+  .catch((error) => {
+    failed++;
+    console.error(error);
+  })
+  .finally(() => {
+    console.log(`\n${passed} passed, ${failed} failed`);
+    process.exit(failed === 0 ? 0 : 1);
+  });

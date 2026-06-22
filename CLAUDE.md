@@ -32,4 +32,7 @@ make PYTEST_ARGS=tests/test_db.py::test_function_name pytest
 
 ## Task Tracking
 
-Use `bd` (beads) for all task tracking — never markdown TODOs. See `AGENTS.md` for workflow details.
+This project does not use `bd` (beads). Do not run `bd` commands or rely on
+`.beads/` state; follow the current user request and Git/GitHub workflow only
+when explicitly asked.
+Any `.beads/` documentation in the repository is legacy and should be ignored.

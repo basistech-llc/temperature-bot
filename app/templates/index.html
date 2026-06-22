@@ -95,8 +95,11 @@
             <tr>
               <th class="column-unit" rowspan="2">Unit</th>
               <th class="column-disable-for" rowspan="2" title="Remaining time rules are disabled for this device (H:MM)">Disabled<br>for</th>
-              <th class="column-temp" rowspan="2">Temp<br><small id="fcu-temp-unit-label">°C</small></th>
+              <th class="column-temp" rowspan="2">FCU Temp<br><small id="fcu-temp-unit-label">°C</small></th>
+              <th class="column-temp" rowspan="2">Room Temp<br><small id="fcu-room-temp-unit-label">°C</small></th>
               <th class="column-temp column-temp-set" rowspan="2">Set Temp<br><small id="fcu-settemp-unit-label">°C</small></th>
+              <th class="column-temp column-temp-range" rowspan="2">Set Range<br><small id="fcu-setrange-unit-label">°C</small></th>
+              <th class="column-mode" rowspan="2">Mode</th>
               <th class="column-speed" colspan="5">Fan Speed</th>
               <th class="column-notes" rowspan="2">Notes</th>
             </tr>
@@ -133,13 +136,18 @@
                               aria-label="Increase disable time">+</button>
                     </span>
                   </td>
-                  {% if device.temp10x %}
-                  <td class="cell-temp cell-temp-link temp-display-no-unit" id="temp-{{ device.device_id }}"
+                  {% if device.temp10x is not none %}
+                  <td class="cell-temp cell-temp-link temp-display temp-display-no-unit" id="fcu-temp-{{ device.device_id }}"
                       data-chart-url="/chart?device_ids={{ device.device_id }}"
                       title="Temperature chart for {{ device.device_label }}">--</td>
                   {% else %}
                   <td class="cell-temp cell-temp-na">n/a</td>
                   {% endif %}
+                  <td class="cell-temp cell-temp-link room-temp-link temp-display temp-display-no-unit" id="room-temp-{{ device.device_id }}"
+                      data-fcu-temp-sources-url="/api/v1/fcu_temp_sources?fcu_device_id={{ device.device_id }}"
+                      data-fcu-temp-source-update-url="/api/v1/fcu_temp_source"
+                      data-fcu-temp-sources-room-name="{{ device.room_name or device.device_label }}"
+                      title="Calculated room temperature for {{ device.device_label }}">--</td>
                   <td class="cell-temp cell-temp-set" id="settemp-{{ device.device_id }}">
                     <span class="settemp-thermostat" role="group" aria-label="Set temperature">
                       <button type="button"
@@ -156,6 +164,44 @@
                               data-delta="0.5"
                               aria-label="Increase set temperature">+</button>
                     </span>
+                  </td>
+                  <td class="cell-temp cell-temp-range" id="setrange-{{ device.device_id }}">
+                    <div class="setrange-widget"
+                         id="setrange-widget-{{ device.device_id }}"
+                         data-device-id="{{ device.device_id }}"
+                         data-update-url="/api/v1/set_range"
+                         data-min-range-c="{{ device.min_set_range_c|default(3.0, true) }}"
+                         {% if device.set_range_low_c is defined and device.set_range_low_c is not none %}data-set-range-low-c="{{ device.set_range_low_c }}"{% endif %}
+                         {% if device.set_range_high_c is defined and device.set_range_high_c is not none %}data-set-range-high-c="{{ device.set_range_high_c }}"{% endif %}>
+                      <div class="setrange-track" data-role="track">
+                        <div class="setrange-fill" data-role="middle" tabindex="0" aria-label="Move set range"></div>
+                        <button type="button" class="setrange-handle setrange-handle-low" data-role="low" aria-label="Move lower set range"></button>
+                        <button type="button" class="setrange-handle setrange-handle-high" data-role="high" aria-label="Move upper set range"></button>
+                      </div>
+                      <div class="setrange-values">
+                        <span class="setrange-end-label temp-display temp-display-no-unit" data-role="low-label">--</span>
+                        <span class="setrange-separator">–</span>
+                        <span class="setrange-end-label temp-display temp-display-no-unit" data-role="high-label">--</span>
+                      </div>
+                    </div>
+                  </td>
+                  {% set current_mode = device.mode|default(device.status.Mode|default('', true), true) %}
+                  {% set current_mode_value = current_mode|upper if current_mode else '' %}
+                  <td class="cell-mode">
+                    <select class="mode-select"
+                            id="mode-{{ device.device_id }}"
+                            data-device-id="{{ device.device_id }}"
+                            data-current-mode="{{ current_mode_value }}"
+                            title="Set mode for {{ device.device_label }}">
+                      {% if not current_mode_value %}
+                      <option value="" selected disabled>--</option>
+                      {% elif current_mode_value not in ['FAN', 'COOL', 'HEAT'] %}
+                      <option value="{{ current_mode_value }}" selected disabled>{{ current_mode_value }}</option>
+                      {% endif %}
+                      <option value="FAN" {% if current_mode_value == 'FAN' %}selected{% endif %}>Fan</option>
+                      <option value="COOL" {% if current_mode_value == 'COOL' %}selected{% endif %}>Cool</option>
+                      <option value="HEAT" {% if current_mode_value == 'HEAT' %}selected{% endif %}>Heat</option>
+                    </select>
                   </td>
                   <td class="cell-speed cell-speed-off">
                     <input type="radio" name="fan_speed-{{ device.device_id }}"
@@ -198,14 +244,14 @@
           <thead>
             <tr>
               <th class="column-unit">Unit</th>
-              <th class="column-humidity" title="Relative humidity (%). Elevated: 30–35 or 55–60. Problem: &lt;30 or &gt;60.">Humidity<br><small>%</small></th>
+              <th class="column-humidity" title="Relative humidity (%). Fair: &gt;50. Poor: &lt;30 or &gt;60.">Humidity<br><small>%</small></th>
               <th class="column-temp" title="Temperature. Unit follows site C/F toggle. Elevated: 18–20 or 25–27 °C. Problem: &lt;18 or &gt;27 °C.">Temp<br><small id="aq-index-temp-unit-label">°C</small></th>
               <th class="column-illuminance" title="Illuminance (lux).">Illuminance<br><small>lx</small></th>
-              <th title="Carbon dioxide (ppm). Elevated: 801–1200. Problem: &gt;1200.">CO₂<br><small>ppm</small></th>
-              <th title="Volatile organic compounds (ppb). Elevated: 501–2000. Problem: &gt;2000.">VOC<br><small>ppb</small></th>
-              <th title="Short-term average radon level (Bq/m³). Elevated: 100–150. Problem: &gt;150.">Radon<br><small id="aq-index-radon-unit-label">Bq/m³</small></th>
-              <th title="Fine particles &lt;2.5µm (µg/m³). Elevated: 13–35. Problem: &gt;35.">PM2.5<br><small>µg/m³</small></th>
-              <th title="Fine particles &lt;1µm (µg/m³). Elevated: 13–35. Problem: &gt;35.">PM1<br><small>µg/m³</small></th>
+              <th title="Carbon dioxide (ppm). Fair: &gt;600. Poor: &gt;1000.">CO₂<br><small>ppm</small></th>
+              <th title="Volatile organic compounds (ppb). Fair: &gt;500. Poor: &gt;2000.">VOC<br><small>ppb</small></th>
+              <th title="Short-term average radon level (Bq/m³). Fair: &gt;75. Poor: &gt;150.">Radon<br><small id="aq-index-radon-unit-label">Bq/m³</small></th>
+              <th title="Fine particles &lt;2.5µm (µg/m³). Fair: &gt;9.0. Poor: &gt;35.4.">PM2.5<br><small>µg/m³</small></th>
+              <th title="Fine particles &lt;1µm (µg/m³). Fair: &gt;9.0. Poor: &gt;35.4.">PM1<br><small>µg/m³</small></th>
               <th class="column-notes">Notes</th>
             </tr>
           </thead>
@@ -218,6 +264,7 @@
                     <span id="device-{{ device.device_id }}-notes"></span>
                   </td>
                   <td class="cell-humidity{% if device.has_humidity %} cell-metric-link{% endif %}" id="humidity-{{ device.device_id }}"
+                      data-air-quality-metric="humidity"
                       {% if device.has_humidity %}data-chart-url="/metric_chart?metric=humidity&device_ids={{ device.device_id }}"
                       title="Humidity chart for {{ device.device_label }}"{% endif %}>--</td>
                   <td class="cell-temp cell-temp-link temp-display temp-display-no-unit" id="temp-{{ device.device_id }}"
@@ -226,13 +273,14 @@
                   <td class="cell-illuminance{% if device.has_illuminance %} cell-illuminance-link{% endif %}" id="illuminance-{{ device.device_id }}"
                       {% if device.has_illuminance %}data-chart-url="/lighting_chart?device_ids={{ device.device_id }}"
                       title="Lighting chart for {{ device.device_label }}"{% endif %}>--</td>
-                  <td {% if device.has_co2 %}class="cell-metric-link" data-chart-url="/metric_chart?metric=co2&device_ids={{ device.device_id }}" title="CO₂ chart for {{ device.device_label }}"{% endif %} id="co2-{{ device.device_id }}">--</td>
-                  <td {% if device.has_voc %}class="cell-metric-link" data-chart-url="/metric_chart?metric=voc&device_ids={{ device.device_id }}" title="VOC chart for {{ device.device_label }}"{% endif %} id="voc-{{ device.device_id }}">--</td>
+                  <td {% if device.has_co2 %}class="cell-metric-link" data-chart-url="/metric_chart?metric=co2&device_ids={{ device.device_id }}" title="CO₂ chart for {{ device.device_label }}"{% endif %} data-air-quality-metric="co2" id="co2-{{ device.device_id }}">--</td>
+                  <td {% if device.has_voc %}class="cell-metric-link" data-chart-url="/metric_chart?metric=voc&device_ids={{ device.device_id }}" title="VOC chart for {{ device.device_label }}"{% endif %} data-air-quality-metric="voc" id="voc-{{ device.device_id }}">--</td>
                   <td class="radon-display{% if device.has_radon %} cell-metric-link{% endif %}" id="radon-{{ device.device_id }}"
+                      data-air-quality-metric="radonShortTermAvg"
                       {% if device.has_radon %}data-chart-url="/metric_chart?metric=radon&device_ids={{ device.device_id }}"
                       title="Radon chart for {{ device.device_label }}"{% endif %}>--</td>
-                  <td {% if device.has_pm25 %}class="cell-metric-link" data-chart-url="/metric_chart?metric=pm25&device_ids={{ device.device_id }}" title="PM2.5 chart for {{ device.device_label }}"{% endif %} id="pm25-{{ device.device_id }}">--</td>
-                  <td {% if device.has_pm1 %}class="cell-metric-link" data-chart-url="/metric_chart?metric=pm1&device_ids={{ device.device_id }}" title="PM1 chart for {{ device.device_label }}"{% endif %} id="pm1-{{ device.device_id }}">--</td>
+                  <td {% if device.has_pm25 %}class="cell-metric-link" data-chart-url="/metric_chart?metric=pm25&device_ids={{ device.device_id }}" title="PM2.5 chart for {{ device.device_label }}"{% endif %} data-air-quality-metric="pm25" id="pm25-{{ device.device_id }}">--</td>
+                  <td {% if device.has_pm1 %}class="cell-metric-link" data-chart-url="/metric_chart?metric=pm1&device_ids={{ device.device_id }}" title="PM1 chart for {{ device.device_label }}"{% endif %} data-air-quality-metric="pm1" id="pm1-{{ device.device_id }}">--</td>
                   <td class="cell-notes">
                     <span class="notes editable-notes" id="notes-{{ device.device_id }}" data-device-id="{{ device.device_id }}" title="Click to edit"></span>
                   </td>
@@ -243,6 +291,34 @@
         </table>
       </form>
     </div> <!-- main-grid -->
+  </div>
+</div>
+
+<div id="fcu-temp-sources-popup" class="fcu-temp-sources-popup hidden" role="dialog" aria-modal="true" aria-labelledby="fcu-temp-sources-title">
+  <div class="fcu-temp-sources-dialog">
+    <div class="fcu-temp-sources-header">
+      <h3 id="fcu-temp-sources-title" data-role="title">Temperature Sources</h3>
+      <div class="fcu-temp-sources-actions">
+        <button type="button" class="pure-button pure-button-primary" data-action="save-fcu-temp-sources">Save</button>
+        <button type="button" class="pure-button" data-action="revert-fcu-temp-sources">Revert</button>
+        <button type="button" class="pure-button" data-action="cancel-fcu-temp-sources">Cancel</button>
+      </div>
+    </div>
+    <p class="fcu-temp-sources-note">Readings older than 10 minutes are ignored.</p>
+    <div class="fcu-temp-sources-message" data-role="message" aria-live="polite"></div>
+    <table class="pure-table pure-table-horizontal fcu-temp-sources-table">
+      <thead>
+        <tr>
+          <th>Source</th>
+          <th>Temp</th>
+          <th>Age</th>
+          <th>Weight</th>
+        </tr>
+      </thead>
+      <tbody data-role="sources-body">
+        <tr><td colspan="4">Loading...</td></tr>
+      </tbody>
+    </table>
   </div>
 </div>
 
