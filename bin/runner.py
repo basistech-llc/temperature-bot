@@ -323,7 +323,7 @@ def setup_parser():
     parser.add_argument("--report", help="report on the database", action="store_true")
     parser.add_argument("--syslog", help="log to syslog", action="store_true")
     parser.add_argument("--daily", help="Run the daily cleanup", action="store_true")
-    parser.add_argument("--rules", choices=["test", "run", "prune"], help="Just run the rules engine" )
+    parser.add_argument("--rules", choices=["test", "run"], help="Just run the rules engine. " )
     parser.add_argument("--aqi", help="Save AQI to database", action="store_true")
     parser.add_argument("--airthings", help="debug the airthings", action="store_true")
     clogging.add_argument(parser)
@@ -355,28 +355,20 @@ def main():
     elif args.daily:
         daily_cleanup(conn, datetime.datetime.now())
     elif args.rules:
-        match args.rules:
-            case "test":
-                print(rules_results(conn))
-            case "prune":
-                rules_engine.prune_rules(conn)
-            case "run":
-                rules_engine.run_rules(conn)
-            case opt:
-                raise RuntimeError(f"Unknown rules option: {opt}")
+        res = rules_engine.run_rules(conn, commit=(arg.rules=="run")))
+        print(res)
     else:
         # Run everything
         clock.lock_script()
         update_from_ae200(conn)
         update_from_hubitat(conn)
         update_from_airthings(conn)
-        rules_engine.prune_rules(conn)
         if not db.get_rules_master_enabled(conn):
             logger.info("Master rules switch is OFF; skipping all rules execution")
         elif rules_engine.all_rules_disabled_until(conn) >= time.time():
             logger.info("all rules disabled (time-limited suspension)")
         else:
-            run_rules(conn)
+            run_rules(conn, commit=1)
 
 
 if __name__ == "__main__":

@@ -1141,10 +1141,12 @@ def get_aqi_series(conn):
     return {key: [[row["logtime"], row[key]] for row in rows] for key in keys}
 
 
-def _is_fcu_device(device: dict[str, Any]) -> bool:
-    return bool(device.get("has_speed_control")) and not device.get(
-        "device_name", ""
-    ).lower().startswith("erv")
+# Pretty gross - we currently determine if a device is an erv or not by its name and properties
+def is_erv_device(devdict: dict[str, Any]) -> bool:
+    return bool(devdict.get("has_speed_control")) and devdict.get("device_name", "" ).lower().startswith("erv")
+
+def is_fcu_device(devdict: dict[str, Any]) -> bool:
+    return bool(devdict.get("has_speed_control")) and not is_erv_device(devdict)
 
 
 def _float_or_none(value: object) -> float | None:
@@ -1800,7 +1802,7 @@ def _fcu_devices_from_current_status(conn) -> list[dict[str, Any]]:
     for device in devices:
         if "status" in device:
             device.update(ae200.extract_drive_and_fan_speed(device["status"]))
-        if _is_fcu_device(device):
+        if is_fcu_device(device):
             fcus.append(device)
     return fcus
 
@@ -2043,7 +2045,7 @@ def get_device_status(conn) -> List[Dict[str, Any]]:
                 data[f"has_{metric_name}"] = (
                     extract_metric_from_status(status, status_key) is not None
                 )
-            if _is_fcu_device(data):
+            if is_fcu_device(data):
                 data["temp_source_stale_seconds"] = TEMP_SOURCE_STALE_SECONDS
                 fcu_device_ids.append(data["device_id"])
 

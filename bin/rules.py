@@ -7,55 +7,37 @@ When it is evaluated, all of the devices are defined as upper-case constants.
 # ruff: noqa
 # pylint: disable=global-statement, invalid-name, missing-function-docstring, unused-variable, undefined-variable, name-defined
 
+from datetime import datetime
+from typing import Annotated
+
+from app.models import Device, RuleResult, MONDAY, TUESDAY, WEDNESDAY, THURSDAY, FRIDAY, SATURDAY, SUNDAY
+
 DEFAULT_KITCHEN_ERV_SPEED = 2
 DEFAULT_RESTROOMS_ERV_SPEED = 4
 
-kitchen_erv_speed = DEFAULT_KITCHEN_ERV_SPEED
-restrooms_erv_speed = DEFAULT_RESTROOMS_ERV_SPEED
+def run_rules_for_device(device:Device, now:datetime, aqi:AQI) -> RuleResult|None:
+    # AQI rules:
+    # AQI>50 is yellow - moderate
+    # AQI>100 is orange - unhealthy for sensitive groups
+    if device.erv:
+        if aqi>100:
+            return RuleResult(fan_speed="Low", drive="on")
 
-# NOTE:
-# AQI > 100 is unhealthy for sensitive groups
-# AQI > 150 is unhealthy
+        if aqi>50:
+            return RuleResult(drive="off")
 
-if TUESDAY or THURSDAY:
-    if HOUR in [11, 12]:
-        kitchen_erv_speed = 4
 
-#
-# By default, from 10pm to 5am every day, put the kitchen and restroom ERVs
-# on full speed to clear out the air.
+        # Turn on kitchen fan for cooking
+        if ((now.weekday() in (TUESDAY, THURSDAY))  and
+            (now.hour in [11, 12]) and
+            ('kitchen' in device.name.lower())):
+            return RuleResult(fan_speed="High", drive="on")
 
-if HOUR in [22, 23, 0, 1, 2, 3, 4, 5]:
-    kitchen_erv_speed = 4
-    restrooms_erv_speed = 4
+        #
+        # By default, from 10pm to 5am every day, put the kitchen and restroom ERVs
+        # on full speed to clear out the air.
 
-#
-# However, if the outdoor AQI is over 50, lower the ERV speed to 1
-# And if it is over 100, lower it to 0
+        if now.hour in [22, 23, 0, 1, 2, 3, 4, 5]:
+            return RuleResult(fan_speed="High", drive="on")
 
-# AQI>50 is yellow - moderate
-if AQI>50:
-    kitchen_erv_speed = 1
-    restrooms_erv_speed = 1
-
-# AQI>100 is orange - unhealthy for sensitive groups
-if AQI>100:
-    kitchen_erv_speed = 0
-    restrooms_erv_speed = 0
-
-#
-# If the ERV speed is 0, we actually have to turn off the drive
-# Otherwise, we have to turn on the drive and set the speed.
-#
-
-if kitchen_erv_speed==0:
-    set_drive(ERV_KITCHEN,0)
-else:
-    set_drive(ERV_KITCHEN,1)
-    set_fan_speed(ERV_KITCHEN,kitchen_erv_speed)
-
-if restrooms_erv_speed==0:
-    set_drive(ERV_RESTROOMS,0)
-else:
-    set_drive(ERV_RESTROOMS,1)
-    set_fan_speed(ERV_RESTROOMS,restrooms_erv_speed)
+    return None

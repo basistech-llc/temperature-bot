@@ -3,27 +3,32 @@ Run the rules engine.
 
 The RULES_ENGINE is a special device which, if disabled, disables all rules.
 Each individual rule can also be disabled.
+Rules are executed with exec(get_rules()) in rules_results.
+We loop for every device
 
 """
 
-from os.path import join
+import datetime
+import types
 import time
 import logging
+from pathlib import Path
 
 
-from .paths import ROOT_DIR
+from .paths import BIN_DIR
 from . import db
 from . import ae200
-from .models import SpeedControl, DriveControl, ModeControl, SetTempControl
+from .models import SpeedControl, DriveControl, ModeControl, SetTempControl,Device,RuleResult
 
 logger = logging.getLogger(__name__)
 
 RULES_DEVICE_NAME = "rules_engine"
+RULES_PATH = Path(BIN_DIR) / "rules.py"
 
+RULES_DISABLED_MESSAGE = "Master rules switch is OFF; skipping all rules execution"
 
 def rules_id(conn):
     return db.get_or_create_device_id(conn, RULES_DEVICE_NAME)
-
 
 def get_time_dict(when=None):
     if when is None:
@@ -77,7 +82,6 @@ def all_rules_disabled_until(conn) -> int:
     logging.info("all rules disabled until %s", until)
     return until if until else 0
 
-
 def disable_all_rules(conn, seconds: int):
     """Enter a database engtry to disable the rules for a period of seconds.
     :param seconds: how long to disable rules for
@@ -85,13 +89,12 @@ def disable_all_rules(conn, seconds: int):
     logging.info("disable_all_rules(%s)", seconds)
     db.disable_rules_for_device(conn, rules_id(conn), seconds)
 
-
 def get_rules():
-    with open(join(ROOT_DIR, "bin", "rules.py"), "r") as f:
-        return f.read()
-
+    """Returns the rules as a text"""
+    return RULES_PATH.read_text()
 
 def prune_rules(conn):
+    """If the rule's disabling has expired, enable it."""
     now = int(time.time())
     c = conn.cursor()
     c.execute(
@@ -99,7 +102,6 @@ def prune_rules(conn):
         (now,),
     )
     conn.commit()
-
 
 def set_body_fan_speed(conn, body: SpeedControl, ipaddr, agent):
     """
@@ -300,32 +302,8 @@ def set_body_set_temp(conn, body: SetTempControl, ipaddr, agent):
     }
 
 
-def rules_results(conn, when=None, aqi=50):
-    """Reports what would happen if the rules were run at `when` with a specific AQI"""
-    logger.debug("when=%s", when)
-
-    results = []
-    temps = _temperature_context(conn)
-
-    def set_drive_verbose(device_id, value):
-        results.append(f"Device {device_id} drive set to {value}")
-
-    def set_fan_speed_verbose(device_id, value):
-        results.append(f"Device {device_id} speed set to {value}")
-
-    global_vars = {**db.devices_to_device_id(conn), **get_time_dict(when)}
-    global_vars["AQI"] = aqi
-    local_vars = {
-        "set_drive": set_drive_verbose,
-        "set_fan_speed": set_fan_speed_verbose,
-        "get_temp": temps["get_temp"],
-        "get_fcu_temp": temps["get_fcu_temp"],
-    }
-    exec(get_rules(), global_vars, local_vars)  # pylint: disable=exec-used
-    return "\n".join(results)
-
-
 def _temperature_context(conn):
+    """Returns the temperature for all devices"""
     status = db.get_device_status(conn)
     effective_by_id = {}
     raw_by_id = {}
@@ -348,54 +326,85 @@ def _temperature_context(conn):
     return {"get_temp": get_temp, "get_fcu_temp": get_fcu_temp}
 
 
-def run_rules(conn, when=None):
-    """Run the rules now and returns the results.
+###
+def rules_results(conn, when=None, aqi=50):
+    """Reports what would happen if the rules were run at `when` with a specific AQI"""
+    logger.debug("when=%s", when)
+
+    results = []
+    temps = _temperature_context(conn)
+
+    def set_drive_verbose(device_id, value):
+        results.append(f"Device {device_id} drive set to {value}")
+
+    def set_fan_speed_verbose(device_id, value):
+        results.append(f"Device {device_id} speed set to {value}")
+
+    global_vars = {**db.devices_to_device_id(conn), **get_time_dict(when)}
+    global_vars["AQI"] = aqi
+    local_vars = {
+        "set_drive": set_drive_verbose,
+        "set_fan_speed": set_fan_speed_verbose,
+        "get_temp": temps["get_temp"],
+        "get_fcu_temp": temps["get_fcu_temp"],
+    }
+
+    exec(get_rules(), global_vars, local_vars)  # pylint: disable=exec-used
+    return "\n".join(results)
+###
+
+def run_all_rules(conn, when=None, commit=False, ):
+    """Run the rules now and returns a text descirption of what changed.
     Does not execute command if all rules are disabled or if the rules for the sepcific device are disabled
     """
     logger.debug("when=%s", when)
 
     # Global master kill switch: if rules are disabled, exit immediately.
     if not db.get_rules_master_enabled(conn):
-        logger.info("Master rules switch is OFF; skipping all rules execution")
-        return
+        logger.info(RULES_DISABLED_MESSAGE)
+        return RULES_DISABLED_MESSAGE
 
+    # Get all of the devices, and determine which are disabled
     all_devices = db.fetch_all_device_dicts(conn)
-    disabled_until_dict = {
-        dev["device_id"]: dev["disabled_until"] for dev in all_devices
-    }
 
-    def is_disabled(device_id):
-        try:
-            return time.time() <= disabled_until_dict.get(device_id, 0)
-        except (ValueError, TypeError, KeyError):
-            return False
+    # Compile the rules_runner
+    virtual_module = types.ModuleType("ephemeral_rule_namespace")
+    virtual_module.__file__ = str(RULES_PATH)
+    virtual_module.__builtins__ = __builtins__
 
-    def set_drive(device_id, drive):
-        if is_disabled(device_id):
-            logger.info("device_id=%s drive set disabled", (device_id,))
-            return
-        set_body_drive(
-            conn, DriveControl(device_id=device_id, drive=drive), "n/a", "rule"
-        )
+    try:
+        # Execute the compiled code exclusively within the virtual module's dictionary
+        exec(get_rules(), virtual_module.__dict__) # pylint: disable=exec-used
 
-    def set_fan_speed(device_id, fan_speed):
-        if is_disabled(device_id):
-            logger.info("device_id=%s fan set disabled", (device_id,))
-            return
-        set_body_fan_speed(
-            conn, SpeedControl(device_id=device_id, fan_speed=fan_speed), "n/a", "rule"
-        )
+        # Extract and invoke the target function
+        if not hasattr(virtual_module, 'run_rules_for_device'):
+            logger.error("Target function 'run_rules' not found in %s", RULES_PATH)
+            return "Cannot run rules"
+        run_rules_for_device = getattr(virtual_module, 'run_rules_for_device')
+    except Exception as e:      # pylint: disable=broad-except
+        logger.error("Execution of run_rules failed: %s", e)
+        return "Cannot compile rules"
 
-    temps = _temperature_context(conn)
-    v1 = {**db.devices_to_device_id(conn), **get_time_dict(when)}
-    v1["AQI"] = db.get_last_aqi(conn)
-    v2 = {
-        "set_drive": set_drive,
-        "set_fan_speed": set_fan_speed,
-        "get_temp": temps["get_temp"],
-        "get_fcu_temp": temps["get_fcu_temp"],
-    }
-    exec(get_rules(), v1, v2)  # pylint: disable=exec-used
+    # Now run the rules for every device
+    now = datetime.datetime.now()
+    aqi = db.get_last_aqi(conn)
+    rules_res = []
+    rules_res.append(f"Rules starting at {now}. commit={commit}")
+
+    for devdict in all_devices:
+        device_id = devdict['device_id']
+        disabled_until = devdict.get("disabled_until",0)
+        if now.timestamp() <= disabled_until:
+            rules_res.append(f"Device {device_id} is disabled until {disabled_until} (currently {now.timestamp()})")
+            continue
+        dev = Device(erv=db.is_erv_device(devdict), name=devdict['device_name'], device_id=devdict['device_id'])
+        res = run_rules_for_device(dev, now, aqi)
+        if res is not None:
+            assert isinstance(res,RuleResult)
+            if commit:
+                set_body_drive(conn, DriveControl(device_id=dev.device_id, drive=res.drive), "n/a", "rule")
+                set_body_fan_speed(conn, SpeedControl(device_id=dev.device_id, fan_speed=res.fan_speed), "n/a", "rule")
+            rules_res.append(str(res))
 
     # finally, if the time has passed for any rule, set to 0
     now = int(time.time())
@@ -416,3 +425,4 @@ def run_rules(conn, when=None):
                 agent="rules runner",
                 comment="disabled timer expired",
             )
+    return "\n".join(rules_res)

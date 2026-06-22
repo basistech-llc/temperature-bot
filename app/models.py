@@ -15,8 +15,32 @@ actually validated before it becomes a mapping.
 """
 
 from typing import Annotated, Any, Dict, Iterable, Literal
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
-from pydantic import BaseModel, ConfigDict, Field
+# weekdays
+MONDAY = 0
+TUESDAY = 1
+WEDNESDAY = 2
+THURSDAY = 3
+FRIDAY = 4
+SATURDAY = 5
+SUNDAY = 6
+
+################################################################
+## for rules
+class Device(BaseModel):
+    """Devices as passed to rules engine"""
+    device_id: int = Field(description="SQLite3 device_id")
+    erv: bool = Field(description="is this an ERV?")
+    name: str = Field(description="the name of the device")
+
+class RuleResult(BaseModel):
+    """Results passed back to Rules Engine"""
+    fan_speed: Annotated[str, StringConstraints(strip_whitespace=True, to_upper=True)] | None
+    drive: Annotated[str, StringConstraints(strip_whitespace=True, to_upper=True)] | None
+
+################################################################
+
 
 
 class StatusPayload(BaseModel):
