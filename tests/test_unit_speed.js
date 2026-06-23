@@ -7,12 +7,15 @@
  */
 const {
   collectFcuTempSourceChanges,
+  autoSetTempRangeForDevice,
   deviceDisplayNameChanged,
   deviceDisplayNamePatchBody,
   deviceRulesEnabledValue,
   ensureModeSelectOption,
   fanRadioIdForDevice,
+  FCU_MODE_OPTIONS,
   fcuTempSourcesTitle,
+  isAutoOperationMode,
   modeLabelForDevice,
   modeValueForDevice,
   moveSetRange,
@@ -108,6 +111,23 @@ check(
   "COOL",
 );
 check(
+  "dry mode display label",
+  modeLabelForDevice({ mode: "DRY" }),
+  "Dry",
+);
+check(
+  "dry mode is commandable",
+  FCU_MODE_OPTIONS.includes("DRY"),
+  true,
+);
+check(
+  "auto mode is commandable",
+  FCU_MODE_OPTIONS.includes("AUTO"),
+  true,
+);
+check("auto mode token is auto operation", isAutoOperationMode("AUTO"), true);
+check("lc_auto mode token is auto operation", isAutoOperationMode("LC_AUTO"), true);
+check(
   "unknown mode passes through",
   modeLabelForDevice({ mode: "SOMETHING_NEW" }),
   "SOMETHING_NEW",
@@ -150,6 +170,21 @@ check(
 );
 check("nonnegative multiplier parses", parseFcuTempSourceMultiplier(" 1.5 "), 1.5);
 check("negative multiplier is invalid", parseFcuTempSourceMultiplier("-0.1"), null);
+
+const autoSetTempRange = autoSetTempRangeForDevice({
+  status: { SetTemp1: "24", SetTemp2: "19", AutoMin: "18", AutoMax: "27" },
+});
+check("auto set temp range heat bottom", autoSetTempRange.lowC, 19);
+check("auto set temp range cool top", autoSetTempRange.highC, 24);
+
+const promotedAutoSetTempRange = autoSetTempRangeForDevice({
+  heat_set_temp_c: 20,
+  cool_set_temp_c: 25,
+  auto_min_c: 18,
+  auto_max_c: 27,
+});
+check("promoted auto set temp range heat bottom", promotedAutoSetTempRange.lowC, 20);
+check("promoted auto set temp range cool top", promotedAutoSetTempRange.highC, 25);
 
 // -- Device display-name rename behavior --
 check(

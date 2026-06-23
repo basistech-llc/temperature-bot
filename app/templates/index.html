@@ -103,7 +103,7 @@
               <th class="column-disable-for" rowspan="2" title="Remaining time rules are disabled for this device (H:MM)">Disabled<br>for</th>
               <th class="column-temp" rowspan="2">FCU Temp<br><small id="fcu-temp-unit-label">°C</small></th>
               <th class="column-temp" rowspan="2">Room Temp<br><small id="fcu-room-temp-unit-label">°C</small></th>
-              <th class="column-temp column-temp-set" rowspan="2">Set Temp<br><small id="fcu-settemp-unit-label">°C</small></th>
+              <th class="column-temp column-temp-set" rowspan="2">FCU Set Temp<br><small id="fcu-settemp-unit-label">°C</small></th>
               <th class="column-temp column-temp-range" rowspan="2">Set Range<br><small id="fcu-setrange-unit-label">°C</small></th>
               <th class="column-mode" rowspan="2">Mode</th>
               <th class="column-speed" colspan="5">Fan Speed</th>
@@ -161,7 +161,10 @@
                       data-fcu-temp-sources-room-name="{{ device.room_name or device.device_label }}"
                       title="Calculated room temperature for {{ device.device_label }}">--</td>
                   <td class="cell-temp cell-temp-set" id="settemp-{{ device.device_id }}">
-                    <span class="settemp-thermostat" role="group" aria-label="Set temperature">
+                    <span class="settemp-thermostat"
+                          id="settemp-controls-{{ device.device_id }}"
+                          role="group"
+                          aria-label="Set temperature">
                       <button type="button"
                               class="settemp-btn settemp-btn-down"
                               data-device-id="{{ device.device_id }}"
@@ -176,6 +179,26 @@
                               data-delta="0.5"
                               aria-label="Increase set temperature">+</button>
                     </span>
+                    <div class="autosettemp-widget hidden"
+                         id="autosettemp-widget-{{ device.device_id }}"
+                         data-device-id="{{ device.device_id }}"
+                         aria-label="Auto heat and cool set temperatures">
+                      <div class="autosettemp-track" data-role="track">
+                        <div class="autosettemp-fill" data-role="auto-range"></div>
+                        <span class="autosettemp-handle autosettemp-handle-heat" data-role="heat"></span>
+                        <span class="autosettemp-handle autosettemp-handle-cool" data-role="cool"></span>
+                      </div>
+                      <div class="autosettemp-values">
+                        <span class="autosettemp-end">
+                          <span class="autosettemp-label">Heat</span>
+                          <span class="autosettemp-end-label temp-display temp-display-no-unit" data-role="heat-label">--</span>
+                        </span>
+                        <span class="autosettemp-end">
+                          <span class="autosettemp-label">Cool</span>
+                          <span class="autosettemp-end-label temp-display temp-display-no-unit" data-role="cool-label">--</span>
+                        </span>
+                      </div>
+                    </div>
                   </td>
                   <td class="cell-temp cell-temp-range" id="setrange-{{ device.device_id }}">
                     <div class="setrange-widget"
@@ -207,12 +230,14 @@
                             title="Set mode for {{ device.device_label }}">
                       {% if not current_mode_value %}
                       <option value="" selected disabled>--</option>
-                      {% elif current_mode_value not in ['FAN', 'COOL', 'HEAT'] %}
+                      {% elif current_mode_value not in ['FAN', 'COOL', 'DRY', 'HEAT', 'AUTO'] %}
                       <option value="{{ current_mode_value }}" selected disabled>{{ current_mode_value }}</option>
                       {% endif %}
                       <option value="FAN" {% if current_mode_value == 'FAN' %}selected{% endif %}>Fan</option>
                       <option value="COOL" {% if current_mode_value == 'COOL' %}selected{% endif %}>Cool</option>
+                      <option value="DRY" {% if current_mode_value == 'DRY' %}selected{% endif %}>Dry</option>
                       <option value="HEAT" {% if current_mode_value == 'HEAT' %}selected{% endif %}>Heat</option>
+                      <option value="AUTO" {% if current_mode_value == 'AUTO' %}selected{% endif %}>Auto</option>
                     </select>
                   </td>
                   <td class="cell-speed cell-speed-off">

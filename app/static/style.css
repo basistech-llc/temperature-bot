@@ -402,6 +402,77 @@ button {
     text-align: center;
 }
 
+.autosettemp-widget {
+    width: 190px;
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    padding: 0.15rem 0;
+}
+
+.autosettemp-track {
+    position: relative;
+    width: 100%;
+    height: 20px;
+}
+
+.autosettemp-track::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 7px;
+    height: 6px;
+    border-radius: 999px;
+    background: #d7dde3;
+}
+
+.autosettemp-fill {
+    position: absolute;
+    top: 7px;
+    height: 6px;
+    border-radius: 999px;
+    background: #805ad5;
+}
+
+.autosettemp-handle {
+    position: absolute;
+    top: 50%;
+    width: 16px;
+    height: 16px;
+    border: 2px solid #1f2937;
+    border-radius: 50%;
+    background: #fff;
+    transform: translate(-50%, -50%);
+}
+
+.autosettemp-values {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.2rem;
+    font-size: 0.78rem;
+    font-weight: 600;
+    line-height: 1.05;
+    color: #1a202c;
+}
+
+.autosettemp-end {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-width: 3.5em;
+}
+
+.autosettemp-label {
+    color: #64748b;
+    font-size: 0.68rem;
+    text-transform: uppercase;
+}
+
+.autosettemp-end-label {
+    text-align: center;
+}
+
 /* All data tables match the widest table's width via grid on the form */
 td.cell-notes {
     min-width: 400px;

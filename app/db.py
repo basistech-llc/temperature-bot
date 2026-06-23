@@ -2158,6 +2158,7 @@ def get_device_status(conn) -> List[Dict[str, Any]]:
         data["rules_enabled"] = bool(data.get("rules_enabled", True))
         if "status" in data:
             data.update(ae200.extract_drive_and_fan_speed(data["status"]))
+            data.update(ae200.extract_set_temperatures(data["status"]))
             status = data["status"]
             illum = status.get("illuminance")
             if illum is None:
