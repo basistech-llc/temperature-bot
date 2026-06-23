@@ -142,7 +142,9 @@ def test_runtime_schema_validator_rejects_baseline_schema():
     assert "idx_changelog_device_id_logtime" in message
 
 
-def test_flask_startup_schema_check_stops_for_stale_database(tmp_path, monkeypatch):
+def test_flask_startup_schema_check_stops_for_stale_database(
+    tmp_path, monkeypatch, capsys
+):
     stale_db = tmp_path / "stale.db"
     with closing(sqlite3.connect(stale_db)) as conn:
         with open(BASELINE_MIGRATION_PATH, "r", encoding="utf-8") as schema_file:
@@ -152,7 +154,12 @@ def test_flask_startup_schema_check_stops_for_stale_database(tmp_path, monkeypat
     monkeypatch.delenv(TEST_DB_NAME, raising=False)
     monkeypatch.setenv(DB_PATH, str(stale_db))
 
-    with pytest.raises(db.DatabaseSchemaMismatchError) as excinfo:
+    with pytest.raises(SystemExit) as excinfo:
         main.validate_database_schema_on_startup()
 
-    assert "Please upgrade the database" in str(excinfo.value)
+    captured = capsys.readouterr()
+    assert excinfo.value.code == 1
+    assert captured.out == ""
+    assert "Please upgrade the database" in captured.err
+    assert "missing_table rooms" in captured.err
+    assert "Traceback" not in captured.err
