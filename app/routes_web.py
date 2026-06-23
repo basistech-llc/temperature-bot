@@ -11,18 +11,22 @@
 import logging
 import datetime
 import time
+from collections.abc import Callable
+from typing import Any
 from flask import render_template, request, redirect, url_for
 
 from .constants import __version__
+from .constants import DASHBOARD_AIR_QUALITY_DEVICE_EXPIRATION_SECONDS
 from . import db
 from . import db_alerts
 from . import rules_engine
 from . import hubitat
 from . import room_config
 from .display_names import display_device_name
-from .models import DeviceMetadataControl
+from .models import DeviceMetadataControl, TableUpdateSummary
 from .utils.request_utils import parse_device_ids
 from .utils.db_utils import with_db_connection
+from .util import github_style_duration
 from .routes_web_airquality_utils import (
     annotate_staleness,
     format_unix_as_asc,
@@ -87,6 +91,116 @@ METRIC_CHART_CONFIG = {
 }
 
 
+def _status_update_timestamp(row: dict[str, Any]) -> int | None:
+    """Return the timestamp when a status row stopped being current."""
+    try:
+        logtime = int(row["logtime"])
+    except (KeyError, TypeError, ValueError):
+        return None
+
+    try:
+        duration_value = row.get("duration", 1)
+        duration = int(1 if duration_value is None else duration_value)
+    except (TypeError, ValueError):
+        duration = 1
+    return logtime + duration
+
+
+def _dashboard_air_quality_device_is_active(device: dict[str, Any], now: int) -> bool:
+    """Return whether a device belongs in the dashboard Air Quality table."""
+    if device.get("has_speed_control") or device.get("temp10x") is None:
+        return False
+    updated_at = _status_update_timestamp(device)
+    if updated_at is None:
+        return False
+    return now - updated_at <= DASHBOARD_AIR_QUALITY_DEVICE_EXPIRATION_SECONDS
+
+
+def _table_update_summary(
+    devices: list[dict[str, Any]],
+    include_device: Callable[[dict[str, Any]], bool],
+    now: int,
+) -> TableUpdateSummary | None:
+    """Summarize the oldest updated timestamp represented in a table."""
+    candidates = [
+        (update_time, _dashboard_device_label(device))
+        for device in devices
+        if include_device(device)
+        for update_time in [_status_update_timestamp(device)]
+        if update_time is not None
+    ]
+    if not candidates:
+        return None
+
+    oldest_update_at, source_device_name = min(candidates, key=lambda item: item[0])
+    oldest_update_datetime = format_unix_as_asc(oldest_update_at) or ""
+    oldest_update_age = github_style_duration(oldest_update_at, now=now)
+    return TableUpdateSummary(
+        oldest_update_at=oldest_update_at,
+        oldest_update_datetime=oldest_update_datetime,
+        oldest_update_age=oldest_update_age,
+        source_device_name=source_device_name,
+        label=(
+            f"(oldest update at {oldest_update_datetime} - "
+            f"{oldest_update_age} ago from {source_device_name})"
+        ),
+    )
+
+
+def _index_table_update_summaries(
+    devices: list[dict[str, Any]], now: int
+) -> dict[str, TableUpdateSummary | None]:
+    """Build update summaries for the index page's three device tables."""
+    return {
+        "erv": _table_update_summary(
+            devices,
+            lambda device: device.get("device_type") == "ERV",
+            now,
+        ),
+        "fcu": _table_update_summary(
+            devices,
+            lambda device: device.get("device_type") == "FCU",
+            now,
+        ),
+        "air_quality": _table_update_summary(
+            devices,
+            lambda device: _dashboard_air_quality_device_is_active(device, now),
+            now,
+        ),
+    }
+
+
+def _dashboard_device_label(device: dict[str, Any]) -> str:
+    """Return a dashboard label without doing live network enrichment."""
+    raw_name = device.get("device_name", "")
+    status = device.get("status") or {}
+    stored_label = status.get("label") if isinstance(status, dict) else None
+    return device.get("display_name") or display_device_name(
+        raw_name,
+        hubitat_label=stored_label,
+        source="db",
+    )
+
+
+def _dashboard_device_tooltip(device: dict[str, Any], now: int) -> str:
+    """Return the Unit-column tooltip for a device row."""
+    device_name = device.get("device_name", "")
+    update_text = _dashboard_device_update_text(device, now)
+    if not update_text:
+        return device_name
+    return f"{device_name}\nLast updated at {update_text}"
+
+
+def _dashboard_device_update_text(device: dict[str, Any], now: int) -> str:
+    """Return the last-update text shown in device metadata UI."""
+    updated_at = _status_update_timestamp(device)
+    if updated_at is None:
+        return ""
+    updated_datetime = format_unix_as_asc(updated_at) or ""
+    updated_age = github_style_duration(updated_at, now=now)
+    return f"{updated_datetime} - {updated_age} ago"
+
+
 def _register_core_routes(app):
     """Register core web routes that back the main navigation."""
 
@@ -97,27 +211,23 @@ def _register_core_routes(app):
         # Get device data for the template
         device_data = db.get_device_status(conn)
 
-        # Enrich with Hubitat label for display (Air Quality section).
-        # The central helper handles any display-only transforms so we can
-        # easily tweak naming strategy in one place.
-        name_to_label = hubitat.get_name_to_label()
-        for d in device_data:
-            raw_name = d.get("device_name", "")
-            hub_label = name_to_label.get(raw_name)
-            d["device_label"] = d.get("display_name") or display_device_name(
-                raw_name,
-                hubitat_label=hub_label,
-                source="hubitat",
-            )
-
-        # Add current timestamp for temporal links
+        # Add current timestamp for temporal links and update-age labels.
         now = int(time.time())
+
+        for d in device_data:
+            d["device_label"] = _dashboard_device_label(d)
+            d["device_update_text"] = _dashboard_device_update_text(d, now)
+            d["device_update_tooltip"] = _dashboard_device_tooltip(d, now)
+            d["dashboard_air_quality_active"] = (
+                _dashboard_air_quality_device_is_active(d, now)
+            )
 
         return render_template(
             "index.html",
             develop=False,
             devices=device_data,
             now=now,
+            table_update_summaries=_index_table_update_summaries(device_data, now),
             current_page="home",
         )
 

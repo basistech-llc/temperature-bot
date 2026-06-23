@@ -724,7 +724,8 @@ def fetch_last_status(conn, flag=EVERY_DEVICE):
     cursor = conn.cursor()
     cursor.execute(f"""
         SELECT a.*,b.device_name,b.display_name,b.device_type,b.rules_enabled,
-               b.ae200_device_id,b.notes,b.disabled_until,b.room_id,r.room_name
+               b.aqi_mon,b.ae200_device_id,b.notes,b.disabled_until,
+               b.room_id,r.room_name
         FROM (SELECT * FROM devlog GROUP BY device_id HAVING logtime=max(logtime)) AS a
         JOIN devices b ON a.device_id = b.device_id
         LEFT JOIN rooms r ON b.room_id = r.room_id

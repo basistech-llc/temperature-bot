@@ -6,7 +6,14 @@ Simple test to check if Flask routes are working
 from unittest.mock import patch
 
 from conftest import flask_test_client  # noqa: F401
-from app.routes_web import _filter_speed_control_devices, _get_hubitat_sensors
+from app.routes_web import (
+    _dashboard_air_quality_device_is_active,
+    _dashboard_device_label,
+    _dashboard_device_tooltip,
+    _filter_speed_control_devices,
+    _get_hubitat_sensors,
+    _table_update_summary,
+)
 from app import room_config
 
 def test_status_endpoint(flask_test_client): # noqa: F811
@@ -54,6 +61,216 @@ def test_simulator_banner_is_rendered(flask_test_client):  # noqa: F811
     html = response.data.decode("utf-8")
     assert 'class="simulator-banner"' in html
     assert ">simulator</div>" in html
+
+
+def test_rooms_menu_has_one_plain_link_per_room(flask_test_client):  # noqa: F811
+    """Rooms menu should not duplicate embedded/no-return variants."""
+    response = flask_test_client.get("/")
+    assert response.status_code == 200
+    html = response.data.decode("utf-8")
+    assert html.count('href="/hickory"') == 1
+    assert html.count('href="/kitchen"') == 1
+    assert "/hickory?embedded" not in html
+    assert "/kitchen?embedded" not in html
+    assert "no-return" not in html
+
+
+def test_dashboard_device_label_uses_stored_status_label():
+    """Index labels must not require a live Hubitat fetch."""
+    label = _dashboard_device_label(
+        {
+            "device_name": "Lobby Sensor on Somerville Broadway",
+            "status": {"label": "Lobby Sensor"},
+        }
+    )
+
+    assert label == "Lobby Sensor"
+
+
+def test_dashboard_device_tooltip_uses_device_update_time():
+    tooltip = _dashboard_device_tooltip(
+        {
+            "device_name": "Area 51",
+            "logtime": 1000,
+            "duration": 60,
+        },
+        now=1300,
+    )
+
+    assert tooltip.startswith("Area 51\nLast updated at ")
+    assert tooltip.endswith(" - 4m ago")
+
+
+def test_dashboard_air_quality_device_expires_after_30_days():
+    current_device = {
+        "has_speed_control": False,
+        "temp10x": 220,
+        "logtime": 1000,
+        "duration": 60,
+    }
+    expired_device = {
+        "has_speed_control": False,
+        "temp10x": 220,
+        "logtime": 1000,
+        "duration": 60,
+    }
+
+    assert _dashboard_air_quality_device_is_active(current_device, now=1300)
+    assert not _dashboard_air_quality_device_is_active(
+        expired_device,
+        now=1000 + 60 + 31 * 24 * 60 * 60,
+    )
+    assert not _dashboard_air_quality_device_is_active(
+        {**current_device, "has_speed_control": True},
+        now=1300,
+    )
+
+
+@patch("app.routes_web.hubitat.get_name_to_label")
+@patch("app.routes_web.time.time", return_value=1300)
+@patch("app.routes_web.db.get_device_status")
+def test_index_does_not_fetch_hubitat_labels_on_render(
+    mock_get_status, _mock_time, mock_get_name_to_label, flask_test_client
+):  # noqa: F811
+    mock_get_status.return_value = [
+        {
+            "device_id": 12,
+            "device_name": "Lobby Sensor on Somerville Broadway",
+            "has_speed_control": False,
+            "temp10x": 220,
+            "logtime": 1000,
+            "duration": 1,
+            "status": {"label": "Lobby Sensor", "humidity": 40},
+        }
+    ]
+
+    response = flask_test_client.get("/")
+    assert response.status_code == 200
+    assert "Lobby Sensor" in response.data.decode("utf-8")
+    mock_get_name_to_label.assert_not_called()
+
+
+def test_table_update_summary_uses_oldest_status_end_time():
+    summary = _table_update_summary(
+        [
+            {"device_type": "ERV", "logtime": 900, "duration": 1},
+            {
+                "device_name": "Older FCU",
+                "device_type": "FCU",
+                "logtime": 1000,
+                "duration": 60,
+            },
+            {
+                "device_name": "Newer FCU",
+                "device_type": "FCU",
+                "logtime": 1100,
+                "duration": 20,
+            },
+            {"device_type": "FCU", "duration": 20},
+            {
+                "device_name": "Newest FCU",
+                "device_type": "FCU",
+                "logtime": 1200,
+                "duration": 0,
+            },
+        ],
+        lambda device: device.get("device_type") == "FCU",
+        now=1300,
+    )
+
+    assert summary is not None
+    assert summary.oldest_update_at == 1060
+    assert summary.oldest_update_age == "4m"
+    assert summary.source_device_name == "Older FCU"
+    assert summary.label == (
+        f"(oldest update at {summary.oldest_update_datetime} - "
+        "4m ago from Older FCU)"
+    )
+
+
+@patch("app.routes_web.hubitat.get_name_to_label", return_value={})
+@patch("app.routes_web.time.time", return_value=1300)
+@patch("app.routes_web.db.get_device_status")
+def test_index_table_update_summaries_render_at_table_bottom(
+    mock_get_status, _mock_time, _mock_labels, flask_test_client
+):  # noqa: F811
+    mock_get_status.return_value = [
+        {
+            "device_id": 10,
+            "device_name": "ERV Test",
+            "device_type": "ERV",
+            "has_speed_control": True,
+            "temp10x": 210,
+            "logtime": 1000,
+            "duration": 1,
+        },
+        {
+            "device_id": 11,
+            "device_name": "FCU Test",
+            "device_type": "FCU",
+            "has_speed_control": True,
+            "temp10x": 220,
+            "calculated_temp10x": 221,
+            "logtime": 1010,
+            "duration": 1,
+            "status": {"Mode": "COOL"},
+        },
+        {
+            "device_id": 12,
+            "device_name": "Air Test",
+            "has_speed_control": False,
+            "temp10x": 230,
+            "logtime": 1020,
+            "duration": 1,
+            "status": {"humidity": 40},
+        },
+    ]
+
+    response = flask_test_client.get("/")
+    assert response.status_code == 200
+    html = response.data.decode("utf-8")
+
+    assert 'id="oldest-update-erv"' in html
+    assert 'id="oldest-update-fcu"' in html
+    assert 'id="oldest-update-air-quality"' in html
+    assert html.count("oldest update at") == 3
+
+
+@patch("app.routes_web.hubitat.get_name_to_label", return_value={})
+@patch("app.routes_web.time.time", return_value=1300)
+@patch("app.routes_web.db.get_device_status")
+def test_index_air_quality_table_hides_expired_devices(
+    mock_get_status, _mock_time, _mock_labels, flask_test_client
+):  # noqa: F811
+    mock_get_status.return_value = [
+        {
+            "device_id": 12,
+            "device_name": "Current Air",
+            "has_speed_control": False,
+            "temp10x": 230,
+            "logtime": 1020,
+            "duration": 1,
+            "status": {"humidity": 40},
+        },
+        {
+            "device_id": 13,
+            "device_name": "Expired Air",
+            "has_speed_control": False,
+            "temp10x": 240,
+            "logtime": 1000 - 31 * 24 * 60 * 60,
+            "duration": 1,
+            "status": {"humidity": 40},
+        },
+    ]
+
+    response = flask_test_client.get("/")
+    assert response.status_code == 200
+    html = response.data.decode("utf-8")
+
+    assert "Current Air" in html
+    assert "Expired Air" not in html
+    assert "from Current Air" in html
+    assert "from Expired Air" not in html
 
 
 @patch("app.routes_web.hubitat.get_name_to_label", return_value={})
@@ -123,9 +340,10 @@ def test_fcu_matrix_room_temp_cell_opens_weight_popup(
 
 
 @patch("app.routes_web.hubitat.get_name_to_label", return_value={})
+@patch("app.routes_web.time.time", return_value=1300)
 @patch("app.routes_web.db.get_device_status")
 def test_index_device_names_expose_rename_popup_contract(
-    mock_get_status, _mock_labels, flask_test_client
+    mock_get_status, _mock_time, _mock_labels, flask_test_client
 ):  # noqa: F811
     mock_get_status.return_value = [
         {
@@ -137,6 +355,8 @@ def test_index_device_names_expose_rename_popup_contract(
             "has_speed_control": True,
             "temp10x": 220,
             "calculated_temp10x": 235,
+            "logtime": 1000,
+            "duration": 60,
             "status": {"Mode": "COOL"},
         }
     ]
@@ -151,9 +371,12 @@ def test_index_device_names_expose_rename_popup_contract(
     assert 'data-display-name="Server Room"' in html
     assert 'data-device-type="FCU"' in html
     assert 'data-rules-enabled="false"' in html
+    assert 'data-device-update="' in html
+    assert " - 4m ago" in html
     assert 'id="device-rename-popup"' in html
     assert 'id="device-rename-device-type"' in html
     assert 'id="device-rename-rules-enabled"' in html
+    assert 'id="device-rename-last-update"' in html
     assert 'data-action="reset-device-name"' in html
     assert 'data-action="rename-device"' in html
     assert 'data-action="cancel-device-rename"' in html

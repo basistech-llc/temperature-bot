@@ -220,7 +220,7 @@ def test_index_fcu_speeds_exclude_one(
     assert f'id="radio-{device_id}-0"' in html
     assert f'id="radio-{device_id}-auto"' in html
     assert '<th class="column-mode" rowspan="2">Mode</th>' in html
-    assert '<th class="column-temp column-temp-set" rowspan="2">FCU Set Temp' in html
+    assert '<th class="column-temp column-temp-set" rowspan="2">FCU Set<br>Temp' in html
     assert 'class="mode-select"' in html
     assert f'id="mode-{device_id}"' in html
     assert f'id="autosettemp-widget-{device_id}"' in html
