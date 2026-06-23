@@ -352,7 +352,7 @@ def main():
     conn = db.get_db_connection()
     if args.report:
         report(conn)
-    if args.csv:
+    elif args.csv:
         load_csv(conn, args.csv, args.csv_after, unsafe=args.unsafe)
     elif args.aqi:
         update_aqi(conn)

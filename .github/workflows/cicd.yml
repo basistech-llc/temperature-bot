@@ -2,7 +2,12 @@
 # Temperature Bot uses SQLite plus Flyway migrations. The Makefile owns all
 # setup, check, and test entrypoints used by CI and local development.
 name: CI
-on: [push, pull_request]
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
 
 jobs:
   build:
