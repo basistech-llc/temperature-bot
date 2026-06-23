@@ -527,7 +527,7 @@ body {
 {% macro device_control_card(device, device_type) %}
 <div class="device-card">
   <div class="device-header">
-    <h2>{{ device.device_name }}</h2>
+    <h2>{{ device.display_name or device.device_name }}</h2>
     <div class="status-value" id="{{ device_type }}-{{ device.device_id }}-status">--</div>
     <div class="temp-display" id="{{ device_type }}-{{ device.device_id }}-temp" data-temp-c="">--</div>
   </div>

@@ -93,8 +93,8 @@ def test_rules_results_runs_device_rule_contract(test_database_conn, monkeypatch
 
     when = datetime.datetime(2026, 6, 23, 11, 0).timestamp()
     assert rules_engine.rules_results(conn, when=when, aqi=75) == (
-        f"Device {device_id} drive set to 1\n"
-        f"Device {device_id} speed set to 4"
+        f"Device {device_id} drive set to ON\n"
+        f"Device {device_id} speed set to HIGH"
     )
 
 
@@ -116,6 +116,33 @@ def test_run_all_rules_uses_supplied_when(test_database_conn, monkeypatch):
     )
 
     when = datetime.datetime(2026, 6, 23, 22, 0).timestamp()
-    assert f"Device {device_id} drive set to 1" in rules_engine.run_all_rules(
+    assert f"Device {device_id} drive set to ON" in rules_engine.run_all_rules(
         conn, when=when
     )
+
+
+def test_run_all_rules_skips_devices_when_rules_disabled(
+    test_database_conn, monkeypatch
+):
+    """Permanent per-device rules_enabled=false should suppress rule execution."""
+    conn = test_database_conn
+    device_id = _add_rule_test_erv(conn)
+    conn.execute(
+        "UPDATE devices SET rules_enabled=0 WHERE device_id=?",
+        (device_id,),
+    )
+    conn.commit()
+
+    monkeypatch.setattr(
+        rules_engine,
+        "get_rules",
+        lambda: (
+            "from app.models import RuleResult\n"
+            "def run_rules_for_device(device, now, aqi):\n"
+            "    return RuleResult(drive='on')\n"
+        ),
+    )
+
+    result = rules_engine.run_all_rules(conn)
+    assert f"Device {device_id} rules are disabled" in result
+    assert f"Device {device_id} drive set to ON" not in result

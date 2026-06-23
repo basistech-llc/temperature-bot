@@ -361,14 +361,17 @@ def _commit_rule_result(conn, dev: Device, result: RuleResult):
     if result.drive is not None:
         set_body_drive(
             conn,
-            DriveControl(device_id=dev.device_id, drive=result.drive),
+            DriveControl(device_id=dev.device_id, drive=ae200.DRIVE_NAMES[result.drive]),
             "n/a",
             "rule",
         )
     if result.fan_speed is not None:
         set_body_fan_speed(
             conn,
-            SpeedControl(device_id=dev.device_id, fan_speed=result.fan_speed),
+            SpeedControl(
+                device_id=dev.device_id,
+                fan_speed=ae200.FAN_SPEED_NAMES[result.fan_speed],
+            ),
             "n/a",
             "rule",
         )
@@ -402,10 +405,14 @@ def rules_results(conn, when=None, aqi=50):
     if run_rules_for_device is not None:
         now = _rule_datetime(when)
         for devdict in db.get_device_status(conn):
+            if not devdict.get("rules_enabled", True):
+                continue
             dev = Device(
                 erv=db.is_erv_device(devdict),
                 name=devdict["device_name"],
                 device_id=devdict["device_id"],
+                device_type=devdict.get("device_type"),
+                rules_enabled=devdict.get("rules_enabled", True),
             )
             res = run_rules_for_device(dev, now, aqi)
             if res is None:
@@ -464,6 +471,9 @@ def run_all_rules(conn, when=None, commit=False):
 
     for devdict in rule_devices:
         device_id = devdict["device_id"]
+        if not devdict.get("rules_enabled", True):
+            rules_res.append(f"Device {device_id} rules are disabled")
+            continue
         disabled_until = devdict.get("disabled_until") or 0
         if now.timestamp() <= disabled_until:
             rules_res.append(
@@ -475,6 +485,8 @@ def run_all_rules(conn, when=None, commit=False):
             erv=db.is_erv_device(devdict),
             name=devdict["device_name"],
             device_id=devdict["device_id"],
+            device_type=devdict.get("device_type"),
+            rules_enabled=devdict.get("rules_enabled", True),
         )
         res = run_rules_for_device(dev, now, aqi)
         if res is not None:

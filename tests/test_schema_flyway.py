@@ -93,7 +93,7 @@ def test_schema_file_contains_rooms_fcu_temp_source_and_set_range_columns():
         }
 
     assert {"room_id", "room_name", "map_json"} <= room_columns
-    assert "room_id" in device_columns
+    assert {"room_id", "display_name", "device_type", "rules_enabled"} <= device_columns
     assert {
         "fcu_device_id",
         "source_device_id",

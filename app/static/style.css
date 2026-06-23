@@ -665,6 +665,52 @@ table.rules-table th  {
     background-color: rgba(52, 152, 219, 0.08);
 }
 
+.device-name-context {
+    cursor: context-menu;
+}
+
+.device-rename-popup {
+    position: fixed;
+    z-index: 1300;
+    width: min(360px, calc(100vw - 16px));
+    padding: 0.65rem;
+    border: 1px solid #aaa;
+    border-radius: 4px;
+    background: #fff;
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.24);
+}
+
+.device-rename-row {
+    display: grid;
+    grid-template-columns: 6.8rem minmax(0, 1fr) 4.8rem;
+    align-items: center;
+    gap: 0.4rem;
+    margin-bottom: 0.45rem;
+}
+
+.device-rename-row label {
+    font-size: 0.86rem;
+    font-weight: 600;
+}
+
+.device-rename-row input {
+    box-sizing: border-box;
+    min-width: 0;
+    width: 100%;
+    padding: 0.28rem 0.35rem;
+}
+
+.device-rename-row .pure-button,
+.device-rename-actions .pure-button {
+    padding: 0.3rem 0.65rem;
+    line-height: 1.15;
+}
+
+.device-rename-actions {
+    display: flex;
+    justify-content: flex-end;
+}
+
 .fcu-temp-sources-popup {
     position: fixed;
     inset: 0;
@@ -1194,4 +1240,16 @@ li.pure-menu-item > .rules-master-toggle {
     padding: 1em;
     color: #666;
     font-style: italic;
+}
+
+/* Device editor */
+.device-editor-table input[type="text"] {
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 8rem;
+}
+
+.device-editor-table td,
+.device-editor-table th {
+    vertical-align: middle;
 }

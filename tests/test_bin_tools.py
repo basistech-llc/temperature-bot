@@ -107,16 +107,16 @@ def test_rules_file_defines_device_rule_contract(bin_dir):
 
     assert rules_module.run_rules_for_device(fcu, lunch_time, 0) is None
     assert rules_module.run_rules_for_device(kitchen_erv, lunch_time, 0) == RuleResult(
-        fan_speed=4, drive=1
+        fan_speed="HIGH", drive="ON"
     )
     assert rules_module.run_rules_for_device(kitchen_erv, lunch_time, 75) == RuleResult(
-        fan_speed=1, drive=1
+        fan_speed="LOW", drive="ON"
     )
     assert rules_module.run_rules_for_device(kitchen_erv, lunch_time, 125) == RuleResult(
-        drive=0
+        drive="OFF"
     )
     assert rules_module.run_rules_for_device(kitchen_erv, night_time, 0) == RuleResult(
-        fan_speed=4, drive=1
+        fan_speed="HIGH", drive="ON"
     )
 
 

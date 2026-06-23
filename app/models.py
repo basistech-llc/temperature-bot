@@ -9,9 +9,9 @@ boundaries:
   services before routes/templates receive JSON-ready dictionaries.
 
 The Flask and Jinja layers still work with mutable mappings today because they
-add display-only fields such as ``display_name`` and CSS annotations. Use
-``json_ready()`` at those boundaries instead of ``typing.cast`` so the data is
-actually validated before it becomes a mapping.
+add CSS annotations and other display-only values. Use ``json_ready()`` at those
+boundaries instead of ``typing.cast`` so the data is actually validated before it
+becomes a mapping.
 """
 
 from typing import Annotated, Any, Dict, Iterable, Literal
@@ -28,6 +28,9 @@ FRIDAY = 4
 SATURDAY = 5
 SUNDAY = 6
 
+DriveState = Literal["OFF", "ON"]
+FanSpeedName = Literal["AUTO", "LOW", "MID2", "MID1", "HIGH"]
+
 ################################################################
 ## for rules
 class Device(BaseModel):
@@ -35,23 +38,27 @@ class Device(BaseModel):
     device_id: int = Field(description="SQLite3 device_id")
     erv: bool = Field(description="is this an ERV?")
     name: str = Field(description="the name of the device")
+    device_type: str | None = Field(default=None, description="Configured device type.")
+    rules_enabled: bool = Field(default=True, description="Whether rules may act.")
 
 class RuleResult(BaseModel):
     """Results passed back to Rules Engine"""
-    fan_speed: int | None = Field(default=None, description="AE-200 fan speed code.")
-    drive: int | None = Field(default=None, description="AE-200 drive state code.")
+    fan_speed: FanSpeedName | None = Field(
+        default=None, description="AE-200 fan speed name."
+    )
+    drive: DriveState | None = Field(default=None, description="AE-200 drive state.")
 
     @field_validator("fan_speed", mode="before")
     @classmethod
     def normalize_fan_speed(cls, value):
-        """Allow rules to use AE-200 protocol names such as HIGH or LOW."""
-        return _rule_code(value, ae200.FAN_SPEED_NAMES, "fan_speed")
+        """Allow rules to use AE-200 protocol names or legacy speed codes."""
+        return _rule_name(value, ae200.FAN_SPEEDS, ae200.FAN_SPEED_NAMES, "fan_speed")
 
     @field_validator("drive", mode="before")
     @classmethod
     def normalize_drive(cls, value):
-        """Allow rules to use ON/OFF drive names."""
-        return _rule_code(value, ae200.DRIVE_NAMES, "drive")
+        """Allow rules to use ON/OFF names or legacy drive codes."""
+        return _rule_name(value, ae200.DRIVES, ae200.DRIVE_NAMES, "drive")
 
 
 def _rule_code(value, names_to_codes: dict[str, int], field_name: str):
@@ -67,6 +74,50 @@ def _rule_code(value, names_to_codes: dict[str, int], field_name: str):
             return int(normalized)
         except ValueError as exc:
             raise ValueError(f"unknown {field_name}: {value!r}") from exc
+    return value
+
+
+def _rule_name(
+    value,
+    codes_to_names: dict[int, str],
+    names_to_codes: dict[str, int],
+    field_name: str,
+):
+    if value is None:
+        return None
+    if isinstance(value, int):
+        if value in codes_to_names:
+            return codes_to_names[value]
+        raise ValueError(f"unknown {field_name}: {value!r}")
+    if isinstance(value, str):
+        normalized = value.strip().upper()
+        if not normalized:
+            return None
+        if normalized in names_to_codes:
+            return normalized
+        try:
+            code = int(normalized)
+        except ValueError as exc:
+            raise ValueError(f"unknown {field_name}: {value!r}") from exc
+        if code in codes_to_names:
+            return codes_to_names[code]
+        raise ValueError(f"unknown {field_name}: {value!r}")
+    return value
+
+
+def _optional_stripped(value):
+    if value is None:
+        return None
+    if isinstance(value, str):
+        stripped = value.strip()
+        return stripped or None
+    return value
+
+
+def _optional_upper(value):
+    value = _optional_stripped(value)
+    if isinstance(value, str):
+        return value.upper()
     return value
 
 ################################################################
@@ -240,6 +291,12 @@ class SpeedControl(BaseModel):
     device_id: int = Field(description="Local device id from the devices table.")
     fan_speed: int = Field(description="Requested AE-200 fan speed code.")
 
+    @field_validator("fan_speed", mode="before")
+    @classmethod
+    def normalize_fan_speed(cls, value):
+        """Accept AE-200 speed names while preserving the integer command path."""
+        return _rule_code(value, ae200.FAN_SPEED_NAMES, "fan_speed")
+
 
 class DriveControl(BaseModel):
     """Request body for changing an AE-200 drive state.
@@ -252,6 +309,12 @@ class DriveControl(BaseModel):
 
     device_id: int = Field(description="Local device id from the devices table.")
     drive: int = Field(description="Requested AE-200 drive state code.")
+
+    @field_validator("drive", mode="before")
+    @classmethod
+    def normalize_drive(cls, value):
+        """Accept ON/OFF while preserving the integer command path."""
+        return _rule_code(value, ae200.DRIVE_NAMES, "drive")
 
 
 class ModeControl(BaseModel):
@@ -268,6 +331,38 @@ class NoteControl(BaseModel):
 
     device_id: int = Field(description="Local device id from the devices table.")
     notes: str | None = Field(description="Replacement note text, or null to clear it.")
+
+
+class DeviceMetadataControl(BaseModel):
+    """Editable metadata stored on the devices table."""
+
+    device_id: int = Field(description="Local device id from the devices table.")
+    display_name: str | None = Field(
+        default=None,
+        description="Optional operator-facing display name override.",
+    )
+    device_type: str | None = Field(
+        default=None,
+        description="Optional configured device type such as FCU or ERV.",
+    )
+    rules_enabled: bool | None = Field(
+        default=None,
+        description="Whether rules may act on this device.",
+    )
+    notes: str | None = Field(
+        default=None,
+        description="Optional operator note.",
+    )
+
+    @field_validator("display_name", "notes", mode="before")
+    @classmethod
+    def normalize_optional_text(cls, value):
+        return _optional_stripped(value)
+
+    @field_validator("device_type", mode="before")
+    @classmethod
+    def normalize_device_type(cls, value):
+        return _optional_upper(value)
 
 
 class SetTempControl(BaseModel):
@@ -372,6 +467,14 @@ class DeviceStatus(BaseModel):
 
     device_id: int = Field(description="Local device id from the devices table.")
     device_name: str = Field(description="Canonical device name from the database.")
+    display_name: str | None = Field(
+        default=None,
+        description="Operator-facing display name override.",
+    )
+    device_type: str | None = Field(
+        default=None,
+        description="Configured or inferred device type.",
+    )
     log_id: int | None = Field(default=None, description="Latest devlog row id.")
     logtime: int | None = Field(default=None, description="Unix timestamp for the row.")
     duration: int | None = Field(default=None, description="Run-length duration in seconds.")
@@ -390,6 +493,10 @@ class DeviceStatus(BaseModel):
     disabled_until: int | None = Field(
         default=None,
         description="Unix timestamp until which automation is disabled.",
+    )
+    rules_enabled: bool = Field(
+        default=True,
+        description="Whether rules may act on this device.",
     )
     ae200_device_id: int | None = Field(
         default=None,

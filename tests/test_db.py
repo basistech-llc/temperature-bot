@@ -423,6 +423,8 @@ def test_get_device_status_includes_ae200_device_id(test_database_conn):
 
     row = next(item for item in status if item["device_id"] == device_id)
     assert row["ae200_device_id"] == 10
+    assert row["device_type"] == "FCU"
+    assert row["rules_enabled"] is True
 
 
 def test_get_temperature_series_includes_device_id(test_database_conn_with_test_data):

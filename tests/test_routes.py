@@ -66,6 +66,7 @@ def test_fcu_matrix_has_raw_fcu_temp_and_room_temp_columns(
         {
             "device_id": 12,
             "device_name": "Area 51",
+            "device_type": "FCU",
             "has_speed_control": True,
             "temp10x": 220,
             "calculated_temp10x": 235,
@@ -93,6 +94,7 @@ def test_fcu_matrix_room_temp_cell_opens_weight_popup(
         {
             "device_id": 12,
             "device_name": "Area 51",
+            "device_type": "FCU",
             "has_speed_control": True,
             "temp10x": 220,
             "calculated_temp10x": 235,
@@ -118,6 +120,38 @@ def test_fcu_matrix_room_temp_cell_opens_weight_popup(
     assert 'data-action="revert-fcu-temp-sources"' in html
     assert 'data-action="cancel-fcu-temp-sources"' in html
     assert 'data-action="close-fcu-temp-sources"' not in html
+
+
+@patch("app.routes_web.hubitat.get_name_to_label", return_value={})
+@patch("app.routes_web.db.get_device_status")
+def test_index_device_names_expose_rename_popup_contract(
+    mock_get_status, _mock_labels, flask_test_client
+):  # noqa: F811
+    mock_get_status.return_value = [
+        {
+            "device_id": 12,
+            "device_name": "Area 51",
+            "display_name": "Server Room",
+            "device_type": "FCU",
+            "has_speed_control": True,
+            "temp10x": 220,
+            "calculated_temp10x": 235,
+            "status": {"Mode": "COOL"},
+        }
+    ]
+
+    response = flask_test_client.get("/")
+    assert response.status_code == 200
+    html = response.data.decode("utf-8")
+
+    assert 'class="device-name-context"' in html
+    assert 'data-device-id="12"' in html
+    assert 'data-device-name="Area 51"' in html
+    assert 'data-display-name="Server Room"' in html
+    assert 'id="device-rename-popup"' in html
+    assert 'data-action="reset-device-name"' in html
+    assert 'data-action="rename-device"' in html
+    assert 'data-action="cancel-device-rename"' in html
 
 
 def test_temperature_chart_page_has_raw_calculated_mode_switch(
@@ -586,19 +620,6 @@ def test_room_config_kitchen_has_fcu():
     """Kitchen must list its FCU so set-temp controls render."""
     fans = room_config.ROOM_CONFIGS["kitchen"].fans
     assert "Kitchen" in fans
-
-
-def test_room_config_erv_names_start_with_erv():
-    """ERV device names must start with 'ERV' — the template uses device_type
-    to decide whether to show set-temp controls (fans only, not ERVs)."""
-    for room_key, config in room_config.ROOM_CONFIGS.items():
-        for name in config.ervs:
-            assert name.startswith("ERV"), (
-                f"{room_key} ERV device '{name}' must start with 'ERV'"
-            )
-
-
-# -- Room dashboard HTML rendering tests --
 
 
 def test_room_config_no_erv_in_fans():
