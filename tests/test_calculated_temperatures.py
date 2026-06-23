@@ -840,7 +840,7 @@ def test_fcu_set_range_api_persists_range_and_logs_old_new_values(
     range_log = next(
         log
         for log in logs
-        if log["current_values"] == "19.5-22.5" and log["new_value"] == "20-24"
+        if log["current_values"] == "22.5-25.5" and log["new_value"] == "20-24"
     )
     assert range_log["comment"] == "set range"
 

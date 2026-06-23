@@ -156,6 +156,20 @@ function autoSetTempRangeForDevice(dev) {
 function setAutoSetTempUnavailable(widget) {
   widget.removeAttribute("data-heat-set-temp-c");
   widget.removeAttribute("data-cool-set-temp-c");
+  widget.removeAttribute("title");
+  const fill = widget.querySelector("[data-role='auto-range']");
+  const heatHandle = widget.querySelector("[data-role='heat']");
+  const coolHandle = widget.querySelector("[data-role='cool']");
+  if (fill) {
+    fill.style.left = "";
+    fill.style.width = "";
+  }
+  if (heatHandle) {
+    heatHandle.style.left = "";
+  }
+  if (coolHandle) {
+    coolHandle.style.left = "";
+  }
   widget.querySelectorAll(".autosettemp-end-label").forEach((label) => {
     label.removeAttribute("data-temp-c");
     label.textContent = "--";
@@ -2256,6 +2270,7 @@ if (typeof module !== "undefined" && module.exports) {
     parseFcuTempSourceMultiplier,
     resizeSetRangeEndpoint,
     saveFcuTempSourceMultipliers,
+    setAutoSetTempUnavailable,
     sortedFcuTempSources,
   };
 }

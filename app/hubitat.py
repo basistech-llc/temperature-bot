@@ -3,11 +3,18 @@ Hubitat implementation
 """
 
 import json
+import os
+from pathlib import Path
+
 import requests
 from app.util import get_config,get_secret
 from app.paths import TIMEOUT_SECONDS
 
 OFFLINE = 'OFFLINE - '
+HUBITAT_SIMULATOR_ENV = "HUBITAT_SIMULATOR"
+SIMULATOR_DIR = Path(__file__).resolve().parent / "test_data"
+SIMULATOR_DEVICES_FILE = SIMULATOR_DIR / "hubitat_get_devices.json"
+TRUE_ENV_VALUES = frozenset({"1", "true", "yes", "on"})
 
 HUBITAT_GET_ALL_DEVICES_FULL_DETAILS = "http://{host}/apps/api/{appId}/devices/all?access_token={access_token}"
 HUBITAT_GET_DEVICE_INFO = "http://{host}/apps/api/{appId}/devices/{device_id}?access_token={access_token}"
@@ -22,6 +29,16 @@ HUBITAT_LIST_DASHBOARDS = "http://{host}/apps/api/{appId}/dashboard/list?access_
 HUBITAT_DUMP_DASHBOARD = "http://{host}/apps/api/{appId}/dashboard/{dash_id}?access_token={access_token}"
 
 HUBITAT_SEND_DEVICE_COMMAND="http://{host}/apps/api/{appId}/devices/{device_id}/{command}/{secondary_value}?access_token={access_token}"
+
+
+def hubitat_simulator_enabled() -> bool:
+    """Return True when Hubitat simulator mode is explicitly enabled."""
+    return os.getenv(HUBITAT_SIMULATOR_ENV, "").strip().lower() in TRUE_ENV_VALUES
+
+
+def _simulated_devices():
+    with open(SIMULATOR_DEVICES_FILE, "r", encoding="utf-8") as f:
+        return json.load(f)
 
 
 def _coerce_numeric(value):
@@ -143,6 +160,8 @@ def dump_dashboard(dash_id, access_token_override=None):
     return r.json()
 
 def get_all_devices():
+    if hubitat_simulator_enabled():
+        return _simulated_devices()
     try:
         host = get_config()['hubitat']['host']
         appId = get_config()['hubitat']['appId']

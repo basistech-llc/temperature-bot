@@ -182,6 +182,7 @@
                     <div class="autosettemp-widget hidden"
                          id="autosettemp-widget-{{ device.device_id }}"
                          data-device-id="{{ device.device_id }}"
+                         role="group"
                          aria-label="Auto heat and cool set temperatures">
                       <div class="autosettemp-track" data-role="track">
                         <div class="autosettemp-fill" data-role="auto-range"></div>
@@ -222,6 +223,7 @@
                   </td>
                   {% set current_mode = device.mode|default(device.status.Mode|default('', true), true) %}
                   {% set current_mode_value = current_mode|upper if current_mode else '' %}
+                  {% set mode_labels = {'LC_AUTO': 'Auto'} %}
                   <td class="cell-mode">
                     <select class="mode-select"
                             id="mode-{{ device.device_id }}"
@@ -231,7 +233,7 @@
                       {% if not current_mode_value %}
                       <option value="" selected disabled>--</option>
                       {% elif current_mode_value not in ['FAN', 'COOL', 'DRY', 'HEAT', 'AUTO'] %}
-                      <option value="{{ current_mode_value }}" selected disabled>{{ current_mode_value }}</option>
+                      <option value="{{ current_mode_value }}" selected disabled>{{ mode_labels.get(current_mode_value, current_mode_value) }}</option>
                       {% endif %}
                       <option value="FAN" {% if current_mode_value == 'FAN' %}selected{% endif %}>Fan</option>
                       <option value="COOL" {% if current_mode_value == 'COOL' %}selected{% endif %}>Cool</option>

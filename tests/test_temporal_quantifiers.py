@@ -224,6 +224,8 @@ def test_index_fcu_speeds_exclude_one(
     assert 'class="mode-select"' in html
     assert f'id="mode-{device_id}"' in html
     assert f'id="autosettemp-widget-{device_id}"' in html
+    assert 'aria-label="Auto heat and cool set temperatures"' in html
+    assert 'role="group"' in html
     assert '<option value="FAN"' in html
     assert '<option value="COOL" selected>Cool</option>' in html
     assert '<option value="DRY"' in html
@@ -236,3 +238,34 @@ def test_index_fcu_speeds_exclude_one(
 
     # Speed 1 should not be present for this FCU
     assert f'id="radio-{device_id}-1"' not in html
+
+
+def test_index_fcu_mode_labels_lc_auto_as_auto(
+    flask_test_client, test_database_conn_with_test_data
+):  # noqa: F811
+    """Reported LC_AUTO should keep its raw option value but display as Auto."""
+    conn, device_id, _ = test_database_conn_with_test_data
+    now = int(time.time())
+    conn.execute(
+        """
+        INSERT INTO devlog (device_id, logtime, duration, temp10x, status_json)
+        VALUES (?, ?, ?, ?, ?)
+        """,
+        (
+            device_id,
+            now,
+            60,
+            240,
+            (
+                '{"Drive": "ON", "FanSpeed": "LOW", "Mode": "LC_AUTO", '
+                '"InletTemp": "24.0", "SetTemp": "24"}'
+            ),
+        ),
+    )
+    conn.commit()
+
+    response = flask_test_client.get("/")
+    assert response.status_code == 200
+    html = response.data.decode("utf-8")
+    assert '<option value="LC_AUTO" selected disabled>Auto</option>' in html
+    assert '<option value="LC_AUTO" selected disabled>LC_AUTO</option>' not in html
