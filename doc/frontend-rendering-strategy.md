@@ -33,7 +33,9 @@ Two rendering “layers” coexist:
 2. **Client-side enhancement / interaction (plain JS + libraries)**
    - JavaScript under `app/static/` calls the `/api/v1/...` endpoints from `routes_api.py`.
    - JS is responsible for **live dashboards, charts, tables, and other highly interactive pieces**:
-     - `chart_support.js` + `chart.html` / `chart_aqi.html` (ECharts time-series, AQI charts).
+     - `temperature_chart_support.js` + `temperature_chart.html`,
+       `chart_aqi_support.js` + `chart_aqi.html`, and per-metric chart modules
+       (ECharts time-series and AQI charts).
      - `room_dashboard.js` + `room_dashboard.html` (room HVAC control tiles).
      - `logs_today.js`, inline JS in `logs.html`, `alerts.html`, `debug_all_devices.html` (Tabulator
        tables and debug views).
@@ -223,9 +225,12 @@ These pages use Jinja2 for the “skeleton” and JS for dynamic content:
   - Template: `room_dashboard.html` (pre-renders tiles, sensor cards).
   - JS: `room_dashboard.js` (fetches `/api/v1/status`, calls `/api/v1/set_*`, updates DOM).
 - Charts:
-  - `chart.html` (temperature, `/chart`) + `chart_support.js` (ECharts, `/api/v1/temperature`,
-    `/api/v1/air_quality`, `/api/v1/status`).
+  - `temperature_chart.html` (temperature, `/chart`) +
+    `temperature_chart_support.js` (ECharts, `/api/v1/temperature`,
+    `/api/v1/status`).
   - `chart_aqi.html` (AQI, `/chart_aqi`) + `chart_aqi_support.js`.
+  - `metric_chart.html` (air-quality metrics, `/metric_chart`) +
+    `metric_chart_support.js`.
 - Logs and alerts:
   - `logs_today.html` + `logs_today.js` (Tabulator, `/api/v1/logs`).
   - `logs.html` + `unit_speed.js` for log table.
@@ -254,8 +259,8 @@ Some older or more JS-heavy areas **do not fully follow our current “SSR-first
 philosophy**:
 
 - **Charting UIs**:
-  - `chart.html` / `chart_aqi.html` plus `chart_support.js` / `chart_aqi_support.js` do most of
-    their work on the client:
+  - `temperature_chart.html`, `chart_aqi.html`, and `metric_chart.html` plus
+    their JS modules do most of their work on the client:
     - Chart configuration, sensor checkbox generation, CSV export, and layout tweaks are highly
       JS-centric.
 - **Log and alert tables**:
@@ -296,7 +301,8 @@ When you (an LLM agent) are asked to modify or add frontend behavior:
 2. **Use existing patterns**:
    - For static/mostly-static pages: copy style from `index.html`, `air-quality.html`,
      `device_log.html`.
-   - For interactive charts/dashboards: copy style from `chart.html` + `chart_support.js` or
+   - For interactive charts/dashboards: copy style from
+     `temperature_chart.html` + `temperature_chart_support.js` or
      `room_dashboard.html` + `room_dashboard.js`.
 3. **Add server routes in the right place**:
    - HTML pages → `routes_web.py` + Jinja template.
