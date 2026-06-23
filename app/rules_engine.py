@@ -90,7 +90,7 @@ def all_rules_disabled_until(conn) -> int:
     if device_id is None:
         return 0
     until = db.device_rules_disabled_until(conn, device_id)
-    logging.info("all rules disabled until %s", until)
+    logger.info("all rules disabled until %s", until)
     return until if until else 0
 
 def disable_all_rules(conn, seconds: int):
