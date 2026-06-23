@@ -39,6 +39,7 @@ const FCU_TEMP_SOURCE_FCU_DEVICE_ID_KEY = "fcu_device_id";
 const FCU_TEMP_SOURCE_SOURCE_DEVICE_ID_KEY = "source_device_id";
 const FCU_TEMP_SOURCE_MULTIPLIER_KEY = "multiplier";
 const FCU_TEMP_SOURCE_TITLE = "Temperature Sources";
+const DEVICE_DISPLAY_NAME_KEY = "display_name";
 
 // Refresh logic
 var start = Date.now();
@@ -580,6 +581,308 @@ async function saveFcuTempSourceMultipliers() {
   }
 }
 
+function normalizedDeviceDisplayName(value) {
+  return String(value || "").trim();
+}
+
+function normalizedDeviceType(value) {
+  return String(value || "").trim();
+}
+
+function deviceRulesEnabledValue(value) {
+  if (value === true || value === 1) {
+    return true;
+  }
+  return ["1", "true", "yes", "on"].includes(String(value).trim().toLowerCase());
+}
+
+function deviceDisplayNameChanged(currentDisplayName, nextDisplayName) {
+  const normalizedNext = normalizedDeviceDisplayName(nextDisplayName);
+  return (
+    normalizedNext !== "" &&
+    normalizedNext !== normalizedDeviceDisplayName(currentDisplayName)
+  );
+}
+
+function deviceDisplayNamePatchBody(displayName) {
+  return { [DEVICE_DISPLAY_NAME_KEY]: normalizedDeviceDisplayName(displayName) };
+}
+
+function deviceMetadataUrl(deviceId) {
+  return `/api/v1/devices/${deviceId}`;
+}
+
+function setDeviceRenameButtonState(popup) {
+  const input = document.getElementById("device-rename-display-name");
+  const renameButton = popup.querySelector("[data-action='rename-device']");
+  if (!input || !renameButton) {
+    return;
+  }
+  renameButton.disabled = !deviceDisplayNameChanged(
+    popup.dataset.currentDisplayName,
+    input.value,
+  );
+}
+
+function setDeviceRenameControlsDisabled(popup, disabled) {
+  popup.querySelectorAll("input, button").forEach((control) => {
+    control.disabled = disabled;
+  });
+  if (!disabled) {
+    const deviceNameInput = document.getElementById("device-rename-device-name");
+    const deviceTypeInput = document.getElementById("device-rename-device-type");
+    const rulesEnabledInput = document.getElementById(
+      "device-rename-rules-enabled",
+    );
+    if (deviceNameInput) {
+      deviceNameInput.readOnly = true;
+    }
+    if (deviceTypeInput) {
+      deviceTypeInput.readOnly = true;
+    }
+    if (rulesEnabledInput) {
+      rulesEnabledInput.disabled = true;
+    }
+    setDeviceRenameButtonState(popup);
+  }
+}
+
+function closeDeviceRenamePopup() {
+  const popup = document.getElementById("device-rename-popup");
+  if (!popup) {
+    return;
+  }
+  popup.classList.add("hidden");
+  popup.removeAttribute("style");
+  delete popup.dataset.deviceId;
+  delete popup.dataset.deviceName;
+  delete popup.dataset.deviceType;
+  delete popup.dataset.rulesEnabled;
+  delete popup.dataset.currentDisplayName;
+}
+
+function setDeviceReadonlyMetadata(popup, deviceType, rulesEnabled) {
+  const deviceTypeInput = document.getElementById("device-rename-device-type");
+  const rulesEnabledInput = document.getElementById("device-rename-rules-enabled");
+  const normalizedType = normalizedDeviceType(deviceType);
+  const normalizedRulesEnabled = deviceRulesEnabledValue(rulesEnabled);
+
+  popup.dataset.deviceType = normalizedType;
+  popup.dataset.rulesEnabled = String(normalizedRulesEnabled);
+  if (deviceTypeInput) {
+    deviceTypeInput.value = normalizedType;
+  }
+  if (rulesEnabledInput) {
+    rulesEnabledInput.checked = normalizedRulesEnabled;
+    rulesEnabledInput.disabled = true;
+  }
+}
+
+function positionDeviceRenamePopup(popup, clientX, clientY) {
+  const margin = 8;
+  const popupWidth = popup.offsetWidth || 360;
+  const popupHeight = popup.offsetHeight || 120;
+  const left = Math.max(
+    margin,
+    Math.min(clientX, window.innerWidth - popupWidth - margin),
+  );
+  const top = Math.max(
+    margin,
+    Math.min(clientY, window.innerHeight - popupHeight - margin),
+  );
+  popup.style.left = `${left}px`;
+  popup.style.top = `${top}px`;
+}
+
+function openDeviceRenamePopup(target, event) {
+  const popup = document.getElementById("device-rename-popup");
+  const deviceNameInput = document.getElementById("device-rename-device-name");
+  const displayNameInput = document.getElementById("device-rename-display-name");
+  if (!popup || !deviceNameInput || !displayNameInput) {
+    return;
+  }
+
+  const deviceId = parseInt(target.dataset.deviceId, 10);
+  if (!Number.isInteger(deviceId)) {
+    return;
+  }
+  const deviceName =
+    target.dataset.deviceName || target.getAttribute("title") || target.textContent;
+  const displayName = target.dataset.displayName || target.textContent;
+  const deviceType = target.dataset.deviceType || "";
+  const rulesEnabled =
+    target.dataset.rulesEnabled === undefined ? true : target.dataset.rulesEnabled;
+
+  popup.dataset.deviceId = String(deviceId);
+  popup.dataset.deviceName = deviceName;
+  popup.dataset.currentDisplayName = displayName;
+  deviceNameInput.value = deviceName;
+  displayNameInput.value = displayName;
+  setDeviceReadonlyMetadata(popup, deviceType, rulesEnabled);
+
+  popup.classList.remove("hidden");
+  setDeviceRenameControlsDisabled(popup, false);
+  positionDeviceRenamePopup(popup, event.clientX, event.clientY);
+  displayNameInput.focus();
+  displayNameInput.select();
+}
+
+async function patchDeviceDisplayName(deviceId, displayName) {
+  let response;
+  try {
+    response = await fetch(deviceMetadataUrl(deviceId), {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(deviceDisplayNamePatchBody(displayName)),
+    });
+  } catch (error) {
+    throw new Error(`NETWORK ${error.message}`);
+  }
+
+  let data = {};
+  try {
+    data = await response.json();
+  } catch {
+    data = {};
+  }
+
+  if (!response.ok) {
+    throw new Error(`${response.status} ${data.error || response.statusText}`);
+  }
+  return data;
+}
+
+function applyDeviceDisplayName(
+  deviceId,
+  deviceName,
+  displayName,
+  deviceType = undefined,
+  rulesEnabled = undefined,
+) {
+  const label = normalizedDeviceDisplayName(displayName) || deviceName;
+  document
+    .querySelectorAll(`.device-name-context[data-device-id="${deviceId}"]`)
+    .forEach((element) => {
+      element.textContent = label;
+      element.dataset.deviceName = deviceName;
+      element.dataset.displayName = label;
+      if (deviceType !== undefined) {
+        element.dataset.deviceType = normalizedDeviceType(deviceType);
+      }
+      if (rulesEnabled !== undefined) {
+        element.dataset.rulesEnabled = String(
+          deviceRulesEnabledValue(rulesEnabled),
+        );
+      }
+      element.setAttribute("title", deviceName);
+    });
+}
+
+async function submitDeviceDisplayName(displayName) {
+  const popup = document.getElementById("device-rename-popup");
+  if (!popup) {
+    return;
+  }
+  const deviceId = parseInt(popup.dataset.deviceId, 10);
+  const deviceName = popup.dataset.deviceName || "";
+  if (!Number.isInteger(deviceId) || !deviceName) {
+    closeDeviceRenamePopup();
+    return;
+  }
+
+  setDeviceRenameControlsDisabled(popup, true);
+  try {
+    const data = await patchDeviceDisplayName(deviceId, displayName);
+    const savedDisplayName = data.display_name || displayName || deviceName;
+    applyDeviceDisplayName(
+      deviceId,
+      deviceName,
+      savedDisplayName,
+      data.device_type ?? popup.dataset.deviceType,
+      data.rules_enabled ?? popup.dataset.rulesEnabled,
+    );
+    forceRefresh = true;
+    closeDeviceRenamePopup();
+  } catch (error) {
+    console.error("Failed to update device display name:", error);
+    alert(`Error ${error.message}`);
+    closeDeviceRenamePopup();
+  } finally {
+    if (!popup.classList.contains("hidden")) {
+      setDeviceRenameControlsDisabled(popup, false);
+    }
+  }
+}
+
+function setupDeviceRenamePopupControls() {
+  document.querySelectorAll(".device-name-context").forEach((deviceName) => {
+    deviceName.addEventListener("contextmenu", function (event) {
+      event.preventDefault();
+      event.stopPropagation();
+      openDeviceRenamePopup(this, event);
+    });
+  });
+
+  const popup = document.getElementById("device-rename-popup");
+  if (!popup) {
+    return;
+  }
+  const displayNameInput = document.getElementById("device-rename-display-name");
+  if (displayNameInput) {
+    displayNameInput.addEventListener("input", () => {
+      setDeviceRenameButtonState(popup);
+    });
+    displayNameInput.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        if (
+          deviceDisplayNameChanged(
+            popup.dataset.currentDisplayName,
+            displayNameInput.value,
+          )
+        ) {
+          submitDeviceDisplayName(displayNameInput.value);
+        }
+      }
+    });
+  }
+
+  const renameButton = popup.querySelector("[data-action='rename-device']");
+  if (renameButton && displayNameInput) {
+    renameButton.addEventListener("click", () => {
+      submitDeviceDisplayName(displayNameInput.value);
+    });
+  }
+
+  const resetButton = popup.querySelector("[data-action='reset-device-name']");
+  if (resetButton) {
+    resetButton.addEventListener("click", () => {
+      const deviceName = popup.dataset.deviceName || "";
+      if (displayNameInput) {
+        displayNameInput.value = deviceName;
+        setDeviceRenameButtonState(popup);
+      }
+      submitDeviceDisplayName(deviceName);
+    });
+  }
+
+  const cancelButton = popup.querySelector("[data-action='cancel-device-rename']");
+  if (cancelButton) {
+    cancelButton.addEventListener("click", closeDeviceRenamePopup);
+  }
+
+  document.addEventListener("click", (event) => {
+    if (!popup.classList.contains("hidden") && !popup.contains(event.target)) {
+      closeDeviceRenamePopup();
+    }
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      closeDeviceRenamePopup();
+    }
+  });
+}
+
 ////////////////////////////////////////////////////////////////
 // Weather display functions
 function displayWeather(weatherInfo) {
@@ -806,6 +1109,9 @@ function setupMatrixListeners() {
 
   // Add event listeners for calculated room-temperature source weights.
   setupFcuTempSourcePopupControls();
+
+  // Add right-click device display-name editor.
+  setupDeviceRenamePopupControls();
 }
 
 function setupModeControls() {
@@ -1603,6 +1909,7 @@ const refreshGridRows = () => {
               }
             }
             updateDeviceNotes(dev);
+            updateDeviceDisplayName(dev);
             updateRulesDisabledBadge(dev);
             updateDisableForCell(dev);
           }
@@ -1673,6 +1980,34 @@ function updateDeviceNotes(dev) {
   if (cell && !cell.classList.contains("editing")) {
     cell.textContent = dev.notes || "";
   }
+}
+
+function updateDeviceDisplayName(dev) {
+  if (dev.display_name === undefined && dev.device_name === undefined) {
+    return;
+  }
+  const labels = document.querySelectorAll(
+    `.device-name-context[data-device-id="${dev.device_id}"]`,
+  );
+  if (labels.length === 0) {
+    return;
+  }
+  const existingDeviceName = labels[0].dataset.deviceName || "";
+  const deviceName = dev.device_name || existingDeviceName;
+  const displayName = dev.display_name || deviceName;
+  const deviceType =
+    dev.device_type === undefined ? labels[0].dataset.deviceType : dev.device_type;
+  const rulesEnabled =
+    dev.rules_enabled === undefined
+      ? labels[0].dataset.rulesEnabled
+      : dev.rules_enabled;
+  applyDeviceDisplayName(
+    dev.device_id,
+    deviceName,
+    displayName,
+    deviceType,
+    rulesEnabled,
+  );
 }
 
 // Pending optimistic writes for the "Disable for" column, keyed by device_id.
@@ -1834,6 +2169,9 @@ if (typeof window !== "undefined") {
 if (typeof module !== "undefined" && module.exports) {
   module.exports = {
     collectFcuTempSourceChanges,
+    deviceDisplayNameChanged,
+    deviceDisplayNamePatchBody,
+    deviceRulesEnabledValue,
     ensureModeSelectOption,
     fanRadioIdForDevice,
     fcuTempSourcesTitle,

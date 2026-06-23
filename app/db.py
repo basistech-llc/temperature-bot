@@ -50,6 +50,7 @@ from .models import (
     DatabaseIndex,
     DatabaseSchemaIssue,
     DatabaseSchemaSnapshot,
+    DeviceMetadataControl,
     DeviceStatus,
     FcuSetRange,
     FcuTempSourceControl,
@@ -78,6 +79,8 @@ MAX_DURATION = 3600  # don't extend more than an hour
 ROOM_MAP_JSON_KEY = "map_json"
 FLYWAY_SCHEMA_HISTORY_TABLE = "flyway_schema_history"
 SCHEMA_UPGRADE_COMMAND = "make migrate-db"
+DEVICE_TYPE_ERV = "ERV"
+DEVICE_TYPE_FCU = "FCU"
 FCU_DEFAULT_TEMP_SOURCE_MULTIPLIER = 1.0
 
 
@@ -481,12 +484,20 @@ def get_or_create_device_id(conn, device_name, use_cache=True):
             return DEVICE_MAP[device_name]
         else:
             logger.error("Could not retrieve ID for device name: %s", device_name)
-            raise ValueError("Could not retrieve ID for device name: %s" % device_name)  # pylint: disable=consider-using-f-string
+            raise ValueError(f"Could not retrieve ID for device name: {device_name}")
 
     except sqlite3.Error as e:
         logger.error("Database error in get_or_create_device_id: %s", e)
         conn.rollback()  # Rollback any partial transaction
         raise  # Re-raise the exception
+
+
+def get_device_id(conn, device_name: str) -> int | None:
+    """Return the device_id for a device name without creating a row."""
+    cursor = conn.cursor()
+    cursor.execute("SELECT device_id FROM devices WHERE device_name=?;", (device_name,))
+    row = cursor.fetchone()
+    return row["device_id"] if row else None
 
 
 def fetch_all_devices(conn):
@@ -508,6 +519,93 @@ def get_device(conn, device_id: int) -> dict[str, Any] | None:
     c.execute("SELECT * FROM devices WHERE device_id=?", (device_id,))
     row = c.fetchone()
     return dict(row) if row else None
+
+
+def normalize_device_type(device_type: object) -> str | None:
+    if not isinstance(device_type, str):
+        return None
+    normalized = device_type.strip().upper()
+    return normalized or None
+
+
+def infer_device_type(devdict: dict[str, Any]) -> str | None:
+    configured = normalize_device_type(devdict.get("device_type"))
+    if configured:
+        return configured
+    if not devdict.get("has_speed_control"):
+        return None
+    name = devdict.get("device_name", "")
+    if isinstance(name, str) and name.lower().startswith("erv"):
+        return DEVICE_TYPE_ERV
+    return DEVICE_TYPE_FCU
+
+
+def get_device_metadata(conn) -> list[dict[str, Any]]:
+    """Return editable device catalog rows."""
+    c = conn.cursor()
+    c.execute(
+        """
+        SELECT d.device_id, d.device_name, d.display_name, d.device_type,
+               d.rules_enabled, d.ae200_device_id, d.disabled_until,
+               d.notes, d.aqi_mon, d.room_id, r.room_name
+        FROM devices d
+        LEFT JOIN rooms r ON d.room_id = r.room_id
+        ORDER BY d.device_name
+        """
+    )
+    return [_normalize_device_metadata_row(dict(row)) for row in c.fetchall()]
+
+
+def _normalize_device_metadata_row(item: dict[str, Any]) -> dict[str, Any]:
+    item["device_type"] = normalize_device_type(item.get("device_type"))
+    item["rules_enabled"] = bool(item.get("rules_enabled", True))
+    return item
+
+
+def update_device_metadata(
+    conn,
+    body: DeviceMetadataControl,
+    *,
+    fields: set[str] | None = None,
+) -> dict[str, Any]:
+    """Update editable device metadata and return the updated row."""
+    update_fields = (
+        fields
+        if fields is not None
+        else {"display_name", "device_type", "rules_enabled", "notes"}
+    )
+    assignments = []
+    args: list[Any] = []
+    if "display_name" in update_fields:
+        assignments.append("display_name=?")
+        args.append(body.display_name)
+    if "device_type" in update_fields:
+        assignments.append("device_type=?")
+        args.append(normalize_device_type(body.device_type))
+    if "rules_enabled" in update_fields and body.rules_enabled is not None:
+        assignments.append("rules_enabled=?")
+        args.append(1 if body.rules_enabled else 0)
+    if "notes" in update_fields:
+        assignments.append("notes=?")
+        args.append(body.notes)
+    if not assignments:
+        device = get_device(conn, body.device_id)
+        if device is None:
+            raise ValueError(f"Unknown device_id: {body.device_id}")
+        return _normalize_device_metadata_row(device)
+
+    args.append(body.device_id)
+    c = conn.cursor()
+    c.execute(
+        f"UPDATE devices SET {', '.join(assignments)} WHERE device_id=?",
+        args,
+    )
+    if c.rowcount == 0:
+        raise ValueError(f"Unknown device_id: {body.device_id}")
+    conn.commit()
+    updated = get_device(conn, body.device_id)
+    assert updated is not None
+    return _normalize_device_metadata_row(updated)
 
 
 def devices_to_device_id(conn):
@@ -625,7 +723,8 @@ def fetch_last_status(conn, flag=EVERY_DEVICE):
         where = "1=1"
     cursor = conn.cursor()
     cursor.execute(f"""
-        SELECT a.*,b.device_name,b.notes,b.disabled_until,b.room_id,r.room_name
+        SELECT a.*,b.device_name,b.display_name,b.device_type,b.rules_enabled,
+               b.ae200_device_id,b.notes,b.disabled_until,b.room_id,r.room_name
         FROM (SELECT * FROM devlog GROUP BY device_id HAVING logtime=max(logtime)) AS a
         JOIN devices b ON a.device_id = b.device_id
         LEFT JOIN rooms r ON b.room_id = r.room_id
@@ -895,7 +994,9 @@ def get_rules_master_enabled(conn) -> bool:
     the underlying storage, so we can distinguish it from time-limited rules
     disablement on the rules_engine device.
     """
-    device_id = get_or_create_device_id(conn, "rules_master")
+    device_id = get_device_id(conn, "rules_master")
+    if device_id is None:
+        return True
     disabled_until = device_rules_disabled_until(conn, device_id)
     # When disabled_until is 0 or in the past, rules are enabled.
     if not disabled_until:
@@ -1123,7 +1224,11 @@ def temporal_quantification(cmd, args):
 def get_last_aqi(conn):
     c = conn.cursor()
     c.execute("select aqi from aqi order by logtime DESC limit 1")
-    aqi = c.fetchone()[0]
+    row = c.fetchone()
+    if row is None:
+        logger.warning("No AQI data available; defaulting to 50")
+        return 50
+    aqi = row[0]
     logger.debug("last_aqi=%s", aqi)
     return aqi
 
@@ -1141,10 +1246,20 @@ def get_aqi_series(conn):
     return {key: [[row["logtime"], row[key]] for row in rows] for key in keys}
 
 
-def _is_fcu_device(device: dict[str, Any]) -> bool:
-    return bool(device.get("has_speed_control")) and not device.get(
+def is_erv_device(devdict: dict[str, Any]) -> bool:
+    device_type = normalize_device_type(devdict.get("device_type"))
+    if device_type:
+        return device_type == DEVICE_TYPE_ERV
+    return bool(devdict.get("has_speed_control")) and devdict.get(
         "device_name", ""
     ).lower().startswith("erv")
+
+
+def is_fcu_device(devdict: dict[str, Any]) -> bool:
+    device_type = normalize_device_type(devdict.get("device_type"))
+    if device_type:
+        return device_type == DEVICE_TYPE_FCU
+    return bool(devdict.get("has_speed_control")) and not is_erv_device(devdict)
 
 
 def _float_or_none(value: object) -> float | None:
@@ -1800,7 +1915,7 @@ def _fcu_devices_from_current_status(conn) -> list[dict[str, Any]]:
     for device in devices:
         if "status" in device:
             device.update(ae200.extract_drive_and_fan_speed(device["status"]))
-        if _is_fcu_device(device):
+        if is_fcu_device(device):
             fcus.append(device)
     return fcus
 
@@ -1859,7 +1974,7 @@ def get_calculated_temperature_series(
             series.append(
                 TimeSeries(
                     device_id=fcu["device_id"],
-                    name=fcu["device_name"],
+                    name=fcu.get("display_name") or fcu["device_name"],
                     data=data,
                 )
             )
@@ -1897,7 +2012,7 @@ def get_temperature_series(
                 series.append(
                     TimeSeries(
                         device_id=dev["device_id"],
-                        name=dev["device_name"],
+                        name=dev["display_name"] or dev["device_name"],
                         data=data,
                     )
                 )
@@ -1914,7 +2029,7 @@ def get_device_metric_series(
     ``aq_metrics.extract_metric_from_status``.
     """
     c = conn.cursor()
-    c.execute("SELECT device_id, device_name FROM devices")
+    c.execute("SELECT device_id, device_name, display_name FROM devices")
     devices = c.fetchall()
 
     if not device_ids:
@@ -1951,7 +2066,11 @@ def get_device_metric_series(
 
         if data:
             series.append(
-                TimeSeries(name=dev["device_name"], device_id=device_id, data=data)
+                TimeSeries(
+                    name=dev["display_name"] or dev["device_name"],
+                    device_id=device_id,
+                    data=data,
+                )
             )
 
     return json_ready_list(series)
@@ -1967,7 +2086,7 @@ def get_lighting_series(
     ``attributes.illuminance`` when present.
     """
     c = conn.cursor()
-    c.execute("SELECT device_id, device_name FROM devices")
+    c.execute("SELECT device_id, device_name, display_name FROM devices")
     devices = c.fetchall()
 
     if not device_ids:
@@ -2019,7 +2138,11 @@ def get_lighting_series(
 
         if data:
             series.append(
-                TimeSeries(name=dev["device_name"], device_id=device_id, data=data)
+                TimeSeries(
+                    name=dev["display_name"] or dev["device_name"],
+                    device_id=device_id,
+                    data=data,
+                )
             )
 
     return json_ready_list(series)
@@ -2032,6 +2155,7 @@ def get_device_status(conn) -> List[Dict[str, Any]]:
 
     # Extract and convert the top-level drive, speed, and other items
     for data in device_data:
+        data["rules_enabled"] = bool(data.get("rules_enabled", True))
         if "status" in data:
             data.update(ae200.extract_drive_and_fan_speed(data["status"]))
             status = data["status"]
@@ -2043,9 +2167,12 @@ def get_device_status(conn) -> List[Dict[str, Any]]:
                 data[f"has_{metric_name}"] = (
                     extract_metric_from_status(status, status_key) is not None
                 )
-            if _is_fcu_device(data):
+            if is_fcu_device(data):
                 data["temp_source_stale_seconds"] = TEMP_SOURCE_STALE_SECONDS
                 fcu_device_ids.append(data["device_id"])
+        inferred_type = infer_device_type(data)
+        if inferred_type:
+            data["device_type"] = inferred_type
 
     set_ranges = get_fcu_set_ranges(conn, fcu_device_ids)
     calculated_temps = calculate_fcu_temperatures10x(conn, fcu_device_ids)

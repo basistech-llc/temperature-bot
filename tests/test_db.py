@@ -404,6 +404,29 @@ def test_get_device_status_sets_aq_metric_flags(test_database_conn_with_test_dat
         assert hubitat[f"has_{metric}"] is False, metric
 
 
+def test_get_device_status_includes_ae200_device_id(test_database_conn):
+    """Status rows should expose the configured AE-200 unit id."""
+    device_id = db.update_devlog_map(
+        test_database_conn,
+        device_name="Broadway Status",
+        ae200_device_id=10,
+    )
+    db.insert_devlog_entry(
+        test_database_conn,
+        device_id=device_id,
+        temp=24,
+        statusdict={"Drive": "ON", "FanSpeed": "LOW", "InletTemp": "24.0"},
+    )
+
+    with app.test_request_context():
+        status = db.get_device_status(test_database_conn)
+
+    row = next(item for item in status if item["device_id"] == device_id)
+    assert row["ae200_device_id"] == 10
+    assert row["device_type"] == "FCU"
+    assert row["rules_enabled"] is True
+
+
 def test_get_temperature_series_includes_device_id(test_database_conn_with_test_data):
     """get_temperature_series returns each series with device_id, name, and data."""
     conn = test_database_conn_with_test_data[0]

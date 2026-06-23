@@ -20,6 +20,7 @@ from . import rules_engine
 from . import hubitat
 from . import room_config
 from .display_names import display_device_name
+from .models import DeviceMetadataControl
 from .utils.request_utils import parse_device_ids
 from .utils.db_utils import with_db_connection
 from .routes_web_airquality_utils import (
@@ -103,7 +104,7 @@ def _register_core_routes(app):
         for d in device_data:
             raw_name = d.get("device_name", "")
             hub_label = name_to_label.get(raw_name)
-            d["device_label"] = display_device_name(
+            d["device_label"] = d.get("display_name") or display_device_name(
                 raw_name,
                 hubitat_label=hub_label,
                 source="hubitat",
@@ -434,6 +435,27 @@ def _register_room_routes(app):
         return render_template(
             "debug_all_devices.html",
             current_page="all_devices",
+        )
+
+    @app.route("/devices", methods=["GET", "POST"])
+    @with_db_connection
+    def edit_devices(conn):
+        """Edit device metadata."""
+        if request.method == "POST":
+            for raw_device_id in request.form.getlist("device_id"):
+                body = DeviceMetadataControl(
+                    device_id=int(raw_device_id),
+                    display_name=request.form.get(f"display_name_{raw_device_id}"),
+                    device_type=request.form.get(f"device_type_{raw_device_id}"),
+                    rules_enabled=f"rules_enabled_{raw_device_id}" in request.form,
+                    notes=request.form.get(f"notes_{raw_device_id}"),
+                )
+                db.update_device_metadata(conn, body)
+            return redirect(url_for("edit_devices"))
+        return render_template(
+            "devices.html",
+            devices=db.get_device_metadata(conn),
+            current_page="devices",
         )
 
     @app.route("/kitchen")

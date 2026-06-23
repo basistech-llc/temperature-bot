@@ -7,6 +7,9 @@
  */
 const {
   collectFcuTempSourceChanges,
+  deviceDisplayNameChanged,
+  deviceDisplayNamePatchBody,
+  deviceRulesEnabledValue,
   ensureModeSelectOption,
   fanRadioIdForDevice,
   fcuTempSourcesTitle,
@@ -147,6 +150,32 @@ check(
 );
 check("nonnegative multiplier parses", parseFcuTempSourceMultiplier(" 1.5 "), 1.5);
 check("negative multiplier is invalid", parseFcuTempSourceMultiplier("-0.1"), null);
+
+// -- Device display-name rename behavior --
+check(
+  "unchanged display name does not enable rename",
+  deviceDisplayNameChanged("Server Room", "Server Room"),
+  false,
+);
+check(
+  "changed display name enables rename",
+  deviceDisplayNameChanged("Server Room", "East Lab"),
+  true,
+);
+check(
+  "blank display name does not enable rename",
+  deviceDisplayNameChanged("Server Room", "   "),
+  false,
+);
+check(
+  "display-name PATCH trims and uses API key",
+  JSON.stringify(deviceDisplayNamePatchBody(" East Lab ")),
+  JSON.stringify({ display_name: "East Lab" }),
+);
+check("rules-enabled true string parses", deviceRulesEnabledValue("true"), true);
+check("rules-enabled false string parses", deviceRulesEnabledValue("false"), false);
+check("rules-enabled one parses", deviceRulesEnabledValue(1), true);
+check("rules-enabled zero parses", deviceRulesEnabledValue(0), false);
 
 const popupWithChangedSource = {
   querySelectorAll: () => [

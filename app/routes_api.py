@@ -26,6 +26,7 @@ from .utils.db_utils import with_db_connection
 
 from .models import (
     CommandResponse,
+    DeviceMetadataControl,
     DeviceRoomControl,
     FcuTempSourceBatchControl,
     DriveControl,
@@ -193,9 +194,37 @@ def get_status(conn):
     # on Hubitat being available.
     for dev in device_data:
         raw_name = dev.get("device_name", "")
-        dev["display_name"] = display_device_name(raw_name, source="db")
+        dev["display_name"] = dev.get("display_name") or display_device_name(
+            raw_name, source="db"
+        )
 
     return jsonify({"devices": device_data})
+
+
+@api_v1.route("/devices", methods=["GET"])
+@with_db_connection
+def devices(conn):
+    """Return editable device catalog rows."""
+    return jsonify({"devices": db.get_device_metadata(conn)})
+
+
+@api_v1.patch("/devices/<int:device_id>")
+@with_db_connection
+def update_device(conn, device_id: int):
+    """Update editable device metadata."""
+    payload = request.get_json(silent=True) or {}
+    allowed_fields = {"display_name", "device_type", "rules_enabled", "notes"}
+    update_fields = allowed_fields.intersection(payload)
+    try:
+        body = DeviceMetadataControl.model_validate(
+            {**payload, "device_id": device_id}
+        )
+        device = db.update_device_metadata(conn, body, fields=update_fields)
+    except ValidationError as e:
+        return _validation_error_response(e)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 404
+    return jsonify(device)
 
 
 @api_v1.route("/weather")

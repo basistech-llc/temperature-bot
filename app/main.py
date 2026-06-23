@@ -4,6 +4,7 @@ Refactored main.py - Flask application with modular structure
 
 import os
 import logging
+import sys
 from os.path import abspath
 from flask import Flask, send_from_directory, jsonify
 from werkzeug.exceptions import HTTPException
@@ -36,7 +37,11 @@ def validate_database_schema_on_startup() -> None:
     """Stop Flask startup when the configured database is not current."""
     if not should_validate_database_schema_on_startup():
         return
-    db.validate_configured_database_schema()
+    try:
+        db.validate_configured_database_schema()
+    except db.DatabaseSchemaMismatchError as e:
+        print(str(e), file=sys.stderr)
+        raise SystemExit(1) from None
 
 
 def create_app():

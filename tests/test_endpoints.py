@@ -232,7 +232,10 @@ def test_status_endpoint_with_schema_validation(flask_test_client):  # noqa: F81
         "device_name",
         "ae200_device_id",
         "disabled_until",
+        "display_name",
+        "device_type",
         "notes",
+        "rules_enabled",
     ]
     for expected_col in expected_columns:
         assert expected_col in columns, (

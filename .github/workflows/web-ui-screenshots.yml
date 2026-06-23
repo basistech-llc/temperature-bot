@@ -2,9 +2,6 @@ name: Web UI Screenshots
 
 on:
   pull_request:
-  push:
-    branches-ignore:
-      - main
 
 concurrency:
   group: web-ui-screenshots-${{ github.repository }}-${{ github.head_ref || github.ref_name }}

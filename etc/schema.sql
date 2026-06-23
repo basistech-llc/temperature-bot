@@ -1,7 +1,7 @@
 CREATE TABLE IF NOT EXISTS devices (
     device_id INTEGER PRIMARY KEY AUTOINCREMENT,
     device_name TEXT UNIQUE NOT NULL
-, ae200_device_id INTEGER, disabled_until INTEGER, notes TEXT, aqi_mon INTEGER DEFAULT 0, room_id INTEGER REFERENCES rooms(room_id));
+, ae200_device_id INTEGER, disabled_until INTEGER, notes TEXT, aqi_mon INTEGER DEFAULT 0, room_id INTEGER REFERENCES rooms(room_id), display_name TEXT, device_type TEXT, rules_enabled INTEGER NOT NULL DEFAULT 1);
 CREATE INDEX IF NOT EXISTS idx_devices_device_name ON devices (device_name);
 CREATE TABLE IF NOT EXISTS devlog (
     log_id INTEGER PRIMARY KEY AUTOINCREMENT,

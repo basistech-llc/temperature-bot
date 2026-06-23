@@ -1,0 +1,47 @@
+{% extends 'base.html' %}
+{% block title %}Devices{% endblock %}
+
+{% block body %}
+<div class="pure-g">
+  <div class="pure-u-1">
+    <h2>Devices</h2>
+    <datalist id="device-types">
+      <option value="FCU"></option>
+      <option value="ERV"></option>
+      <option value="SENSOR"></option>
+      <option value="FAN"></option>
+      <option value="OTHER"></option>
+    </datalist>
+    <form method="post" action="/devices">
+    <table class="pure-table pure-table-striped data-table device-editor-table">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Name</th>
+          <th>Display Name</th>
+          <th>Type</th>
+          <th>AE-200</th>
+          <th>Rules</th>
+          <th>Notes</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for device in devices %}
+        <tr>
+          <td>{{ device.device_id }}<input type="hidden" name="device_id" value="{{ device.device_id }}"></td>
+          <td>{{ device.device_name }}</td>
+          <td><input type="text" name="display_name_{{ device.device_id }}" value="{{ device.display_name or '' }}"></td>
+          <td><input type="text" name="device_type_{{ device.device_id }}" list="device-types" value="{{ device.device_type or '' }}"></td>
+          <td>{{ device.ae200_device_id or '' }}</td>
+          <td><input type="checkbox" name="rules_enabled_{{ device.device_id }}" value="1"{% if device.rules_enabled %} checked{% endif %}></td>
+          <td><input type="text" name="notes_{{ device.device_id }}" value="{{ device.notes or '' }}"></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <button type="submit" class="pure-button pure-button-primary">Save</button>
+    </form>
+  </div>
+</div>
+{% endblock %}

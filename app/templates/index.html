@@ -32,10 +32,16 @@
           </thead>
           <tbody>
             {% for device in devices %}
-            {% if device.has_speed_control and device.device_name.lower().startswith('erv') %}
+            {% if device.device_type == 'ERV' %}
                 <tr class="device-row" x-data-device-id="{{ device.device_id }}">
                   <td class="cell-unit">
-                    <span title="{{ device.device_name }}">{{ device.device_label }}</span><span class="rules-disabled-superscript hidden" id="rules-disabled-{{ device.device_id }}" title=""></span>
+                    <span class="device-name-context"
+                          data-device-id="{{ device.device_id }}"
+                          data-device-name="{{ device.device_name }}"
+                          data-display-name="{{ device.device_label }}"
+                          data-device-type="{{ device.device_type or '' }}"
+                          data-rules-enabled="{{ 'true' if device.rules_enabled|default(true) else 'false' }}"
+                          title="{{ device.device_name }}">{{ device.device_label }}</span><span class="rules-disabled-superscript hidden" id="rules-disabled-{{ device.device_id }}" title=""></span>
                     <span id="device-{{ device.device_id }}-notes"></span>
                   </td>
                   <td class="cell-disable-for" id="disable-for-{{ device.device_id }}">
@@ -113,10 +119,16 @@
           </thead>
           <tbody>
             {% for device in devices %}
-            {% if device.has_speed_control and not device.device_name.lower().startswith('erv') %}
+            {% if device.device_type == 'FCU' %}
                 <tr class="device-row" x-data-device-id="{{ device.device_id }}">
                   <td class="cell-unit">
-                    <span title="{{ device.device_name }}">{{ device.device_label }}</span><span class="rules-disabled-superscript hidden" id="rules-disabled-{{ device.device_id }}" title=""></span>
+                    <span class="device-name-context"
+                          data-device-id="{{ device.device_id }}"
+                          data-device-name="{{ device.device_name }}"
+                          data-display-name="{{ device.device_label }}"
+                          data-device-type="{{ device.device_type or '' }}"
+                          data-rules-enabled="{{ 'true' if device.rules_enabled|default(true) else 'false' }}"
+                          title="{{ device.device_name }}">{{ device.device_label }}</span><span class="rules-disabled-superscript hidden" id="rules-disabled-{{ device.device_id }}" title=""></span>
                     <span id="device-{{ device.device_id }}-notes"></span>
                   </td>
                   <td class="cell-disable-for" id="disable-for-{{ device.device_id }}">
@@ -260,7 +272,13 @@
             {% if not device.has_speed_control and device.temp10x %}
                 <tr class="device-row" x-data-device-id="{{ device.device_id }}">
                   <td class="cell-unit">
-                    <span title="{{ device.device_name }}">{{ device.device_label }}</span><span class="rules-disabled-superscript hidden" id="rules-disabled-{{ device.device_id }}" title=""></span>
+                    <span class="device-name-context"
+                          data-device-id="{{ device.device_id }}"
+                          data-device-name="{{ device.device_name }}"
+                          data-display-name="{{ device.device_label }}"
+                          data-device-type="{{ device.device_type or '' }}"
+                          data-rules-enabled="{{ 'true' if device.rules_enabled|default(true) else 'false' }}"
+                          title="{{ device.device_name }}">{{ device.device_label }}</span><span class="rules-disabled-superscript hidden" id="rules-disabled-{{ device.device_id }}" title=""></span>
                     <span id="device-{{ device.device_id }}-notes"></span>
                   </td>
                   <td class="cell-humidity{% if device.has_humidity %} cell-metric-link{% endif %}" id="humidity-{{ device.device_id }}"
@@ -293,6 +311,32 @@
     </div> <!-- main-grid -->
   </div>
 </div>
+
+<form id="device-rename-popup" class="device-rename-popup hidden" role="dialog" aria-modal="true" aria-label="Rename device">
+  <div class="device-rename-row">
+    <label for="device-rename-device-name">device name</label>
+    <input id="device-rename-device-name" type="text" readonly>
+    <button type="button" class="pure-button" data-action="reset-device-name">reset</button>
+  </div>
+  <div class="device-rename-row">
+    <label for="device-rename-display-name">display name</label>
+    <input id="device-rename-display-name" type="text" autocomplete="off">
+    <button type="button" class="pure-button pure-button-primary" data-action="rename-device" disabled>rename</button>
+  </div>
+  <div class="device-rename-row">
+    <label for="device-rename-device-type">device type</label>
+    <input id="device-rename-device-type" type="text" readonly>
+    <span aria-hidden="true"></span>
+  </div>
+  <div class="device-rename-row">
+    <label for="device-rename-rules-enabled">rules enabled</label>
+    <input id="device-rename-rules-enabled" type="checkbox" disabled>
+    <span aria-hidden="true"></span>
+  </div>
+  <div class="device-rename-actions">
+    <button type="button" class="pure-button" data-action="cancel-device-rename">cancel</button>
+  </div>
+</form>
 
 <div id="fcu-temp-sources-popup" class="fcu-temp-sources-popup hidden" role="dialog" aria-modal="true" aria-labelledby="fcu-temp-sources-title">
   <div class="fcu-temp-sources-dialog">

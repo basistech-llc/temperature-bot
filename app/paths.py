@@ -10,6 +10,7 @@ import os
 TIMEOUT_SECONDS = 2
 APP_DIR = dirname(abspath(__file__))
 ROOT_DIR = dirname(APP_DIR)
+BIN_DIR = Path(ROOT_DIR) / "bin"
 ETC_DIR = join(dirname(APP_DIR),"etc")
 SCHEMA_FILE_PATH = join(dirname(dirname(__file__)), 'etc', 'schema.sql')
 CONFIG_YAML_PATH = Path(os.getenv('TEMPERATURE_BOT_CONFIG',join(ROOT_DIR, 'temperature-bot-config.yaml')))
