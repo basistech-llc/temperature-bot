@@ -39,6 +39,8 @@
                           data-device-id="{{ device.device_id }}"
                           data-device-name="{{ device.device_name }}"
                           data-display-name="{{ device.device_label }}"
+                          data-device-type="{{ device.device_type or '' }}"
+                          data-rules-enabled="{{ 'true' if device.rules_enabled|default(true) else 'false' }}"
                           title="{{ device.device_name }}">{{ device.device_label }}</span><span class="rules-disabled-superscript hidden" id="rules-disabled-{{ device.device_id }}" title=""></span>
                     <span id="device-{{ device.device_id }}-notes"></span>
                   </td>
@@ -124,6 +126,8 @@
                           data-device-id="{{ device.device_id }}"
                           data-device-name="{{ device.device_name }}"
                           data-display-name="{{ device.device_label }}"
+                          data-device-type="{{ device.device_type or '' }}"
+                          data-rules-enabled="{{ 'true' if device.rules_enabled|default(true) else 'false' }}"
                           title="{{ device.device_name }}">{{ device.device_label }}</span><span class="rules-disabled-superscript hidden" id="rules-disabled-{{ device.device_id }}" title=""></span>
                     <span id="device-{{ device.device_id }}-notes"></span>
                   </td>
@@ -272,6 +276,8 @@
                           data-device-id="{{ device.device_id }}"
                           data-device-name="{{ device.device_name }}"
                           data-display-name="{{ device.device_label }}"
+                          data-device-type="{{ device.device_type or '' }}"
+                          data-rules-enabled="{{ 'true' if device.rules_enabled|default(true) else 'false' }}"
                           title="{{ device.device_name }}">{{ device.device_label }}</span><span class="rules-disabled-superscript hidden" id="rules-disabled-{{ device.device_id }}" title=""></span>
                     <span id="device-{{ device.device_id }}-notes"></span>
                   </td>
@@ -316,6 +322,16 @@
     <label for="device-rename-display-name">display name</label>
     <input id="device-rename-display-name" type="text" autocomplete="off">
     <button type="button" class="pure-button pure-button-primary" data-action="rename-device" disabled>rename</button>
+  </div>
+  <div class="device-rename-row">
+    <label for="device-rename-device-type">device type</label>
+    <input id="device-rename-device-type" type="text" readonly>
+    <span aria-hidden="true"></span>
+  </div>
+  <div class="device-rename-row">
+    <label for="device-rename-rules-enabled">rules enabled</label>
+    <input id="device-rename-rules-enabled" type="checkbox" disabled>
+    <span aria-hidden="true"></span>
   </div>
   <div class="device-rename-actions">
     <button type="button" class="pure-button" data-action="cancel-device-rename">cancel</button>

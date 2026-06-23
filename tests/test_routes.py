@@ -133,6 +133,7 @@ def test_index_device_names_expose_rename_popup_contract(
             "device_name": "Area 51",
             "display_name": "Server Room",
             "device_type": "FCU",
+            "rules_enabled": False,
             "has_speed_control": True,
             "temp10x": 220,
             "calculated_temp10x": 235,
@@ -148,7 +149,11 @@ def test_index_device_names_expose_rename_popup_contract(
     assert 'data-device-id="12"' in html
     assert 'data-device-name="Area 51"' in html
     assert 'data-display-name="Server Room"' in html
+    assert 'data-device-type="FCU"' in html
+    assert 'data-rules-enabled="false"' in html
     assert 'id="device-rename-popup"' in html
+    assert 'id="device-rename-device-type"' in html
+    assert 'id="device-rename-rules-enabled"' in html
     assert 'data-action="reset-device-name"' in html
     assert 'data-action="rename-device"' in html
     assert 'data-action="cancel-device-rename"' in html

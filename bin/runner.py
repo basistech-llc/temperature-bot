@@ -366,7 +366,7 @@ def main():
             print(res)
     else:
         # Run everything
-        clock.lock_script()
+        clock.lock_script(abspath(__file__))
         update_from_ae200(conn)
         update_from_hubitat(conn)
         update_from_airthings(conn)

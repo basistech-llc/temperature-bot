@@ -585,6 +585,17 @@ function normalizedDeviceDisplayName(value) {
   return String(value || "").trim();
 }
 
+function normalizedDeviceType(value) {
+  return String(value || "").trim();
+}
+
+function deviceRulesEnabledValue(value) {
+  if (value === true || value === 1) {
+    return true;
+  }
+  return ["1", "true", "yes", "on"].includes(String(value).trim().toLowerCase());
+}
+
 function deviceDisplayNameChanged(currentDisplayName, nextDisplayName) {
   const normalizedNext = normalizedDeviceDisplayName(nextDisplayName);
   return (
@@ -619,8 +630,18 @@ function setDeviceRenameControlsDisabled(popup, disabled) {
   });
   if (!disabled) {
     const deviceNameInput = document.getElementById("device-rename-device-name");
+    const deviceTypeInput = document.getElementById("device-rename-device-type");
+    const rulesEnabledInput = document.getElementById(
+      "device-rename-rules-enabled",
+    );
     if (deviceNameInput) {
       deviceNameInput.readOnly = true;
+    }
+    if (deviceTypeInput) {
+      deviceTypeInput.readOnly = true;
+    }
+    if (rulesEnabledInput) {
+      rulesEnabledInput.disabled = true;
     }
     setDeviceRenameButtonState(popup);
   }
@@ -635,7 +656,26 @@ function closeDeviceRenamePopup() {
   popup.removeAttribute("style");
   delete popup.dataset.deviceId;
   delete popup.dataset.deviceName;
+  delete popup.dataset.deviceType;
+  delete popup.dataset.rulesEnabled;
   delete popup.dataset.currentDisplayName;
+}
+
+function setDeviceReadonlyMetadata(popup, deviceType, rulesEnabled) {
+  const deviceTypeInput = document.getElementById("device-rename-device-type");
+  const rulesEnabledInput = document.getElementById("device-rename-rules-enabled");
+  const normalizedType = normalizedDeviceType(deviceType);
+  const normalizedRulesEnabled = deviceRulesEnabledValue(rulesEnabled);
+
+  popup.dataset.deviceType = normalizedType;
+  popup.dataset.rulesEnabled = String(normalizedRulesEnabled);
+  if (deviceTypeInput) {
+    deviceTypeInput.value = normalizedType;
+  }
+  if (rulesEnabledInput) {
+    rulesEnabledInput.checked = normalizedRulesEnabled;
+    rulesEnabledInput.disabled = true;
+  }
 }
 
 function positionDeviceRenamePopup(popup, clientX, clientY) {
@@ -669,12 +709,16 @@ function openDeviceRenamePopup(target, event) {
   const deviceName =
     target.dataset.deviceName || target.getAttribute("title") || target.textContent;
   const displayName = target.dataset.displayName || target.textContent;
+  const deviceType = target.dataset.deviceType || "";
+  const rulesEnabled =
+    target.dataset.rulesEnabled === undefined ? true : target.dataset.rulesEnabled;
 
   popup.dataset.deviceId = String(deviceId);
   popup.dataset.deviceName = deviceName;
   popup.dataset.currentDisplayName = displayName;
   deviceNameInput.value = deviceName;
   displayNameInput.value = displayName;
+  setDeviceReadonlyMetadata(popup, deviceType, rulesEnabled);
 
   popup.classList.remove("hidden");
   setDeviceRenameControlsDisabled(popup, false);
@@ -708,7 +752,13 @@ async function patchDeviceDisplayName(deviceId, displayName) {
   return data;
 }
 
-function applyDeviceDisplayName(deviceId, deviceName, displayName) {
+function applyDeviceDisplayName(
+  deviceId,
+  deviceName,
+  displayName,
+  deviceType = undefined,
+  rulesEnabled = undefined,
+) {
   const label = normalizedDeviceDisplayName(displayName) || deviceName;
   document
     .querySelectorAll(`.device-name-context[data-device-id="${deviceId}"]`)
@@ -716,6 +766,14 @@ function applyDeviceDisplayName(deviceId, deviceName, displayName) {
       element.textContent = label;
       element.dataset.deviceName = deviceName;
       element.dataset.displayName = label;
+      if (deviceType !== undefined) {
+        element.dataset.deviceType = normalizedDeviceType(deviceType);
+      }
+      if (rulesEnabled !== undefined) {
+        element.dataset.rulesEnabled = String(
+          deviceRulesEnabledValue(rulesEnabled),
+        );
+      }
       element.setAttribute("title", deviceName);
     });
 }
@@ -736,7 +794,13 @@ async function submitDeviceDisplayName(displayName) {
   try {
     const data = await patchDeviceDisplayName(deviceId, displayName);
     const savedDisplayName = data.display_name || displayName || deviceName;
-    applyDeviceDisplayName(deviceId, deviceName, savedDisplayName);
+    applyDeviceDisplayName(
+      deviceId,
+      deviceName,
+      savedDisplayName,
+      data.device_type ?? popup.dataset.deviceType,
+      data.rules_enabled ?? popup.dataset.rulesEnabled,
+    );
     forceRefresh = true;
     closeDeviceRenamePopup();
   } catch (error) {
@@ -1931,7 +1995,19 @@ function updateDeviceDisplayName(dev) {
   const existingDeviceName = labels[0].dataset.deviceName || "";
   const deviceName = dev.device_name || existingDeviceName;
   const displayName = dev.display_name || deviceName;
-  applyDeviceDisplayName(dev.device_id, deviceName, displayName);
+  const deviceType =
+    dev.device_type === undefined ? labels[0].dataset.deviceType : dev.device_type;
+  const rulesEnabled =
+    dev.rules_enabled === undefined
+      ? labels[0].dataset.rulesEnabled
+      : dev.rules_enabled;
+  applyDeviceDisplayName(
+    dev.device_id,
+    deviceName,
+    displayName,
+    deviceType,
+    rulesEnabled,
+  );
 }
 
 // Pending optimistic writes for the "Disable for" column, keyed by device_id.
@@ -2095,6 +2171,7 @@ if (typeof module !== "undefined" && module.exports) {
     collectFcuTempSourceChanges,
     deviceDisplayNameChanged,
     deviceDisplayNamePatchBody,
+    deviceRulesEnabledValue,
     ensureModeSelectOption,
     fanRadioIdForDevice,
     fcuTempSourcesTitle,

@@ -17,6 +17,7 @@ from conftest import db_path
 
 from app.constants import TEST_DB_NAME
 from app.models import Device, RuleResult
+from bin import runner
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +49,42 @@ def test_runner_help(bin_dir):
     assert "--csv" in result.stdout
     assert "--report" in result.stdout
     assert "--aqi" in result.stdout
+
+
+def test_runner_module_help_has_no_runpy_warning():
+    """The Makefile runs runner as `python -m bin.runner`."""
+    result = subprocess.run(
+        [sys.executable, "-m", "bin.runner", "--help"],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode == 0, f"python -m bin.runner --help failed: {result.stderr}"
+    assert "BasisTech LLC Runner" in result.stdout
+    assert "RuntimeWarning" not in result.stderr
+
+
+def test_runner_default_lock_uses_runner_file(monkeypatch, temp_db):
+    """Default runner execution must not lock '-m' under `python -m bin.runner`."""
+    captured = {}
+
+    def capture_lock(lockfile=None):
+        captured["lockfile"] = lockfile
+        return 1
+
+    monkeypatch.setenv(TEST_DB_NAME, temp_db)
+    monkeypatch.setattr(sys, "argv", ["-m"])
+    monkeypatch.setattr(runner.clock, "lock_script", capture_lock)
+    monkeypatch.setattr(runner, "update_from_ae200", lambda conn: None)
+    monkeypatch.setattr(runner, "update_from_hubitat", lambda conn: None)
+    monkeypatch.setattr(runner, "update_from_airthings", lambda conn: None)
+    monkeypatch.setattr(runner.db, "get_rules_master_enabled", lambda conn: False)
+
+    runner.main()
+
+    assert captured["lockfile"] == str(Path(runner.__file__).resolve())
 
 
 def test_runner_database_access(bin_dir, temp_db):

@@ -700,6 +700,13 @@ table.rules-table th  {
     padding: 0.28rem 0.35rem;
 }
 
+.device-rename-row input[type="checkbox"] {
+    justify-self: start;
+    width: auto;
+    min-width: 0;
+    padding: 0;
+}
+
 .device-rename-row .pure-button,
 .device-rename-actions .pure-button {
     padding: 0.3rem 0.65rem;

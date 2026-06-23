@@ -9,6 +9,7 @@ const {
   collectFcuTempSourceChanges,
   deviceDisplayNameChanged,
   deviceDisplayNamePatchBody,
+  deviceRulesEnabledValue,
   ensureModeSelectOption,
   fanRadioIdForDevice,
   fcuTempSourcesTitle,
@@ -171,6 +172,10 @@ check(
   JSON.stringify(deviceDisplayNamePatchBody(" East Lab ")),
   JSON.stringify({ display_name: "East Lab" }),
 );
+check("rules-enabled true string parses", deviceRulesEnabledValue("true"), true);
+check("rules-enabled false string parses", deviceRulesEnabledValue("false"), false);
+check("rules-enabled one parses", deviceRulesEnabledValue(1), true);
+check("rules-enabled zero parses", deviceRulesEnabledValue(0), false);
 
 const popupWithChangedSource = {
   querySelectorAll: () => [
