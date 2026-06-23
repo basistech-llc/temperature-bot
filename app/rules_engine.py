@@ -102,7 +102,7 @@ def disable_all_rules(conn, seconds: int):
 
 def get_rules():
     """Returns the rules as a text"""
-    return RULES_PATH.read_text()
+    return RULES_PATH.read_text(encoding="utf-8")
 
 def prune_rules(conn):
     """If the rule's disabling has expired, enable it."""
