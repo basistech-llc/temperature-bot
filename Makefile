@@ -157,14 +157,14 @@ validate-migrations:
 # Run web backend locally, with simulated data. (needs populated db too)
 local-dev: $(REQ)
 	@echo Running with simulator
-	export AE200_SIMULATOR=1 && $(MAKE) _local-dev-web
+	export AE200_SIMULATOR=1 HUBITAT_SIMULATOR=1 AIRTHINGS_SIMULATOR=1 && $(MAKE) _local-dev-web
 
 # Run web backend locally against live AE-200 hardware.
 local-live-dev: $(REQ)
 	@echo updating database
-	make every-minute
+	AE200_SIMULATOR= HUBITAT_SIMULATOR= AIRTHINGS_SIMULATOR= $(MAKE) every-minute
 	@echo Running without simulator
-	AE200_SIMULATOR= $(MAKE) _local-dev-web
+	AE200_SIMULATOR= HUBITAT_SIMULATOR= AIRTHINGS_SIMULATOR= $(MAKE) _local-dev-web
 
 # Shared web backend runner for local-dev and local-live-dev.
 _local-dev-web: $(REQ)

@@ -127,18 +127,26 @@ body {
 
 .settemp-thermostat .settemp-display,
 .disable-thermostat .disable-display {
-    min-width: 3.5em;
     text-align: center;
     font-weight: 600;
     color: #1a202c;
 }
 
+.settemp-thermostat .settemp-display {
+    min-width: 3em;
+}
+
+.disable-thermostat .disable-display {
+    min-width: 0;
+    text-align: center;
+}
+
 /* Thermostat adjust: wide tap targets, minimal look — doesn’t add row height */
 .settemp-thermostat .settemp-btn,
 .disable-thermostat .disable-btn {
-    /* Wide enough for touch (44px min); no min-height so row stays compact */
-    min-width: 44px;
-    padding: 0.2rem 0.35rem;
+    width: auto;
+    min-width: 0;
+    padding: 0.15rem 4px;
     font-size: 1.1rem;
     font-weight: 600;
     line-height: 1;
@@ -232,7 +240,7 @@ button {
 
 .column-temp-set,
 .cell-temp-set {
-    min-width: 160px;
+    min-width: 96px;
 }
 
 .column-temp-range,
@@ -292,8 +300,8 @@ button {
 
 .cell-disable-for {
     text-align: center;
-    padding-left: 0.5em;
-    padding-right: 0.5em;
+    padding-left: 4px;
+    padding-right: 4px;
 }
 
 .data-table tbody td.cell-mode {
@@ -325,18 +333,30 @@ button {
     text-align: center;
 }
 
+.data-table tbody td.cell-disable-for {
+    text-align: center;
+}
+
+.data-table tbody td.cell-disable-for.rules-disabled-active {
+    text-align: left;
+}
+
+.data-table tbody td.cell-temp-set {
+    text-align: left;
+}
+
 .setrange-widget {
     width: 190px;
     display: flex;
     flex-direction: column;
-    gap: 0.2rem;
-    padding: 0.15rem 0;
+    gap: 0.05rem;
+    padding: 0;
 }
 
 .setrange-track {
     position: relative;
     width: 100%;
-    height: 20px;
+    height: 16px;
     touch-action: none;
     cursor: pointer;
 }
@@ -346,16 +366,16 @@ button {
     position: absolute;
     left: 0;
     right: 0;
-    top: 7px;
-    height: 6px;
+    top: 6px;
+    height: 4px;
     border-radius: 999px;
     background: #d7dde3;
 }
 
 .setrange-fill {
     position: absolute;
-    top: 7px;
-    height: 6px;
+    top: 6px;
+    height: 4px;
     border-radius: 999px;
     background: #2f855a;
     cursor: grab;
@@ -369,8 +389,8 @@ button {
 .setrange-handle {
     position: absolute;
     top: 50%;
-    width: 16px;
-    height: 16px;
+    width: 14px;
+    height: 14px;
     padding: 0;
     border: 2px solid #1f2937;
     border-radius: 50%;
@@ -391,9 +411,9 @@ button {
     justify-content: space-between;
     align-items: center;
     gap: 0.2rem;
-    font-size: 0.85rem;
+    font-size: 0.78rem;
     font-weight: 600;
-    line-height: 1;
+    line-height: 0.95;
     color: #1a202c;
 }
 
@@ -406,14 +426,14 @@ button {
     width: 190px;
     display: flex;
     flex-direction: column;
-    gap: 0.2rem;
-    padding: 0.15rem 0;
+    gap: 0.05rem;
+    padding: 0;
 }
 
 .autosettemp-track {
     position: relative;
     width: 100%;
-    height: 20px;
+    height: 16px;
 }
 
 .autosettemp-track::before {
@@ -421,16 +441,16 @@ button {
     position: absolute;
     left: 0;
     right: 0;
-    top: 7px;
-    height: 6px;
+    top: 6px;
+    height: 4px;
     border-radius: 999px;
     background: #d7dde3;
 }
 
 .autosettemp-fill {
     position: absolute;
-    top: 7px;
-    height: 6px;
+    top: 6px;
+    height: 4px;
     border-radius: 999px;
     background: #805ad5;
 }
@@ -438,8 +458,8 @@ button {
 .autosettemp-handle {
     position: absolute;
     top: 50%;
-    width: 16px;
-    height: 16px;
+    width: 14px;
+    height: 14px;
     border: 2px solid #1f2937;
     border-radius: 50%;
     background: #fff;
@@ -450,9 +470,9 @@ button {
     display: flex;
     justify-content: space-between;
     gap: 0.2rem;
-    font-size: 0.78rem;
+    font-size: 0.74rem;
     font-weight: 600;
-    line-height: 1.05;
+    line-height: 0.95;
     color: #1a202c;
 }
 
@@ -901,6 +921,54 @@ td.cell-speed-auto {
 .cell-unit {
     white-space: nowrap;
     vertical-align: top;
+}
+
+.data-table th {
+    padding-top: 6px;
+    padding-bottom: 6px;
+}
+
+.data-table tr.device-row td {
+    padding-top: 4px;
+    padding-bottom: 4px;
+}
+
+.data-table thead th.column-disable-for,
+.data-table thead th.column-temp-set,
+.data-table tbody td.cell-disable-for,
+.data-table tbody td.cell-temp-set {
+    padding-left: 4px !important;
+    padding-right: 4px !important;
+}
+
+table.data-table tbody tr.device-row td.cell-temp-set {
+    padding-left: 4px !important;
+    padding-right: 4px !important;
+    text-align: left !important;
+}
+
+.data-table .settemp-thermostat .settemp-btn,
+.data-table .disable-thermostat .disable-btn {
+    width: auto;
+    min-width: 0;
+    padding-left: 4px;
+    padding-right: 4px;
+}
+
+.data-table .editable-notes {
+    padding-top: 2px;
+    padding-bottom: 2px;
+    min-height: 1.2em;
+}
+
+.table-update-summary {
+    color: #666;
+    font-size: 0.85em;
+    font-style: italic;
+    border-top: 1px solid #d6d6d6;
+    padding-top: 4px;
+    padding-bottom: 4px;
+    text-align: left;
 }
 
 /* optional: make tables respect the column width instead of expanding it */

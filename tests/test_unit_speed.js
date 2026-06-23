@@ -8,9 +8,14 @@
 const {
   collectFcuTempSourceChanges,
   autoSetTempRangeForDevice,
+  compactAgeFromSeconds,
+  dashboardAirQualityDeviceIsActive,
   deviceDisplayNameChanged,
   deviceDisplayNamePatchBody,
   deviceRulesEnabledValue,
+  deviceUpdateText,
+  deviceUpdateTooltipText,
+  deviceUpdateTimestampSeconds,
   ensureModeSelectOption,
   fanRadioIdForDevice,
   FCU_MODE_OPTIONS,
@@ -20,11 +25,14 @@ const {
   modeValueForDevice,
   moveSetRange,
   normalizeSetRange,
+  oldestUpdateTimestampForTable,
   parseFcuTempSourceMultiplier,
+  renderDisableCell,
   resizeSetRangeEndpoint,
   saveFcuTempSourceMultipliers,
   setAutoSetTempUnavailable,
   sortedFcuTempSources,
+  tableUpdateSummaryText,
 } = require("../app/static/unit_speed.js");
 
 let passed = 0;
@@ -54,6 +62,17 @@ function checkRange(label, actual, expectedLow, expectedHigh) {
   }
 }
 
+function checkContains(label, actual, expectedFragment) {
+  if (String(actual).includes(expectedFragment)) {
+    passed++;
+  } else {
+    failed++;
+    console.error(
+      `FAIL ${label}: got "${actual}", expected to include "${expectedFragment}"`,
+    );
+  }
+}
+
 // -- The bug: off unit holding Auto must show Off, not Auto --
 check(
   "off + held Auto (-1) -> Off",
@@ -70,6 +89,181 @@ check(
   fanRadioIdForDevice({ device_id: 7, drive: "Off", fan_speed: -1 }),
   "radio-7-0",
 );
+
+// -- Table update timestamps --
+check(
+  "device update timestamp uses logtime plus duration",
+  deviceUpdateTimestampSeconds({ logtime: 1000, duration: 60 }),
+  1060,
+);
+check(
+  "device update timestamp defaults missing duration",
+  deviceUpdateTimestampSeconds({ logtime: "1000" }),
+  1001,
+);
+check(
+  "oldest FCU update ignores other tables",
+  oldestUpdateTimestampForTable(
+    [
+      { device_type: "ERV", logtime: 900, duration: 1 },
+      { device_type: "FCU", logtime: 1000, duration: 60 },
+      { device_type: "FCU", logtime: 1100, duration: 20 },
+    ],
+    "fcu",
+  ),
+  1060,
+);
+check(
+  "fresh air quality device is included",
+  dashboardAirQualityDeviceIsActive(
+    { has_speed_control: false, temp10x: 220, logtime: 1000, duration: 60 },
+    new Date(1300 * 1000),
+  ),
+  true,
+);
+check(
+  "expired air quality device is hidden",
+  dashboardAirQualityDeviceIsActive(
+    { has_speed_control: false, temp10x: 220, logtime: 1000, duration: 60 },
+    new Date((1060 + 31 * 24 * 60 * 60) * 1000),
+  ),
+  false,
+);
+check(
+  "oldest air quality update ignores expired devices",
+  oldestUpdateTimestampForTable(
+    [
+      {
+        device_name: "Expired Air",
+        has_speed_control: false,
+        temp10x: 220,
+        logtime: 2000 - 31 * 24 * 60 * 60,
+        duration: 1,
+      },
+      {
+        device_name: "Current Air",
+        has_speed_control: false,
+        temp10x: 230,
+        logtime: 2000,
+        duration: 20,
+      },
+    ],
+    "air-quality",
+    new Date(2200 * 1000),
+  ),
+  2020,
+);
+check(
+  "compact age minutes",
+  compactAgeFromSeconds(240),
+  "4m",
+);
+checkContains(
+  "table update summary includes compact age",
+  tableUpdateSummaryText(1060, new Date(1300 * 1000)),
+  " - 4m ago)",
+);
+checkContains(
+  "table update summary includes source device",
+  tableUpdateSummaryText(1060, new Date(1300 * 1000), "Older FCU"),
+  " from Older FCU)",
+);
+checkContains(
+  "device update text includes compact age",
+  deviceUpdateText(
+    { device_name: "Area 51", logtime: 1000, duration: 60 },
+    new Date(1300 * 1000),
+  ),
+  " - 4m ago",
+);
+checkContains(
+  "device update tooltip includes device name",
+  deviceUpdateTooltipText(
+    { device_name: "Area 51", logtime: 1000, duration: 60 },
+    "",
+    new Date(1300 * 1000),
+  ),
+  "Area 51",
+);
+checkContains(
+  "device update tooltip includes update age",
+  deviceUpdateTooltipText(
+    { device_name: "Area 51", logtime: 1000, duration: 60 },
+    "",
+    new Date(1300 * 1000),
+  ),
+  " - 4m ago",
+);
+check(
+  "device update tooltip falls back to device name without timestamp",
+  deviceUpdateTooltipText({}, "Fallback Device"),
+  "Fallback Device",
+);
+
+// -- Rules disabled cell alignment state --
+{
+  const originalDocument = global.document;
+  const cellClasses = new Set(["rules-disabled-active"]);
+  const downButtonClasses = new Set();
+  const upButtonClasses = new Set();
+  const display = {
+    attributes: {},
+    textContent: "",
+    removeAttribute: (name) => {
+      delete display.attributes[name];
+    },
+    setAttribute: (name, value) => {
+      display.attributes[name] = value;
+    },
+  };
+  const classListFromSet = (set) => ({
+    add: (name) => set.add(name),
+    remove: (name) => set.delete(name),
+    contains: (name) => set.has(name),
+  });
+  const cell = {
+    classList: classListFromSet(cellClasses),
+    querySelectorAll: () => [
+      { classList: classListFromSet(downButtonClasses) },
+      { classList: classListFromSet(upButtonClasses) },
+    ],
+  };
+  global.document = {
+    getElementById: (id) => {
+      if (id === "disable-display-44") return display;
+      if (id === "disable-for-44") return cell;
+      return null;
+    },
+  };
+  try {
+    renderDisableCell(44, 0);
+    check("enabled rules show centered dash", display.textContent, "—");
+    check(
+      "enabled rules remove active alignment class",
+      cell.classList.contains("rules-disabled-active"),
+      false,
+    );
+    check(
+      "enabled rules hide decrement button",
+      downButtonClasses.has("hidden"),
+      true,
+    );
+
+    renderDisableCell(44, Math.floor(Date.now() / 1000) + 90);
+    check(
+      "disabled rules add active alignment class",
+      cell.classList.contains("rules-disabled-active"),
+      true,
+    );
+    check(
+      "disabled rules show decrement button",
+      downButtonClasses.has("hidden"),
+      false,
+    );
+  } finally {
+    global.document = originalDocument;
+  }
+}
 
 // -- On states still resolve correctly --
 check(

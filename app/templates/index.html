@@ -17,7 +17,7 @@
           <thead>
             <tr>
               <th class="column-unit" rowspan="2">Unit</th>
-              <th class="column-disable-for" rowspan="2" title="Remaining time rules are disabled for this device (H:MM)">Disabled<br>for</th>
+              <th class="column-disable-for" rowspan="2" title="Remaining time rules are disabled for this device (H:MM)">Rules<br>disabled<br>for</th>
               <th class="column-temp" rowspan="2">Temp<br><small id="erv-temp-unit-label">°C</small></th>
               <th class="column-speed" colspan="5">Fan Speed</th>
               <th class="column-notes" rowspan="2">Notes</th>
@@ -41,7 +41,8 @@
                           data-display-name="{{ device.device_label }}"
                           data-device-type="{{ device.device_type or '' }}"
                           data-rules-enabled="{{ 'true' if device.rules_enabled|default(true) else 'false' }}"
-                          title="{{ device.device_name }}">{{ device.device_label }}</span><span class="rules-disabled-superscript hidden" id="rules-disabled-{{ device.device_id }}" title=""></span>
+                          data-device-update="{{ device.device_update_text|default('', true) }}"
+                          title="{{ device.device_update_tooltip|default(device.device_name, true) }}">{{ device.device_label }}</span><span class="rules-disabled-superscript hidden" id="rules-disabled-{{ device.device_id }}" title=""></span>
                     <span id="device-{{ device.device_id }}-notes"></span>
                   </td>
                   <td class="cell-disable-for" id="disable-for-{{ device.device_id }}">
@@ -93,6 +94,11 @@
             {% endif %}
             {% endfor %}
           </tbody>
+          <tfoot>
+            <tr>
+              <td colspan="9" class="table-update-summary" id="oldest-update-erv">{{ table_update_summaries.erv.label if table_update_summaries.erv else '' }}</td>
+            </tr>
+          </tfoot>
         </table>
 
         <h2>Heating and Cooling - Fan Control Units (FCUs)</h2>
@@ -100,10 +106,10 @@
           <thead>
             <tr>
               <th class="column-unit" rowspan="2">Unit</th>
-              <th class="column-disable-for" rowspan="2" title="Remaining time rules are disabled for this device (H:MM)">Disabled<br>for</th>
+              <th class="column-disable-for" rowspan="2" title="Remaining time rules are disabled for this device (H:MM)">Rules<br>disabled<br>for</th>
               <th class="column-temp" rowspan="2">FCU Temp<br><small id="fcu-temp-unit-label">°C</small></th>
               <th class="column-temp" rowspan="2">Room Temp<br><small id="fcu-room-temp-unit-label">°C</small></th>
-              <th class="column-temp column-temp-set" rowspan="2">FCU Set Temp<br><small id="fcu-settemp-unit-label">°C</small></th>
+              <th class="column-temp column-temp-set" rowspan="2">FCU Set<br>Temp<br><small id="fcu-settemp-unit-label">°C</small></th>
               <th class="column-temp column-temp-range" rowspan="2">Set Range<br><small id="fcu-setrange-unit-label">°C</small></th>
               <th class="column-mode" rowspan="2">Mode</th>
               <th class="column-speed" colspan="5">Fan Speed</th>
@@ -128,7 +134,8 @@
                           data-display-name="{{ device.device_label }}"
                           data-device-type="{{ device.device_type or '' }}"
                           data-rules-enabled="{{ 'true' if device.rules_enabled|default(true) else 'false' }}"
-                          title="{{ device.device_name }}">{{ device.device_label }}</span><span class="rules-disabled-superscript hidden" id="rules-disabled-{{ device.device_id }}" title=""></span>
+                          data-device-update="{{ device.device_update_text|default('', true) }}"
+                          title="{{ device.device_update_tooltip|default(device.device_name, true) }}">{{ device.device_label }}</span><span class="rules-disabled-superscript hidden" id="rules-disabled-{{ device.device_id }}" title=""></span>
                     <span id="device-{{ device.device_id }}-notes"></span>
                   </td>
                   <td class="cell-disable-for" id="disable-for-{{ device.device_id }}">
@@ -275,6 +282,11 @@
             {% endif %}
             {% endfor %}
           </tbody>
+          <tfoot>
+            <tr>
+              <td colspan="13" class="table-update-summary" id="oldest-update-fcu">{{ table_update_summaries.fcu.label if table_update_summaries.fcu else '' }}</td>
+            </tr>
+          </tfoot>
         </table>
 
         <!-- Section 3: Air Quality — devices without speed control that have temp -->
@@ -296,7 +308,7 @@
           </thead>
           <tbody>
             {% for device in devices %}
-            {% if not device.has_speed_control and device.temp10x %}
+            {% if device.dashboard_air_quality_active %}
                 <tr class="device-row" x-data-device-id="{{ device.device_id }}">
                   <td class="cell-unit">
                     <span class="device-name-context"
@@ -305,7 +317,8 @@
                           data-display-name="{{ device.device_label }}"
                           data-device-type="{{ device.device_type or '' }}"
                           data-rules-enabled="{{ 'true' if device.rules_enabled|default(true) else 'false' }}"
-                          title="{{ device.device_name }}">{{ device.device_label }}</span><span class="rules-disabled-superscript hidden" id="rules-disabled-{{ device.device_id }}" title=""></span>
+                          data-device-update="{{ device.device_update_text|default('', true) }}"
+                          title="{{ device.device_update_tooltip|default(device.device_name, true) }}">{{ device.device_label }}</span><span class="rules-disabled-superscript hidden" id="rules-disabled-{{ device.device_id }}" title=""></span>
                     <span id="device-{{ device.device_id }}-notes"></span>
                   </td>
                   <td class="cell-humidity{% if device.has_humidity %} cell-metric-link{% endif %}" id="humidity-{{ device.device_id }}"
@@ -333,6 +346,11 @@
             {% endif %}
             {% endfor %}
           </tbody>
+          <tfoot>
+            <tr>
+              <td colspan="10" class="table-update-summary" id="oldest-update-air-quality">{{ table_update_summaries.air_quality.label if table_update_summaries.air_quality else '' }}</td>
+            </tr>
+          </tfoot>
         </table>
       </form>
     </div> <!-- main-grid -->
@@ -358,6 +376,11 @@
   <div class="device-rename-row">
     <label for="device-rename-rules-enabled">rules enabled</label>
     <input id="device-rename-rules-enabled" type="checkbox" disabled>
+    <span aria-hidden="true"></span>
+  </div>
+  <div class="device-rename-row">
+    <label for="device-rename-last-update">last update</label>
+    <input id="device-rename-last-update" type="text" readonly>
     <span aria-hidden="true"></span>
   </div>
   <div class="device-rename-actions">

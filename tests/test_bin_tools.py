@@ -9,6 +9,7 @@ import subprocess
 import sqlite3
 import datetime
 import importlib.util
+import json
 from pathlib import Path
 
 import pytest
@@ -82,6 +83,65 @@ def test_runner_default_lock_uses_runner_file(monkeypatch, temp_db):
     runner.main()
 
     assert captured["lockfile"] == str(Path(runner.__file__).resolve())
+
+
+def test_makefile_local_targets_control_sensor_simulators():
+    """Local dev targets must make simulator/live intent explicit for all sensors."""
+    makefile = (Path(__file__).resolve().parents[1] / "Makefile").read_text(
+        encoding="utf-8"
+    )
+
+    assert (
+        "export AE200_SIMULATOR=1 HUBITAT_SIMULATOR=1 AIRTHINGS_SIMULATOR=1"
+        in makefile
+    )
+    assert (
+        "AE200_SIMULATOR= HUBITAT_SIMULATOR= AIRTHINGS_SIMULATOR= $(MAKE) every-minute"
+        in makefile
+    )
+    assert (
+        "AE200_SIMULATOR= HUBITAT_SIMULATOR= AIRTHINGS_SIMULATOR= $(MAKE) _local-dev-web"
+        in makefile
+    )
+
+
+def test_update_from_airthings_persists_sensor_status(monkeypatch, test_database_conn):
+    """Airthings updater should write both temperature and rich air-quality payloads."""
+    monkeypatch.setattr(
+        runner.airthings,
+        "read_airthings_now",
+        lambda: [
+            {
+                "name": "Lab",
+                "sensors": [
+                    {"sensorType": "temp", "value": 21.4, "unit": "c"},
+                    {"sensorType": "humidity", "value": 45.0, "unit": "pct"},
+                    {"sensorType": "co2", "value": 744.0, "unit": "ppm"},
+                    {"sensorType": "pm25", "value": 3.2, "unit": "ug/m3"},
+                ],
+            }
+        ],
+    )
+
+    runner.update_from_airthings(test_database_conn)
+
+    row = test_database_conn.execute(
+        """
+        SELECT d.device_name, l.temp10x, l.status_json
+        FROM devices d
+        JOIN devlog l ON d.device_id = l.device_id
+        WHERE d.device_name = ?
+        ORDER BY l.logtime DESC
+        LIMIT 1
+        """,
+        ("Airthings Lab",),
+    ).fetchone()
+    assert row is not None
+    assert row["temp10x"] == 214
+    status = json.loads(row["status_json"])
+    assert status["humidity"]["value"] == 45.0
+    assert status["co2"]["value"] == 744.0
+    assert status["pm25"]["value"] == 3.2
 
 
 def test_runner_database_access(bin_dir, temp_db):
