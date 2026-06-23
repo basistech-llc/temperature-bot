@@ -50,7 +50,7 @@ def _seed_ae200_status(device_id, status):
 
 def test_set_mode_endpoint_records_mode_and_disables_rules(flask_test_client):  # noqa: F811
     """Manual FCU mode changes should update simulator status and local logs."""
-    target_mode = "HEAT"
+    target_mode = "AUTO"
     original_mode = ae200.get_device_info(BROADWAY_SOUTH).get(ae200.AE200_MODE_KEY)
     device_id = _link_device_to_unit("Broadway Mode Test")
     ae200.set_mode(BROADWAY_SOUTH, "COOL")
@@ -92,6 +92,8 @@ def test_set_mode_endpoint_records_mode_and_disables_rules(flask_test_client):  
         )
         status = json.loads(verify_cursor.fetchone()["status_json"])
         assert status[ae200.AE200_MODE_KEY] == target_mode
+        assert status[ae200.AE200_COOL_SET_TEMP_KEY] == "24"
+        assert status[ae200.AE200_HEAT_SET_TEMP_KEY] == "19"
         verify_cursor.execute(
             "SELECT COUNT(*) AS n FROM changelog WHERE device_id=?", (device_id,)
         )
@@ -188,7 +190,7 @@ def test_set_mode_endpoint_rejects_invalid_mode(flask_test_client):  # noqa: F81
 
     response = flask_test_client.post(
         "/api/v1/set_mode",
-        json={"device_id": device_id, "mode": "AUTO"},
+        json={"device_id": device_id, "mode": "SETBACK"},
     )
 
     assert response.status_code == 400

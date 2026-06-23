@@ -7,12 +7,15 @@
  */
 const {
   collectFcuTempSourceChanges,
+  autoSetTempRangeForDevice,
   deviceDisplayNameChanged,
   deviceDisplayNamePatchBody,
   deviceRulesEnabledValue,
   ensureModeSelectOption,
   fanRadioIdForDevice,
+  FCU_MODE_OPTIONS,
   fcuTempSourcesTitle,
+  isAutoOperationMode,
   modeLabelForDevice,
   modeValueForDevice,
   moveSetRange,
@@ -20,6 +23,7 @@ const {
   parseFcuTempSourceMultiplier,
   resizeSetRangeEndpoint,
   saveFcuTempSourceMultipliers,
+  setAutoSetTempUnavailable,
   sortedFcuTempSources,
 } = require("../app/static/unit_speed.js");
 
@@ -108,6 +112,23 @@ check(
   "COOL",
 );
 check(
+  "dry mode display label",
+  modeLabelForDevice({ mode: "DRY" }),
+  "Dry",
+);
+check(
+  "dry mode is commandable",
+  FCU_MODE_OPTIONS.includes("DRY"),
+  true,
+);
+check(
+  "auto mode is commandable",
+  FCU_MODE_OPTIONS.includes("AUTO"),
+  true,
+);
+check("auto mode token is auto operation", isAutoOperationMode("AUTO"), true);
+check("lc_auto mode token is auto operation", isAutoOperationMode("LC_AUTO"), true);
+check(
   "unknown mode passes through",
   modeLabelForDevice({ mode: "SOMETHING_NEW" }),
   "SOMETHING_NEW",
@@ -150,6 +171,72 @@ check(
 );
 check("nonnegative multiplier parses", parseFcuTempSourceMultiplier(" 1.5 "), 1.5);
 check("negative multiplier is invalid", parseFcuTempSourceMultiplier("-0.1"), null);
+
+const autoSetTempRange = autoSetTempRangeForDevice({
+  status: { SetTemp1: "24", SetTemp2: "19", AutoMin: "18", AutoMax: "27" },
+});
+check("auto set temp range heat bottom", autoSetTempRange.lowC, 19);
+check("auto set temp range cool top", autoSetTempRange.highC, 24);
+
+const promotedAutoSetTempRange = autoSetTempRangeForDevice({
+  heat_set_temp_c: 20,
+  cool_set_temp_c: 25,
+  auto_min_c: 18,
+  auto_max_c: 27,
+});
+check("promoted auto set temp range heat bottom", promotedAutoSetTempRange.lowC, 20);
+check("promoted auto set temp range cool top", promotedAutoSetTempRange.highC, 25);
+
+function fakeElement(attributes = {}, styles = {}) {
+  return {
+    attributes: { ...attributes },
+    style: { ...styles },
+    textContent: "",
+    removeAttribute(name) {
+      delete this.attributes[name];
+    },
+  };
+}
+
+const autoFill = fakeElement({}, { left: "20%", width: "50%" });
+const autoHeatHandle = fakeElement({}, { left: "20%" });
+const autoCoolHandle = fakeElement({}, { left: "70%" });
+const autoLabels = [
+  fakeElement({ "data-temp-c": "19" }),
+  fakeElement({ "data-temp-c": "24" }),
+];
+autoLabels[0].textContent = "19";
+autoLabels[1].textContent = "24";
+const autoWidget = {
+  attributes: {
+    "data-heat-set-temp-c": "19",
+    "data-cool-set-temp-c": "24",
+    title: "Auto Heat 19°C / Cool 24°C",
+  },
+  removeAttribute(name) {
+    delete this.attributes[name];
+  },
+  querySelector(selector) {
+    return {
+      "[data-role='auto-range']": autoFill,
+      "[data-role='heat']": autoHeatHandle,
+      "[data-role='cool']": autoCoolHandle,
+    }[selector];
+  },
+  querySelectorAll(selector) {
+    return selector === ".autosettemp-end-label" ? autoLabels : [];
+  },
+};
+setAutoSetTempUnavailable(autoWidget);
+check("auto unavailable clears heat data", autoWidget.attributes["data-heat-set-temp-c"], undefined);
+check("auto unavailable clears cool data", autoWidget.attributes["data-cool-set-temp-c"], undefined);
+check("auto unavailable clears title", autoWidget.attributes.title, undefined);
+check("auto unavailable clears fill left", autoFill.style.left, "");
+check("auto unavailable clears fill width", autoFill.style.width, "");
+check("auto unavailable clears heat handle", autoHeatHandle.style.left, "");
+check("auto unavailable clears cool handle", autoCoolHandle.style.left, "");
+check("auto unavailable clears heat label", autoLabels[0].textContent, "--");
+check("auto unavailable clears cool label data", autoLabels[1].attributes["data-temp-c"], undefined);
 
 // -- Device display-name rename behavior --
 check(

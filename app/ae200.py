@@ -42,7 +42,12 @@ DRIVE_NAMES = {value: key for key, value in DRIVES.items()}
 AE200_DRIVE_KEY = "Drive"
 AE200_FAN_SPEED_KEY = "FanSpeed"
 AE200_MODE_KEY = "Mode"
-AE200_ALLOWED_SET_MODES = frozenset({"FAN", "COOL", "HEAT"})
+AE200_SET_TEMP_KEY = "SetTemp"
+AE200_COOL_SET_TEMP_KEY = "SetTemp1"
+AE200_HEAT_SET_TEMP_KEY = "SetTemp2"
+AE200_AUTO_MIN_KEY = "AutoMin"
+AE200_AUTO_MAX_KEY = "AutoMax"
+AE200_ALLOWED_SET_MODES = frozenset({"FAN", "COOL", "DRY", "HEAT", "AUTO"})
 AE200_COMMAND_LOCK_PATH = os.getenv("AE200_COMMAND_LOCK_PATH", "/tmp/temperature-bot-ae200.lock")
 
 # User-facing fan-speed labels, keyed by speed number. These intentionally
@@ -148,6 +153,32 @@ def extract_drive_and_fan_speed(data):
         "fan_speed": FAN_SPEED_NAMES[speed],
         "has_speed_control": True,
     })
+    return ret
+
+
+def _float_or_none(value):
+    if value in (None, ""):
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def extract_set_temperatures(data):
+    """Return promoted AE-200 set-temperature fields for app JSON responses."""
+    ret = {}
+    field_map = {
+        "set_temp_c": AE200_SET_TEMP_KEY,
+        "cool_set_temp_c": AE200_COOL_SET_TEMP_KEY,
+        "heat_set_temp_c": AE200_HEAT_SET_TEMP_KEY,
+        "auto_min_c": AE200_AUTO_MIN_KEY,
+        "auto_max_c": AE200_AUTO_MAX_KEY,
+    }
+    for response_key, status_key in field_map.items():
+        value = _float_or_none(data.get(status_key))
+        if value is not None:
+            ret[response_key] = value
     return ret
 
 

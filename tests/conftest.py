@@ -19,6 +19,7 @@ TEST_DEVICE_NAME = "Broadway Test"
 
 # Set environment variables for all tests
 os.environ["AE200_SIMULATOR"] = "1"
+os.environ["HUBITAT_SIMULATOR"] = "1"
 os.environ["PLAYWRIGHT_BROWSERS_PATH"] = str(
     Path(__file__).resolve().parents[0].parents[0] / ".playwright"
 )
@@ -152,7 +153,11 @@ def test_database_conn_with_test_data(test_database_conn):
                 record_time,
                 60,
                 240,
-                '{"Drive": "ON", "FanSpeed": "LOW", "Mode": "COOL", "InletTemp": "24.0"}',
+                (
+                    '{"AutoMax": "27", "AutoMin": "18", "Drive": "ON", '
+                    '"FanSpeed": "LOW", "Mode": "COOL", "InletTemp": "24.0", '
+                    '"SetTemp": "24", "SetTemp1": "24", "SetTemp2": "19"}'
+                ),
             ),
         )
 

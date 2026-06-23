@@ -321,7 +321,7 @@ class ModeControl(BaseModel):
     """Request body for changing an AE-200 operation mode."""
 
     device_id: int = Field(description="Local device id from the devices table.")
-    mode: Literal["FAN", "COOL", "HEAT"] = Field(
+    mode: Literal["FAN", "COOL", "DRY", "HEAT", "AUTO"] = Field(
         description="Requested AE-200 operation mode."
     )
 
@@ -517,6 +517,26 @@ class DeviceStatus(BaseModel):
     mode: str | None = Field(
         default=None,
         description="AE-200 operation mode promoted from status.Mode, when present.",
+    )
+    set_temp_c: float | None = Field(
+        default=None,
+        description="AE-200 single set temperature in degrees Celsius.",
+    )
+    cool_set_temp_c: float | None = Field(
+        default=None,
+        description="AE-200 dual-setpoint Cool temperature in degrees Celsius.",
+    )
+    heat_set_temp_c: float | None = Field(
+        default=None,
+        description="AE-200 dual-setpoint Heat temperature in degrees Celsius.",
+    )
+    auto_min_c: float | None = Field(
+        default=None,
+        description="Minimum allowed AE-200 Auto set temperature in degrees Celsius.",
+    )
+    auto_max_c: float | None = Field(
+        default=None,
+        description="Maximum allowed AE-200 Auto set temperature in degrees Celsius.",
     )
     set_range_low_c: float | None = Field(
         default=None,

@@ -49,6 +49,16 @@ def test_hubitat_extract_temperatures_numeric_fields():
     assert attrs["illuminance"] == 78
 
 
+def test_hubitat_simulator_returns_checked_in_devices(monkeypatch):
+    """Hubitat simulator mode should not require host/appId config."""
+    monkeypatch.setenv(hubitat.HUBITAT_SIMULATOR_ENV, "1")
+    devices = hubitat.get_all_devices()
+    names = {device["name"] for device in devices}
+    assert "Lobby Sensor on Somerville Broadway" in names
+    assert "Hickory Sensor" in names
+    assert "Dungeon Cage" in names
+
+
 @patch("bin.runner.hubitat.get_all_devices")
 def test_update_from_hubitat_persists_status_json(
     mock_get_all_devices, test_database_conn

@@ -25,9 +25,10 @@ const AE200_MODE_LABELS = {
   FAN: "Fan",
   LC_AUTO: "Auto",
 };
-const FCU_MODE_OPTIONS = ["FAN", "COOL", "HEAT"];
+const FCU_MODE_OPTIONS = ["FAN", "COOL", "DRY", "HEAT", "AUTO"];
 const FCU_MODE_DEVICE_ID_KEY = "device_id";
 const FCU_MODE_MODE_KEY = "mode";
+const AE200_AUTO_MODE_VALUES = ["AUTO", "LC_AUTO"];
 const SET_RANGE_TRACK_MIN_C = 10;
 const SET_RANGE_TRACK_MAX_C = 30;
 const SET_RANGE_STEP_C = 0.5;
@@ -104,6 +105,10 @@ function modeValueForDevice(dev) {
   return String(rawMode).toUpperCase();
 }
 
+function isAutoOperationMode(rawMode) {
+  return AE200_AUTO_MODE_VALUES.includes(String(rawMode || "").toUpperCase());
+}
+
 function ensureModeSelectOption(select, rawMode) {
   if (!select) {
     return;
@@ -132,6 +137,122 @@ function updateModeControlForDevice(dev) {
   select.value = rawMode;
   select.dataset.currentMode = rawMode;
   select.setAttribute("title", rawMode ? `AE-200 Mode: ${rawMode}` : "AE-200 Mode");
+}
+
+function autoSetTempRangeForDevice(dev) {
+  const status = dev.status || {};
+  const heatSetTempC = finiteNumber(dev.heat_set_temp_c, finiteNumber(status.SetTemp2));
+  const coolSetTempC = finiteNumber(dev.cool_set_temp_c, finiteNumber(status.SetTemp1));
+  if (heatSetTempC === null || coolSetTempC === null) {
+    return null;
+  }
+  return normalizeSetRange(heatSetTempC, coolSetTempC, {
+    minRangeC: 0.5,
+    trackMinC: finiteNumber(dev.auto_min_c, finiteNumber(status.AutoMin, SET_RANGE_TRACK_MIN_C)),
+    trackMaxC: finiteNumber(dev.auto_max_c, finiteNumber(status.AutoMax, SET_RANGE_TRACK_MAX_C)),
+  });
+}
+
+function setAutoSetTempUnavailable(widget) {
+  widget.removeAttribute("data-heat-set-temp-c");
+  widget.removeAttribute("data-cool-set-temp-c");
+  widget.removeAttribute("title");
+  const fill = widget.querySelector("[data-role='auto-range']");
+  const heatHandle = widget.querySelector("[data-role='heat']");
+  const coolHandle = widget.querySelector("[data-role='cool']");
+  if (fill) {
+    fill.style.left = "";
+    fill.style.width = "";
+  }
+  if (heatHandle) {
+    heatHandle.style.left = "";
+  }
+  if (coolHandle) {
+    coolHandle.style.left = "";
+  }
+  widget.querySelectorAll(".autosettemp-end-label").forEach((label) => {
+    label.removeAttribute("data-temp-c");
+    label.textContent = "--";
+  });
+}
+
+function renderAutoSetTempWidget(widget, dev) {
+  const range = autoSetTempRangeForDevice(dev);
+  if (!range) {
+    setAutoSetTempUnavailable(widget);
+    return;
+  }
+  const status = dev.status || {};
+  const options = setRangeOptions({
+    minRangeC: 0.5,
+    trackMinC: finiteNumber(dev.auto_min_c, finiteNumber(status.AutoMin, SET_RANGE_TRACK_MIN_C)),
+    trackMaxC: finiteNumber(dev.auto_max_c, finiteNumber(status.AutoMax, SET_RANGE_TRACK_MAX_C)),
+  });
+  const heatPercent = rangeTempToPercent(range.lowC, options);
+  const coolPercent = rangeTempToPercent(range.highC, options);
+  const fill = widget.querySelector("[data-role='auto-range']");
+  const heatHandle = widget.querySelector("[data-role='heat']");
+  const coolHandle = widget.querySelector("[data-role='cool']");
+  const heatLabel = widget.querySelector("[data-role='heat-label']");
+  const coolLabel = widget.querySelector("[data-role='cool-label']");
+
+  widget.dataset.heatSetTempC = String(range.lowC);
+  widget.dataset.coolSetTempC = String(range.highC);
+  fill.style.left = `${heatPercent}%`;
+  fill.style.width = `${coolPercent - heatPercent}%`;
+  heatHandle.style.left = `${heatPercent}%`;
+  coolHandle.style.left = `${coolPercent}%`;
+
+  for (const [label, value] of [
+    [heatLabel, range.lowC],
+    [coolLabel, range.highC],
+  ]) {
+    label.setAttribute("data-temp-c", String(value));
+    label.textContent = TemperatureUtils.formatTemperature(value, false);
+  }
+  widget.setAttribute(
+    "title",
+    `Auto Heat ${TemperatureUtils.formatTemperature(range.lowC)} / Cool ${TemperatureUtils.formatTemperature(range.highC)}`,
+  );
+}
+
+function updateSetTempForDevice(dev) {
+  const setTempCell = document.getElementById(`settemp-${dev.device_id}`);
+  const setTempDisplay = document.getElementById(`settemp-display-${dev.device_id}`);
+  const setTempControls = document.getElementById(`settemp-controls-${dev.device_id}`);
+  const autoWidget = document.getElementById(`autosettemp-widget-${dev.device_id}`);
+  if (!setTempCell || !setTempDisplay || !setTempControls || !autoWidget) {
+    return;
+  }
+
+  const status = dev.status || {};
+  if (isAutoOperationMode(modeValueForDevice(dev))) {
+    setTempControls.classList.add("hidden");
+    autoWidget.classList.remove("hidden");
+    renderAutoSetTempWidget(autoWidget, dev);
+    setTempCell.removeAttribute("data-temp-c");
+    setTempDisplay.removeAttribute("data-temp-c");
+    return;
+  }
+
+  autoWidget.classList.add("hidden");
+  setTempControls.classList.remove("hidden");
+  const rawSetTemp = dev.set_temp_c ?? status.SetTemp;
+
+  if (rawSetTemp !== undefined && rawSetTemp !== "") {
+    const setTempValue = parseFloat(rawSetTemp);
+    if (!Number.isNaN(setTempValue)) {
+      const setTempC = setTempValue;
+      setTempCell.setAttribute("data-temp-c", setTempC.toString());
+      setTempDisplay.setAttribute("data-temp-c", setTempC.toString());
+      updateStalenessAndTooltip(setTempDisplay, dev);
+      setTempDisplay.textContent = TemperatureUtils.formatTemperature(setTempC, false);
+      return;
+    }
+  }
+  setTempCell.removeAttribute("data-temp-c");
+  setTempDisplay.removeAttribute("data-temp-c");
+  setTempDisplay.textContent = "--";
 }
 
 /**
@@ -1854,43 +1975,7 @@ const refreshGridRows = () => {
               }
             }
 
-            // Update set temperature (from AE-200 status) where available
-            const setTempCell = document.getElementById(
-              `settemp-${dev.device_id}`,
-            );
-            const setTempDisplay = document.getElementById(
-              `settemp-display-${dev.device_id}`,
-            );
-
-            if (setTempCell && setTempDisplay) {
-              const status = dev.status || {};
-              const rawSetTemp = status.SetTemp;
-
-              if (rawSetTemp !== undefined && rawSetTemp !== "") {
-                const setTempValue = parseFloat(rawSetTemp);
-                if (!Number.isNaN(setTempValue)) {
-                  // AE-200 SetTemp is reported in Celsius
-                  const setTempC = setTempValue;
-                  // Store Celsius value for UI conversions and adjustments
-                  setTempCell.setAttribute("data-temp-c", setTempC.toString());
-                  setTempDisplay.setAttribute(
-                    "data-temp-c",
-                    setTempC.toString(),
-                  );
-                  updateStalenessAndTooltip(setTempDisplay, dev);
-                  setTempDisplay.textContent =
-                    TemperatureUtils.formatTemperature(setTempC, false);
-                } else {
-                  setTempCell.removeAttribute("data-temp-c");
-                  setTempDisplay.removeAttribute("data-temp-c");
-                  setTempDisplay.textContent = "--";
-                }
-              } else {
-                setTempCell.removeAttribute("data-temp-c");
-                setTempDisplay.removeAttribute("data-temp-c");
-                setTempDisplay.textContent = "--";
-              }
-            }
+            updateSetTempForDevice(dev);
 
             updateSetRangeForDevice(dev);
 
@@ -2169,12 +2254,15 @@ if (typeof window !== "undefined") {
 if (typeof module !== "undefined" && module.exports) {
   module.exports = {
     collectFcuTempSourceChanges,
+    autoSetTempRangeForDevice,
     deviceDisplayNameChanged,
     deviceDisplayNamePatchBody,
     deviceRulesEnabledValue,
     ensureModeSelectOption,
     fanRadioIdForDevice,
+    FCU_MODE_OPTIONS,
     fcuTempSourcesTitle,
+    isAutoOperationMode,
     modeLabelForDevice,
     modeValueForDevice,
     moveSetRange,
@@ -2182,6 +2270,7 @@ if (typeof module !== "undefined" && module.exports) {
     parseFcuTempSourceMultiplier,
     resizeSetRangeEndpoint,
     saveFcuTempSourceMultipliers,
+    setAutoSetTempUnavailable,
     sortedFcuTempSources,
   };
 }

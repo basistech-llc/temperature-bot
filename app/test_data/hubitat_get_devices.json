@@ -776,5 +776,107 @@
         "command": "setParameter"
       }
     ]
+  },
+  {
+    "name": "Hickory Sensor",
+    "label": "Hickory Sensor",
+    "type": "AeotecMultiSensor6",
+    "id": "582",
+    "date": "2025-01-08T20:48:32+0000",
+    "model": null,
+    "manufacturer": null,
+    "room": "Hickory",
+    "capabilities": [
+      "RelativeHumidityMeasurement",
+      "MotionSensor",
+      "Configuration",
+      "PowerSource",
+      "Battery",
+      "TamperAlert",
+      "IlluminanceMeasurement",
+      "UltravioletIndex",
+      "AccelerationSensor",
+      "TemperatureMeasurement",
+      "Sensor"
+    ],
+    "attributes": {
+      "acceleration": "inactive",
+      "dataType": "NUMBER",
+      "values": null,
+      "tamper": "clear",
+      "powerSource": "dc",
+      "battery": "100",
+      "temperature": "23.4",
+      "firmware": null,
+      "humidity": "24",
+      "motion": "inactive",
+      "ultravioletIndex": null,
+      "illuminance": "12"
+    },
+    "commands": [
+      {
+        "command": "configure"
+      },
+      {
+        "command": "getParameterReport"
+      },
+      {
+        "command": "refresh"
+      },
+      {
+        "command": "setParameter"
+      }
+    ]
+  },
+  {
+    "name": "Dungeon Cage",
+    "label": "Dungeon Cage",
+    "type": "AeotecMultiSensor6",
+    "id": "583",
+    "date": "2025-01-08T20:48:32+0000",
+    "model": null,
+    "manufacturer": null,
+    "room": "Dungeon",
+    "capabilities": [
+      "RelativeHumidityMeasurement",
+      "MotionSensor",
+      "Configuration",
+      "PowerSource",
+      "Battery",
+      "TamperAlert",
+      "IlluminanceMeasurement",
+      "UltravioletIndex",
+      "AccelerationSensor",
+      "TemperatureMeasurement",
+      "Sensor"
+    ],
+    "attributes": {
+      "acceleration": "inactive",
+      "dataType": "NUMBER",
+      "values": null,
+      "tamper": "clear",
+      "powerSource": "dc",
+      "battery": "100",
+      "temperature": "24.6",
+      "firmware": null,
+      "humidity": "18",
+      "motion": "inactive",
+      "ultravioletIndex": null,
+      "illuminance": "7"
+    },
+    "commands": [
+      {
+        "command": "configure"
+      },
+      {
+        "command": "getParameterReport"
+      },
+      {
+        "command": "refresh"
+      },
+      {
+        "command": "setParameter"
+      }
+    ]
   }
 ]

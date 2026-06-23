@@ -44,6 +44,10 @@ def test_status_endpoint(flask_test_client):  # noqa: F811
     )
     assert fcu_device["status"]["Mode"] == "COOL"
     assert fcu_device["mode"] == "COOL"
+    assert fcu_device["status"]["SetTemp1"] == "24"
+    assert fcu_device["status"]["SetTemp2"] == "19"
+    assert fcu_device["cool_set_temp_c"] == 24.0
+    assert fcu_device["heat_set_temp_c"] == 19.0
 
 
 def test_metric_endpoint_accepts_known_metrics(flask_test_client):  # noqa: F811

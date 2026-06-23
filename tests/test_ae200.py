@@ -97,6 +97,25 @@ def test_extract_drive_and_fan_speed_keeps_mode_without_speed_control():
     assert extracted == {"mode": "HEAT", "has_speed_control": False}
 
 
+def test_extract_set_temperatures_promotes_auto_dual_setpoints():
+    """AE-200 dual-setpoint Auto values should be convenient at the API boundary."""
+    status = {
+        "SetTemp": "24",
+        "SetTemp1": "25",
+        "SetTemp2": "19",
+        "AutoMin": "18",
+        "AutoMax": "27",
+    }
+    extracted = ae200.extract_set_temperatures(status)
+    assert extracted == {
+        "set_temp_c": 24.0,
+        "cool_set_temp_c": 25.0,
+        "heat_set_temp_c": 19.0,
+        "auto_min_c": 18.0,
+        "auto_max_c": 27.0,
+    }
+
+
 async def _async_value(value):
     return value
 
@@ -151,10 +170,10 @@ def test_set_mode_updates_simulator_and_rejects_unknown():
     device_id = 10
     original_mode = ae200.get_device_info(device_id).get(ae200.AE200_MODE_KEY)
     try:
-        ae200.set_mode(device_id, "HEAT")
-        assert ae200.get_device_info(device_id)[ae200.AE200_MODE_KEY] == "HEAT"
+        ae200.set_mode(device_id, "DRY")
+        assert ae200.get_device_info(device_id)[ae200.AE200_MODE_KEY] == "DRY"
         with pytest.raises(ValueError):
-            ae200.set_mode(device_id, "AUTO")
+            ae200.set_mode(device_id, "SETBACK")
     finally:
         if original_mode in ae200.AE200_ALLOWED_SET_MODES:
             ae200.set_mode(device_id, original_mode)

@@ -115,7 +115,8 @@ root = "."
 norecursedirs = ["lib/ctools"]
 env = [
     "PYTEST=1",
-    "AE200_SIMULATOR=1"
+    "AE200_SIMULATOR=1",
+    "HUBITAT_SIMULATOR=1"
 ]
 minversion = "6.0"
 addopts = ["-ra", "-q"]
