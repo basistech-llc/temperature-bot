@@ -488,6 +488,10 @@ class DeviceStatus(BaseModel):
         description="Age cutoff for excluding stale calculated-temperature sources.",
     )
     notes: str | None = Field(default=None, description="Operator note from the devices table.")
+    aqi_mon: bool | None = Field(
+        default=None,
+        description="Whether the device is configured as an indoor air-quality monitor.",
+    )
     room_id: int | None = Field(default=None, description="Assigned room id.")
     room_name: str | None = Field(default=None, description="Assigned room name.")
     disabled_until: int | None = Field(
@@ -538,6 +542,7 @@ class DeviceStatus(BaseModel):
         default=None,
         description="Maximum allowed AE-200 Auto set temperature in degrees Celsius.",
     )
+
     set_range_low_c: float | None = Field(
         default=None,
         description="Lower configured FCU set-range end in degrees Celsius.",
@@ -550,6 +555,16 @@ class DeviceStatus(BaseModel):
         default=None,
         description="System-wide minimum FCU set-range width in degrees Celsius.",
     )
+
+
+class TableUpdateSummary(BaseModel):
+    """Oldest timestamp represented by the data currently shown in a table."""
+
+    oldest_update_at: int
+    oldest_update_datetime: str
+    oldest_update_age: str
+    source_device_name: str | None = None
+    label: str
 
 
 def json_ready(model: BaseModel) -> Dict[str, Any]:

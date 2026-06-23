@@ -16,6 +16,7 @@ const DEBUG = false;
 const REFRESH_INTERVAL = 10; // seconds between refreshes
 const RUNNING_MINUTES = 10; // minutes to run before stopping
 const SHOW_REFRESH_COUNTDOWN = false;
+const DASHBOARD_AIR_QUALITY_DEVICE_EXPIRATION_SECONDS = 30 * 24 * 60 * 60;
 let lastRefreshTime = 0;
 const AE200_MODE_LABELS = {
   COOL: "Cool",
@@ -107,6 +108,196 @@ function modeValueForDevice(dev) {
 
 function isAutoOperationMode(rawMode) {
   return AE200_AUTO_MODE_VALUES.includes(String(rawMode || "").toUpperCase());
+}
+
+function deviceUpdateTimestampSeconds(dev) {
+  if (!dev || dev.logtime == null) {
+    return null;
+  }
+  const logtime = Number(dev.logtime);
+  if (!Number.isFinite(logtime)) {
+    return null;
+  }
+  const duration = dev.duration == null ? 1 : Number(dev.duration);
+  return Math.floor(logtime + (Number.isFinite(duration) ? duration : 1));
+}
+
+function dashboardAirQualityDeviceIsActive(dev, nowDate = new Date()) {
+  if (dev?.has_speed_control || dev?.temp10x == null) {
+    return false;
+  }
+  const updatedAt = deviceUpdateTimestampSeconds(dev);
+  if (updatedAt == null) {
+    return false;
+  }
+  return (
+    nowDate.getTime() / 1000 - updatedAt <=
+    DASHBOARD_AIR_QUALITY_DEVICE_EXPIRATION_SECONDS
+  );
+}
+
+function updateDashboardAirQualityRowVisibility(dev, nowDate = new Date()) {
+  if (dev?.has_speed_control || dev?.temp10x == null) {
+    return;
+  }
+  const row = document.querySelector(
+    `.device-row[x-data-device-id="${dev.device_id}"]`,
+  );
+  if (row) {
+    row.classList.toggle("hidden", !dashboardAirQualityDeviceIsActive(dev, nowDate));
+  }
+}
+
+function indexTableIncludesDevice(tableName, dev, nowDate = new Date()) {
+  if (tableName === "erv") {
+    return dev.device_type === "ERV";
+  }
+  if (tableName === "fcu") {
+    return dev.device_type === "FCU";
+  }
+  if (tableName === "air-quality") {
+    return dashboardAirQualityDeviceIsActive(dev, nowDate);
+  }
+  return false;
+}
+
+function displayNameForDevice(dev) {
+  return dev?.display_name || dev?.device_label || dev?.device_name || "";
+}
+
+function oldestUpdateForTable(devices, tableName, nowDate = new Date()) {
+  if (!Array.isArray(devices)) {
+    return null;
+  }
+  let oldest = null;
+  for (const dev of devices) {
+    if (!indexTableIncludesDevice(tableName, dev, nowDate)) {
+      continue;
+    }
+    const updateTime = deviceUpdateTimestampSeconds(dev);
+    if (
+      updateTime != null &&
+      (oldest == null || updateTime < oldest.timestampSeconds)
+    ) {
+      oldest = {
+        timestampSeconds: updateTime,
+        deviceName: displayNameForDevice(dev),
+      };
+    }
+  }
+  return oldest;
+}
+
+function oldestUpdateTimestampForTable(devices, tableName, nowDate = new Date()) {
+  return oldestUpdateForTable(devices, tableName, nowDate)?.timestampSeconds ?? null;
+}
+
+function compactAgeFromSeconds(ageSeconds) {
+  const seconds = Math.max(0, Math.floor(ageSeconds));
+  if (seconds < 60) {
+    return `${seconds}s`;
+  }
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) {
+    return `${minutes}m`;
+  }
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) {
+    return `${hours}h`;
+  }
+  const days = Math.floor(hours / 24);
+  if (days < 30) {
+    return `${days}d`;
+  }
+  const months = Math.floor(days / 30);
+  if (months < 12) {
+    return `${months}mo`;
+  }
+  return `${Math.floor(months / 12)}y`;
+}
+
+function padDatePart(value) {
+  return String(value).padStart(2, "0");
+}
+
+function localDateTimeFromTimestamp(timestampSeconds) {
+  const date = new Date(timestampSeconds * 1000);
+  return [
+    date.getFullYear(),
+    "-",
+    padDatePart(date.getMonth() + 1),
+    "-",
+    padDatePart(date.getDate()),
+    " ",
+    padDatePart(date.getHours()),
+    ":",
+    padDatePart(date.getMinutes()),
+    ":",
+    padDatePart(date.getSeconds()),
+  ].join("");
+}
+
+function tableUpdateSummaryText(
+  timestampSeconds,
+  nowDate = new Date(),
+  sourceDeviceName = "",
+) {
+  if (timestampSeconds == null) {
+    return "";
+  }
+  const ageSeconds = nowDate.getTime() / 1000 - timestampSeconds;
+  const sourceSuffix = sourceDeviceName ? ` from ${sourceDeviceName}` : "";
+  return (
+    `(oldest update at ${localDateTimeFromTimestamp(timestampSeconds)} - ` +
+    `${compactAgeFromSeconds(ageSeconds)} ago${sourceSuffix})`
+  );
+}
+
+function deviceUpdateText(dev, nowDate = new Date()) {
+  const timestampSeconds = deviceUpdateTimestampSeconds(dev);
+  if (timestampSeconds == null) {
+    return "";
+  }
+  const ageText =
+    dev?.age || compactAgeFromSeconds(nowDate.getTime() / 1000 - timestampSeconds);
+  return `${localDateTimeFromTimestamp(timestampSeconds)} - ${ageText} ago`;
+}
+
+function deviceUpdateTooltipText(dev, fallbackDeviceName = "", nowDate = new Date()) {
+  const deviceName = dev?.device_name || fallbackDeviceName || "";
+  const updateText = deviceUpdateText(dev, nowDate);
+  if (!updateText) {
+    return deviceName;
+  }
+  return `${deviceName}\nLast updated at ${updateText}`;
+}
+
+function updateDeviceNameTooltip(dev, nowDate = new Date()) {
+  const labels = document.querySelectorAll(
+    `.device-name-context[data-device-id="${dev.device_id}"]`,
+  );
+  labels.forEach((element) => {
+    element.dataset.deviceUpdate = deviceUpdateText(dev, nowDate);
+    element.setAttribute(
+      "title",
+      deviceUpdateTooltipText(dev, element.dataset.deviceName || "", nowDate),
+    );
+  });
+}
+
+function updateTableUpdateSummaries(devices, nowDate = new Date()) {
+  for (const tableName of ["erv", "fcu", "air-quality"]) {
+    const element = document.getElementById(`oldest-update-${tableName}`);
+    if (!element) {
+      continue;
+    }
+    const summary = oldestUpdateForTable(devices, tableName, nowDate);
+    element.textContent = tableUpdateSummaryText(
+      summary?.timestampSeconds,
+      nowDate,
+      summary?.deviceName,
+    );
+  }
 }
 
 function ensureModeSelectOption(select, rawMode) {
@@ -755,6 +946,7 @@ function setDeviceRenameControlsDisabled(popup, disabled) {
     const rulesEnabledInput = document.getElementById(
       "device-rename-rules-enabled",
     );
+    const lastUpdateInput = document.getElementById("device-rename-last-update");
     if (deviceNameInput) {
       deviceNameInput.readOnly = true;
     }
@@ -763,6 +955,9 @@ function setDeviceRenameControlsDisabled(popup, disabled) {
     }
     if (rulesEnabledInput) {
       rulesEnabledInput.disabled = true;
+    }
+    if (lastUpdateInput) {
+      lastUpdateInput.readOnly = true;
     }
     setDeviceRenameButtonState(popup);
   }
@@ -779,6 +974,7 @@ function closeDeviceRenamePopup() {
   delete popup.dataset.deviceName;
   delete popup.dataset.deviceType;
   delete popup.dataset.rulesEnabled;
+  delete popup.dataset.deviceUpdate;
   delete popup.dataset.currentDisplayName;
 }
 
@@ -819,6 +1015,7 @@ function openDeviceRenamePopup(target, event) {
   const popup = document.getElementById("device-rename-popup");
   const deviceNameInput = document.getElementById("device-rename-device-name");
   const displayNameInput = document.getElementById("device-rename-display-name");
+  const lastUpdateInput = document.getElementById("device-rename-last-update");
   if (!popup || !deviceNameInput || !displayNameInput) {
     return;
   }
@@ -831,14 +1028,19 @@ function openDeviceRenamePopup(target, event) {
     target.dataset.deviceName || target.getAttribute("title") || target.textContent;
   const displayName = target.dataset.displayName || target.textContent;
   const deviceType = target.dataset.deviceType || "";
+  const deviceUpdate = target.dataset.deviceUpdate || "";
   const rulesEnabled =
     target.dataset.rulesEnabled === undefined ? true : target.dataset.rulesEnabled;
 
   popup.dataset.deviceId = String(deviceId);
   popup.dataset.deviceName = deviceName;
+  popup.dataset.deviceUpdate = deviceUpdate;
   popup.dataset.currentDisplayName = displayName;
   deviceNameInput.value = deviceName;
   displayNameInput.value = displayName;
+  if (lastUpdateInput) {
+    lastUpdateInput.value = deviceUpdate || "--";
+  }
   setDeviceReadonlyMetadata(popup, deviceType, rulesEnabled);
 
   popup.classList.remove("hidden");
@@ -895,7 +1097,12 @@ function applyDeviceDisplayName(
           deviceRulesEnabledValue(rulesEnabled),
         );
       }
-      element.setAttribute("title", deviceName);
+      element.setAttribute(
+        "title",
+        element.dataset.deviceUpdate
+          ? `${deviceName}\nLast updated at ${element.dataset.deviceUpdate}`
+          : deviceName,
+      );
     });
 }
 
@@ -1828,8 +2035,10 @@ const refreshGridRows = () => {
         }
 
         // Update the tables with the new data
+        const refreshDate = new Date();
         if (data.devices)
           for (const dev of data.devices) {
+            updateDashboardAirQualityRowVisibility(dev, refreshDate);
             updateTemperatureCell(
               document.getElementById(`temp-${dev.device_id}`),
               dev.temp10x,
@@ -1995,9 +2204,11 @@ const refreshGridRows = () => {
             }
             updateDeviceNotes(dev);
             updateDeviceDisplayName(dev);
+            updateDeviceNameTooltip(dev);
             updateRulesDisabledBadge(dev);
             updateDisableForCell(dev);
           }
+        updateTableUpdateSummaries(data.devices || [], refreshDate);
 
         // Update last refresh time
         const lr = document.getElementById("last-refresh");
@@ -2199,6 +2410,7 @@ function renderDisableCell(deviceId, until) {
   const now = Math.floor(Date.now() / 1000);
   const secondsRemaining = (until || 0) - now;
   if (secondsRemaining <= 0) {
+    cell?.classList.remove("rules-disabled-active");
     display.textContent = "—";
     display.removeAttribute("data-disabled-until");
     buttons.forEach((b) => b.classList.add("hidden"));
@@ -2209,6 +2421,7 @@ function renderDisableCell(deviceId, until) {
   const minutes = totalMinutes % 60;
   display.textContent = `${hours}:${String(minutes).padStart(2, "0")}`;
   display.setAttribute("data-disabled-until", String(until));
+  cell?.classList.add("rules-disabled-active");
   buttons.forEach((b) => b.classList.remove("hidden"));
 }
 
@@ -2255,9 +2468,14 @@ if (typeof module !== "undefined" && module.exports) {
   module.exports = {
     collectFcuTempSourceChanges,
     autoSetTempRangeForDevice,
+    compactAgeFromSeconds,
+    dashboardAirQualityDeviceIsActive,
     deviceDisplayNameChanged,
     deviceDisplayNamePatchBody,
     deviceRulesEnabledValue,
+    deviceUpdateText,
+    deviceUpdateTooltipText,
+    deviceUpdateTimestampSeconds,
     ensureModeSelectOption,
     fanRadioIdForDevice,
     FCU_MODE_OPTIONS,
@@ -2267,10 +2485,13 @@ if (typeof module !== "undefined" && module.exports) {
     modeValueForDevice,
     moveSetRange,
     normalizeSetRange,
+    oldestUpdateTimestampForTable,
     parseFcuTempSourceMultiplier,
+    renderDisableCell,
     resizeSetRangeEndpoint,
     saveFcuTempSourceMultipliers,
     setAutoSetTempUnavailable,
     sortedFcuTempSources,
+    tableUpdateSummaryText,
   };
 }

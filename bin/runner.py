@@ -77,9 +77,13 @@ def update_from_hubitat(conn):
     try:
         devices = hubitat.get_all_devices()
         temps = hubitat.extract_temperatures(devices)
-    except requests.exceptions.ConnectTimeout as e:
-        logger.error("update_from_hubitat: timeout %s", e)
+    except requests.exceptions.RequestException as e:
+        logger.error("update_from_hubitat: request failed: %s", e)
         return
+    except RuntimeError as e:
+        logger.error("update_from_hubitat: %s", e)
+        return
+    updated_names = []
     for item in temps:
         statusdict = item.get("status") or {}
         db.insert_devlog_entry(
@@ -88,10 +92,17 @@ def update_from_hubitat(conn):
             temp=item["temperature"],
             statusdict=statusdict,
         )
+        updated_names.append(item["name"])
+    logger.info(
+        "update_from_hubitat: updated %d temperature devices: %s",
+        len(updated_names),
+        ", ".join(updated_names),
+    )
 
 def update_from_airthings(conn):
     logtime = time.time()
     data = airthings.read_airthings_now()
+    updated_names = []
     for dev in data:
         sensors = {sensor['sensorType']:{'value':sensor['value'],'unit':sensor['unit']} for sensor in dev['sensors']}
         name = "Airthings "+dev['name']
@@ -100,6 +111,13 @@ def update_from_airthings(conn):
             print("name=",name,"temp=",temp,'status',sensors)
             continue
         db.insert_devlog_entry(conn, device_name=name, temp=temp, statusdict=sensors, logtime=logtime)
+        updated_names.append(name)
+    if conn is not None:
+        logger.info(
+            "update_from_airthings: updated %d devices: %s",
+            len(updated_names),
+            ", ".join(updated_names),
+        )
 
 
 def update_aqi(conn):
