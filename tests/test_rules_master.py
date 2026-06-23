@@ -3,6 +3,7 @@ Tests for the master rules kill switch behaviour.
 """
 
 import datetime
+import logging
 import time
 from unittest.mock import patch
 
@@ -72,6 +73,75 @@ def test_run_all_rules_respects_global_time_suspension(test_database_conn):
             == rules_engine.RULES_TIME_SUSPENDED_MESSAGE
         )
         mock_get_rules.assert_not_called()
+
+
+def test_run_all_rules_dry_run_does_not_mutate_database(
+    test_database_conn, monkeypatch
+):
+    """commit=False should not create pseudo-devices or clear expired timers."""
+    conn = test_database_conn
+    device_id = _add_rule_test_erv(conn)
+    expired_until = int(time.time()) - 60
+    conn.execute(
+        "UPDATE devices SET disabled_until=? WHERE device_id=?",
+        (expired_until, device_id),
+    )
+    conn.commit()
+
+    changelog_count = conn.execute("SELECT COUNT(*) FROM changelog").fetchone()[0]
+    pseudo_count = conn.execute(
+        """
+        SELECT COUNT(*) FROM devices
+        WHERE device_name IN ('rules_master', 'rules_engine')
+        """
+    ).fetchone()[0]
+    assert pseudo_count == 0
+
+    monkeypatch.setattr(
+        rules_engine,
+        "get_rules",
+        lambda: "def run_rules_for_device(device, now, aqi):\n    return None\n",
+    )
+
+    rules_engine.run_all_rules(conn, commit=False)
+
+    disabled_until = conn.execute(
+        "SELECT disabled_until FROM devices WHERE device_id=?",
+        (device_id,),
+    ).fetchone()["disabled_until"]
+    assert disabled_until == expired_until
+    final_changelog_count = conn.execute(
+        "SELECT COUNT(*) FROM changelog"
+    ).fetchone()[0]
+    assert final_changelog_count == changelog_count
+    assert (
+        conn.execute(
+            """
+            SELECT COUNT(*) FROM devices
+            WHERE device_name IN ('rules_master', 'rules_engine')
+            """
+        ).fetchone()[0]
+        == 0
+    )
+
+
+def test_run_all_rules_compile_failure_logs_traceback(
+    test_database_conn, monkeypatch, caplog
+):
+    """Broken rules.py compilation should preserve traceback details in logs."""
+    conn = test_database_conn
+    monkeypatch.setattr(
+        rules_engine,
+        "get_rules",
+        lambda: "def run_rules_for_device(:\n    return None\n",
+    )
+
+    with caplog.at_level(logging.ERROR, logger="app.rules_engine"):
+        result = rules_engine.run_all_rules(conn, commit=False)
+
+    assert result == "Cannot compile rules"
+    assert "Failed to compile rules from" in caplog.text
+    assert any(record.exc_info for record in caplog.records)
 
 
 def test_rules_results_runs_device_rule_contract(test_database_conn, monkeypatch):

@@ -52,6 +52,45 @@ def test_device_metadata_api_updates_fields(flask_test_client):  # noqa: F811
     assert row["notes"] == "metadata test"
 
 
+def test_device_metadata_empty_patch_preserves_fields(flask_test_client):  # noqa: F811
+    """PATCH with no editable fields should not clear existing metadata."""
+    device_id = _first_device_id()
+    test_db_path = os.environ["TEST_DB_NAME"]
+    with sqlite3.connect(test_db_path) as conn:
+        conn.execute(
+            """
+            UPDATE devices
+            SET display_name=?, device_type=?, rules_enabled=?, notes=?
+            WHERE device_id=?
+            """,
+            ("Existing Name", "ERV", 0, "keep this note", device_id),
+        )
+        conn.commit()
+
+    response = flask_test_client.patch(f"/api/v1/devices/{device_id}", json={})
+
+    assert response.status_code == 200
+    assert response.json["display_name"] == "Existing Name"
+    assert response.json["device_type"] == "ERV"
+    assert response.json["rules_enabled"] is False
+    assert response.json["notes"] == "keep this note"
+
+    with sqlite3.connect(test_db_path) as conn:
+        conn.row_factory = sqlite3.Row
+        row = conn.execute(
+            """
+            SELECT display_name, device_type, rules_enabled, notes
+            FROM devices
+            WHERE device_id=?
+            """,
+            (device_id,),
+        ).fetchone()
+    assert row["display_name"] == "Existing Name"
+    assert row["device_type"] == "ERV"
+    assert row["rules_enabled"] == 0
+    assert row["notes"] == "keep this note"
+
+
 def test_devices_route(flask_test_client):  # noqa: F811
     """Device editor page should render."""
     response = flask_test_client.get("/devices")

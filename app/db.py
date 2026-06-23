@@ -484,12 +484,20 @@ def get_or_create_device_id(conn, device_name, use_cache=True):
             return DEVICE_MAP[device_name]
         else:
             logger.error("Could not retrieve ID for device name: %s", device_name)
-            raise ValueError("Could not retrieve ID for device name: %s" % device_name)  # pylint: disable=consider-using-f-string
+            raise ValueError(f"Could not retrieve ID for device name: {device_name}")
 
     except sqlite3.Error as e:
         logger.error("Database error in get_or_create_device_id: %s", e)
         conn.rollback()  # Rollback any partial transaction
         raise  # Re-raise the exception
+
+
+def get_device_id(conn, device_name: str) -> int | None:
+    """Return the device_id for a device name without creating a row."""
+    cursor = conn.cursor()
+    cursor.execute("SELECT device_id FROM devices WHERE device_name=?;", (device_name,))
+    row = cursor.fetchone()
+    return row["device_id"] if row else None
 
 
 def fetch_all_devices(conn):
@@ -561,7 +569,11 @@ def update_device_metadata(
     fields: set[str] | None = None,
 ) -> dict[str, Any]:
     """Update editable device metadata and return the updated row."""
-    update_fields = fields or {"display_name", "device_type", "rules_enabled", "notes"}
+    update_fields = (
+        fields
+        if fields is not None
+        else {"display_name", "device_type", "rules_enabled", "notes"}
+    )
     assignments = []
     args: list[Any] = []
     if "display_name" in update_fields:
@@ -982,7 +994,9 @@ def get_rules_master_enabled(conn) -> bool:
     the underlying storage, so we can distinguish it from time-limited rules
     disablement on the rules_engine device.
     """
-    device_id = get_or_create_device_id(conn, "rules_master")
+    device_id = get_device_id(conn, "rules_master")
+    if device_id is None:
+        return True
     disabled_until = device_rules_disabled_until(conn, device_id)
     # When disabled_until is 0 or in the past, rules are enabled.
     if not disabled_until:

@@ -7,7 +7,6 @@ import sys
 import tempfile
 import subprocess
 import sqlite3
-import logging
 import datetime
 import importlib.util
 from pathlib import Path
@@ -18,8 +17,6 @@ from conftest import db_path
 from app.constants import TEST_DB_NAME
 from app.models import Device, RuleResult
 from bin import runner
-
-logger = logging.getLogger(__name__)
 
 @pytest.fixture
 def temp_db(test_database_conn_with_test_data):
@@ -101,11 +98,8 @@ def test_runner_database_access(bin_dir, temp_db):
         check=False,
     )
 
-    if result.returncode != 0:
-        logger.debug("result.stderr=%s", result.stderr)
-        assert "appId" in result.stderr or "hubitat" in result.stderr.lower()
-    else:
-        assert len(result.stdout) > 0
+    assert result.returncode == 0, f"runner.py --report failed: {result.stderr}"
+    assert len(result.stdout) > 0
 
 
 def test_runner_aqi_update(bin_dir, temp_db):
@@ -219,10 +213,8 @@ def test_runner_with_test_database(bin_dir, temp_db):
         check=False,
     )
 
-    if result.returncode != 0:
-        assert "Test Device" in result.stdout or "appId" in result.stderr
-    else:
-        assert "Test Device" in result.stdout or "No data found" in result.stdout
+    assert result.returncode == 0, f"runner.py --report failed: {result.stderr}"
+    assert "Test Device" in result.stdout or "No data found" in result.stdout
 
 
 def test_runner_daily_cleanup(bin_dir, temp_db):

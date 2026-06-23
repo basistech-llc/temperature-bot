@@ -86,7 +86,10 @@ def get_air_dict(conn):
 
 
 def all_rules_disabled_until(conn) -> int:
-    until = db.device_rules_disabled_until(conn, rules_id(conn))
+    device_id = db.get_device_id(conn, RULES_DEVICE_NAME)
+    if device_id is None:
+        return 0
+    until = db.device_rules_disabled_until(conn, device_id)
     logging.info("all rules disabled until %s", until)
     return until if until else 0
 
@@ -423,6 +426,25 @@ def rules_results(conn, when=None, aqi=50):
     return "\n".join(results)
 
 
+def _clear_expired_device_rule_suspensions(conn):
+    """Clear expired per-device rules timers and write audit entries."""
+    now_ts = int(time.time())
+    for device_row in db.fetch_all_device_dicts(conn):
+        try:
+            disabled_timer_expired = 0 < device_row["disabled_until"] < now_ts
+        except (TypeError, KeyError):
+            disabled_timer_expired = False
+
+        if disabled_timer_expired:
+            db.disable_rules_for_device(
+                conn,
+                device_row["device_id"],
+                0,
+                agent="rules runner",
+                comment="disabled timer expired",
+            )
+
+
 def run_all_rules(conn, when=None, commit=False):
     """Run the rules and return a text description of what changed.
 
@@ -459,8 +481,8 @@ def run_all_rules(conn, when=None, commit=False):
             )
             return "Cannot run rules"
         run_rules_for_device = getattr(virtual_module, "run_rules_for_device")
-    except Exception as e:  # pylint: disable=broad-except
-        logger.error("Execution of run_rules_for_device failed: %s", e)
+    except Exception:  # pylint: disable=broad-except
+        logger.exception("Failed to compile rules from %s", RULES_PATH)
         return "Cannot compile rules"
 
     # Now run the rules for every device
@@ -495,25 +517,8 @@ def run_all_rules(conn, when=None, commit=False):
                 _commit_rule_result(conn, dev, res)
             _append_rule_result(rules_res, dev.device_id, res)
 
-    # finally, if the time has passed for any rule, set to 0
-    now_ts = int(time.time())
-    for device_row in db.fetch_all_device_dicts(conn):
-        try:
-            disabled_timer_expired = 0 < device_row["disabled_until"] < now_ts
-        except (TypeError, KeyError):
-            disabled_timer_expired = False
-
-        # Only clear the timer (and log) when a non-zero disabled_until has
-        # actually expired. This avoids spamming the changelog every time the
-        # rules runner executes for devices that are not currently disabled.
-        if disabled_timer_expired:
-            db.disable_rules_for_device(
-                conn,
-                device_row["device_id"],
-                0,
-                agent="rules runner",
-                comment="disabled timer expired",
-            )
+    if commit:
+        _clear_expired_device_rule_suspensions(conn)
     return "\n".join(rules_res)
 
 
