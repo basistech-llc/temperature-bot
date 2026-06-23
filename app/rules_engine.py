@@ -97,7 +97,7 @@ def disable_all_rules(conn, seconds: int):
     """Enter a database engtry to disable the rules for a period of seconds.
     :param seconds: how long to disable rules for
     """
-    logging.info("disable_all_rules(%s)", seconds)
+    logger.info("disable_all_rules(%s)", seconds)
     db.disable_rules_for_device(conn, rules_id(conn), seconds)
 
 def get_rules():
