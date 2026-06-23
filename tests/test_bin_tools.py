@@ -8,12 +8,15 @@ import tempfile
 import subprocess
 import sqlite3
 import logging
+import datetime
+import importlib.util
 from pathlib import Path
 
 import pytest
 from conftest import db_path
 
 from app.constants import TEST_DB_NAME
+from app.models import Device, RuleResult
 
 logger = logging.getLogger(__name__)
 
@@ -86,18 +89,35 @@ def test_runner_aqi_update(bin_dir, temp_db):
     assert result.returncode == 0, f"runner.py --aqi failed: {result.stderr}"
 
 
-def test_rules_file_exists(bin_dir):
-    """Test that rules.py file exists and is readable."""
+def test_rules_file_defines_device_rule_contract(bin_dir):
+    """rules.py exposes executable per-device rules with normalized outputs."""
     rules_file = bin_dir / "rules.py"
     assert rules_file.exists(), "rules.py file not found"
 
-    with open(rules_file, encoding="utf-8") as f:
-        content = f.read()
+    spec = importlib.util.spec_from_file_location("rules_under_test", rules_file)
+    assert spec is not None
+    assert spec.loader is not None
+    rules_module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(rules_module)
 
-    assert "kitchen_erv_speed" in content
-    assert "restrooms_erv_speed" in content
-    assert "set_drive" in content
-    assert "set_fan_speed" in content
+    kitchen_erv = Device(device_id=1, erv=True, name="ERV Kitchen")
+    fcu = Device(device_id=2, erv=False, name="Broadway South")
+    lunch_time = datetime.datetime(2026, 6, 23, 11, 0)
+    night_time = datetime.datetime(2026, 6, 23, 22, 0)
+
+    assert rules_module.run_rules_for_device(fcu, lunch_time, 0) is None
+    assert rules_module.run_rules_for_device(kitchen_erv, lunch_time, 0) == RuleResult(
+        fan_speed=4, drive=1
+    )
+    assert rules_module.run_rules_for_device(kitchen_erv, lunch_time, 75) == RuleResult(
+        fan_speed=1, drive=1
+    )
+    assert rules_module.run_rules_for_device(kitchen_erv, lunch_time, 125) == RuleResult(
+        drive=0
+    )
+    assert rules_module.run_rules_for_device(kitchen_erv, night_time, 0) == RuleResult(
+        fan_speed=4, drive=1
+    )
 
 
 def test_rules_syntax_valid(bin_dir):

@@ -15,7 +15,9 @@ actually validated before it becomes a mapping.
 """
 
 from typing import Annotated, Any, Dict, Iterable, Literal
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from . import ae200
 
 # weekdays
 MONDAY = 0
@@ -36,8 +38,36 @@ class Device(BaseModel):
 
 class RuleResult(BaseModel):
     """Results passed back to Rules Engine"""
-    fan_speed: Annotated[str, StringConstraints(strip_whitespace=True, to_upper=True)] | None
-    drive: Annotated[str, StringConstraints(strip_whitespace=True, to_upper=True)] | None
+    fan_speed: int | None = Field(default=None, description="AE-200 fan speed code.")
+    drive: int | None = Field(default=None, description="AE-200 drive state code.")
+
+    @field_validator("fan_speed", mode="before")
+    @classmethod
+    def normalize_fan_speed(cls, value):
+        """Allow rules to use AE-200 protocol names such as HIGH or LOW."""
+        return _rule_code(value, ae200.FAN_SPEED_NAMES, "fan_speed")
+
+    @field_validator("drive", mode="before")
+    @classmethod
+    def normalize_drive(cls, value):
+        """Allow rules to use ON/OFF drive names."""
+        return _rule_code(value, ae200.DRIVE_NAMES, "drive")
+
+
+def _rule_code(value, names_to_codes: dict[str, int], field_name: str):
+    if value is None or isinstance(value, int):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().upper()
+        if not normalized:
+            return None
+        if normalized in names_to_codes:
+            return names_to_codes[normalized]
+        try:
+            return int(normalized)
+        except ValueError as exc:
+            raise ValueError(f"unknown {field_name}: {value!r}") from exc
+    return value
 
 ################################################################
 

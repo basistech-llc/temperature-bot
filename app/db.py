@@ -625,7 +625,7 @@ def fetch_last_status(conn, flag=EVERY_DEVICE):
         where = "1=1"
     cursor = conn.cursor()
     cursor.execute(f"""
-        SELECT a.*,b.device_name,b.notes,b.disabled_until,b.room_id,r.room_name
+        SELECT a.*,b.device_name,b.ae200_device_id,b.notes,b.disabled_until,b.room_id,r.room_name
         FROM (SELECT * FROM devlog GROUP BY device_id HAVING logtime=max(logtime)) AS a
         JOIN devices b ON a.device_id = b.device_id
         LEFT JOIN rooms r ON b.room_id = r.room_id
@@ -1123,7 +1123,11 @@ def temporal_quantification(cmd, args):
 def get_last_aqi(conn):
     c = conn.cursor()
     c.execute("select aqi from aqi order by logtime DESC limit 1")
-    aqi = c.fetchone()[0]
+    row = c.fetchone()
+    if row is None:
+        logger.warning("No AQI data available; defaulting to 50")
+        return 50
+    aqi = row[0]
     logger.debug("last_aqi=%s", aqi)
     return aqi
 
@@ -1141,9 +1145,11 @@ def get_aqi_series(conn):
     return {key: [[row["logtime"], row[key]] for row in rows] for key in keys}
 
 
-# Pretty gross - we currently determine if a device is an erv or not by its name and properties
 def is_erv_device(devdict: dict[str, Any]) -> bool:
-    return bool(devdict.get("has_speed_control")) and devdict.get("device_name", "" ).lower().startswith("erv")
+    return bool(devdict.get("has_speed_control")) and devdict.get(
+        "device_name", ""
+    ).lower().startswith("erv")
+
 
 def is_fcu_device(devdict: dict[str, Any]) -> bool:
     return bool(devdict.get("has_speed_control")) and not is_erv_device(devdict)

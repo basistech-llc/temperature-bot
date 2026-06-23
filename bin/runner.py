@@ -323,7 +323,11 @@ def setup_parser():
     parser.add_argument("--report", help="report on the database", action="store_true")
     parser.add_argument("--syslog", help="log to syslog", action="store_true")
     parser.add_argument("--daily", help="Run the daily cleanup", action="store_true")
-    parser.add_argument("--rules", choices=["test", "run"], help="Just run the rules engine. " )
+    parser.add_argument(
+        "--rules",
+        choices=["test", "run", "prune"],
+        help="Just run the rules engine.",
+    )
     parser.add_argument("--aqi", help="Save AQI to database", action="store_true")
     parser.add_argument("--airthings", help="debug the airthings", action="store_true")
     clogging.add_argument(parser)
@@ -355,8 +359,11 @@ def main():
     elif args.daily:
         daily_cleanup(conn, datetime.datetime.now())
     elif args.rules:
-        res = rules_engine.run_rules(conn, commit=(arg.rules=="run")))
-        print(res)
+        if args.rules == "prune":
+            rules_engine.prune_rules(conn)
+        else:
+            res = rules_engine.run_rules(conn, commit=(args.rules == "run"))
+            print(res)
     else:
         # Run everything
         clock.lock_script()
@@ -365,8 +372,6 @@ def main():
         update_from_airthings(conn)
         if not db.get_rules_master_enabled(conn):
             logger.info("Master rules switch is OFF; skipping all rules execution")
-        elif rules_engine.all_rules_disabled_until(conn) >= time.time():
-            logger.info("all rules disabled (time-limited suspension)")
         else:
             run_rules(conn, commit=1)
 
