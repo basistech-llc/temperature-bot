@@ -1,9 +1,20 @@
 # Agent Instructions
 
-This project does **not** use `bd` (beads). Do not run `bd` commands, create
-Beads issues, or rely on `.beads/` state for task tracking. The `.beads/`
-content is legacy and should be ignored. Use the user's current request, Git
-history, and GitHub only when explicitly asked.
+## Task Tracking
+
+This project has two maintainers who use **different** issue trackers. Before
+tracking, creating, or closing any work, determine who is driving and follow
+their workflow:
+
+1. Check `git config user.email`:
+   - `deg@degel.com` → **David** uses Beads — read `doc/agent-workflow-david.md`.
+   - `simsong@acm.org` → **Simson** uses GitHub Issues — read `doc/agent-workflow-simson.md`.
+2. If the email matches neither (CI, shared/unset identity), ask the user which
+   workflow to follow before tracking any work.
+
+`.beads/` is a live workspace for David's workflow; do not delete it. When
+Simson is driving, ignore both `.beads/` state and any auto-injected `bd prime`
+session context.
 
 ## Git Commit Signing
 

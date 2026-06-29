@@ -1,7 +1,8 @@
 # Technical Debt Review
 
 Reviewed against the current `main` checkout and the open GitHub issues on
-2026-06-21. This report ignores legacy `.beads/` state per `AGENTS.md`.
+2026-06-21. This report tracks work as GitHub issues; issue tracking depends on
+the active developer — see `AGENTS.md`.
 
 ## Executive Summary
 
