@@ -612,6 +612,72 @@ async function setDeviceSetTemp(deviceId, setTempC) {
 }
 
 /**
+ * Largest scale factor <= 1 that fits content (contentW x contentH) inside the
+ * available box (availW x availH). Capped at 1 because the scaler only ever
+ * shrinks -- enlarging to fill big screens is the responsive CSS's job, and
+ * uniform enlargement looks awkward. Returns 1 when content hasn't been measured
+ * yet (non-positive dimensions) so we never divide by zero or blow it up.
+ *
+ * Extracted as a pure function so the shrink-only invariant is unit-testable
+ * without a DOM.
+ */
+function computeFitScale(contentW, contentH, availW, availH) {
+    // Bail on any non-positive dimension. Non-positive *available* space happens
+    // when content above the wrapper (header + rules banner) is taller than the
+    // viewport: availH goes negative, which without this guard would yield a
+    // negative scale (flipped content) or scale(0) (invisible). Returning 1
+    // leaves the page unscaled; the ResizeObserver refires and self-heals once
+    // there is room again.
+    if (contentW <= 0 || contentH <= 0 || availW <= 0 || availH <= 0) return 1;
+    return Math.min(1, availH / contentH, availW / contentW);
+}
+
+/**
+ * Scale-to-fit safety: the per-room page must never show scrollbars at any
+ * viewport size. Responsive clamp() sizing in the template keeps things
+ * attractive across the common range; this scaler is the guarantee that catches
+ * the overflow cases (many cards/sensors, very short windows). It only ever
+ * shrinks (scale <= 1) -- growing to fill large screens is the CSS's job.
+ */
+function setupScaleToFit() {
+    const wrap = document.getElementById('room-scale-wrap');
+    const content = document.getElementById('room-scale-content');
+    if (!wrap || !content) return;
+
+    function fit() {
+        // CSS transforms don't affect layout, so scrollHeight/scrollWidth always
+        // report the natural (unscaled) size regardless of the current transform.
+        const contentH = content.scrollHeight;
+        const contentW = content.scrollWidth;
+        if (!contentH || !contentW) return;
+        // Available height: viewport below the wrapper's top edge (which already
+        // accounts for any banners/padding above it), minus a small safety margin
+        // so sub-pixel rounding never trips a scrollbar.
+        const margin = 8;
+        const availH = window.innerHeight - wrap.getBoundingClientRect().top - margin;
+        const availW = wrap.clientWidth;
+        const scale = computeFitScale(contentW, contentH, availW, availH);
+        content.style.transform = scale < 1 ? `scale(${scale})` : 'none';
+        // Reserve only the scaled height so the page itself doesn't overflow.
+        wrap.style.height = (contentH * scale) + 'px';
+    }
+
+    window.addEventListener('resize', fit);
+    window.addEventListener('orientationchange', fit);
+    if (typeof ResizeObserver !== 'undefined') {
+        const ro = new ResizeObserver(fit);
+        // Live data (status text, sensor tiles) resizing the content.
+        ro.observe(content);
+        // A banner above the wrapper toggling (the rules-off banner in base.html
+        // shows/hides post-load) shifts the wrapper down and changes availH, so
+        // it must retrigger fit() too.
+        const banner = document.getElementById('rules-master-banner');
+        if (banner) ro.observe(banner);
+    }
+    fit();
+}
+
+/**
  * Initialize room dashboard functionality.
  */
 function setupRoomDashboard() {
@@ -638,6 +704,7 @@ function setupRoomDashboard() {
 
     initializeSensorTemperatures();
     setupTemperatureToggle();
+    setupScaleToFit();
 
     // Initial status refresh
     refreshStatus();
@@ -648,4 +715,12 @@ function setupRoomDashboard() {
     setInterval(refreshRoomStatus, REFRESH_INTERVAL * 1000);
 }
 
-window.addEventListener('DOMContentLoaded', setupRoomDashboard);
+// Browser-only wiring (skipped under the Node.js test environment).
+if (typeof window !== 'undefined') {
+    window.addEventListener('DOMContentLoaded', setupRoomDashboard);
+}
+
+// Node.js export for testing.
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = { computeFitScale };
+}

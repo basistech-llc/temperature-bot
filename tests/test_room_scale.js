@@ -1,0 +1,57 @@
+/**
+ * Node.js tests for the scale-to-fit math in room_dashboard.js (computeFitScale).
+ * Run with: node tests/test_room_scale.js
+ *
+ * The per-room HVAC page must never show scrollbars at any viewport size
+ * (Carl's request). A JS scaler shrinks the whole dashboard to fit; this covers
+ * the pure factor it uses. The invariant that matters most is shrink-only: the
+ * scaler must never enlarge content (factor capped at 1), or a roomy page on a
+ * big screen would zoom up and look broken. These tests lock that in, plus the
+ * "fit the tighter of the two axes" and degenerate-size guards.
+ */
+const { computeFitScale } = require("../app/static/room_dashboard.js");
+
+let passed = 0;
+let failed = 0;
+
+function approx(label, actual, expected) {
+  if (Math.abs(actual - expected) < 1e-9) {
+    passed++;
+  } else {
+    failed++;
+    console.error(`FAIL ${label}: got ${actual}, expected ${expected}`);
+  }
+}
+
+// Content already fits: never enlarge, factor stays 1. This is the regression
+// guard against re-introducing upscaling, which would balloon sparse rooms.
+approx("fits with room to spare -> 1", computeFitScale(800, 400, 1000, 1000), 1);
+approx("fits exactly -> 1", computeFitScale(1000, 1000, 1000, 1000), 1);
+
+// Content too tall: scale by the height ratio (the binding axis here).
+approx("too tall -> height ratio", computeFitScale(800, 2000, 1000, 1000), 0.5);
+
+// Content too wide: scale by the width ratio (the binding axis here).
+approx("too wide -> width ratio", computeFitScale(2000, 800, 1000, 1000), 0.5);
+
+// Both axes overflow: pick the smaller (tighter) factor so it fits in both.
+approx(
+  "both overflow -> tighter axis",
+  computeFitScale(2000, 4000, 1000, 1000),
+  0.25,
+);
+
+// Degenerate sizes (nothing measured yet) must not divide-by-zero or NaN out;
+// fit() calls this on first paint before layout settles.
+approx("zero height -> 1", computeFitScale(800, 0, 1000, 1000), 1);
+approx("zero width -> 1", computeFitScale(0, 400, 1000, 1000), 1);
+
+// Non-positive *available* space: content above the wrapper taller than the
+// viewport drives availH negative. Without the guard, Math.min would return a
+// negative factor -> scale(-x) flips the content and reintroduces a scrollbar,
+// which is exactly the failure this feature exists to prevent.
+approx("negative avail height -> 1", computeFitScale(800, 400, 1000, -50), 1);
+approx("zero avail width -> 1", computeFitScale(800, 400, 0, 1000), 1);
+
+console.log(`\n${passed} passed, ${failed} failed`);
+process.exit(failed === 0 ? 0 : 1);

@@ -21,6 +21,15 @@ body {
   background: #f5f5f5;
 }
 
+/* Scale-to-fit: room_dashboard.js uniformly shrinks #room-scale-content (never
+   enlarges) so the whole page always fits the viewport with no scrollbars at
+   any tablet/window size. The responsive clamp() sizing below keeps it
+   attractive across the common range; the scaler is the guarantee for the
+   overflow cases. transform-origin keeps it anchored top and centered. */
+#room-scale-content {
+  transform-origin: top center;
+}
+
 .notes-banner {
   background: #ffeb3b;
   padding: 1em;
@@ -120,11 +129,11 @@ body {
 .speed-btn {
   flex: 1 1 0;
   min-width: 0;
-  height: 110px;
+  height: clamp(60px, 12vh, 110px);
   padding: 0;
   border: 3px solid transparent;
   border-radius: 12px;
-  font: bold 1.4em sans-serif;
+  font: bold clamp(1.05em, 2.4vh, 1.4em) sans-serif;
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -314,7 +323,7 @@ body {
 
 .tv-btn {
   flex: 1;
-  height: 54px;
+  height: clamp(44px, 7vh, 54px);
   border: 3px solid transparent;
   border-radius: 10px;
   font: bold 1.2em sans-serif;
@@ -363,7 +372,7 @@ body {
 
 .wall-btn {
   width: 100%;
-  height: 54px;
+  height: clamp(44px, 7vh, 54px);
   border: 3px solid transparent;
   border-radius: 10px;
   font: bold 1.2em sans-serif;
@@ -458,17 +467,15 @@ body {
 
 /* Responsive */
 @media (max-width: 768px) {
-  .speed-btn {
-    height: 90px;
-    font-size: 1.4em;
-  }
+  /* Button heights/fonts come from the clamp() continuum above; this query only
+     tightens spacing and grid density on narrow viewports. */
   .speed-controls { gap: 0.5em; }
   .temp-display { font-size: 1.3em; }
   .device-card, .sensors-card { padding: 0.6em 0.8em; }
   .sensors-grid { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0.5em; }
   .sensor-tile { padding: 0.6em; min-height: 60px; }
   .sensor-temp { font-size: 1.3em; }
-  .tv-btn, .wall-btn { height: 46px; font-size: 1em; }
+  .tv-btn, .wall-btn { font-size: 1em; }
   .room-controls-grid { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
 }
 
@@ -476,6 +483,7 @@ body {
 {% endblock %}
 
 {% block body %}
+<div id="room-scale-wrap"><div id="room-scale-content">
 {% if notes %}
 <div class="notes-banner">{{ notes }}</div>
 {% endif %}
@@ -643,6 +651,7 @@ body {
   </div>
 </div>
 {% endif %}
+</div></div>
 
 <script>
 (function() {
