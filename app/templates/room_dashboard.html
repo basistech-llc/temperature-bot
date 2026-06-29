@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
 {% set hide_nav = True %}
-{% block title %}{{ location }} HVAC Control{% endblock %}
+{% block title %}{{ location }}{% endblock %}
 {% block head %}
 <link rel="stylesheet" href="/static/slider.css">
 <style>
@@ -19,6 +19,15 @@
 body {
   padding: 0.5em;
   background: #f5f5f5;
+}
+
+/* Scale-to-fit: room_dashboard.js uniformly shrinks #room-scale-content (never
+   enlarges) so the whole page always fits the viewport with no scrollbars at
+   any tablet/window size. The responsive clamp() sizing below keeps it
+   attractive across the common range; the scaler is the guarantee for the
+   overflow cases. transform-origin keeps it anchored top and centered. */
+#room-scale-content {
+  transform-origin: top center;
 }
 
 .notes-banner {
@@ -40,24 +49,18 @@ body {
   color: #333;
 }
 
-.dashboard-header h1 {
-  margin: 0;
-  font-size: 1.4em;
-}
-
-.dashboard-header .title-group {
-  flex: 1;
-  text-align: center;
-}
-
 .dashboard-header .main-link-back {
   flex-shrink: 0;
 }
 
+/* The room-name header was removed (Carl: "Hickory" is obvious), so the
+   date/time is now the primary header text: moved to the left and enlarged.
+   margin-right:auto pins it left even in embedded mode, where the "← Main"
+   link is a third flex sibling that would otherwise center it. */
 .live-clock {
-  font: 500 0.9em sans-serif;
-  color: #666;
-  margin-top: 0.2em;
+  font: 600 1.3em sans-serif;
+  color: #444;
+  margin-right: auto;
 }
 
 
@@ -120,11 +123,11 @@ body {
 .speed-btn {
   flex: 1 1 0;
   min-width: 0;
-  height: 110px;
+  height: clamp(60px, 12vh, 110px);
   padding: 0;
   border: 3px solid transparent;
   border-radius: 12px;
-  font: bold 1.4em sans-serif;
+  font: bold clamp(1.05em, 2.4vh, 1.4em) sans-serif;
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -314,7 +317,7 @@ body {
 
 .tv-btn {
   flex: 1;
-  height: 54px;
+  height: clamp(44px, 7vh, 54px);
   border: 3px solid transparent;
   border-radius: 10px;
   font: bold 1.2em sans-serif;
@@ -363,7 +366,7 @@ body {
 
 .wall-btn {
   width: 100%;
-  height: 54px;
+  height: clamp(44px, 7vh, 54px);
   border: 3px solid transparent;
   border-radius: 10px;
   font: bold 1.2em sans-serif;
@@ -458,17 +461,15 @@ body {
 
 /* Responsive */
 @media (max-width: 768px) {
-  .speed-btn {
-    height: 90px;
-    font-size: 1.4em;
-  }
+  /* Button heights/fonts come from the clamp() continuum above; this query only
+     tightens spacing and grid density on narrow viewports. */
   .speed-controls { gap: 0.5em; }
   .temp-display { font-size: 1.3em; }
   .device-card, .sensors-card { padding: 0.6em 0.8em; }
   .sensors-grid { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0.5em; }
   .sensor-tile { padding: 0.6em; min-height: 60px; }
   .sensor-temp { font-size: 1.3em; }
-  .tv-btn, .wall-btn { height: 46px; font-size: 1em; }
+  .tv-btn, .wall-btn { font-size: 1em; }
   .room-controls-grid { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
 }
 
@@ -476,6 +477,7 @@ body {
 {% endblock %}
 
 {% block body %}
+<div id="room-scale-wrap"><div id="room-scale-content">
 {% if notes %}
 <div class="notes-banner">{{ notes }}</div>
 {% endif %}
@@ -484,10 +486,7 @@ body {
   {% if embedded %}
   <a href="/" class="pure-button pure-button-primary main-link-back" id="main-link">← Main</a>
   {% endif %}
-  <div class="title-group">
-    <h1>{{ location }} HVAC Control</h1>
-    <div class="live-clock" id="live-clock"></div>
-  </div>
+  <div class="live-clock" id="live-clock"></div>
   <div class="temperature-toggle">
     <span class="temp-unit-label">°C</span>
     <div class="toggle-switch">
@@ -565,22 +564,10 @@ body {
 </div>
 {% endmacro %}
 
-{% if erv_devices %}
-{% for device in erv_devices %}
-{{ device_control_card(device, 'erv') }}
-{% endfor %}
-{% endif %}
-
-{% if fan_devices %}
-{% for device in fan_devices %}
-{{ device_control_card(device, 'fan') }}
-{% endfor %}
-{% endif %}
-
-<!-- Room Controls (TV, Lights) -->
+<!-- Room Controls (TV, Lights) — moved above the device cards per Carl; caption
+     removed since the TV / Main Lights / Green Wall labels are self-evident. -->
 {% if show_tv_control %}
 <div class="device-card room-controls-card">
-  <h2>Room Controls</h2>
   <div class="room-controls-grid">
     <div class="room-control-tile">
       <div class="room-control-tile-label">TV</div>
@@ -614,10 +601,21 @@ body {
 </div>
 {% endif %}
 
-<!-- Temperature Sensors -->
+{% if erv_devices %}
+{% for device in erv_devices %}
+{{ device_control_card(device, 'erv') }}
+{% endfor %}
+{% endif %}
+
+{% if fan_devices %}
+{% for device in fan_devices %}
+{{ device_control_card(device, 'fan') }}
+{% endfor %}
+{% endif %}
+
+<!-- Temperature Sensors — caption removed per Carl; the tiles are self-explanatory. -->
 {% if hubitat_sensors %}
 <div class="sensors-card">
-  <h2>Temperature Sensors</h2>
   <div class="sensors-grid">
     {% for sensor in hubitat_sensors %}
     <div class="sensor-tile{% if sensor.offline %} sensor-offline{% endif %}">
@@ -643,6 +641,7 @@ body {
   </div>
 </div>
 {% endif %}
+</div></div>
 
 <script>
 (function() {
