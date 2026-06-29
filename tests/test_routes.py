@@ -862,3 +862,46 @@ def test_room_config_no_erv_in_fans():
             assert not fan_name.startswith("ERV"), (
                 f"{room_key} fans list contains ERV device '{fan_name}'"
             )
+
+
+@patch("app.routes_web.db.get_device_status")
+def test_hickory_dashboard_uses_decluttered_layout(mock_get_status, flask_test_client):  # noqa: F811
+    """Guard Carl's June 2026 room-dashboard restructure (hvac-00i).
+
+    Carl found the page jargon-heavy and cluttered. This pins the de-jargoned,
+    reordered layout so it can't silently regress:
+    - the "<Location> HVAC Control" header is gone (no on-screen jargon);
+    - the "Room Controls" and "Temperature Sensors" section captions are gone;
+    - the Room Controls block leads the page, above the first HVAC device card.
+
+    We inject one speed-control device matching Hickory's config so an HVAC card
+    actually renders; otherwise the ordering check would be vacuous (device cards
+    are DB-driven and absent from the bare test fixture).
+    """
+    mock_get_status.return_value = [
+        {
+            "device_id": 117,
+            "device_name": "ERV Restrooms",  # matches room_config hickory.ervs
+            "has_speed_control": True,
+        }
+    ]
+
+    response = flask_test_client.get("/hickory")
+    assert response.status_code == 200
+    html = response.data.decode("utf-8")
+
+    assert "HVAC Control" not in html
+    assert "<h2>Room Controls</h2>" not in html
+    assert "<h2>Temperature Sensors</h2>" not in html
+
+    # Anchor on the HTML usage (class="...") rather than the bare class name,
+    # which also appears earlier in the embedded <style> block. The room-controls
+    # card uses class="device-card room-controls-card"; HVAC cards use the bare
+    # class="device-card", so the two finds resolve to distinct elements.
+    room_controls_pos = html.find('class="device-card room-controls-card"')
+    first_device_card_pos = html.find('class="device-card"')
+    assert room_controls_pos != -1, "Room Controls block missing"
+    assert first_device_card_pos != -1, "expected the injected HVAC device card"
+    assert room_controls_pos < first_device_card_pos, (
+        "Room Controls must render above the first HVAC device card"
+    )
