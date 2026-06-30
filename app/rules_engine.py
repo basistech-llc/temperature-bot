@@ -18,6 +18,8 @@ from pathlib import Path
 from .paths import BIN_DIR
 from . import db
 from . import ae200
+from . import slack
+
 from .models import (
     SpeedControl,
     DriveControl,
@@ -400,6 +402,7 @@ def rules_results(conn, when=None, aqi=50):
         "set_fan_speed": set_fan_speed_verbose,
         "get_temp": temps["get_temp"],
         "get_fcu_temp": temps["get_fcu_temp"],
+        "slack_post":slack.post
     })
 
     exec(get_rules(), rule_namespace, rule_namespace)  # pylint: disable=exec-used
