@@ -83,11 +83,11 @@ Unlike the AE200 simulator, this one is read-only.  (Claude is concerned; I'm no
 Two more issues flagged by Claude. Quoting literally here because they may require discussion with Simson. _Also captured as beads hvac-b0c and hvac-sep_:
 
 ↓↓↓↓↓↓↓↓ BEGIN CLAUDE QUOTE ↓↓↓↓↓↓↓↓
-  
+
   A) Inconsistent simulator env-var parsing — a genuine footgun
 
-  The three simulator flags don't agree on what "on" means:               
-  
+  The three simulator flags don't agree on what "on" means:
+
 ```
   ┌─────────────────────┬─────────────────────────────────────────────────┬─────────────────────┐
   │        Flag         │                     Parsing                     │ =0 or =false means… │
@@ -115,7 +115,7 @@ Two more issues flagged by Claude. Quoting literally here because they may requi
   test checks numeric conversion against it).
   - The simulator fixture is referenced by zero tests.
 
-  So the JSON that make local-dev actually feeds through extract_temperatures() / update_from_hubitat()  is never exercised by the test suite. If its shape drifts from what the parser expects, tests stay 
+  So the JSON that make local-dev actually feeds through extract_temperatures() / update_from_hubitat()  is never exercised by the test suite. If its shape drifts from what the parser expects, tests stay
   green while local-dev silently produces wrong or empty data — the worst kind of gap, because the
   simulator's whole purpose is to be a faithful stand-in. Given the two fixtures already have visibly
   different attributes structures, "are they actually interchangeable?" is an open question the tests
@@ -180,7 +180,7 @@ Excellent.  Claude flagged one issue _(bead hvac_obp)_. Is it right, or are you 
 ```
 
   The HVAC-control request models use Pydantic's default extra="ignore", so a client that sends a
-  misspelled or wrong field name gets a 200 with an unintended action, not a 400. Example: POST 
+  misspelled or wrong field name gets a 200 with an unintended action, not a 400. Example: POST
   /set_temp {"device_id": 12, "set_temp": 21} — the real field is set_temp_c, so set_temp is silently
   dropped and set_temp_c is missing/wrong. For endpoints that command real hardware, silently ignoring
   unknown fields is exactly where you'd want strict extra="forbid" to catch the client bug. Meanwhile
@@ -197,6 +197,12 @@ Excellent.  Claude flagged one issue _(bead hvac_obp)_. Is it right, or are you 
 # Topic #9: Tech-debt review
 
 Claude notes that your (Copilot's?) Code review caught many of the same issues as above. It suggested that we use the same tracking tools. It's right, of course, but I'm very happy with Beads and would guess that you are equally happy with GitHub. At our current scale, I think we can live with this conflict. What do you think?
+
+Resolution, 2026-06-30: GitHub Issues are the canonical tracker for durable
+project work. Beads may remain David's local working queue, but durable Beads
+items should be migrated or cross-linked to GitHub Issues. Open durable Beads
+items were migrated as `hvac-yhq` → #156, `hvac-1mz` → #157, and `hvac-8tp` →
+#158. `hvac-c95` remains local Beads housekeeping.
 
 Just for completeness, here are the overlaps that Claude noticed:
 
@@ -231,7 +237,7 @@ Just for completeness, here are the overlaps that Claude noticed:
   One process concern worth raising: the tech-debt items reference GitHub issues (#42, #56, #127, …),
   but this project mandates beads (bd) for all task tracking ("never use markdown TODOs";
   AGENTS.md/CLAUDE.md). So the project's most important roadmap currently lives in a markdown doc +
-  GitHub issues, outside the mandated tracker. The beads I've been filing this session (rules, backups,  db split, etc.) may overlap or duplicate those GitHub issues. There's a real question of which 
+  GitHub issues, outside the mandated tracker. The beads I've been filing this session (rules, backups,  db split, etc.) may overlap or duplicate those GitHub issues. There's a real question of which
   tracker is authoritative — and if it's beads, this roadmap should be imported so it's not
   split-brained.
 
@@ -306,4 +312,3 @@ Here is Claude's summary of the issues it detected now. We should merge and comp
 ```
 
 ↑↑↑↑↑↑↑↑ END CLAUDE QUOTE ↑↑↑↑↑↑↑↑
-

@@ -1,13 +1,17 @@
-# Agent Workflow — David (Beads)
+# Agent Workflow — David's Local Beads Queue
 
-When **David** (`deg@degel.com`) is driving, this project uses **bd (beads)**
-for ALL issue tracking. Do NOT use TodoWrite, markdown TODO lists, or any other
-tracking method while David is at the keyboard.
+GitHub Issues are the canonical tracker for durable project work in this repo.
+Use `doc/agent-workflow-simson.md` for project issue tracking, including work
+driven by David.
+
+David may still use **bd (Beads)** as a personal/local working queue. Beads
+entries are not authoritative project records. Only use `bd` when the user
+explicitly asks for local Beads housekeeping or asks to inspect/migrate a Beads
+entry.
 
 > If a beads SessionStart hook is configured locally, it injects the live,
-> canonical protocol each session and takes precedence over this file. This
-> document is the repository-resident copy so beads instructions survive even on
-> a machine without that hook.
+> local Beads protocol each session. That protocol does not supersede GitHub
+> Issues as the canonical project tracker.
 
 ## Quick Reference
 
@@ -24,7 +28,7 @@ bd dolt push            # Push beads data to remote
 - Dependency-aware: track blockers and relationships between issues
 - Git-friendly: Dolt-powered version control with native sync
 - Agent-optimized: JSON output, ready-work detection, discovered-from links
-- Prevents duplicate tracking systems and confusion
+- Useful as David's private queue before durable work is promoted to GitHub
 
 ## Quick Start
 
@@ -72,12 +76,16 @@ bd close bd-42 --reason "Completed" --json
 
 ## Workflow for AI Agents
 
+Use this workflow only when the user explicitly asks for local Beads work:
+
 1. **Check ready work**: `bd ready` shows unblocked issues
-2. **Claim your task atomically**: `bd update <id> --claim`
+2. **Claim the local item atomically**: `bd update <id> --claim`
 3. **Work on it**: implement, test, document
-4. **Discover new work?** Create a linked issue:
+4. **Durable follow-up?** Create or update a GitHub issue, then record the
+   GitHub issue number in Beads if the user wants the local queue updated.
+5. **Local-only follow-up?** Create a linked Beads issue:
    - `bd create "Found bug" --description="Details about what was found" -p 1 --deps discovered-from:<parent-id>`
-5. **Complete**: `bd close <id> --reason "Done"`
+6. **Complete local item**: `bd close <id> --reason "Done"`
 
 ## Quality
 
@@ -101,13 +109,14 @@ bd automatically syncs via Dolt:
 
 ## Important Rules
 
-- Use bd for ALL task tracking
+- Use GitHub Issues for durable project tracking.
+- Use bd only for explicit local Beads housekeeping.
 - Always use `--json` flag for programmatic use
-- Link discovered work with `discovered-from` dependencies
-- Check `bd ready` before asking "what should I work on?"
+- Link local-only discovered work with `discovered-from` dependencies.
+- Check `bd ready` only for user-requested local Beads work.
 - Do NOT create markdown TODO lists
-- Do NOT use external issue trackers
-- Do NOT duplicate tracking systems
+- Do NOT let Beads become a second authoritative tracker.
+- Cross-link Beads ids to GitHub issues when migrating durable work.
 
 ## Session Completion
 
