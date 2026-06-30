@@ -61,6 +61,21 @@ RUFF_VERSION   ?= 0.15.15
 PYTEST_ARGS ?= .
 
 
+.PHONY: help
+help: ## Show this help message
+	@printf "\033[1;34mUsage:\033[0m make [target]\n\n"
+	@printf "\033[1;36mTargets:\033[0m\n"
+	@# List every command target. A target missing its '## ' doc prints
+	@# "(no description)", which makes the omission obvious in this output.
+	@awk -F: '/^[a-zA-Z0-9_-]+:/ { \
+	    desc = "(no description)"; \
+	    if (match($$0, /## /)) { desc = substr($$0, RSTART + 3); } \
+	    printf "  \033[1;32m%-20s\033[0m \033[0;37m%s\033[0m\n", $$1, desc; \
+	}' $(MAKEFILE_LIST) | sort
+	@printf "\n"
+
+
+
 
 ################################################################
 # Create the virtual environment and install python modules.
@@ -73,8 +88,7 @@ PYTEST_ARGS ?= .
 # Manage the local development database and configuration file.
 #
 
-# make a clean local development database from scratch, using Flyway migrations
-make-dev-db:
+make-dev-db: ## Create a fresh local dev database from scratch via Flyway migrations
 	/bin/rm -f $(DEV_DB)
 	mkdir -p $(dir $(DEV_DB))
 	flyway migrate \
@@ -89,11 +103,11 @@ $(DEV_DB):
 	@echo "       Create it with 'make make-dev-db' or fetch it with 'make fetch-dev-db'."
 	@false
 
-# fetch the local development database and configuration file.
-# Then give the user a status report of what is in the database.
+# Fetch the dev database and config from the remote host, then print a
+# summary of the database contents.
 # NOTE: temperature-bot-config.yaml includes production secrets
 #       until we move to better secret management system
-fetch-dev-db:
+fetch-dev-db: ## Fetch the dev DB and config from the remote host
 	mkdir -p $(dir $(DEV_DB))
 	rsync --verbose --delete --archive $(FETCH_HOST):$(FETCH_REMOTE_DB_DIR) $(dir $(DEV_DB))
 	rsync --verbose $(FETCH_HOST):$(FETCH_REMOTE_CONFIG) ./temperature-bot-config.yaml
@@ -119,23 +133,22 @@ etc/schema.sql: $(wildcard $(FLYWAY_SQL_DIR)/*.sql)
 	test -s etc/schema.sql
 	/bin/rm -f $(FLYWAY_SCHEMA_TEMP) $(FLYWAY_SCHEMA_DUMP)
 
-# Phony target to force regeneration of etc/schema.sql regardless of timestamps
-schema:
+schema: ## Regenerate etc/schema.sql from the Flyway migration history
 	$(MAKE) --always-make etc/schema.sql
 
-# Apply any pending Flyway migrations to the existing development database.
+# Apply pending Flyway migrations to the existing dev database.
 # Uses -baselineOnMigrate=true so databases already at V1 (but without a
 # flyway_schema_history entry) are baselined automatically before migrating.
-migrate-db: $(DEV_DB)
+migrate-db: $(DEV_DB) ## Apply pending Flyway migrations to the dev DB
 	flyway migrate \
 	    -url="jdbc:sqlite:$(abspath $(DEV_DB))" \
 	    -locations="filesystem:$(FLYWAY_SQL_DIR)" \
 	    -baselineOnMigrate=true
 
-# Validate that all versioned migrations apply cleanly from scratch and that
-# Flyway accepts the resulting schema history. This is safe for CI and local
-# checks because it uses only a temporary database under /tmp.
-validate-migrations:
+# Validate that all Flyway migrations apply cleanly from scratch.
+# Runs entirely against a temporary /tmp database, so it is safe for CI and
+# local use and never touches your real dev database.
+validate-migrations: ## Validate that all migrations apply from scratch
 	@set -eu; \
 	/bin/rm -f "$(FLYWAY_VALIDATE_TEMP)"; \
 	trap '/bin/rm -f "$(FLYWAY_VALIDATE_TEMP)"' EXIT; \
@@ -154,27 +167,23 @@ validate-migrations:
 ## NOTE: It does not do JavaScript live reload; you need to use node for that
 ##       or just hit shift-reload on the web browser
 
-# Run web backend locally, with simulated data. (needs populated db too)
-local-dev: $(REQ)
+local-dev: $(REQ) ## Run the web backend locally with simulated hardware data
 	@echo Running with simulator
 	export AE200_SIMULATOR=1 HUBITAT_SIMULATOR=1 AIRTHINGS_SIMULATOR=1 && $(MAKE) _local-dev-web
 
-# Run web backend locally against live AE-200 hardware.
-local-live-dev: $(REQ)
+local-live-dev: $(REQ) ## Run the web backend locally against live AE-200 hardware
 	@echo updating database
 	AE200_SIMULATOR= HUBITAT_SIMULATOR= AIRTHINGS_SIMULATOR= $(MAKE) every-minute
 	@echo Running without simulator
 	AE200_SIMULATOR= HUBITAT_SIMULATOR= AIRTHINGS_SIMULATOR= $(MAKE) _local-dev-web
 
-# Shared web backend runner for local-dev and local-live-dev.
-_local-dev-web: $(REQ)
+_local-dev-web: $(REQ) ## Internal: shared web backend runner for the local-dev targets
 	FLASK_DEBUG=True poetry run flask --app app.main:app run --port 8000
 
-# Run the data collection agent and rules runner locally, querying the hardware (assumes VPN or running in CALA)
-live-dev-runner: $(REQ)
+live-dev-runner: $(REQ) ## Run the collection agent and rules runner against live hardware
 	LOG_LEVEL=DEBUG $(PYTHON) bin/runner.py
 
-tags:
+tags: ## Build an etags TAGS file for all Python sources
 	etags */*.py
 
 .PHONY: local-dev local-live-dev _local-dev-web live-dev-runner tags
@@ -184,8 +193,8 @@ tags:
 PYLINT_THRESHOLD := 10.0
 PYLINT_OPTS :=--output-format=parseable --rcfile .pylintrc --fail-under=$(PYLINT_THRESHOLD) --verbose
 
-lint: check
-check: $(REQ)
+lint: check ## Run all static analysis checks (alias for check)
+check: $(REQ) ## Run all static analysis (ruff, pylint, djlint, eslint, mypy, migrations)
 	$(MAKE) ruff-check
 	$(MAKE) no-type-ignore
 	$(MAKE) pylint-check
@@ -194,35 +203,35 @@ check: $(REQ)
 	$(MAKE) check-types
 	$(MAKE) validate-migrations
 
-format: $(REQ)
+format: $(REQ) ## Auto-fix Python style issues with ruff
 	poetry run ruff check --fix app | etc/ruff-reformat.bash
 
-pylint: ruff-check pylint-check
+pylint: ruff-check pylint-check ## Run ruff and pylint checks
 
-ruff-check: $(REQ)
+ruff-check: $(REQ) ## Run the ruff linter on app/
 	poetry run ruff check app
 
-no-type-ignore:
+no-type-ignore: ## Fail if any 'type: ignore' comments exist in the source
 	@! rg -n 'type:\s*ignore|type:ignore' app bin tests *.py
 
-pylint-check: $(REQ)
+pylint-check: $(REQ) ## Run pylint on app, tests, and top-level modules
 	$(PYTHON) -m pylint $(PYLINT_OPTS) app tests *.py
 
-djlint: $(REQ)
+djlint: $(REQ) ## Lint Jinja2 HTML templates with djlint
 	poetry run djlint $(DJLINT_FLAGS) $(TEMPLATE_DIR)/*.html
 
-eslint: $(REQ)
+eslint: $(REQ) ## Run ESLint on the frontend JavaScript
 	(cd app/static; make eslint)
 
-check-types: $(REQ)
+check-types: $(REQ) ## Run mypy type checking on app/
 	poetry run mypy app
 
 ## Dynamic Analysis
-pytest: $(REQ)
+pytest: $(REQ) ## Run the Python test suite with coverage
 	make pylint
 	$(PYTHON) -m pytest $(PYTEST_ARGS) -v --cov=. --cov-report=xml --cov-report=html --log-cli-level=WARNING --log-file-level=DEBUG
 	@echo coverage report in htmlcov/
-test-js: $(REQ)
+test-js: $(REQ) ## Run the JavaScript unit tests
 	@echo "Running JavaScript unit tests..."
 	node tests/test_time_utils.js
 	node tests/test_temperature_utils.js
@@ -230,19 +239,19 @@ test-js: $(REQ)
 	node tests/test_unit_speed.js
 	node tests/test_metric_chart_support.js
 	node tests/test_room_scale.js
-test: $(REQ)
+test: $(REQ) ## Run both Python and JavaScript test suites
 	@python_exit=0; js_exit=0; \
 	make pytest || python_exit=$$?; \
 	make test-js || js_exit=$$?; \
 	exit $$(($$python_exit + $$js_exit))
 
-playwright-install: $(REQ)
+playwright-install: $(REQ) ## Install the Playwright Chromium browser
 	poetry run playwright install --with-deps chromium
 
-web-screenshots: $(REQ) playwright-install
+web-screenshots: $(REQ) playwright-install ## Render screenshots of the web UI pages
 	$(PYTHON) bin/render_web_ui_pages.py
 
-outdated: $(REQ)
+outdated: $(REQ) ## Report outdated Python and CDN dependencies
 	poetry lock
 	poetry install
 	@echo "=== Python ==="
@@ -265,13 +274,13 @@ outdated: $(REQ)
 ##
 ## Question - should we just have cron do a 'make daily' and 'make every-minute' ?
 
-every-minute: $(REQ)
+every-minute: $(REQ) ## Run the per-minute data collection runner
 	$(PYTHON) -m bin.runner
 
-daily: $(REQ)
+daily: $(REQ) ## Run the daily data collection runner
 	$(PYTHON) -m bin.runner --daily
 
-monthly-backup:
+monthly-backup: ## Back up the production database with a dated copy
 	sudo cp /var/db/temperature-bot.db /var/db/temperature-bot.backup.$$(date -I).db
 
 .PHONY: every-minute daily monthly-backup
@@ -279,7 +288,7 @@ monthly-backup:
 ################################################################
 ## Installation targets
 
-install-either:
+install-either: ## Shared install steps (poetry + playwright) for macOS/Ubuntu
 	pipx ensurepath
 	pipx install poetry==$(POETRY_VERSION)
 	poetry config virtualenvs.in-project true
@@ -287,11 +296,11 @@ install-either:
 	poetry install --with dev
 	poetry run playwright install --with-deps # This will be fast if CI restored .playwright
 
-install-ubuntu:
+install-ubuntu: ## Install the development environment on Ubuntu
 	sudo apt install python3-pip pipx
 	make install-either
 
-install-macos:
+install-macos: ## Install the development environment on macOS
 	@echo Use pipx for the latest poetry
 	@if ! command -v brew >/dev/null 2>&1; then \
 		echo "Error: Homebrew is not installed. Please install Homebrew from https://brew.sh/ and try again."; \
@@ -300,8 +309,7 @@ install-macos:
 	brew install pipx
 	make install-either
 
-# Clean all the tmp and work product files.
-clean:
+clean: ## Remove generated files and the virtual environment
 	@echo "Cleaning up generated files and virtual environment..."
 	rm -rf .venv
 	rm -rf .playwright
@@ -319,16 +327,16 @@ clean:
 	rm -f debug_page_20*
 	@echo "Clean complete."
 
-# Clean very aggressively, including the local db
+# Clean aggressively, including the local database (prompts first).
 # [TODO] Should this also clear the private data in temperature-bot-config.yaml?
-cleanall: clean
+cleanall: clean ## Clean aggressively, including the local DB (prompts first)
 	@echo "Doing aggressive cleanup. This will delete the local database!"
 	@printf "Are you sure you want to delete $(DEV_DB)? [y/N] "
 	@read -r confirm && [ "$$confirm" = "y" ] || [ "$$confirm" = "Y" ] && rm -f $(DEV_DB) || echo "Cancelled."
 
 ## Installs the latest source code into the live system and applies any pending
 ## database migrations. Run on the server (slg1.basistech.net).
-deploy:
+deploy: ## Deploy latest code and run DB migrations on the production server
 	@if [ "$$(hostname)" = "$(PROD_HOSTNAME)" ]; then \
 		cd $(PROD_APP_DIR) && \
 		git pull && \
