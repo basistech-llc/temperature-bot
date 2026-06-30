@@ -9,6 +9,10 @@ entries are not authoritative project records. Only use `bd` when the user
 explicitly asks for local Beads housekeeping or asks to inspect/migrate a Beads
 entry.
 
+The `.beads/` directory is intentionally kept in the Git repo so agents can
+read and review David's local queue. Do not add `.beads/` to `.gitignore`, remove
+tracked Beads files, or treat their presence as accidental.
+
 > If a beads SessionStart hook is configured locally, it injects the live,
 > local Beads protocol each session. That protocol does not supersede GitHub
 > Issues as the canonical project tracker.
@@ -111,6 +115,7 @@ bd automatically syncs via Dolt:
 
 - Use GitHub Issues for durable project tracking.
 - Use bd only for explicit local Beads housekeeping.
+- Keep `.beads/` in the Git repo for read-only review and migration context.
 - Always use `--json` flag for programmatic use
 - Link local-only discovered work with `discovered-from` dependencies.
 - Check `bd ready` only for user-requested local Beads work.

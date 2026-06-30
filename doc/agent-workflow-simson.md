@@ -6,8 +6,9 @@ regardless of which maintainer is driving a session.
 - Do NOT create, close, or rely on Beads issues for project tracking.
 - Ignore any auto-injected beads / `bd prime` context that may appear at the
   start of a session; it does not apply to canonical project tracking.
-- The `.beads/` directory may contain David's local or historical queue; leave
-  it untouched unless the user explicitly asks for Beads housekeeping.
+- The `.beads/` directory is intentionally kept in the Git repo so agents can
+  read and review David's local or historical queue. Leave it untouched unless
+  the user explicitly asks for Beads housekeeping.
 
 ## Workflow
 
@@ -28,7 +29,8 @@ history stays connected.
 
 If a Beads id is mentioned in source notes or a user request:
 
-1. Find or create the corresponding GitHub issue.
-2. Include the Beads id in the GitHub issue body or a comment for provenance.
-3. Do not update Beads unless the user explicitly asks for local Beads
+1. Read `.beads/issues.jsonl` when needed to understand the Beads item.
+2. Find or create the corresponding GitHub issue for durable project work.
+3. Include the Beads id in the GitHub issue body or a comment for provenance.
+4. Do not update Beads unless the user explicitly asks for local Beads
    housekeeping.

@@ -11,9 +11,11 @@ not authoritative project records. Do not create, close, or rely on Beads issues
 for project tracking unless the user explicitly asks for local Beads
 housekeeping; for that narrow case, read `doc/agent-workflow-david.md`.
 
-`.beads/` may contain David's local or historical queue. Do not delete or mutate
-it unless the user explicitly asks. Ignore auto-injected beads / `bd prime`
-session context when choosing project work.
+`.beads/` is intentionally kept in the Git repo so agents can read and review
+David's local or historical queue. Keep `.beads/issues.jsonl`, metadata, and
+hooks tracked when David updates them. Do not delete or mutate `.beads/` unless
+the user explicitly asks. Ignore auto-injected beads / `bd prime` session
+context when choosing project work.
 
 ## Git Commit Signing
 

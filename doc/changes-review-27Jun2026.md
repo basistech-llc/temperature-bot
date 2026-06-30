@@ -202,7 +202,9 @@ Resolution, 2026-06-30: GitHub Issues are the canonical tracker for durable
 project work. Beads may remain David's local working queue, but durable Beads
 items should be migrated or cross-linked to GitHub Issues. Open durable Beads
 items were migrated as `hvac-yhq` → #156, `hvac-1mz` → #157, and `hvac-8tp` →
-#158. `hvac-c95` remains local Beads housekeeping.
+#158. `hvac-c95` remains local Beads housekeeping. The `.beads/` directory stays
+in the Git repo so agents can review David's queue without making it the
+canonical tracker.
 
 Just for completeness, here are the overlaps that Claude noticed:
 
