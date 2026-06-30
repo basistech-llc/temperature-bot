@@ -1,12 +1,8 @@
 # Changelog
 
-> Versions 0.0.0–0.0.57 are reconstructed retroactively from git history (back
-> to the initial commit) and were never assigned version numbers at the time;
-> the numbering is synthetic. Add changes under `## Unreleased`; `make release`
-> (or `release-minor` / `release-major`) stamps them into a dated release and
-> tags it.
-
 ## Unreleased
+
+## v0.1.0 (30Jun26)
 
 * [feature] Formal version system: a top-level `VERSION` file is the single
   source of truth, surfaced as `v<version> (git sha: <sha>)` in the About-page
@@ -14,6 +10,12 @@
 * [feature] This CHANGELOG and `make release` / `release-minor` / `release-major`
   targets (via `bin/release.py`) that bump the version, stamp the changelog, and
   create a `vX.Y.Z` git tag.
+
+> Versions 0.0.0–0.0.57 are reconstructed retroactively from git history (back
+> to the initial commit) and were never assigned version numbers at the time;
+> the numbering is synthetic. Add changes under `## Unreleased`; `make release`
+> (or `release-minor` / `release-major`) stamps them into a dated release and
+> tags it.
 
 ## v0.0.57 (30Jun26)
 
