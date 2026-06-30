@@ -12,8 +12,8 @@ from flask_pydantic import validate
 from pydantic import TypeAdapter, ValidationError
 from websockets.exceptions import WebSocketException
 
-from .constants import __version__
 from . import constants
+from .version import __version__, git_sha
 from . import db
 from . import db_alerts
 from . import rules_engine
@@ -69,7 +69,7 @@ def _ae200_error_response(error):
 
 @api_v1.route("/version")
 def get_version_json():
-    return jsonify({"version": __version__})
+    return jsonify({"version": __version__, "sha": git_sha()})
 
 
 @api_v1.route("/set_fan_speed", methods=["POST"])

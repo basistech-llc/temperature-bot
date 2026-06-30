@@ -14,6 +14,7 @@ from . import ae200
 from . import db
 from . import routes_api
 from . import routes_web
+from .version import display_version
 
 DEV = "/home/simsong" in abspath(__file__)
 DEFAULT_LOG_LEVEL = "DEBUG"
@@ -65,6 +66,10 @@ def create_app():
     @app.context_processor
     def simulator_context():
         return {"ae200_simulator": bool(ae200.AE200_SIMULATOR)}
+
+    @app.context_processor
+    def version_context():
+        return {"app_version": display_version()}
 
     # Register blueprints
     app.register_blueprint(routes_api.api_v1, url_prefix="/api/v1")

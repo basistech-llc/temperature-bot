@@ -359,3 +359,26 @@ deploy: ## Deploy latest code and run DB migrations on the production server
 
 
 .PHONY: install-either install-ubuntu install-macos clean cleanall deploy
+
+################################################################
+## Release targets
+##
+## The version number lives in the top-level VERSION file (single source of
+## truth). Add changes under the `## Unreleased` heading in CHANGELOG.md as you
+## work; a release stamps that section into a dated `## vX.Y.Z` entry, bumps the
+## version, and creates a vX.Y.Z tag.
+## Nothing is pushed automatically -- review, then push the commit and tag.
+
+release: ## Cut a patch release: bump version, stamp CHANGELOG, git-tag (no push)
+	python3 bin/release.py --patch
+
+release-minor: ## Cut a minor release (no push)
+	python3 bin/release.py --minor
+
+release-major: ## Cut a major release (no push)
+	python3 bin/release.py --major
+
+release-dry-run: ## Show what a patch release would do, changing nothing
+	python3 bin/release.py --patch --dry-run
+
+.PHONY: release release-minor release-major release-dry-run

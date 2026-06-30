@@ -15,8 +15,8 @@ from collections.abc import Callable
 from typing import Any
 from flask import render_template, request, redirect, url_for
 
-from .constants import __version__
 from .constants import DASHBOARD_AIR_QUALITY_DEVICE_EXPIRATION_SECONDS
+from .version import display_version
 from . import db
 from . import db_alerts
 from . import rules_engine
@@ -424,7 +424,7 @@ def _register_core_routes(app):
     @app.route("/version")
     def get_version():
         """Version page"""
-        return f"version: {__version__}"
+        return f"version: {display_version()}"
 
     def _render_room_dashboard(location: str):
         """Helper function to render room dashboard"""

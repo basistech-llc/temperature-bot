@@ -1347,6 +1347,13 @@ li.pure-menu-item > .rules-master-toggle {
     padding: 0 1em;
 }
 
+.footer {
+    margin-top: 2em;
+    font-size: 0.9em;
+    font-style: italic;
+    color: #666;
+}
+
 .deep-dive-toggle {
     margin: 1em 0;
 }
