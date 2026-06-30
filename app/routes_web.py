@@ -290,7 +290,7 @@ def _register_core_routes(app):
 
     @app.route("/logs_today")
     def logs_today():
-        """Today's Log page"""
+        """Activity Log page"""
         return render_template("logs_today.html", current_page="logs_today")
 
     @app.route("/device_log/<device_id>")

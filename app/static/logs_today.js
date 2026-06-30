@@ -1,4 +1,4 @@
-// Log table functionality for Today's Log page
+// Log table functionality for Activity Log page
 
 const LOG_PAGE_SIZE = 50;
 
