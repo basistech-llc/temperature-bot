@@ -488,15 +488,33 @@
             timeoutMs: CORNER_TIMEOUT_MS,
             onComplete: showChoiceDialog,
         });
+        let lastTouchTime = 0;
 
-        document.addEventListener('pointerdown', event => {
+        function handleCornerInput(clientX, clientY, event) {
             if (activeOverlay) return;
-            const result = recognizer.handlePoint(event.clientX, event.clientY, Date.now());
+            const result = recognizer.handlePoint(clientX, clientY, Date.now());
             if (result.matched) {
-                event.preventDefault();
+                if (event.cancelable) event.preventDefault();
                 event.stopPropagation();
             }
-        }, true);
+        }
+
+        if (window.PointerEvent) {
+            document.addEventListener('pointerdown', event => {
+                handleCornerInput(event.clientX, event.clientY, event);
+            }, true);
+        } else {
+            document.addEventListener('mousedown', event => {
+                if (Date.now() - lastTouchTime < 700) return;
+                handleCornerInput(event.clientX, event.clientY, event);
+            }, true);
+            document.addEventListener('touchstart', event => {
+                const touch = event.changedTouches[0];
+                if (!touch) return;
+                lastTouchTime = Date.now();
+                handleCornerInput(touch.clientX, touch.clientY, event);
+            }, { capture: true, passive: false });
+        }
     }
 
     return {
