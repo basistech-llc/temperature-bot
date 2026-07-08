@@ -230,6 +230,7 @@ test-js: $(REQ)
 	node tests/test_unit_speed.js
 	node tests/test_metric_chart_support.js
 	node tests/test_room_scale.js
+	node tests/test_hickory_life.js
 test: $(REQ)
 	@python_exit=0; js_exit=0; \
 	make pytest || python_exit=$$?; \
