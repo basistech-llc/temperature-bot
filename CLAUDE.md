@@ -4,6 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Read `AGENTS.md` and `.github/copilot-instructions.md` for full coding conventions, project structure, and workflow details.**
 
+For faster navigation on frontend, room dashboard, and Hickory display tasks,
+also read `doc/agent-index.md`.
+
 Run tests through the Makefile. For a single pytest target:
 
 ```bash

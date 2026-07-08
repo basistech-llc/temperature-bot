@@ -683,4 +683,7 @@ body {
 <!-- temperature_utils.js is already loaded by base.html; re-including it here
      redeclared USE_FAHRENHEIT (SyntaxError) and double-bound its listeners. -->
 <script src="/static/room_dashboard.js"></script>
+{% if location == 'Hickory' %}
+<script src="/static/hickory_life.js"></script>
+{% endif %}
 {% endblock %}

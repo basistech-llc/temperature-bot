@@ -1,5 +1,8 @@
 # Agent Instructions
 
+For a quick repository map, especially for frontend, room dashboard, and
+Hickory display work, read `doc/agent-index.md` after this file.
+
 ## Task Tracking
 
 This project has two maintainers who use **different** issue trackers. Before
