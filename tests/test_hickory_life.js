@@ -122,5 +122,19 @@ const wrongOrder = createCornerSequenceRecognizer({
 checkTrue("wrong-order recognizer starts", wrongOrder.handlePoint(5, 5, 0).matched);
 check("wrong-order recognizer rejects bottom-right", wrongOrder.handlePoint(995, 795, 100).matched, false);
 
+let defaultCompleted = 0;
+const defaultRecognizer = createCornerSequenceRecognizer({
+  width: 1000,
+  height: 800,
+  onComplete: () => {
+    defaultCompleted += 1;
+  },
+});
+checkTrue("default hit area includes 100px top-left", defaultRecognizer.handlePoint(100, 100, 0).matched);
+checkTrue("default timeout allows deliberate top-right", defaultRecognizer.handlePoint(900, 100, 3000).matched);
+checkTrue("default timeout allows deliberate bottom-left", defaultRecognizer.handlePoint(100, 700, 6000).matched);
+checkTrue("default timeout allows deliberate bottom-right", defaultRecognizer.handlePoint(900, 700, 9000).matched);
+check("default sequence completes", defaultCompleted, 1);
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed === 0 ? 0 : 1);

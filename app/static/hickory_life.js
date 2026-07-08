@@ -10,8 +10,8 @@
     }
 })(typeof window !== 'undefined' ? window : null, function() {
     const CORNER_SEQUENCE = ['top-left', 'top-right', 'bottom-left', 'bottom-right'];
-    const CORNER_HIT_SIZE = 72;
-    const CORNER_TIMEOUT_MS = 1400;
+    const CORNER_HIT_SIZE = 120;
+    const CORNER_TIMEOUT_MS = 5000;
     const LIFE_INTERVAL_MS = 200;
     const LIFE_HISTORY_SIZE = 240;
     const LIFE_DENSITY = 0.34;
@@ -389,6 +389,26 @@
         yesButton.focus();
     }
 
+    function addPressListener(target, handler) {
+        let lastTouchTime = 0;
+        if (window.PointerEvent) {
+            target.addEventListener('pointerdown', event => {
+                handler(event, event.clientX, event.clientY);
+            }, true);
+            return;
+        }
+        target.addEventListener('mousedown', event => {
+            if (Date.now() - lastTouchTime < 700) return;
+            handler(event, event.clientX, event.clientY);
+        }, true);
+        target.addEventListener('touchstart', event => {
+            const touch = event.changedTouches[0];
+            if (!touch) return;
+            lastTouchTime = Date.now();
+            handler(event, touch.clientX, touch.clientY);
+        }, { capture: true, passive: false });
+    }
+
     function canvasGridSize() {
         const width = window.innerWidth;
         const height = window.innerHeight;
@@ -457,8 +477,8 @@
             renderLife(canvas, lifeSimulation);
         }
 
-        overlay.addEventListener('pointerdown', event => {
-            event.preventDefault();
+        addPressListener(overlay, event => {
+            if (event.cancelable) event.preventDefault();
             clearOverlay();
         });
         lifeResizeHandler = resetSimulation;
@@ -488,7 +508,6 @@
             timeoutMs: CORNER_TIMEOUT_MS,
             onComplete: showChoiceDialog,
         });
-        let lastTouchTime = 0;
 
         function handleCornerInput(clientX, clientY, event) {
             if (activeOverlay) return;
@@ -499,22 +518,9 @@
             }
         }
 
-        if (window.PointerEvent) {
-            document.addEventListener('pointerdown', event => {
-                handleCornerInput(event.clientX, event.clientY, event);
-            }, true);
-        } else {
-            document.addEventListener('mousedown', event => {
-                if (Date.now() - lastTouchTime < 700) return;
-                handleCornerInput(event.clientX, event.clientY, event);
-            }, true);
-            document.addEventListener('touchstart', event => {
-                const touch = event.changedTouches[0];
-                if (!touch) return;
-                lastTouchTime = Date.now();
-                handleCornerInput(touch.clientX, touch.clientY, event);
-            }, { capture: true, passive: false });
-        }
+        addPressListener(document, (event, clientX, clientY) => {
+            handleCornerInput(clientX, clientY, event);
+        });
     }
 
     return {
