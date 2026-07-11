@@ -40,7 +40,7 @@ const SET_RANGE_HIGH_KEY = "set_range_high_c";
 const FCU_TEMP_SOURCE_FCU_DEVICE_ID_KEY = "fcu_device_id";
 const FCU_TEMP_SOURCE_SOURCE_DEVICE_ID_KEY = "source_device_id";
 const FCU_TEMP_SOURCE_MULTIPLIER_KEY = "multiplier";
-const FCU_TEMP_SOURCE_TITLE = "Temperature Sources";
+const FCU_TEMP_SOURCE_TITLE = "Room Editor";
 const DEVICE_DISPLAY_NAME_KEY = "display_name";
 
 // Refresh logic
@@ -673,7 +673,9 @@ function setFcuTempSourcesMessage(popup, message, isError = false) {
 function setFcuTempSourcesControlsDisabled(popup, disabled) {
   popup.dataset.saving = disabled ? "true" : "false";
   popup
-    .querySelectorAll(".fcu-temp-source-weight, .fcu-temp-sources-actions button")
+    .querySelectorAll(
+      ".fcu-temp-source-weight, .fcu-room-display-name, .fcu-temp-sources-actions button",
+    )
     .forEach((control) => {
       control.disabled = disabled;
     });
@@ -725,10 +727,42 @@ function collectFcuTempSourceChanges(popup) {
   return { changes, error: "" };
 }
 
+function setFcuRoomEditorDisplayName(popup, displayName) {
+  const input = popup.querySelector("[data-role='display-name']");
+  const normalizedName = normalizedDeviceDisplayName(displayName);
+  popup.dataset.currentDisplayName = normalizedName;
+  if (input) {
+    input.value = normalizedName;
+    input.dataset.initialDisplayName = normalizedName;
+  }
+}
+
+function collectFcuRoomEditorDisplayNameChange(popup) {
+  const input = popup.querySelector("[data-role='display-name']");
+  if (!input) {
+    return { changed: false, displayName: "", error: "" };
+  }
+  const displayName = normalizedDeviceDisplayName(input.value);
+  if (!displayName) {
+    return {
+      changed: false,
+      displayName: "",
+      error: "Room (Unit) name is required.",
+    };
+  }
+  return {
+    changed:
+      displayName !== normalizedDeviceDisplayName(popup.dataset.currentDisplayName),
+    displayName,
+    error: "",
+  };
+}
+
 function revertFcuTempSourceChanges(popup) {
   popup.querySelectorAll(".fcu-temp-source-weight").forEach((input) => {
     input.value = input.dataset.initialMultiplier;
   });
+  setFcuRoomEditorDisplayName(popup, popup.dataset.currentDisplayName);
   setFcuTempSourcesMessage(popup, "");
 }
 
@@ -806,9 +840,16 @@ async function loadFcuTempSourcesForCell(cell) {
     return;
   }
 
+  const deviceId = parseInt(cell.dataset.deviceId, 10);
+  const displayName = cell.dataset.displayName || cell.textContent;
   popup.dataset.updateUrl = updateUrl;
-  setFcuTempSourcesTitle(popup, cell.dataset.fcuTempSourcesRoomName);
+  popup.dataset.deviceUpdateUrl = cell.dataset.deviceUpdateUrl || "";
+  popup.dataset.deviceId = Number.isInteger(deviceId) ? String(deviceId) : "";
+  popup.dataset.deviceName = cell.dataset.deviceName || "";
+  setFcuRoomEditorDisplayName(popup, displayName);
+  setFcuTempSourcesTitle(popup, displayName);
   popup.classList.remove("hidden");
+  setFcuTempSourcesControlsDisabled(popup, false);
   setFcuTempSourcesMessage(popup, "Loading...");
   const tbody = popup.querySelector("[data-role='sources-body']");
   if (tbody) {
@@ -837,15 +878,20 @@ async function saveFcuTempSourceMultipliers() {
 
   const updateUrl = popup.dataset.updateUrl;
   const { changes, error } = collectFcuTempSourceChanges(popup);
+  const displayNameChange = collectFcuRoomEditorDisplayNameChange(popup);
   if (error) {
     setFcuTempSourcesMessage(popup, error, true);
+    return;
+  }
+  if (displayNameChange.error) {
+    setFcuTempSourcesMessage(popup, displayNameChange.error, true);
     return;
   }
   if (!updateUrl) {
     setFcuTempSourcesMessage(popup, "Unable to save without an update URL.", true);
     return;
   }
-  if (changes.length === 0) {
+  if (changes.length === 0 && !displayNameChange.changed) {
     closeFcuTempSourcesPopup();
     return;
   }
@@ -853,14 +899,40 @@ async function saveFcuTempSourceMultipliers() {
   setFcuTempSourcesControlsDisabled(popup, true);
   setFcuTempSourcesMessage(popup, "Saving...");
   try {
-    const response = await fetch(updateUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(changes),
-    });
-    const data = await response.json();
-    if (!response.ok) {
-      throw new Error(data.error || "Unable to save weights.");
+    const deviceId = parseInt(popup.dataset.deviceId, 10);
+    const deviceName = popup.dataset.deviceName || "";
+    if (displayNameChange.changed) {
+      if (!Number.isInteger(deviceId) || !deviceName) {
+        throw new Error("Unable to save without device metadata.");
+      }
+      const data = await patchDeviceDisplayName(
+        deviceId,
+        displayNameChange.displayName,
+        popup.dataset.deviceUpdateUrl,
+      );
+      const savedDisplayName =
+        data.display_name || displayNameChange.displayName || deviceName;
+      applyDeviceDisplayName(
+        deviceId,
+        data.device_name || deviceName,
+        savedDisplayName,
+        data.device_type ?? undefined,
+        data.rules_enabled ?? undefined,
+      );
+      setFcuRoomEditorDisplayName(popup, savedDisplayName);
+      setFcuTempSourcesTitle(popup, savedDisplayName);
+    }
+
+    if (changes.length > 0) {
+      const response = await fetch(updateUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(changes),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || "Unable to save weights.");
+      }
     }
     forceRefresh = true;
     closeFcuTempSourcesPopup({ force: true });
@@ -1029,10 +1101,10 @@ function openDeviceRenamePopup(target, event) {
   displayNameInput.select();
 }
 
-async function patchDeviceDisplayName(deviceId, displayName) {
+async function patchDeviceDisplayName(deviceId, displayName, updateUrl = undefined) {
   let response;
   try {
-    response = await fetch(deviceMetadataUrl(deviceId), {
+    response = await fetch(updateUrl || deviceMetadataUrl(deviceId), {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(deviceDisplayNamePatchBody(displayName)),
@@ -1076,12 +1148,18 @@ function applyDeviceDisplayName(
           deviceRulesEnabledValue(rulesEnabled),
         );
       }
-      element.setAttribute(
-        "title",
-        element.dataset.deviceUpdate
+      const isRoomEditorTrigger =
+        element.classList?.contains("fcu-room-editor-trigger");
+      if (isRoomEditorTrigger) {
+        element.dataset.fcuTempSourcesRoomName = label;
+        element.setAttribute("aria-label", `Edit room settings for ${label}`);
+      }
+      const title = isRoomEditorTrigger
+        ? `Edit room settings for ${label}`
+        : element.dataset.deviceUpdate
           ? `${deviceName}\nLast updated at ${element.dataset.deviceUpdate}`
-          : deviceName,
-      );
+          : deviceName;
+      element.setAttribute("title", title);
     });
 }
 
@@ -1438,17 +1516,29 @@ function setupModeControls() {
       this.dataset.saving = "true";
       this.dataset.currentMode = mode;
       this.disabled = true;
+      updateSetRangeModeState(
+        document.getElementById(`setrange-widget-${deviceId}`),
+        mode,
+      );
       setDeviceMode(deviceId, mode)
         .then((result) => {
           const savedMode = result.mode || mode;
           ensureModeSelectOption(this, savedMode);
           this.value = savedMode;
           this.dataset.currentMode = savedMode;
+          updateSetRangeModeState(
+            document.getElementById(`setrange-widget-${deviceId}`),
+            savedMode,
+          );
         })
         .catch(() => {
           ensureModeSelectOption(this, previousMode);
           this.value = previousMode;
           this.dataset.currentMode = previousMode;
+          updateSetRangeModeState(
+            document.getElementById(`setrange-widget-${deviceId}`),
+            previousMode,
+          );
           alert("Error setting mode.");
         })
         .finally(() => {
@@ -1460,10 +1550,16 @@ function setupModeControls() {
 }
 
 function setupFcuTempSourcePopupControls() {
-  document.querySelectorAll(".room-temp-link").forEach((cell) => {
-    cell.addEventListener("click", function (event) {
+  document.querySelectorAll(".fcu-room-editor-trigger").forEach((trigger) => {
+    trigger.addEventListener("click", function (event) {
       event.preventDefault();
       loadFcuTempSourcesForCell(this);
+    });
+    trigger.addEventListener("keydown", function (event) {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        loadFcuTempSourcesForCell(this);
+      }
     });
   });
 
@@ -1647,6 +1743,22 @@ function setSetRangeUnavailable(widget) {
   });
 }
 
+function updateSetRangeModeState(widget, rawMode) {
+  if (!widget) {
+    return;
+  }
+  const mode = String(rawMode || "").toUpperCase();
+  const autoMode = isAutoOperationMode(mode);
+  widget.dataset.mode = mode;
+  widget.classList.toggle("setrange-widget-local", !autoMode);
+  widget.setAttribute(
+    "title",
+    autoMode
+      ? "Auto mode: AE-200 implements this range."
+      : "Stored set range for rules. AE-200 uses FCU Set Temp in this mode.",
+  );
+}
+
 function rangeTempToPercent(valueC, options) {
   return ((valueC - options.trackMinC) / (options.trackMaxC - options.trackMinC)) * 100;
 }
@@ -1765,6 +1877,7 @@ function updateSetRangeForDevice(dev) {
   if (!widget || widget.dataset.dragging === "true") {
     return;
   }
+  updateSetRangeModeState(widget, modeValueForDevice(dev));
   if (
     dev.set_range_low_c === undefined ||
     dev.set_range_high_c === undefined
@@ -1896,6 +2009,7 @@ function handleSetRangeKeyDown(event) {
 
 function setupSetRangeControls() {
   document.querySelectorAll(".setrange-widget").forEach((widget) => {
+    updateSetRangeModeState(widget, widget.dataset.mode);
     const lowC = finiteNumber(widget.dataset.setRangeLowC);
     const highC = finiteNumber(widget.dataset.setRangeHighC);
     if (lowC !== null && highC !== null) {
@@ -2424,6 +2538,7 @@ if (typeof window !== "undefined") {
 // Node.js export for testing
 if (typeof module !== "undefined" && module.exports) {
   module.exports = {
+    collectFcuRoomEditorDisplayNameChange,
     collectFcuTempSourceChanges,
     autoSetTempRangeForDevice,
     compactAgeFromSeconds,
@@ -2449,6 +2564,7 @@ if (typeof module !== "undefined" && module.exports) {
     saveFcuTempSourceMultipliers,
     setRangePartFromPointerTarget,
     setAutoSetTempUnavailable,
+    updateSetRangeModeState,
     sortedFcuTempSources,
     tableUpdateSummaryText,
   };

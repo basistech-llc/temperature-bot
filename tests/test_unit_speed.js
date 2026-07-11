@@ -6,6 +6,7 @@
  * holding the Auto (-1) fan speed must select the Off radio, not Auto.
  */
 const {
+  collectFcuRoomEditorDisplayNameChange,
   collectFcuTempSourceChanges,
   autoSetTempRangeForDevice,
   compactAgeFromSeconds,
@@ -33,6 +34,7 @@ const {
   setRangePartFromPointerTarget,
   sortedFcuTempSources,
   tableUpdateSummaryText,
+  updateSetRangeModeState,
 } = require("../app/static/unit_speed.js");
 
 let passed = 0;
@@ -71,6 +73,33 @@ function checkContains(label, actual, expectedFragment) {
       `FAIL ${label}: got "${actual}", expected to include "${expectedFragment}"`,
     );
   }
+}
+
+function fakeClassList() {
+  const classes = new Set();
+  return {
+    contains(className) {
+      return classes.has(className);
+    },
+    toggle(className, enabled) {
+      if (enabled) {
+        classes.add(className);
+      } else {
+        classes.delete(className);
+      }
+    },
+  };
+}
+
+function fakeWidget() {
+  return {
+    attributes: {},
+    classList: fakeClassList(),
+    dataset: {},
+    setAttribute(name, value) {
+      this.attributes[name] = String(value);
+    },
+  };
 }
 
 // -- The bug: off unit holding Auto must show Off, not Auto --
@@ -322,6 +351,40 @@ check(
 );
 check("auto mode token is auto operation", isAutoOperationMode("AUTO"), true);
 check("lc_auto mode token is auto operation", isAutoOperationMode("LC_AUTO"), true);
+
+const coolSetRangeWidget = fakeWidget();
+updateSetRangeModeState(coolSetRangeWidget, "COOL");
+check(
+  "non-auto set range uses local hatch",
+  coolSetRangeWidget.classList.contains("setrange-widget-local"),
+  true,
+);
+checkContains(
+  "non-auto set range title names FCU Set Temp",
+  coolSetRangeWidget.attributes.title,
+  "FCU Set Temp",
+);
+
+const autoSetRangeWidget = fakeWidget();
+updateSetRangeModeState(autoSetRangeWidget, "AUTO");
+check(
+  "auto set range removes local hatch",
+  autoSetRangeWidget.classList.contains("setrange-widget-local"),
+  false,
+);
+checkContains(
+  "auto set range title names AE-200 range",
+  autoSetRangeWidget.attributes.title,
+  "AE-200 implements",
+);
+
+const lcAutoSetRangeWidget = fakeWidget();
+updateSetRangeModeState(lcAutoSetRangeWidget, "LC_AUTO");
+check(
+  "lc_auto set range displays as active auto range",
+  lcAutoSetRangeWidget.classList.contains("setrange-widget-local"),
+  false,
+);
 check(
   "unknown mode passes through",
   modeLabelForDevice({ mode: "SOMETHING_NEW" }),
@@ -335,14 +398,14 @@ check(
 
 // -- FCU temperature source popup behavior --
 check(
-  "temperature source title includes room name",
+  "room editor title includes room name",
   fcuTempSourcesTitle("Area 51"),
-  "Area 51: Temperature Sources",
+  "Area 51: Room Editor",
 );
 check(
-  "temperature source title without room name",
+  "room editor title without room name",
   fcuTempSourcesTitle(""),
-  "Temperature Sources",
+  "Room Editor",
 );
 
 const unsortedSources = [
@@ -363,7 +426,11 @@ check(
   unsortedSources.map((source) => source.source_device_id).join(","),
   "1,2,3,4",
 );
-check("nonnegative multiplier parses", parseFcuTempSourceMultiplier(" 1.5 "), 1.5);
+check(
+  "nonnegative multiplier parses",
+  parseFcuTempSourceMultiplier(" 1.5 "),
+  1.5,
+);
 check("negative multiplier is invalid", parseFcuTempSourceMultiplier("-0.1"), null);
 
 const autoSetTempRange = autoSetTempRangeForDevice({
@@ -378,7 +445,11 @@ const promotedAutoSetTempRange = autoSetTempRangeForDevice({
   auto_min_c: 18,
   auto_max_c: 27,
 });
-check("promoted auto set temp range heat bottom", promotedAutoSetTempRange.lowC, 20);
+check(
+  "promoted auto set temp range heat bottom",
+  promotedAutoSetTempRange.lowC,
+  20,
+);
 check("promoted auto set temp range cool top", promotedAutoSetTempRange.highC, 25);
 
 function fakeElement(attributes = {}, styles = {}) {
@@ -422,15 +493,27 @@ const autoWidget = {
   },
 };
 setAutoSetTempUnavailable(autoWidget);
-check("auto unavailable clears heat data", autoWidget.attributes["data-heat-set-temp-c"], undefined);
-check("auto unavailable clears cool data", autoWidget.attributes["data-cool-set-temp-c"], undefined);
+check(
+  "auto unavailable clears heat data",
+  autoWidget.attributes["data-heat-set-temp-c"],
+  undefined,
+);
+check(
+  "auto unavailable clears cool data",
+  autoWidget.attributes["data-cool-set-temp-c"],
+  undefined,
+);
 check("auto unavailable clears title", autoWidget.attributes.title, undefined);
 check("auto unavailable clears fill left", autoFill.style.left, "");
 check("auto unavailable clears fill width", autoFill.style.width, "");
 check("auto unavailable clears heat handle", autoHeatHandle.style.left, "");
 check("auto unavailable clears cool handle", autoCoolHandle.style.left, "");
 check("auto unavailable clears heat label", autoLabels[0].textContent, "--");
-check("auto unavailable clears cool label data", autoLabels[1].attributes["data-temp-c"], undefined);
+check(
+  "auto unavailable clears cool label data",
+  autoLabels[1].attributes["data-temp-c"],
+  undefined,
+);
 
 // -- Device display-name rename behavior --
 check(
@@ -480,7 +563,11 @@ const popupWithChangedSource = {
 };
 const sourceChanges = collectFcuTempSourceChanges(popupWithChangedSource);
 check("changed source collection has no error", sourceChanges.error, "");
-check("changed source collection filters unchanged rows", sourceChanges.changes.length, 1);
+check(
+  "changed source collection filters unchanged rows",
+  sourceChanges.changes.length,
+  1,
+);
 check(
   "changed source collection builds API payload",
   JSON.stringify(sourceChanges.changes[0]),
@@ -503,6 +590,37 @@ check(
   "invalid source collection reports validation error",
   invalidSourceChanges.error,
   "Weight must be a nonnegative number.",
+);
+
+const unchangedRoomName = collectFcuRoomEditorDisplayNameChange({
+  dataset: { currentDisplayName: "Area 51" },
+  querySelector: (selector) =>
+    selector === "[data-role='display-name']" ? { value: "Area 51" } : null,
+});
+check("unchanged room editor name is ignored", unchangedRoomName.changed, false);
+check("unchanged room editor name has no error", unchangedRoomName.error, "");
+
+const changedRoomName = collectFcuRoomEditorDisplayNameChange({
+  dataset: { currentDisplayName: "Area 51" },
+  querySelector: (selector) =>
+    selector === "[data-role='display-name']" ? { value: " East Lab " } : null,
+});
+check("changed room editor name is detected", changedRoomName.changed, true);
+check(
+  "changed room editor name is trimmed",
+  changedRoomName.displayName,
+  "East Lab",
+);
+
+const blankRoomName = collectFcuRoomEditorDisplayNameChange({
+  dataset: { currentDisplayName: "Area 51" },
+  querySelector: (selector) =>
+    selector === "[data-role='display-name']" ? { value: " " } : null,
+});
+check(
+  "blank room editor name is invalid",
+  blankRoomName.error,
+  "Room (Unit) name is required.",
 );
 
 async function testFcuBatchSavePost() {
@@ -557,7 +675,8 @@ async function testFcuBatchSavePost() {
         return inputs;
       }
       if (
-        selector === ".fcu-temp-source-weight, .fcu-temp-sources-actions button"
+        selector ===
+        ".fcu-temp-source-weight, .fcu-room-display-name, .fcu-temp-sources-actions button"
       ) {
         return inputs.concat(buttons);
       }
@@ -597,6 +716,108 @@ async function testFcuBatchSavePost() {
       { fcu_device_id: 12, source_device_id: 22, multiplier: 0.25 },
     ]),
   );
+}
+
+async function testFcuRoomEditorNamePatch() {
+  const input = {
+    disabled: false,
+    value: "East Lab",
+    dataset: { initialDisplayName: "Area 51" },
+  };
+  const message = {
+    textContent: "",
+    classList: {
+      toggle: () => {},
+    },
+  };
+  const popup = {
+    dataset: {
+      updateUrl: "/api/v1/fcu_temp_source",
+      deviceUpdateUrl: "/api/v1/devices/12",
+      deviceId: "12",
+      deviceName: "Area 51",
+      currentDisplayName: "Area 51",
+    },
+    classList: {
+      hidden: false,
+      add: (name) => {
+        popup.classList.hidden = name === "hidden";
+      },
+    },
+    querySelector: (selector) => {
+      if (selector === "[data-role='message']") {
+        return message;
+      }
+      if (selector === "[data-role='display-name']") {
+        return input;
+      }
+      if (selector === "[data-role='title']") {
+        return { textContent: "" };
+      }
+      return null;
+    },
+    querySelectorAll: (selector) => {
+      if (selector === ".fcu-temp-source-weight") {
+        return [];
+      }
+      if (
+        selector ===
+        ".fcu-temp-source-weight, .fcu-room-display-name, .fcu-temp-sources-actions button"
+      ) {
+        return [input];
+      }
+      return [];
+    },
+  };
+  const label = {
+    dataset: { deviceUpdate: "", deviceName: "Area 51" },
+    classList: { contains: (name) => name === "fcu-room-editor-trigger" },
+    textContent: "",
+    setAttribute(name, value) {
+      this[name] = value;
+    },
+  };
+  const requests = [];
+  const originalDocumentForSave = global.document;
+  const originalFetch = global.fetch;
+  global.document = {
+    getElementById: (id) => (id === "fcu-temp-sources-popup" ? popup : null),
+    querySelectorAll: () => [label],
+  };
+  global.fetch = async (url, options) => {
+    requests.push({ url, options });
+    return {
+      ok: true,
+      json: async () => ({
+        device_id: 12,
+        device_name: "Area 51",
+        display_name: "East Lab",
+        device_type: "FCU",
+        rules_enabled: true,
+      }),
+    };
+  };
+  try {
+    await saveFcuTempSourceMultipliers();
+  } finally {
+    global.document = originalDocumentForSave;
+    global.fetch = originalFetch;
+  }
+
+  const patchBody = JSON.parse(requests[0].options.body);
+  check("room editor name save sends one request", requests.length, 1);
+  check(
+    "room editor name save patches device URL",
+    requests[0].url,
+    "/api/v1/devices/12",
+  );
+  check("room editor name save uses PATCH", requests[0].options.method, "PATCH");
+  check(
+    "room editor name save sends display name",
+    JSON.stringify(patchBody),
+    JSON.stringify({ display_name: "East Lab" }),
+  );
+  check("room editor name save updates label", label.textContent, "East Lab");
 }
 
 // -- FCU mode select option updates --
@@ -687,7 +908,9 @@ check(
   null,
 );
 
-testFcuBatchSavePost()
+Promise.resolve()
+  .then(testFcuBatchSavePost)
+  .then(testFcuRoomEditorNamePatch)
   .catch((error) => {
     failed++;
     console.error(error);

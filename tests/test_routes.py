@@ -3,6 +3,7 @@
 Simple test to check if Flask routes are working
 """
 # pylint: disable=unused-import
+from html import unescape
 from unittest.mock import patch
 
 from conftest import flask_test_client  # noqa: F401
@@ -293,20 +294,23 @@ def test_fcu_matrix_has_raw_fcu_temp_and_room_temp_columns(
 
     response = flask_test_client.get("/")
     assert response.status_code == 200
-    html = response.data.decode("utf-8")
+    html = unescape(response.data.decode("utf-8"))
 
+    assert "Room (Unit)" in html
     assert "FCU Temp" in html
     assert "Room Temp" in html
     assert 'id="fcu-temp-12"' in html
+    assert 'data-chart-url="/chart?mode=raw&device_ids=12"' in html
     assert 'id="room-temp-12"' in html
+    assert 'data-chart-url="/chart?mode=calculated&device_ids=12"' in html
 
 
 @patch("app.routes_web.hubitat.get_name_to_label", return_value={})
 @patch("app.routes_web.db.get_device_status")
-def test_fcu_matrix_room_temp_cell_opens_weight_popup(
+def test_fcu_matrix_room_unit_cell_opens_room_editor(
     mock_get_status, _mock_labels, flask_test_client
 ):  # noqa: F811
-    """Room Temp cells must expose the source-weight popup contract."""
+    """Room (Unit) cells must expose the editor/source-weight popup contract."""
     mock_get_status.return_value = [
         {
             "device_id": 12,
@@ -323,20 +327,27 @@ def test_fcu_matrix_room_temp_cell_opens_weight_popup(
 
     response = flask_test_client.get("/")
     assert response.status_code == 200
-    html = response.data.decode("utf-8")
+    html = unescape(response.data.decode("utf-8"))
 
     assert 'id="fcu-temp-sources-popup"' in html
+    assert 'class="device-name-context fcu-room-editor-trigger"' in html
+    assert 'role="button"' in html
+    assert 'tabindex="0"' in html
+    assert 'data-device-update-url="/api/v1/devices/12"' in html
     assert (
         'data-fcu-temp-sources-url="/api/v1/fcu_temp_sources?fcu_device_id=12"'
         in html
     )
     assert 'data-fcu-temp-source-update-url="/api/v1/fcu_temp_source"' in html
     assert 'data-fcu-temp-sources-room-name="Area 51"' in html
+    assert 'id="fcu-room-display-name"' in html
+    assert "Room (Unit) name" in html
     assert "Readings older than 10 minutes are ignored" in html
     assert 'data-action="save-fcu-temp-sources"' in html
     assert 'data-action="revert-fcu-temp-sources"' in html
     assert 'data-action="cancel-fcu-temp-sources"' in html
     assert 'data-action="close-fcu-temp-sources"' not in html
+    assert "room-temp-link" not in html
 
 
 @patch("app.routes_web.hubitat.get_name_to_label", return_value={})
@@ -363,9 +374,9 @@ def test_index_device_names_expose_rename_popup_contract(
 
     response = flask_test_client.get("/")
     assert response.status_code == 200
-    html = response.data.decode("utf-8")
+    html = unescape(response.data.decode("utf-8"))
 
-    assert 'class="device-name-context"' in html
+    assert 'class="device-name-context fcu-room-editor-trigger"' in html
     assert 'data-device-id="12"' in html
     assert 'data-device-name="Area 51"' in html
     assert 'data-display-name="Server Room"' in html

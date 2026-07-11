@@ -226,6 +226,8 @@ def test_index_fcu_speeds_exclude_one(
     assert f'id="autosettemp-widget-{device_id}"' in html
     assert 'aria-label="Auto heat and cool set temperatures"' in html
     assert 'role="group"' in html
+    assert "Auto mode: the AE-200 implements Set Range." in html
+    assert "Set Range stays editable for rules." in html
     assert '<option value="FAN"' in html
     assert '<option value="COOL" selected>Cool</option>' in html
     assert '<option value="DRY"' in html

@@ -105,7 +105,7 @@
         <table class="pure-table data-table fcu-table">
           <thead>
             <tr>
-              <th class="column-unit" rowspan="2">Unit</th>
+              <th class="column-unit" rowspan="2">Room (Unit)</th>
               <th class="column-disable-for" rowspan="2" title="Remaining time rules are disabled for this device (H:MM)">Rules<br>disabled<br>for</th>
               <th class="column-temp" rowspan="2">FCU Temp<br><small id="fcu-temp-unit-label">°C</small></th>
               <th class="column-temp" rowspan="2">Room Temp<br><small id="fcu-room-temp-unit-label">°C</small></th>
@@ -126,16 +126,25 @@
           <tbody>
             {% for device in devices %}
             {% if device.device_type == 'FCU' %}
+                {% set current_mode = device.mode|default(device.status.Mode|default('', true), true) %}
+                {% set current_mode_value = current_mode|upper if current_mode else '' %}
                 <tr class="device-row" x-data-device-id="{{ device.device_id }}">
                   <td class="cell-unit">
-                    <span class="device-name-context"
+                    <span class="device-name-context fcu-room-editor-trigger"
+                          role="button"
+                          tabindex="0"
                           data-device-id="{{ device.device_id }}"
                           data-device-name="{{ device.device_name }}"
                           data-display-name="{{ device.device_label }}"
                           data-device-type="{{ device.device_type or '' }}"
                           data-rules-enabled="{{ 'true' if device.rules_enabled|default(true) else 'false' }}"
                           data-device-update="{{ device.device_update_text|default('', true) }}"
-                          title="{{ device.device_update_tooltip|default(device.device_name, true) }}">{{ device.device_label }}</span><span class="rules-disabled-superscript hidden" id="rules-disabled-{{ device.device_id }}" title=""></span>
+                          data-device-update-url="/api/v1/devices/{{ device.device_id }}"
+                          data-fcu-temp-sources-url="/api/v1/fcu_temp_sources?fcu_device_id={{ device.device_id }}"
+                          data-fcu-temp-source-update-url="/api/v1/fcu_temp_source"
+                          data-fcu-temp-sources-room-name="{{ device.room_name or device.device_label }}"
+                          aria-label="Edit room settings for {{ device.device_label }}"
+                          title="Edit room settings for {{ device.device_label }}">{{ device.device_label }}</span><span class="rules-disabled-superscript hidden" id="rules-disabled-{{ device.device_id }}" title=""></span>
                     <span id="device-{{ device.device_id }}-notes"></span>
                   </td>
                   <td class="cell-disable-for" id="disable-for-{{ device.device_id }}">
@@ -157,16 +166,14 @@
                   </td>
                   {% if device.temp10x is not none %}
                   <td class="cell-temp cell-temp-link temp-display temp-display-no-unit" id="fcu-temp-{{ device.device_id }}"
-                      data-chart-url="/chart?device_ids={{ device.device_id }}"
-                      title="Temperature chart for {{ device.device_label }}">--</td>
+                      data-chart-url="/chart?mode=raw&device_ids={{ device.device_id }}"
+                      title="FCU temperature chart for {{ device.device_label }}">--</td>
                   {% else %}
                   <td class="cell-temp cell-temp-na">n/a</td>
                   {% endif %}
-                  <td class="cell-temp cell-temp-link room-temp-link temp-display temp-display-no-unit" id="room-temp-{{ device.device_id }}"
-                      data-fcu-temp-sources-url="/api/v1/fcu_temp_sources?fcu_device_id={{ device.device_id }}"
-                      data-fcu-temp-source-update-url="/api/v1/fcu_temp_source"
-                      data-fcu-temp-sources-room-name="{{ device.room_name or device.device_label }}"
-                      title="Calculated room temperature for {{ device.device_label }}">--</td>
+                  <td class="cell-temp cell-temp-link temp-display temp-display-no-unit" id="room-temp-{{ device.device_id }}"
+                      data-chart-url="/chart?mode=calculated&device_ids={{ device.device_id }}"
+                      title="Calculated room temperature chart for {{ device.device_label }}">--</td>
                   <td class="cell-temp cell-temp-set" id="settemp-{{ device.device_id }}">
                     <span class="settemp-thermostat"
                           id="settemp-controls-{{ device.device_id }}"
@@ -209,9 +216,10 @@
                     </div>
                   </td>
                   <td class="cell-temp cell-temp-range" id="setrange-{{ device.device_id }}">
-                    <div class="setrange-widget"
+                    <div class="setrange-widget{% if current_mode_value not in ['AUTO', 'LC_AUTO'] %} setrange-widget-local{% endif %}"
                          id="setrange-widget-{{ device.device_id }}"
                          data-device-id="{{ device.device_id }}"
+                         data-mode="{{ current_mode_value }}"
                          data-update-url="/api/v1/set_range"
                          data-min-range-c="{{ device.min_set_range_c|default(3.0, true) }}"
                          {% if device.set_range_low_c is defined and device.set_range_low_c is not none %}data-set-range-low-c="{{ device.set_range_low_c }}"{% endif %}
@@ -228,8 +236,6 @@
                       </div>
                     </div>
                   </td>
-                  {% set current_mode = device.mode|default(device.status.Mode|default('', true), true) %}
-                  {% set current_mode_value = current_mode|upper if current_mode else '' %}
                   {% set mode_labels = {'LC_AUTO': 'Auto'} %}
                   <td class="cell-mode">
                     <select class="mode-select"
@@ -285,6 +291,9 @@
           <tfoot>
             <tr>
               <td colspan="13" class="table-update-summary" id="oldest-update-fcu">{{ table_update_summaries.fcu.label if table_update_summaries.fcu else '' }}</td>
+            </tr>
+            <tr>
+              <td colspan="13" class="fcu-setrange-note">Auto mode: the AE-200 implements Set Range. In Cool, Heat, Dry, and Fan modes, FCU Set Temp is the active AE-200 setpoint; Set Range stays editable for rules.</td>
             </tr>
           </tfoot>
         </table>
@@ -391,12 +400,16 @@
 <div id="fcu-temp-sources-popup" class="fcu-temp-sources-popup hidden" role="dialog" aria-modal="true" aria-labelledby="fcu-temp-sources-title">
   <div class="fcu-temp-sources-dialog">
     <div class="fcu-temp-sources-header">
-      <h3 id="fcu-temp-sources-title" data-role="title">Temperature Sources</h3>
+      <h3 id="fcu-temp-sources-title" data-role="title">Room Editor</h3>
       <div class="fcu-temp-sources-actions">
         <button type="button" class="pure-button pure-button-primary" data-action="save-fcu-temp-sources">Save</button>
         <button type="button" class="pure-button" data-action="revert-fcu-temp-sources">Revert</button>
         <button type="button" class="pure-button" data-action="cancel-fcu-temp-sources">Cancel</button>
       </div>
+    </div>
+    <div class="fcu-room-editor-row">
+      <label for="fcu-room-display-name">Room (Unit) name</label>
+      <input id="fcu-room-display-name" class="fcu-room-display-name" type="text" autocomplete="off" data-role="display-name">
     </div>
     <p class="fcu-temp-sources-note">Readings older than 10 minutes are ignored.</p>
     <div class="fcu-temp-sources-message" data-role="message" aria-live="polite"></div>
