@@ -30,3 +30,4 @@ venv/
 .beads-credential-key
 devices*.json
 x.json
+slack-token
