@@ -333,6 +333,11 @@ button {
     text-align: center;
 }
 
+.data-table tbody tr.device-row td.cell-temp.cell-temp-link.cell-fcu-temp,
+.data-table tbody tr.device-row td.cell-temp.cell-temp-link.cell-room-temp {
+    text-align: center;
+}
+
 .data-table tbody td.cell-disable-for {
     text-align: center;
 }
@@ -342,7 +347,7 @@ button {
 }
 
 .data-table tbody td.cell-temp-set {
-    text-align: left;
+    text-align: center;
 }
 
 .setrange-widget {
@@ -355,18 +360,6 @@ button {
     align-items: center;
     margin: 0 auto;
     padding: 0;
-}
-
-.setrange-widget-local {
-    border-radius: 4px;
-    background:
-        repeating-linear-gradient(
-            135deg,
-            rgba(100, 116, 139, 0.18) 0,
-            rgba(100, 116, 139, 0.18) 2px,
-            transparent 2px,
-            transparent 8px
-        );
 }
 
 .setrange-track {
@@ -456,6 +449,7 @@ button {
     display: flex;
     flex-direction: column;
     gap: 0.05rem;
+    margin: 0 auto;
     padding: 0;
 }
 
@@ -463,6 +457,7 @@ button {
     position: relative;
     width: 100%;
     height: 16px;
+    touch-action: none;
 }
 
 .autosettemp-track::before {
@@ -489,10 +484,18 @@ button {
     top: 50%;
     width: 14px;
     height: 14px;
+    padding: 0;
     border: 2px solid #1f2937;
     border-radius: 50%;
     background: #fff;
+    cursor: ew-resize;
     transform: translate(-50%, -50%);
+}
+
+.autosettemp-handle.selected,
+.autosettemp-handle:focus-visible {
+    outline: 2px solid #3b82f6;
+    outline-offset: 2px;
 }
 
 .autosettemp-values {
@@ -520,6 +523,18 @@ button {
 
 .autosettemp-end-label {
     text-align: center;
+}
+
+.settemp-thermostat .settemp-display[data-update-state="pending"],
+.autosettemp-widget[data-update-state="pending"] .autosettemp-end-label,
+.setrange-widget[data-update-state="pending"] .setrange-end-label {
+    color: #2563eb;
+}
+
+.settemp-thermostat .settemp-display[data-update-state="failed"],
+.autosettemp-widget[data-update-state="failed"] .autosettemp-end-label,
+.setrange-widget[data-update-state="failed"] .setrange-end-label {
+    color: #c62828;
 }
 
 /* All data tables match the widest table's width via grid on the form */
@@ -612,12 +627,35 @@ td.cell-notes {
 
 .rules-disabled-superscript {
     color: #c62828;
-    font-size: 0.7em;
+    display: inline-flex;
+    align-items: baseline;
+    gap: 2px;
+    font-size: 0.65em;
     vertical-align: super;
     margin-left: 4px;
     cursor: default;
     font-weight: 500;
     position: relative;
+    max-width: 100%;
+    white-space: nowrap;
+}
+
+.rules-disabled-clear {
+    appearance: none;
+    border: none;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+    font: inherit;
+    font-weight: 700;
+    line-height: 1;
+    margin: 0;
+    padding: 0;
+}
+
+.rules-disabled-clear:hover,
+.rules-disabled-clear:focus-visible {
+    text-decoration: underline;
 }
 
 .rules-disabled-superscript:hover::after {
@@ -946,7 +984,7 @@ table.rules-table th  {
 /* optional: avoid a hard fixed width on the header */
 .column-unit {
     white-space: normal;
-    min-width: 120px;
+    min-width: 150px;
     word-break: break-word;
 }
 
@@ -979,8 +1017,12 @@ td.cell-speed-auto {
 }
 
 .cell-unit {
-    white-space: nowrap;
+    white-space: normal;
     vertical-align: top;
+}
+
+.device-name-context {
+    white-space: nowrap;
 }
 
 .data-table th {
@@ -1004,7 +1046,7 @@ td.cell-speed-auto {
 table.data-table tbody tr.device-row td.cell-temp-set {
     padding-left: 4px !important;
     padding-right: 4px !important;
-    text-align: left !important;
+    text-align: center !important;
 }
 
 .data-table .settemp-thermostat .settemp-btn,

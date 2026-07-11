@@ -221,13 +221,17 @@ def test_index_fcu_speeds_exclude_one(
     assert f'id="radio-{device_id}-auto"' in html
     assert '<th class="column-mode" rowspan="2">Mode</th>' in html
     assert '<th class="column-temp column-temp-set" rowspan="2">FCU Set<br>Temp' in html
+    assert (
+        '<th class="column-temp column-temp-range" rowspan="2">Rule Set Range'
+        in html
+    )
     assert 'class="mode-select"' in html
     assert f'id="mode-{device_id}"' in html
     assert f'id="autosettemp-widget-{device_id}"' in html
     assert 'aria-label="Auto heat and cool set temperatures"' in html
     assert 'role="group"' in html
-    assert "Auto mode: the AE-200 implements Set Range." in html
-    assert "Set Range stays editable for rules." in html
+    assert "FCU Set Temp edits the AE-200 Heat/Cool range." in html
+    assert "Rule Set Range stays editable for local rules." in html
     assert '<option value="FAN"' in html
     assert '<option value="COOL" selected>Cool</option>' in html
     assert '<option value="DRY"' in html

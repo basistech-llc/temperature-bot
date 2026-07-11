@@ -25,6 +25,7 @@ from .utils.request_utils import parse_device_ids
 from .utils.db_utils import with_db_connection
 
 from .models import (
+    AutoSetTempControl,
     CommandResponse,
     DeviceMetadataControl,
     DeviceRoomControl,
@@ -154,6 +155,26 @@ def set_temp(conn, body: SetTempControl):
     logger.debug("/set_temp: body=[%s]", body)
     try:
         ret = rules_engine.set_body_set_temp(conn, body, request.remote_addr, "web")
+    except ValueError as exc:
+        return _command_error_response(exc)
+    except (ET.ParseError, OSError, RuntimeError, WebSocketException) as exc:
+        return _ae200_error_response(exc)
+    return jsonify(json_ready(CommandResponse.model_validate({"status": "ok", **ret})))
+
+
+@api_v1.route("/set_auto_temp", methods=["POST"])
+@validate()
+@with_db_connection
+def set_auto_temp(conn, body: AutoSetTempControl):
+    """Set AE-200 Auto Heat/Cool setpoints for a unit."""
+    logger.debug("/set_auto_temp: body=[%s]", body)
+    try:
+        ret = rules_engine.set_body_auto_set_temp(
+            conn,
+            body,
+            request.remote_addr,
+            "web",
+        )
     except ValueError as exc:
         return _command_error_response(exc)
     except (ET.ParseError, OSError, RuntimeError, WebSocketException) as exc:

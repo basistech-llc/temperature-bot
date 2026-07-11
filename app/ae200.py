@@ -395,6 +395,25 @@ def set_set_temp(ae200_device, set_temp_c):
     d.send(ae200_device, {"SetTemp": str(set_temp_c)})
 
 
+def set_auto_set_temps(ae200_device, *, heat_set_temp_c, cool_set_temp_c):
+    """Set the Auto-mode Heat/Cool dual setpoints in Celsius."""
+    logger.info(
+        "set_auto_set_temps(%s, heat=%s, cool=%s)",
+        ae200_device,
+        heat_set_temp_c,
+        cool_set_temp_c,
+    )
+    payload = {
+        AE200_COOL_SET_TEMP_KEY: str(cool_set_temp_c),
+        AE200_HEAT_SET_TEMP_KEY: str(heat_set_temp_c),
+    }
+    if AE200_SIMULATOR:
+        simulated_devices[str(ae200_device)].update(payload)
+        return
+    d = AE200Functions()
+    d.send(ae200_device, payload)
+
+
 def set_mode(ae200_device, mode):
     mode = str(mode).upper()
     if mode not in AE200_ALLOWED_SET_MODES:

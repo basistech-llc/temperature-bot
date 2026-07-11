@@ -7,8 +7,12 @@ Each FCU has two temperature values:
 - **FCU Temp** is the raw inlet/device temperature stored in `devlog.temp10x`.
 - **Room Temp** is the calculated room temperature used by display, reporting,
   and automation.
-- **Set Range** is the persisted allowed temperature band for an FCU. The
+- **Rule Set Range** is the persisted allowed temperature band for an FCU. The
   system-wide minimum width is 3.0 °C; individual FCUs can use a wider range.
+  This range is local to TemperatureBot rules; in Auto mode, the FCU Set Temp
+  column edits the AE-200 Heat/Cool setpoints instead.
+  The FCU Set Temp and Rule Set Range slider tracks use a common 55 °F to 85 °F
+  visual scale.
 
 Calculated temperature is a weighted average of the FCU's own raw temperature
 and any configured temperature-reporting devices:
@@ -231,7 +235,26 @@ Temperature chart endpoints:
 - `GET /api/v1/temperature?mode=calculated&device_ids=12` returns calculated FCU
   room-temperature history for FCU devices only.
 
-FCU set range endpoint:
+FCU Auto Heat/Cool setpoint endpoint:
+
+- `POST /api/v1/set_auto_temp`
+
+```json
+{
+  "device_id": 12,
+  "heat_set_temp_c": 20.0,
+  "cool_set_temp_c": 25.0
+}
+```
+
+The endpoint writes AE-200 `SetTemp2` for Heat and `SetTemp1` for Cool, records
+the change in `changelog`, and stores the read-back status in `devlog`.
+After an operator edits a single setpoint or range, the UI colors the requested
+number blue while waiting for status read-back. For 30 seconds, stale read-back
+values that do not match the request are suppressed; after that, a mismatching
+read-back value is shown in red.
+
+FCU Rule Set Range endpoint:
 
 - `POST /api/v1/set_range`
 

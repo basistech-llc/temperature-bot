@@ -15,7 +15,7 @@ becomes a mapping.
 """
 
 from typing import Annotated, Any, Dict, Iterable, Literal
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from . import ae200
 
@@ -374,6 +374,20 @@ class SetTempControl(BaseModel):
 
     device_id: int = Field(description="Local device id from the devices table.")
     set_temp_c: float = Field(description="Requested set point in degrees Celsius.")
+
+
+class AutoSetTempControl(BaseModel):
+    """Request body for changing AE-200 Auto Heat/Cool setpoints."""
+
+    device_id: int = Field(description="Local device id from the devices table.")
+    heat_set_temp_c: float = Field(description="Requested Auto Heat set point in Celsius.")
+    cool_set_temp_c: float = Field(description="Requested Auto Cool set point in Celsius.")
+
+    @model_validator(mode="after")
+    def validate_range(self):
+        if self.heat_set_temp_c >= self.cool_set_temp_c:
+            raise ValueError("heat_set_temp_c must be lower than cool_set_temp_c")
+        return self
 
 
 class SetRangeControl(BaseModel):
