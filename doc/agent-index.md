@@ -50,9 +50,12 @@ Recommended implementation shape:
 
 - Add `app/static/hickory_life.js`.
 - Load it only when `location == 'Hickory'` from `room_dashboard.html`.
+- Keep Hickory-only hidden gestures in this same module; it also owns the
+  repeated same-corner reload gesture.
 - Keep it self-contained:
   - attach its own `DOMContentLoaded` listener;
   - add four-corner `pointerdown` sequence detection;
+  - add repeated same-corner press detection for the reload gesture;
   - inject its own overlay, dialog, canvas, and style element;
   - exit cleanly and remove DOM/timers on click;
   - export only pure helper functions for Node tests.
@@ -68,6 +71,9 @@ Corner trigger guidance:
   the dialog accidentally.
 - Be careful with top-right: the room dashboard temperature toggle is also near
   that corner.
+- The reload gesture is separate from the Life sequence: four presses in the
+  same corner within four seconds flash "reloading" for 0.25 seconds, then
+  reload the page.
 
 Game of Life guidance:
 

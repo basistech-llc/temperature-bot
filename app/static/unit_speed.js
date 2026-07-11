@@ -593,27 +593,6 @@ function resizeSetRangeEndpoint(lowC, highC, endpoint, valueC, options = {}) {
   return normalizeSetRange(low, high, opts);
 }
 
-function moveSetRange(lowC, highC, deltaC, options = {}) {
-  const opts = setRangeOptions(options);
-  const current = normalizeSetRange(lowC, highC, opts);
-  if (!current) {
-    return null;
-  }
-
-  const width = current.highC - current.lowC;
-  let low = current.lowC + deltaC;
-  if (low < opts.trackMinC) {
-    low = opts.trackMinC;
-  }
-  if (low + width > opts.trackMaxC) {
-    low = opts.trackMaxC - width;
-  }
-  return {
-    lowC: roundTempC(low),
-    highC: roundTempC(low + width),
-  };
-}
-
 function setRangesEqual(first, second) {
   return (
     Boolean(first) &&
@@ -1653,7 +1632,7 @@ function getSetRangeFromWidget(widget) {
 function setSetRangeSelectedPart(widget, part) {
   widget.dataset.selectedPart = part;
   widget
-    .querySelectorAll("[data-role='low'], [data-role='high'], [data-role='middle']")
+    .querySelectorAll("[data-role='low'], [data-role='high']")
     .forEach((element) => {
       element.classList.toggle("selected", element.dataset.role === part);
     });
@@ -1809,44 +1788,25 @@ function applySetRangePointerValue(widget, event) {
   }
 
   const options = getSetRangeWidgetOptions(widget, current);
-  let nextRange;
-  if (drag.part === "middle") {
-    const currentPointerC = pointerEventToRangeTemp(widget, event);
-    nextRange = moveSetRange(
-      drag.startLowC,
-      drag.startHighC,
-      currentPointerC - drag.startPointerC,
-      options,
-    );
-  } else {
-    nextRange = resizeSetRangeEndpoint(
-      current.lowC,
-      current.highC,
-      drag.part,
-      pointerEventToRangeTemp(widget, event),
-      options,
-    );
-  }
+  const nextRange = resizeSetRangeEndpoint(
+    current.lowC,
+    current.highC,
+    drag.part,
+    pointerEventToRangeTemp(widget, event),
+    options,
+  );
   if (nextRange && !setRangesEqual(current, nextRange)) {
     drag.changed = true;
     renderSetRangeWidget(widget, nextRange.lowC, nextRange.highC);
   }
 }
 
-function setRangePartFromPointerTarget(widget, event) {
-  const role = event.target.dataset.role;
-  if (role === "low" || role === "high" || role === "middle") {
+function setRangePartFromPointerTarget(event) {
+  const role = event.currentTarget?.dataset?.role || event.target?.dataset?.role;
+  if (role === "low" || role === "high") {
     return role;
   }
-
-  const current = getSetRangeFromWidget(widget);
-  if (!current) {
-    return "middle";
-  }
-  const pointerC = pointerEventToRangeTemp(widget, event);
-  return Math.abs(pointerC - current.lowC) <= Math.abs(pointerC - current.highC)
-    ? "low"
-    : "high";
+  return null;
 }
 
 function handleSetRangePointerDown(event) {
@@ -1855,9 +1815,12 @@ function handleSetRangePointerDown(event) {
   if (!current) {
     return;
   }
-  event.preventDefault();
 
-  const part = setRangePartFromPointerTarget(widget, event);
+  const part = setRangePartFromPointerTarget(event);
+  if (!part) {
+    return;
+  }
+  event.preventDefault();
   setSetRangeSelectedPart(widget, part);
   if (typeof event.target.focus === "function") {
     event.target.focus();
@@ -1867,15 +1830,8 @@ function handleSetRangePointerDown(event) {
   widget._setRangeDrag = {
     part,
     changed: false,
-    startLowC: current.lowC,
-    startHighC: current.highC,
-    startPointerC: pointerEventToRangeTemp(widget, event),
   };
   event.currentTarget.setPointerCapture(event.pointerId);
-
-  if (event.target.dataset.role === "track") {
-    applySetRangePointerValue(widget, event);
-  }
 }
 
 function handleSetRangePointerMove(event) {
@@ -1920,18 +1876,18 @@ function handleSetRangeKeyDown(event) {
   event.preventDefault();
 
   const part = event.currentTarget.dataset.role || widget.dataset.selectedPart;
+  if (part !== "low" && part !== "high") {
+    return;
+  }
   setSetRangeSelectedPart(widget, part);
   const options = getSetRangeWidgetOptions(widget, current);
-  const nextRange =
-    part === "middle"
-      ? moveSetRange(current.lowC, current.highC, delta, options)
-      : resizeSetRangeEndpoint(
-          current.lowC,
-          current.highC,
-          part,
-          current[`${part}C`] + delta,
-          options,
-        );
+  const nextRange = resizeSetRangeEndpoint(
+    current.lowC,
+    current.highC,
+    part,
+    current[`${part}C`] + delta,
+    options,
+  );
   if (nextRange) {
     renderSetRangeWidget(widget, nextRange.lowC, nextRange.highC);
     saveSetRangeWidget(widget);
@@ -1945,16 +1901,18 @@ function setupSetRangeControls() {
     if (lowC !== null && highC !== null) {
       renderSetRangeWidget(widget, lowC, highC, widget.dataset.minRangeC);
     }
-    setSetRangeSelectedPart(widget, widget.dataset.selectedPart || "middle");
+    setSetRangeSelectedPart(
+      widget,
+      widget.dataset.selectedPart === "high" ? "high" : "low",
+    );
 
-    const track = widget.querySelector(".setrange-track");
-    track.addEventListener("pointerdown", handleSetRangePointerDown);
-    track.addEventListener("pointermove", handleSetRangePointerMove);
-    track.addEventListener("pointerup", finishSetRangePointerDrag);
-    track.addEventListener("pointercancel", finishSetRangePointerDrag);
     widget
-      .querySelectorAll("[data-role='low'], [data-role='high'], [data-role='middle']")
+      .querySelectorAll("[data-role='low'], [data-role='high']")
       .forEach((element) => {
+        element.addEventListener("pointerdown", handleSetRangePointerDown);
+        element.addEventListener("pointermove", handleSetRangePointerMove);
+        element.addEventListener("pointerup", finishSetRangePointerDrag);
+        element.addEventListener("pointercancel", finishSetRangePointerDrag);
         element.addEventListener("keydown", handleSetRangeKeyDown);
       });
   });
@@ -2483,13 +2441,13 @@ if (typeof module !== "undefined" && module.exports) {
     isAutoOperationMode,
     modeLabelForDevice,
     modeValueForDevice,
-    moveSetRange,
     normalizeSetRange,
     oldestUpdateTimestampForTable,
     parseFcuTempSourceMultiplier,
     renderDisableCell,
     resizeSetRangeEndpoint,
     saveFcuTempSourceMultipliers,
+    setRangePartFromPointerTarget,
     setAutoSetTempUnavailable,
     sortedFcuTempSources,
     tableUpdateSummaryText,

@@ -7,8 +7,10 @@ const {
   aliveCount,
   cornerForPoint,
   createCornerSequenceRecognizer,
+  createRepeatedCornerRecognizer,
   makeLifeSimulation,
   nextLifeGrid,
+  showReloadOverlay,
 } = require("../app/static/hickory_life.js");
 
 let passed = 0;
@@ -135,6 +137,162 @@ checkTrue("default timeout allows deliberate top-right", defaultRecognizer.handl
 checkTrue("default timeout allows deliberate bottom-left", defaultRecognizer.handlePoint(100, 700, 6000).matched);
 checkTrue("default timeout allows deliberate bottom-right", defaultRecognizer.handlePoint(900, 700, 9000).matched);
 check("default sequence completes", defaultCompleted, 1);
+
+let reloadCorner = "";
+const reloadRecognizer = createRepeatedCornerRecognizer({
+  width: 1000,
+  height: 800,
+  hitSize: 72,
+  neededClicks: 4,
+  windowMs: 4000,
+  onComplete: corner => {
+    reloadCorner = corner;
+  },
+});
+check("reload recognizer first click", reloadRecognizer.handlePoint(5, 5, 0), {
+  corner: "top-left",
+  matched: true,
+  completed: false,
+  count: 1,
+});
+check("reload recognizer second click", reloadRecognizer.handlePoint(6, 6, 1000).count, 2);
+check("reload recognizer third click", reloadRecognizer.handlePoint(7, 7, 2000).count, 3);
+check("reload recognizer fourth click completes", reloadRecognizer.handlePoint(8, 8, 4000), {
+  corner: "top-left",
+  matched: true,
+  completed: true,
+  count: 4,
+});
+check("reload recognizer reports completed corner", reloadCorner, "top-left");
+
+let reloadCompletions = 0;
+const slowReloadRecognizer = createRepeatedCornerRecognizer({
+  width: 1000,
+  height: 800,
+  hitSize: 72,
+  neededClicks: 4,
+  windowMs: 4000,
+  onComplete: () => {
+    reloadCompletions += 1;
+  },
+});
+slowReloadRecognizer.handlePoint(995, 795, 0);
+slowReloadRecognizer.handlePoint(995, 795, 1000);
+slowReloadRecognizer.handlePoint(995, 795, 2000);
+check("reload recognizer resets after window", slowReloadRecognizer.handlePoint(995, 795, 4001), {
+  corner: "bottom-right",
+  matched: true,
+  completed: false,
+  count: 1,
+});
+check("slow reload sequence does not complete", reloadCompletions, 0);
+
+const changingCornerReload = createRepeatedCornerRecognizer({
+  width: 1000,
+  height: 800,
+  hitSize: 72,
+  neededClicks: 4,
+  windowMs: 4000,
+  onComplete: () => {
+    reloadCompletions += 1;
+  },
+});
+changingCornerReload.handlePoint(5, 5, 0);
+changingCornerReload.handlePoint(995, 5, 500);
+changingCornerReload.handlePoint(5, 795, 1000);
+const changingCornerFinal = changingCornerReload.handlePoint(995, 795, 1500);
+check("four different corners do not reload", changingCornerFinal.completed, false);
+check("changing corners keep latest count at one", changingCornerFinal.count, 1);
+
+const interruptedReload = createRepeatedCornerRecognizer({
+  width: 1000,
+  height: 800,
+  hitSize: 72,
+  neededClicks: 4,
+  windowMs: 4000,
+  onComplete: () => {
+    reloadCompletions += 1;
+  },
+});
+interruptedReload.handlePoint(5, 5, 0);
+interruptedReload.handlePoint(5, 5, 1000);
+check("non-corner resets reload recognizer", interruptedReload.handlePoint(500, 400, 1500), {
+  corner: null,
+  matched: false,
+  completed: false,
+  count: 0,
+});
+check("interrupted reload sequence starts again", interruptedReload.handlePoint(5, 5, 2000).count, 1);
+
+function fakeDocument() {
+  function makeElement(tagName) {
+    return {
+      tagName,
+      attributes: {},
+      children: [],
+      className: "",
+      id: "",
+      textContent: "",
+      appendChild(child) {
+        child.parent = this;
+        this.children.push(child);
+        return child;
+      },
+      remove() {
+        if (!this.parent) return;
+        this.parent.children = this.parent.children.filter(child => child !== this);
+      },
+      setAttribute(name, value) {
+        this.attributes[name] = value;
+      },
+    };
+  }
+
+  return {
+    body: makeElement("body"),
+    head: makeElement("head"),
+    createElement: makeElement,
+    getElementById: () => null,
+  };
+}
+
+const originalDocument = global.document;
+const originalWindow = global.window;
+const originalSetTimeout = global.setTimeout;
+try {
+  const timers = [];
+  const document = fakeDocument();
+  let reloads = 0;
+  global.document = document;
+  global.window = {
+    location: {
+      reload: () => {
+        reloads += 1;
+      },
+    },
+  };
+  global.setTimeout = (callback, delayMs) => {
+    timers.push({ callback, delayMs });
+    return timers.length;
+  };
+
+  showReloadOverlay();
+  check("reload flash appends one overlay", document.body.children.length, 1);
+  check(
+    "reload flash overlay class",
+    document.body.children[0].className,
+    "hickory-life-overlay hickory-life-reload-overlay",
+  );
+  check("reload flash message text", document.body.children[0].children[0].textContent, "reloading");
+  check("reload flash delay", timers[0].delayMs, 250);
+  check("reload is not immediate", reloads, 0);
+  timers[0].callback();
+  check("reload happens after flash", reloads, 1);
+} finally {
+  global.document = originalDocument;
+  global.window = originalWindow;
+  global.setTimeout = originalSetTimeout;
+}
 
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed === 0 ? 0 : 1);

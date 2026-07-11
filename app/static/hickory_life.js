@@ -12,6 +12,9 @@
     const CORNER_SEQUENCE = ['top-left', 'top-right', 'bottom-left', 'bottom-right'];
     const CORNER_HIT_SIZE = 120;
     const CORNER_TIMEOUT_MS = 5000;
+    const RELOAD_CORNER_CLICKS = 4;
+    const RELOAD_CORNER_WINDOW_MS = 4000;
+    const RELOAD_FLASH_MS = 250;
     const LIFE_INTERVAL_MS = 200;
     const LIFE_HISTORY_SIZE = 240;
     const LIFE_DENSITY = 0.34;
@@ -24,6 +27,7 @@
     let lifeResizeHandler = null;
     let lifeSimulation = null;
     let skullTimer = null;
+    let reloadTimer = null;
 
     function cornerForPoint(x, y, width, height, hitSize) {
         if (x < 0 || y < 0 || width <= 0 || height <= 0 || hitSize <= 0) {
@@ -96,6 +100,68 @@
 
             reset();
             return { corner, matched: false, completed: false };
+        }
+
+        return { handlePoint, reset };
+    }
+
+    function createRepeatedCornerRecognizer(options) {
+        const neededClicks = options.neededClicks || RELOAD_CORNER_CLICKS;
+        const windowMs = options.windowMs || RELOAD_CORNER_WINDOW_MS;
+        const hitSize = options.hitSize || CORNER_HIT_SIZE;
+        const onComplete = options.onComplete || function() {};
+        let activeCorner = null;
+        let firstTime = null;
+        let clickCount = 0;
+
+        function size() {
+            if (options.getSize) return options.getSize();
+            return { width: options.width, height: options.height };
+        }
+
+        function reset() {
+            activeCorner = null;
+            firstTime = null;
+            clickCount = 0;
+        }
+
+        function start(corner, currentTime) {
+            activeCorner = corner;
+            firstTime = currentTime;
+            clickCount = 1;
+            return { corner, matched: true, completed: false, count: clickCount };
+        }
+
+        function handlePoint(x, y, nowMs) {
+            const currentTime = nowMs == null ? Date.now() : nowMs;
+            const bounds = size();
+            const corner = cornerForPoint(
+                x,
+                y,
+                bounds.width,
+                bounds.height,
+                hitSize,
+            );
+            if (!corner) {
+                reset();
+                return { corner: null, matched: false, completed: false, count: 0 };
+            }
+
+            if (
+                corner !== activeCorner
+                || firstTime == null
+                || currentTime - firstTime > windowMs
+            ) {
+                return start(corner, currentTime);
+            }
+
+            clickCount += 1;
+            if (clickCount >= neededClicks) {
+                reset();
+                onComplete(corner);
+                return { corner, matched: true, completed: true, count: neededClicks };
+            }
+            return { corner, matched: true, completed: false, count: clickCount };
         }
 
         return { handlePoint, reset };
@@ -305,6 +371,22 @@
   color: #f5f5f5;
   text-shadow: 0 0 28px rgba(255, 255, 255, 0.24);
 }
+.hickory-life-reload-overlay {
+  background: rgba(5, 5, 5, 0.6);
+  pointer-events: none;
+}
+.hickory-life-reload-message {
+  box-sizing: border-box;
+  min-width: min(80vw, 16rem);
+  padding: 0.9rem 1.4rem;
+  border-radius: 8px;
+  background: rgba(23, 18, 13, 0.94);
+  color: #f8f3df;
+  font: 700 clamp(1.5rem, 4vw, 2.4rem) sans-serif;
+  text-align: center;
+  text-transform: lowercase;
+  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.45);
+}
 @media (max-width: 560px) {
   .hickory-life-actions {
     flex-direction: column;
@@ -329,6 +411,10 @@
         if (skullTimer) {
             clearTimeout(skullTimer);
             skullTimer = null;
+        }
+        if (reloadTimer) {
+            clearTimeout(reloadTimer);
+            reloadTimer = null;
         }
         lifeSimulation = null;
         if (activeOverlay) {
@@ -496,6 +582,15 @@
         skullTimer = setTimeout(clearOverlay, SKULL_SECONDS * 1000);
     }
 
+    function showReloadOverlay() {
+        const overlay = buildOverlay('hickory-life-reload-overlay');
+        const message = document.createElement('div');
+        message.className = 'hickory-life-reload-message';
+        message.textContent = 'reloading';
+        overlay.appendChild(message);
+        reloadTimer = setTimeout(() => window.location.reload(), RELOAD_FLASH_MS);
+    }
+
     function setupHickoryLifeEasterEgg() {
         if (typeof document === 'undefined') return;
         if (!document.body) return;
@@ -508,9 +603,23 @@
             timeoutMs: CORNER_TIMEOUT_MS,
             onComplete: showChoiceDialog,
         });
+        const reloadRecognizer = createRepeatedCornerRecognizer({
+            getSize: () => ({ width: window.innerWidth, height: window.innerHeight }),
+            hitSize: CORNER_HIT_SIZE,
+            neededClicks: RELOAD_CORNER_CLICKS,
+            windowMs: RELOAD_CORNER_WINDOW_MS,
+            onComplete: showReloadOverlay,
+        });
 
         function handleCornerInput(clientX, clientY, event) {
             if (activeOverlay) return;
+            const reloadResult = reloadRecognizer.handlePoint(clientX, clientY, Date.now());
+            if (reloadResult.completed) {
+                if (event.cancelable) event.preventDefault();
+                event.stopPropagation();
+                return;
+            }
+
             const result = recognizer.handlePoint(clientX, clientY, Date.now());
             if (result.matched) {
                 if (event.cancelable) event.preventDefault();
@@ -530,9 +639,11 @@
         createCornerSequenceRecognizer,
         createEmptyGrid,
         createRandomGrid,
+        createRepeatedCornerRecognizer,
         gridHash,
         makeLifeSimulation,
         nextLifeGrid,
+        showReloadOverlay,
         setupHickoryLifeEasterEgg,
     };
 });

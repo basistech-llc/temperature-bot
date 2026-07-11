@@ -217,7 +217,7 @@
                          {% if device.set_range_low_c is defined and device.set_range_low_c is not none %}data-set-range-low-c="{{ device.set_range_low_c }}"{% endif %}
                          {% if device.set_range_high_c is defined and device.set_range_high_c is not none %}data-set-range-high-c="{{ device.set_range_high_c }}"{% endif %}>
                       <div class="setrange-track" data-role="track">
-                        <div class="setrange-fill" data-role="middle" tabindex="0" aria-label="Move set range"></div>
+                        <div class="setrange-fill" data-role="middle" aria-hidden="true"></div>
                         <button type="button" class="setrange-handle setrange-handle-low" data-role="low" aria-label="Move lower set range"></button>
                         <button type="button" class="setrange-handle setrange-handle-high" data-role="high" aria-label="Move upper set range"></button>
                       </div>

@@ -23,7 +23,6 @@ const {
   isAutoOperationMode,
   modeLabelForDevice,
   modeValueForDevice,
-  moveSetRange,
   normalizeSetRange,
   oldestUpdateTimestampForTable,
   parseFcuTempSourceMultiplier,
@@ -31,6 +30,7 @@ const {
   resizeSetRangeEndpoint,
   saveFcuTempSourceMultipliers,
   setAutoSetTempUnavailable,
+  setRangePartFromPointerTarget,
   sortedFcuTempSources,
   tableUpdateSummaryText,
 } = require("../app/static/unit_speed.js");
@@ -666,11 +666,25 @@ checkRange(
   21,
   24,
 );
-checkRange(
-  "moving middle preserves width and clamps to track",
-  moveSetRange(20, 24, -20, { minRangeC: 3, trackMinC: 10, trackMaxC: 30 }),
-  10,
-  14,
+check(
+  "set range low handle starts drag",
+  setRangePartFromPointerTarget({ currentTarget: { dataset: { role: "low" } } }),
+  "low",
+);
+check(
+  "set range high handle starts drag",
+  setRangePartFromPointerTarget({ currentTarget: { dataset: { role: "high" } } }),
+  "high",
+);
+check(
+  "set range middle fill does not start drag",
+  setRangePartFromPointerTarget({ currentTarget: { dataset: { role: "middle" } } }),
+  null,
+);
+check(
+  "set range track does not start drag",
+  setRangePartFromPointerTarget({ currentTarget: { dataset: { role: "track" } } }),
+  null,
 );
 
 testFcuBatchSavePost()
