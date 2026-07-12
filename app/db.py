@@ -2043,31 +2043,37 @@ def temperature_data_availability(
     end: int | None,
 ) -> tuple[bool, bool]:
     """Return whether selected devices have temperature samples outside a window."""
-    if device_ids is None:
-        device_ids = [
-            row["device_id"]
-            for row in conn.execute("SELECT device_id FROM devices").fetchall()
-        ]
-    if not device_ids:
+    if device_ids == []:
         return (False, False)
 
-    placeholders = ",".join("?" for _ in device_ids)
+    if device_ids is None:
+        index = "idx_devlog_temperature_logtime_device"
+        device_clause = ""
+        device_args: list[int] = []
+    elif len(device_ids) == 1:
+        index = "idx_devlog_temperature_device_logtime"
+        device_clause = " AND device_id = ?"
+        device_args = device_ids
+    else:
+        index = "idx_devlog_temperature_logtime_device"
+        placeholders = ",".join("?" for _ in device_ids)
+        device_clause = f" AND device_id IN ({placeholders})"
+        device_args = device_ids
 
     def exists_outside(boundary: int | None, before_window: bool) -> bool:
         if boundary is None:
             return False
         sql = f"""
             SELECT logtime
-            FROM devlog INDEXED BY idx_devlog_temperature_logtime_device
-            WHERE device_id IN ({placeholders})
-                AND temp10x IS NOT NULL
+            FROM devlog INDEXED BY {index}
+            WHERE temp10x IS NOT NULL{device_clause}
         """
         sql += (
             " AND logtime < ? ORDER BY logtime DESC LIMIT 1"
             if before_window
             else " AND logtime > ? ORDER BY logtime ASC LIMIT 1"
         )
-        return conn.execute(sql, [*device_ids, boundary]).fetchone() is not None
+        return conn.execute(sql, [*device_args, boundary]).fetchone() is not None
 
     return (
         exists_outside(start, True),

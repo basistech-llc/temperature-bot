@@ -58,6 +58,41 @@ def test_temperature_data_availability_checks_selected_devices(test_database_con
         test_database_conn, [], 150, 250
     ) == (False, False)
 
+
+def test_temperature_data_availability_uses_direct_all_device_probe(
+    test_database_conn,
+):
+    device_id = db.get_or_create_device_id(test_database_conn, "device")
+    test_database_conn.execute(
+        "INSERT INTO devlog (device_id, logtime, duration, temp10x) VALUES (?, 100, 1, 200)",
+        (device_id,),
+    )
+    statements = []
+    test_database_conn.set_trace_callback(statements.append)
+
+    assert db.temperature_data_availability(
+        test_database_conn, None, 150, 50
+    ) == (True, True)
+
+    test_database_conn.set_trace_callback(None)
+    probes = [sql for sql in statements if "SELECT logtime" in sql]
+    assert len(probes) == 2
+    assert all("device_id" not in sql for sql in probes)
+
+
+def test_temperature_data_availability_uses_device_first_index_for_one_device(
+    test_database_conn,
+):
+    device_id = db.get_or_create_device_id(test_database_conn, "device")
+    statements = []
+    test_database_conn.set_trace_callback(statements.append)
+
+    db.temperature_data_availability(test_database_conn, [device_id], 150, None)
+
+    test_database_conn.set_trace_callback(None)
+    probe = next(sql for sql in statements if "SELECT logtime" in sql)
+    assert "INDEXED BY idx_devlog_temperature_device_logtime" in probe
+
 def test_temperature_insert(test_database_conn_with_test_data):
     conn = test_database_conn_with_test_data[0]
 

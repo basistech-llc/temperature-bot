@@ -4,6 +4,7 @@ test_chart_functionality.py
 
 import json
 import logging
+import re
 
 logger = logging.getLogger(__name__)
 
@@ -44,10 +45,17 @@ def test_temperature_chart_page_has_exclusion_controls(flask_test_client):  # no
     assert "temperature_chart_support.js" in content
     assert 'id="checkboxes"' in content
     assert 'id="temp-chart"' in content
-    assert 'id="earlierDataBtn"' in content
-    assert 'id="laterDataBtn"' in content
-    assert 'id="earlierDataBtn" class="chart-navigation-button" aria-label="Show earlier data" title="Show earlier data" disabled' in content
-    assert 'id="laterDataBtn" class="chart-navigation-button" aria-label="Show later data" title="Show later data" disabled' in content
+    for button_id, label in (
+        ("earlierDataBtn", "Show earlier data"),
+        ("laterDataBtn", "Show later data"),
+    ):
+        match = re.search(rf'<button\b[^>]*\bid="{button_id}"[^>]*>', content)
+        assert match is not None
+        button = match.group()
+        assert 'class="chart-navigation-button"' in button
+        assert f'aria-label="{label}"' in button
+        assert f'title="{label}"' in button
+        assert "disabled" in button
     assert 'id="calculated-temperature-explanation"' in content
     assert "current room temperature weights, not historical weights" in content
 
