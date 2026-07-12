@@ -161,6 +161,9 @@ function updateMetricChart() {
         let output = `${formatTime(ts)}<br>`;
         for (const p of params) {
           const val = p.value[1];
+          if (typeof val !== "number" || !Number.isFinite(val)) {
+            continue;
+          }
           output += `${p.marker} ${p.seriesName}: ${val.toFixed(decimals)}${unit ? " " + unit : ""}<br>`;
         }
         return output;

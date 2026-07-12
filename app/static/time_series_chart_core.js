@@ -20,6 +20,7 @@ let excludedSensorNames = new Set();
 let programmaticCheckboxUpdate = false;
 
 const STATUS_ENDPOINT = "/api/v1/status";
+const CHART_GAP_BREAK_SECONDS = 60 * 60;
 
 function buildSensor(displayName, deviceName, deviceId) {
   const safeDisplay = displayName || deviceName || "";
@@ -30,6 +31,33 @@ function buildSensor(displayName, deviceName, deviceId) {
     fullName,
     device_id: deviceId,
   };
+}
+
+function isFiniteNumber(value) {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+function lineDataWithGapBreaks(data, valueTransform) {
+  const lineData = [];
+  let previousTs = null;
+
+  data.forEach(([ts, val]) => {
+    if (isFiniteNumber(ts) && previousTs !== null) {
+      const delta = ts - previousTs;
+      if (delta > CHART_GAP_BREAK_SECONDS) {
+        lineData.push([(previousTs + delta / 2) * 1000, null]);
+      }
+    }
+    lineData.push([
+      ts * 1000,
+      val === null || val === undefined ? null : valueTransform(val),
+    ]);
+    if (isFiniteNumber(ts)) {
+      previousTs = ts;
+    }
+  });
+
+  return lineData;
 }
 
 /****************************************************************
@@ -66,10 +94,8 @@ function buildSeriesAndAxis(checkboxes, sensors, dataMap, valueTransform, option
         name: label,
         type: "line",
         showSymbol: false,
-        data: seriesData.data.map(([ts, val]) => [
-          ts * 1000,
-          valueTransform(val),
-        ]),
+        connectNulls: false,
+        data: lineDataWithGapBreaks(seriesData.data, valueTransform),
       });
     }
     legendSelected[label] = cb.checked;
@@ -109,10 +135,15 @@ function buildSeriesAndAxis(checkboxes, sensors, dataMap, valueTransform, option
   let maxVal = -Infinity;
   series.forEach((s) => {
     s.data.forEach(([, val]) => {
+      if (!isFiniteNumber(val)) return;
       if (val < minVal) minVal = val;
       if (val > maxVal) maxVal = val;
     });
   });
+
+  if (minVal === Infinity || maxVal === -Infinity) {
+    return { series, legendSelected, markLines, yAxisMin: 0, yAxisMax: 100 };
+  }
 
   const range = maxVal - minVal;
   const padding = Math.max(range * 0.1, 5);
@@ -329,3 +360,10 @@ function renderSensorCheckboxes(availableNames, onChange) {
   );
 }
 
+if (typeof module !== "undefined" && module.exports) {
+  module.exports = {
+    buildSeriesAndAxis,
+    CHART_GAP_BREAK_SECONDS,
+    lineDataWithGapBreaks,
+  };
+}
