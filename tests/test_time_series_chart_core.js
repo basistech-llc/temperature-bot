@@ -6,6 +6,10 @@ const {
   buildSeriesAndAxis,
   CHART_GAP_BREAK_SECONDS,
   lineDataWithGapBreaks,
+  shiftTimeWindow,
+  timeWindowFromPercent,
+  temperatureSeriesLabel,
+  zoomTimeWindow,
 } = require("../app/static/time_series_chart_core.js");
 
 let passed = 0;
@@ -101,6 +105,36 @@ check(
   ],
 );
 check("null gap marker does not pull y-axis to zero", axis.yAxisMin, 15);
+
+check("shift window earlier", shiftTimeWindow(100, 200, -1), { start: 0, end: 100 });
+check("shift window later", shiftTimeWindow(100, 200, 1), { start: 200, end: 300 });
+check("zoom in around center", zoomTimeWindow(100, 250, 1 / 1.5), {
+  start: 125,
+  end: 225,
+});
+check("zoom out around center", zoomTimeWindow(100, 200, 1.5), {
+  start: 75,
+  end: 225,
+});
+check("selected middle half becomes window", timeWindowFromPercent(100, 300, 25, 75), {
+  start: 150,
+  end: 250,
+});
+check(
+  "raw FCU temperature label identifies source",
+  temperatureSeriesLabel("Area 51", "FCU", "raw"),
+  "Area 51 (FCU)",
+);
+check(
+  "calculated FCU temperature label remains room-oriented",
+  temperatureSeriesLabel("Area 51", "FCU", "calculated"),
+  "Area 51",
+);
+check(
+  "raw sensor temperature label is unchanged",
+  temperatureSeriesLabel("Area 51 Sensor", null, "raw"),
+  "Area 51 Sensor",
+);
 
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed === 0 ? 0 : 1);

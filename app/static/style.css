@@ -1226,6 +1226,30 @@ table.data-table tbody tr.device-row td.cell-temp-set {
     background: #0056b3;
     border-color: #0056b3;
 }
+
+.chart-navigation {
+  align-items: center;
+  display: flex;
+  width: 100%;
+}
+
+.chart-navigation #temp-chart {
+  flex: 1;
+  min-width: 0;
+}
+
+.chart-navigation-button {
+  flex: 0 0 auto;
+  font-size: 1.5rem;
+  margin: 0 0.5rem;
+  padding: 0.5rem;
+  width: auto;
+}
+
+.chart-navigation-button:disabled {
+  cursor: default;
+  opacity: 0.25;
+}
 #downloadCsv {
     width: auto;
     padding: 0.3em 0.8em;

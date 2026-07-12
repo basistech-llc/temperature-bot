@@ -228,6 +228,14 @@ class TimeSeries(BaseModel):
     data: list[tuple[int, float]] = Field(description="Ordered (unix time, value) samples.")
 
 
+class TemperatureSeriesResponse(BaseModel):
+    """Temperature chart data and availability outside the requested window."""
+
+    series: list[TimeSeries] = Field(default_factory=list)
+    has_earlier_data: bool = False
+    has_later_data: bool = False
+
+
 class ChangelogRow(BaseModel):
     """One changelog row returned to the DataTables endpoint."""
 

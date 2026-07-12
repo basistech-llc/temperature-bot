@@ -36,7 +36,11 @@
 </div>
 
 <!-- Temperature chart -->
-<div class="pure-g"><div id="temp-chart"></div></div>
+<div class="chart-navigation">
+  <button type="button" id="earlierDataBtn" class="chart-navigation-button" aria-label="Show earlier data" title="Show earlier data">◀</button>
+  <div id="temp-chart"></div>
+  <button type="button" id="laterDataBtn" class="chart-navigation-button" aria-label="Show later data" title="Show later data">▶</button>
+</div>
 <div class="pure-g"><span id="record-count"></span></div>
 <div class="pure-g"><button id="downloadCsv">Download CSV</button></div>
 

@@ -7,6 +7,7 @@ Temperature Bot now tracks SQL schema versions with Flyway.
 - `etc/flyway/sql/V1__baseline_schema.sql` is the baseline migration.
 - It contains only application-owned schema objects and matches the deployed pre-Flyway database.
 - `etc/flyway/sql/V2__changelog_device_logtime_index.sql` upgrades the changelog device index to the current application schema.
+- `etc/flyway/sql/V7__devlog_temperature_device_logtime_index.sql` adds the composite partial index used by chart boundary probes.
 - Flyway creates and manages `flyway_schema_history`; do not add that table to a versioned migration or to `etc/schema.sql`.
 - Existing populated databases are baselined at V1 by `make migrate-db` and `make deploy`, then any later migrations are applied.
 - `etc/schema.sql` is generated from the Flyway migration history for tests and compatibility. Do not hand-edit it for schema changes.

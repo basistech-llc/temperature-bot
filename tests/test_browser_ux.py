@@ -123,6 +123,22 @@ def test_chart_page_no_dom_errors(test_database_conn_with_test_data):  # noqa: F
         # Wait a bit for JS to run
         page.wait_for_timeout(1000)
 
+        expect(page.locator("#earlierDataBtn")).to_be_enabled()
+        expect(page.locator("#laterDataBtn")).to_be_disabled()
+        toolbox_features = page.evaluate(
+            "Object.keys(tempChart.getOption().toolbox[0].feature)"
+        )
+        assert toolbox_features == ["myZoomIn", "myZoomOut", "dataZoom"]
+
+        with page.expect_response(
+            lambda response: "/api/v1/temperature" in response.url,
+            timeout=15_000,
+        ) as response_info:
+            page.locator("#earlierDataBtn").click()
+        shifted_payload = response_info.value.json()
+        assert shifted_payload["has_earlier_data"] is True
+        assert shifted_payload["has_later_data"] is True
+
         # Check for NotFoundError in console errors
         error_texts = [msg.text for msg in errors]
         assert not any("NotFoundError" in text for text in error_texts), (

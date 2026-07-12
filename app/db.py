@@ -1982,6 +1982,17 @@ def get_calculated_temperature_series(
     return json_ready_list(series)
 
 
+def get_calculated_temperature_device_ids(
+    conn, device_ids: list[int] | None = None
+) -> list[int]:
+    """Return FCU ids eligible for calculated temperature charting."""
+    fcu_ids = [fcu["device_id"] for fcu in _fcu_devices_from_current_status(conn)]
+    if device_ids:
+        wanted = set(device_ids)
+        return [device_id for device_id in fcu_ids if device_id in wanted]
+    return fcu_ids
+
+
 def get_temperature_series(
     conn, device_ids: List[int] | None = None
 ) -> List[Dict[str, Any]]:
@@ -2018,6 +2029,40 @@ def get_temperature_series(
                     )
                 )
     return json_ready_list(series)
+
+
+def temperature_data_availability(
+    conn,
+    device_ids: list[int] | None,
+    start: int | None,
+    end: int | None,
+) -> tuple[bool, bool]:
+    """Return whether selected devices have temperature samples outside a window."""
+    if not device_ids:
+        device_ids = [
+            row["device_id"]
+            for row in conn.execute("SELECT device_id FROM devices").fetchall()
+        ]
+
+    def exists_outside(boundary: int | None, operator: str, order: str) -> bool:
+        if boundary is None:
+            return False
+        sql = f"""
+            SELECT logtime
+            FROM devlog
+            WHERE device_id=? AND temp10x IS NOT NULL AND logtime {operator} ?
+            ORDER BY logtime {order}
+            LIMIT 1
+        """
+        return any(
+            conn.execute(sql, (device_id, boundary)).fetchone() is not None
+            for device_id in device_ids
+        )
+
+    return (
+        exists_outside(start, "<", "DESC"),
+        exists_outside(end, ">", "ASC"),
+    )
 
 
 def get_device_metric_series(

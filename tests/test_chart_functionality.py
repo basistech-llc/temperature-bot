@@ -44,6 +44,8 @@ def test_temperature_chart_page_has_exclusion_controls(flask_test_client):  # no
     assert "temperature_chart_support.js" in content
     assert 'id="checkboxes"' in content
     assert 'id="temp-chart"' in content
+    assert 'id="earlierDataBtn"' in content
+    assert 'id="laterDataBtn"' in content
 
 
 def test_chart_aqi_page_loads(flask_test_client):  # noqa: F811

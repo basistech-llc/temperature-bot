@@ -15,6 +15,46 @@ from bin import runner
 
 logger = logging.getLogger(__name__)
 
+
+@pytest.mark.parametrize(("operator", "order"), [("<", "DESC"), (">", "ASC")])
+def test_temperature_boundary_queries_use_composite_index(
+    test_database_conn, operator, order
+):
+    """Boundary probes filter and order directly from the temperature index."""
+    query = """
+        SELECT logtime FROM devlog
+        WHERE device_id=? AND temp10x IS NOT NULL AND logtime {operator} ?
+        ORDER BY logtime {order} LIMIT 1
+    """
+    plan = " ".join(
+        row["detail"]
+        for row in test_database_conn.execute(
+            f"EXPLAIN QUERY PLAN {query.format(operator=operator, order=order)}",
+            (1, 100),
+        ).fetchall()
+    )
+    assert "idx_devlog_temperature_device_logtime" in plan
+    assert "TEMP B-TREE" not in plan
+
+
+def test_temperature_data_availability_checks_selected_devices(test_database_conn):
+    first_id = db.get_or_create_device_id(test_database_conn, "first")
+    second_id = db.get_or_create_device_id(test_database_conn, "second")
+    test_database_conn.executemany(
+        """
+        INSERT INTO devlog (device_id, logtime, duration, temp10x)
+        VALUES (?, ?, 1, 200)
+        """,
+        [(first_id, 100), (first_id, 200), (first_id, 300), (second_id, 220)],
+    )
+
+    assert db.temperature_data_availability(
+        test_database_conn, [first_id], 150, 250
+    ) == (True, True)
+    assert db.temperature_data_availability(
+        test_database_conn, [second_id], 150, 250
+    ) == (False, False)
+
 def test_temperature_insert(test_database_conn_with_test_data):
     conn = test_database_conn_with_test_data[0]
 
