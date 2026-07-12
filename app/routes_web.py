@@ -15,8 +15,8 @@ from collections.abc import Callable
 from typing import Any
 from flask import render_template, request, redirect, url_for
 
-from .constants import __version__
 from .constants import DASHBOARD_AIR_QUALITY_DEVICE_EXPIRATION_SECONDS
+from .version import __version__
 from . import db
 from . import db_alerts
 from . import rules_engine
@@ -290,7 +290,7 @@ def _register_core_routes(app):
 
     @app.route("/logs_today")
     def logs_today():
-        """Today's Log page"""
+        """Activity Log page"""
         return render_template("logs_today.html", current_page="logs_today")
 
     @app.route("/device_log/<device_id>")

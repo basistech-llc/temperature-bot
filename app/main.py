@@ -5,7 +5,6 @@ Refactored main.py - Flask application with modular structure
 import datetime
 import logging
 import os
-import subprocess
 import sys
 from functools import lru_cache
 from os.path import abspath
@@ -19,8 +18,8 @@ from . import ae200
 from . import db
 from . import routes_api
 from . import routes_web
-from .constants import __version__
 from .models import ApplicationMetadata, json_ready
+from .version import __version__, git_branch, git_sha
 
 DEV = "/home/simsong" in abspath(__file__)
 DEFAULT_LOG_LEVEL = "DEBUG"
@@ -44,40 +43,14 @@ def _mtime_year(path: Path) -> int:
     return datetime.datetime.fromtimestamp(path.stat().st_mtime).year
 
 
-def _git_commit(repo_dir: Path) -> str:
+def _git_commit() -> str:
     """Return the current git commit for this checkout, if available."""
-    env_commit = os.getenv("GIT_COMMIT") or os.getenv("COMMIT_SHA")
-    if env_commit:
-        return env_commit[:12]
-    try:
-        result = subprocess.run(
-            ["git", "-C", str(repo_dir), "rev-parse", "--short=12", "HEAD"],
-            check=True,
-            capture_output=True,
-            text=True,
-            timeout=1,
-        )
-    except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
-        return "unknown"
-    return result.stdout.strip() or "unknown"
+    return git_sha()
 
 
-def _git_branch(repo_dir: Path) -> str:
+def _git_branch() -> str:
     """Return the current git branch for this checkout, if available."""
-    env_branch = os.getenv("GIT_BRANCH") or os.getenv("BRANCH_NAME")
-    if env_branch:
-        return env_branch.removeprefix("origin/")
-    try:
-        result = subprocess.run(
-            ["git", "-C", str(repo_dir), "rev-parse", "--abbrev-ref", "HEAD"],
-            check=True,
-            capture_output=True,
-            text=True,
-            timeout=1,
-        )
-    except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
-        return "unknown"
-    return result.stdout.strip() or "unknown"
+    return git_branch()
 
 
 def _github_branch_url(branch: str) -> str:
@@ -88,13 +61,13 @@ def _github_branch_url(branch: str) -> str:
 @lru_cache(maxsize=1)
 def application_metadata() -> ApplicationMetadata:
     """Return metadata displayed in the site footer."""
-    git_branch = _git_branch(REPO_DIR)
+    branch = _git_branch()
     return ApplicationMetadata(
         app_version=__version__,
         deployment_date=_format_mtime(APP_DIR),
         deployment_year=_mtime_year(APP_DIR),
-        git_branch_url=_github_branch_url(git_branch),
-        git_commit=_git_commit(REPO_DIR),
+        git_branch_url=_github_branch_url(branch),
+        git_commit=_git_commit(),
     )
 
 

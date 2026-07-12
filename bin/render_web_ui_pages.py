@@ -627,9 +627,9 @@ def page_specs(device_ids: dict[str, int]) -> list[PageSpec]:
         PageSpec(slug="aqi-chart", title="Air Quality Chart", path="/chart_aqi", wait_selector="#aqi-chart canvas"),
         PageSpec(slug="alerts", title="Alerts", path="/alerts", wait_selector="#active-alerts-table"),
         PageSpec(slug="rules", title="Rules", path="/rules?run_rules=0", wait_selector=".suspend-rules-buttons"),
-        PageSpec(slug="logs-today", title="Today's Log", path="/logs_today", wait_selector="#log-table"),
+        PageSpec(slug="logs-today", title="Activity Log", path="/logs_today", wait_selector="#log-table"),
         PageSpec(slug="logs", title="Detailed Logs", path="/logs", wait_selector="#log-table"),
-        PageSpec(slug="all-devices", title="All Devices", path="/all_devices", wait_selector="#db-names-pre:not(.hidden)"),
+        PageSpec(slug="all-devices", title="Raw Device Details", path="/all_devices", wait_selector="#db-names-pre:not(.hidden)"),
         PageSpec(slug="kitchen", title="Kitchen Room Dashboard", path="/kitchen?embedded", wait_selector=".device-card"),
         PageSpec(slug="hickory", title="Hickory Room Dashboard", path="/hickory?embedded", wait_selector=".device-card"),
         PageSpec(

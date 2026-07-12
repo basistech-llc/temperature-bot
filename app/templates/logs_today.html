@@ -1,5 +1,5 @@
 {% extends 'base.html' %}
-{% block title %}Today's Log{% endblock %}
+{% block title %}Activity Log{% endblock %}
 {% block head %}
 <link href="https://unpkg.com/tabulator-tables@{{ tabulator_version }}/dist/css/tabulator.min.css" rel="stylesheet">
 <script src="https://unpkg.com/tabulator-tables@{{ tabulator_version }}/dist/js/tabulator.min.js"></script>
@@ -9,7 +9,7 @@
 <div class="pure-g">
   <div class="pure-u-1">
     <div id="main-grid" class="logs-grid">
-      <h2>Today's Log</h2>
+      <h2>Activity Log</h2>
       <div id="log-table"></div>
       <div class="log-controls">
         <button id="log-show-more" class="pure-button">Show more</button>
@@ -21,4 +21,3 @@
 
 <script src="/static/logs_today.js"></script>
 {% endblock %}
-

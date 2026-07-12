@@ -1,7 +1,6 @@
 """
 Application constants
 """
-__version__ = "0.9.0"
 
 # Environment variables
 TEST_DB_NAME = 'TEST_DB_NAME'

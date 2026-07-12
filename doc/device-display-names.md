@@ -100,7 +100,7 @@ To change how names are displayed across the app, edit **only** `display_device_
 
 These views intentionally show system-accurate names for debugging and cross-system mapping:
 
-- **All Devices (`debug_all_devices.html`)**
+- **Raw Device Details (`debug_all_devices.html`)**
   - `/api/v1/debug/db_devices`: returns:
     - `names`: list of strings like `"name (label)"` when a matching Hubitat label exists.
     - `data`: full device dicts including raw `device_name`.
