@@ -3,10 +3,12 @@
 Simple test to check if Flask routes are working
 """
 # pylint: disable=unused-import
+import datetime
 from html import unescape
 from unittest.mock import patch
 
 from conftest import flask_test_client  # noqa: F401
+from app.main import APP_DIR, application_metadata
 from app.routes_web import (
     _dashboard_air_quality_device_is_active,
     _dashboard_device_label,
@@ -16,6 +18,7 @@ from app.routes_web import (
     _table_update_summary,
 )
 from app import room_config
+from app.constants import __version__
 
 def test_status_endpoint(flask_test_client): # noqa: F811
     response = flask_test_client.get("/api/v1/status")
@@ -43,17 +46,41 @@ def test_about_route(flask_test_client):  # noqa: F811
     assert b"About" in response.data
 
 
-def test_footer_only_on_about(flask_test_client):  # noqa: F811
-    """Footer should appear on About page but not on the main dashboard."""
-    # About page should contain the site footer
-    about_response = flask_test_client.get("/about")
-    assert about_response.status_code == 200
-    assert b"BasisTech LLC" in about_response.data
+def test_footer_metadata_on_all_pages(flask_test_client):  # noqa: F811
+    """Footer metadata should appear on every rendered page."""
+    for path in ("/", "/about"):
+        response = flask_test_client.get(path)
+        assert response.status_code == 200
+        html = response.data.decode("utf-8")
+        metadata = application_metadata()
+        assert f"© {metadata.deployment_year} BasisTech." in html
+        assert "BasisTech LLC" not in html
+        assert f"Version {__version__}." in html
+        assert "Deployed " in html
+        assert (
+            f'Git <a href="{metadata.git_branch_url}">{metadata.git_commit}</a>.'
+            in html
+        )
 
-    # Main page should not contain the footer text anymore
-    index_response = flask_test_client.get("/")
-    assert index_response.status_code == 200
-    assert b"BasisTech LLC" not in index_response.data
+
+def test_application_metadata_uses_app_directory_mtime():
+    """Deployment date should come from the app directory mtime."""
+    application_metadata.cache_clear()
+    expected_deployment_date = datetime.datetime.fromtimestamp(
+        APP_DIR.stat().st_mtime
+    ).strftime("%Y-%m-%d %H:%M:%S")
+    expected_deployment_year = datetime.datetime.fromtimestamp(
+        APP_DIR.stat().st_mtime
+    ).year
+    metadata = application_metadata()
+
+    assert metadata.app_version == __version__
+    assert metadata.deployment_date == expected_deployment_date
+    assert metadata.deployment_year == expected_deployment_year
+    assert str(metadata.git_branch_url).startswith(
+        "https://github.com/basistech-llc/temperature-bot/tree/"
+    )
+    assert metadata.git_commit
 
 
 def test_simulator_banner_is_rendered(flask_test_client):  # noqa: F811

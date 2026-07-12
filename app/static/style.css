@@ -10,6 +10,17 @@ body {
   margin-bottom: 1em;
 }
 
+.footer {
+  color: #666;
+  font-size: 0.75rem;
+  margin-top: 2rem;
+  padding: 0.75rem 0;
+}
+
+.footer p {
+  margin: 0;
+}
+
 .top-banner {
   position: fixed;
   top: 0;

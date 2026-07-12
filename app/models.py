@@ -105,6 +105,16 @@ def _rule_name(
     return value
 
 
+class ApplicationMetadata(BaseModel):
+    """Runtime metadata displayed in the site footer."""
+
+    app_version: str = Field(description="Application version string.")
+    deployment_date: str = Field(description="Local mtime of the app directory.")
+    deployment_year: int = Field(description="Year from the deployment date.")
+    git_branch_url: str = Field(description="GitHub URL for the deployed branch.")
+    git_commit: str = Field(description="Git commit for the deployed checkout.")
+
+
 def _optional_stripped(value):
     if value is None:
         return None
