@@ -2043,7 +2043,7 @@ def temperature_data_availability(
     end: int | None,
 ) -> tuple[bool, bool]:
     """Return whether selected devices have temperature samples outside a window."""
-    if device_ids == []:
+    if device_ids is not None and not device_ids:
         return (False, False)
 
     if device_ids is None:
