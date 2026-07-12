@@ -108,7 +108,7 @@
               <th class="column-unit" rowspan="2">Room (Unit)</th>
               <th class="column-disable-for" rowspan="2" title="Remaining time rules are disabled for this device (H:MM)">Rules<br>disabled<br>for</th>
               <th class="column-temp" rowspan="2">FCU Temp<br><small id="fcu-temp-unit-label">°C</small></th>
-              <th class="column-temp" rowspan="2">Room Temp<br><small id="fcu-room-temp-unit-label">°C</small></th>
+              <th class="column-computed-room" colspan="2">Computed Room</th>
               <th class="column-temp column-temp-set" rowspan="2">FCU Set<br>Temp<br><small id="fcu-settemp-unit-label">°C</small></th>
               <th class="column-temp column-temp-range" rowspan="2">Rule Set Range<br><small id="fcu-setrange-unit-label">°C</small></th>
               <th class="column-mode" rowspan="2">Mode</th>
@@ -116,6 +116,8 @@
               <th class="column-notes" rowspan="2">Notes</th>
             </tr>
             <tr>
+              <th class="column-temp column-computed-room-temp">Temp<br><small id="fcu-room-temp-unit-label">°C</small></th>
+              <th class="column-room-humidity">Humidity<br><small>%</small></th>
               <th class="column-speed column-speed-off">Off</th>
               <th class="column-speed column-speed-auto">Auto</th>
               <th class="column-speed column-speed-mid2">Low</th>
@@ -174,6 +176,7 @@
                   <td class="cell-temp cell-temp-link cell-room-temp temp-display temp-display-no-unit" id="room-temp-{{ device.device_id }}"
                       data-chart-url="/chart?mode=calculated&device_ids={{ device.device_id }}"
                       title="Calculated room temperature chart for {{ device.device_label }}; click to show graph.">--</td>
+                  <td class="cell-room-humidity">--</td>
                   <td class="cell-temp cell-temp-set" id="settemp-{{ device.device_id }}">
                     <span class="settemp-thermostat"
                           id="settemp-controls-{{ device.device_id }}"
@@ -291,10 +294,10 @@
           </tbody>
           <tfoot>
             <tr>
-              <td colspan="13" class="table-update-summary" id="oldest-update-fcu">{{ table_update_summaries.fcu.label if table_update_summaries.fcu else '' }}</td>
+              <td colspan="14" class="table-update-summary" id="oldest-update-fcu">{{ table_update_summaries.fcu.label if table_update_summaries.fcu else '' }}</td>
             </tr>
             <tr>
-              <td colspan="13" class="fcu-setrange-note">Auto mode: FCU Set Temp edits the AE-200 Heat/Cool range. Rule Set Range stays editable for local rules.</td>
+              <td colspan="14" class="fcu-setrange-note">Auto mode: FCU Set Temp edits the AE-200 Heat/Cool range. Rule Set Range stays editable for local rules.</td>
             </tr>
           </tfoot>
         </table>

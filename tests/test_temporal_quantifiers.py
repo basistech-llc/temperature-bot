@@ -220,6 +220,13 @@ def test_index_fcu_speeds_exclude_one(
     assert f'id="radio-{device_id}-0"' in html
     assert f'id="radio-{device_id}-auto"' in html
     assert '<th class="column-mode" rowspan="2">Mode</th>' in html
+    assert '<th class="column-computed-room" colspan="2">Computed Room</th>' in html
+    assert (
+        '<th class="column-temp column-computed-room-temp">Temp<br><small '
+        'id="fcu-room-temp-unit-label">°C</small></th>'
+        in html
+    )
+    assert '<th class="column-room-humidity">Humidity<br><small>%</small></th>' in html
     assert '<th class="column-temp column-temp-set" rowspan="2">FCU Set<br>Temp' in html
     assert (
         '<th class="column-temp column-temp-range" rowspan="2">Rule Set Range'

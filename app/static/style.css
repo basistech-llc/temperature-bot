@@ -259,6 +259,13 @@ button {
     min-width: 210px;
 }
 
+.column-computed-room,
+.column-room-humidity,
+.cell-room-humidity {
+    min-width: 3.5em;
+    text-align: center;
+}
+
 .column-mode,
 .cell-mode {
     min-width: 4.5em;
@@ -346,6 +353,10 @@ button {
 
 .data-table tbody tr.device-row td.cell-temp.cell-temp-link.cell-fcu-temp,
 .data-table tbody tr.device-row td.cell-temp.cell-temp-link.cell-room-temp {
+    text-align: center;
+}
+
+.data-table tbody tr.device-row td.cell-room-humidity {
     text-align: center;
 }
 

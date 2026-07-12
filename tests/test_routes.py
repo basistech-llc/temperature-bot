@@ -335,7 +335,10 @@ def test_fcu_matrix_has_raw_fcu_temp_and_room_temp_columns(
 
     assert "Room (Unit)" in html
     assert "FCU Temp" in html
-    assert "Room Temp" in html
+    assert "Computed Room" in html
+    assert "column-computed-room-temp" in html
+    assert 'id="fcu-room-temp-unit-label"' in html
+    assert 'class="column-room-humidity"' in html
     assert "Rule Set Range" in html
     assert 'id="fcu-temp-12"' in html
     assert "cell-fcu-temp" in html
@@ -343,6 +346,7 @@ def test_fcu_matrix_has_raw_fcu_temp_and_room_temp_columns(
     assert "FCU temperature chart for Area 51; click to show graph." in html
     assert 'id="room-temp-12"' in html
     assert "cell-room-temp" in html
+    assert "cell-room-humidity" in html
     assert 'data-chart-url="/chart?mode=calculated&device_ids=12"' in html
     assert "Calculated room temperature chart for Area 51; click to show graph." in html
     assert 'data-update-url="/api/v1/set_auto_temp"' in html
