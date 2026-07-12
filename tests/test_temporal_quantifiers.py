@@ -222,16 +222,21 @@ def test_index_fcu_speeds_exclude_one(
     assert '<th class="column-mode" rowspan="2">Mode</th>' in html
     assert '<th class="column-computed-room" colspan="2">Computed Room</th>' in html
     assert (
-        '<th class="column-temp column-computed-room-temp">Temp<br><small '
+        '<th class="column-temp column-computed-room-temp" rowspan="2">Temp<br><small '
         'id="fcu-room-temp-unit-label">°C</small></th>'
         in html
     )
-    assert '<th class="column-room-humidity">Humidity<br><small>%</small></th>' in html
-    assert '<th class="column-temp column-temp-set" rowspan="2">FCU Set<br>Temp' in html
     assert (
-        '<th class="column-temp column-temp-range" rowspan="2">Rule Set Range'
+        '<th class="column-room-humidity" rowspan="2">Humidity<br><small>%</small></th>'
         in html
     )
+    assert (
+        '<th class="column-temp column-temp-range" rowspan="3">Rule Set Range'
+        in html
+    )
+    assert '<th class="column-fcu-set" colspan="7">FCU Set</th>' in html
+    assert '<th class="column-temp column-temp-set" rowspan="2">Temp<br>' in html
+    assert '<th class="column-speed" colspan="5">Fan Speed</th>' in html
     assert 'class="mode-select"' in html
     assert f'id="mode-{device_id}"' in html
     assert f'id="autosettemp-widget-{device_id}"' in html

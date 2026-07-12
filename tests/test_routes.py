@@ -340,6 +340,7 @@ def test_fcu_matrix_has_raw_fcu_temp_and_room_temp_columns(
     assert 'id="fcu-room-temp-unit-label"' in html
     assert 'class="column-room-humidity"' in html
     assert "Rule Set Range" in html
+    assert '<th class="column-fcu-set" colspan="7">FCU Set</th>' in html
     assert 'id="fcu-temp-12"' in html
     assert "cell-fcu-temp" in html
     assert 'data-chart-url="/chart?mode=raw&device_ids=12"' in html

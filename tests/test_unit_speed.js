@@ -25,6 +25,7 @@ const {
   FCU_MODE_OPTIONS,
   fcuTempSourcesTitle,
   isAutoOperationMode,
+  isFanOperationMode,
   markRangePending,
   markSingleSetTempPending,
   modeLabelForDevice,
@@ -43,6 +44,7 @@ const {
   setRangePartFromPointerTarget,
   sortedFcuTempSources,
   tableUpdateSummaryText,
+  updateSetTempForDevice,
   updateTemperatureCell,
   updateSetRangeModeState,
 } = require("../app/static/unit_speed.js");
@@ -88,8 +90,14 @@ function checkContains(label, actual, expectedFragment) {
 function fakeClassList() {
   const classes = new Set();
   return {
+    add(className) {
+      classes.add(className);
+    },
     contains(className) {
       return classes.has(className);
+    },
+    remove(className) {
+      classes.delete(className);
     },
     toggle(className, enabled) {
       if (enabled) {
@@ -437,6 +445,8 @@ check(
 );
 check("auto mode token is auto operation", isAutoOperationMode("AUTO"), true);
 check("lc_auto mode token is auto operation", isAutoOperationMode("LC_AUTO"), true);
+check("fan mode token is fan operation", isFanOperationMode("fan"), true);
+check("cool mode token is not fan operation", isFanOperationMode("COOL"), false);
 
 const coolSetRangeWidget = fakeWidget();
 updateSetRangeModeState(coolSetRangeWidget, "COOL");
@@ -585,6 +595,93 @@ checkContains(
   "refreshed chart temperature tooltip keeps graph hint",
   tooltipCell.attributes.title,
   "click to show graph",
+);
+
+function fakeSetTempElement(attributes = {}) {
+  return {
+    attributes: { ...attributes },
+    classList: fakeClassList(),
+    dataset: {},
+    textContent: "",
+    querySelectorAll: () => [],
+    removeAttribute(name) {
+      delete this.attributes[name];
+    },
+    setAttribute(name, value) {
+      this.attributes[name] = String(value);
+    },
+  };
+}
+
+function withSetTempDocument(callback) {
+  const originalDocumentForSetTemp = global.document;
+  const downButton = { disabled: false };
+  const upButton = { disabled: false };
+  const setTempControls = fakeSetTempElement();
+  setTempControls.querySelectorAll = (selector) =>
+    selector === ".settemp-btn" ? [downButton, upButton] : [];
+  const elements = {
+    "settemp-12": fakeSetTempElement(),
+    "settemp-display-12": fakeSetTempElement(),
+    "settemp-controls-12": setTempControls,
+    "autosettemp-widget-12": fakeSetTempElement(),
+  };
+  global.document = {
+    getElementById: (id) => elements[id] || null,
+  };
+  try {
+    callback({ ...elements, downButton, upButton });
+  } finally {
+    global.document = originalDocumentForSetTemp;
+  }
+}
+
+withSetTempDocument(
+  ({
+    "settemp-display-12": display,
+    "settemp-controls-12": controls,
+    downButton,
+    upButton,
+  }) => {
+    updateSetTempForDevice({
+      device_id: 12,
+      mode: "FAN",
+      set_temp_c: 22,
+      logtime: Math.floor(Date.now() / 1000),
+    });
+    check("fan mode set temp display remains visible", display.textContent, "22.0");
+    check(
+      "fan mode set temp display is aria disabled",
+      display.attributes["aria-disabled"],
+      "true",
+    );
+    check(
+      "fan mode set temp controls get disabled class",
+      controls.classList.contains("settemp-disabled"),
+      true,
+    );
+    check("fan mode set temp down button disabled", downButton.disabled, true);
+    check("fan mode set temp up button disabled", upButton.disabled, true);
+
+    updateSetTempForDevice({
+      device_id: 12,
+      mode: "COOL",
+      set_temp_c: 22,
+      logtime: Math.floor(Date.now() / 1000),
+    });
+    check(
+      "cool mode set temp display is aria enabled",
+      display.attributes["aria-disabled"],
+      undefined,
+    );
+    check(
+      "cool mode set temp controls lose disabled class",
+      controls.classList.contains("settemp-disabled"),
+      false,
+    );
+    check("cool mode set temp down button enabled", downButton.disabled, false);
+    check("cool mode set temp up button enabled", upButton.disabled, false);
+  },
 );
 
 const autoFill = fakeElement({}, { left: "20%", width: "50%" });
