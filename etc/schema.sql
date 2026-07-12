@@ -72,3 +72,5 @@ CREATE TABLE IF NOT EXISTS fcu_set_ranges (
 );
 CREATE INDEX IF NOT EXISTS idx_devlog_temperature_device_logtime
     ON devlog (device_id, logtime) WHERE temp10x IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_devlog_temperature_logtime_device
+    ON devlog (logtime, device_id) WHERE temp10x IS NOT NULL;

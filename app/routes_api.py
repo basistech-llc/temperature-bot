@@ -269,8 +269,7 @@ def get_temperature(conn):
         series = db.get_temperature_series(conn, device_ids)
         boundary_device_ids = device_ids
     elif mode == "calculated":
-        series = db.get_calculated_temperature_series(conn, device_ids)
-        boundary_device_ids = db.get_calculated_temperature_device_ids(
+        series, boundary_device_ids = db.get_calculated_temperature_series_and_device_ids(
             conn, device_ids
         )
     else:

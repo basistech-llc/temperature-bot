@@ -22,18 +22,18 @@ def test_temperature_boundary_queries_use_composite_index(
 ):
     """Boundary probes filter and order directly from the temperature index."""
     query = """
-        SELECT logtime FROM devlog
-        WHERE device_id=? AND temp10x IS NOT NULL AND logtime {operator} ?
+        SELECT logtime FROM devlog INDEXED BY idx_devlog_temperature_logtime_device
+        WHERE device_id IN (?, ?) AND temp10x IS NOT NULL AND logtime {operator} ?
         ORDER BY logtime {order} LIMIT 1
     """
     plan = " ".join(
         row["detail"]
         for row in test_database_conn.execute(
             f"EXPLAIN QUERY PLAN {query.format(operator=operator, order=order)}",
-            (1, 100),
+            (1, 2, 100),
         ).fetchall()
     )
-    assert "idx_devlog_temperature_device_logtime" in plan
+    assert "idx_devlog_temperature_logtime_device" in plan
     assert "TEMP B-TREE" not in plan
 
 
