@@ -104,7 +104,12 @@ When `HUBITAT_SIMULATOR` is one of `1`, `true`, `yes`, or `on`,
 `get_all_devices()` returns `app/test_data/hubitat_get_devices.json` instead of
 calling Hubitat.
 
-`hubitat.extract_temperatures()` filters the Maker API result to devices with
+Before temperature filtering, the runner classifies and creates every authorized
+Maker API device. `FanControl` devices become `FAN`; devices with actuator,
+switch, level, button, door, or lock capabilities become `CONTROL`; measurement
+devices become `SENSOR`. Existing non-null types are preserved.
+
+`hubitat.extract_temperatures()` then filters the Maker API result to devices with
 the `TemperatureMeasurement` capability and a non-null `attributes.temperature`
 value. It normalizes common numeric string attributes to numbers:
 
@@ -145,9 +150,14 @@ If the temperature is unchanged but any persisted Hubitat attribute changes,
 such as humidity, illuminance, battery, or motion, the `status_json` differs and
 a new `devlog` row is inserted.
 
-The `/devices` admin page edits local metadata on the `devices` row:
-`display_name`, `device_type`, `rules_enabled`, and `notes`. It does not create
-Hubitat devices and does not expose a sensor through Maker API.
+The `/devices` admin page edits `display_name`, `rules_enabled`, and `notes`.
+It displays the automatically assigned `device_type` read-only. It does not
+create Hubitat devices or expose a sensor through Maker API.
+
+`make DEVICE_TYPE_DB=<path> device-type-backfill` previews classifications for
+untyped historical rows. Add `APPLY=1` to persist them; the target first copies
+the database to `DEVICE_TYPE_BACKUP`. Live capabilities are preferred. A narrow
+name-marker fallback handles rows created before Hubitat metadata was retained.
 
 ## Retention, Compression, And Backups
 

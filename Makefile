@@ -59,6 +59,9 @@ RUFF_VERSION   ?= 0.15.15
 # Test selection override, e.g.
 #   make PYTEST_ARGS=tests/test_db.py::test_name pytest
 PYTEST_ARGS ?= .
+DEVICE_TYPE_DB ?= $(DEV_DB)
+DEVICE_TYPE_BACKUP ?= $(DEVICE_TYPE_DB).pre-device-type-backfill
+DEVICE_TYPE_REPORT ?= var/device-type-report.tsv
 
 
 .PHONY: help
@@ -93,6 +96,14 @@ make-dev-db: ## Create a fresh local dev database from scratch via Flyway migrat
 	    -url="jdbc:sqlite:$(abspath $(DEV_DB))" \
 	    -locations="filesystem:$(FLYWAY_SQL_DIR)"
 	ls -l $(DEV_DB)
+
+device-type-backfill: $(REQ) ## Infer missing device types; add APPLY=1 to persist
+	$(if $(APPLY),cp -f $(DEVICE_TYPE_DB) $(DEVICE_TYPE_BACKUP),@true)
+	$(PYTHON) bin/backfill_device_types.py $(DEVICE_TYPE_DB) $(if $(APPLY),--apply,)
+
+device-type-report: $(REQ) ## Write a TSV report containing every device and type
+	$(PYTHON) bin/backfill_device_types.py $(DEVICE_TYPE_DB) --all > $(DEVICE_TYPE_REPORT)
+	@echo "Wrote $(DEVICE_TYPE_REPORT)"
 
 # Explicit rule for the development database file so that schema generation
 # fails with a clear, actionable message when the DB is missing.

@@ -15,6 +15,8 @@ import logging
 from pathlib import Path
 
 
+from .constants import RULES_ENGINE_DEVICE_NAME
+from .device_types import DEVICE_TYPE_INTERNAL
 from .paths import BIN_DIR
 from . import db
 from . import ae200
@@ -30,14 +32,16 @@ from .models import (
 
 logger = logging.getLogger(__name__)
 
-RULES_DEVICE_NAME = "rules_engine"
+RULES_DEVICE_NAME = RULES_ENGINE_DEVICE_NAME
 RULES_PATH = Path(BIN_DIR) / "rules.py"
 
 RULES_DISABLED_MESSAGE = "Master rules switch is OFF; skipping all rules execution"
 RULES_TIME_SUSPENDED_MESSAGE = "all rules disabled (time-limited suspension)"
 
 def rules_id(conn):
-    return db.get_or_create_device_id(conn, RULES_DEVICE_NAME)
+    return db.get_or_create_device_id(
+        conn, RULES_DEVICE_NAME, device_type=DEVICE_TYPE_INTERNAL
+    )
 
 def get_time_dict(when=None):
     if when is None:

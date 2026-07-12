@@ -96,25 +96,34 @@ def test_devices_route(flask_test_client):  # noqa: F811
     response = flask_test_client.get("/devices")
     assert response.status_code == 200
     assert b"Display Name" in response.data
+    assert b"<th>ID</th>" not in response.data
+    assert b'datalist id="device-types"' not in response.data
+    assert b'name="device_type_' not in response.data
 
 
 def test_devices_route_updates_metadata(flask_test_client):  # noqa: F811
-    """Posting the device editor form should persist metadata."""
+    """Posting the device editor form persists editable fields but not type."""
     device_id = _first_device_id()
+    test_db_path = os.environ["TEST_DB_NAME"]
+    with sqlite3.connect(test_db_path) as conn:
+        conn.execute(
+            "UPDATE devices SET device_type=? WHERE device_id=?",
+            ("FCU", device_id),
+        )
+        conn.commit()
 
     response = flask_test_client.post(
         "/devices",
         data={
             "device_id": str(device_id),
             f"display_name_{device_id}": "Editor Name",
-            f"device_type_{device_id}": "sensor",
+            f"device_type_{device_id}": "sensor",  # Ignored even if forged.
             f"rules_enabled_{device_id}": "1",
             f"notes_{device_id}": "editor note",
         },
     )
     assert response.status_code == 302
 
-    test_db_path = os.environ["TEST_DB_NAME"]
     with sqlite3.connect(test_db_path) as conn:
         conn.row_factory = sqlite3.Row
         row = conn.execute(
@@ -126,6 +135,6 @@ def test_devices_route_updates_metadata(flask_test_client):  # noqa: F811
             (device_id,),
         ).fetchone()
     assert row["display_name"] == "Editor Name"
-    assert row["device_type"] == "SENSOR"
+    assert row["device_type"] == "FCU"
     assert row["rules_enabled"] == 1
     assert row["notes"] == "editor note"
