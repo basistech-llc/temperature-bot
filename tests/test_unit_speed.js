@@ -30,6 +30,7 @@ const {
   markSingleSetTempPending,
   modeLabelForDevice,
   modeValueForDevice,
+  setTempDisabledTooltip,
   normalizeSetRange,
   oldestUpdateTimestampForTable,
   parseFcuTempSourceMultiplier,
@@ -447,6 +448,17 @@ check("auto mode token is auto operation", isAutoOperationMode("AUTO"), true);
 check("lc_auto mode token is auto operation", isAutoOperationMode("LC_AUTO"), true);
 check("fan mode token is fan operation", isFanOperationMode("fan"), true);
 check("cool mode token is not fan operation", isFanOperationMode("COOL"), false);
+check(
+  "dry mode set temperature tooltip",
+  setTempDisabledTooltip("dry"),
+  "control disabled in Dry mode.",
+);
+check(
+  "fan mode set temperature tooltip",
+  setTempDisabledTooltip("FAN"),
+  "control disabled in Fan mode.",
+);
+check("cool mode has no set temperature tooltip", setTempDisabledTooltip("COOL"), "");
 
 const coolSetRangeWidget = fakeWidget();
 updateSetRangeModeState(coolSetRangeWidget, "COOL");
@@ -638,8 +650,10 @@ function withSetTempDocument(callback) {
 
 withSetTempDocument(
   ({
+    "settemp-12": cell,
     "settemp-display-12": display,
     "settemp-controls-12": controls,
+    "autosettemp-widget-12": autoWidget,
     downButton,
     upButton,
   }) => {
@@ -662,6 +676,21 @@ withSetTempDocument(
     );
     check("fan mode set temp down button disabled", downButton.disabled, true);
     check("fan mode set temp up button disabled", upButton.disabled, true);
+    check("fan mode set temp cell tooltip", cell.attributes.title, "control disabled in Fan mode.");
+
+    updateSetTempForDevice({
+      device_id: 12,
+      mode: "DRY",
+      set_temp_c: 22,
+      logtime: Math.floor(Date.now() / 1000),
+    });
+    check("dry mode set temp down button disabled", downButton.disabled, true);
+    check("dry mode set temp up button disabled", upButton.disabled, true);
+    check("dry mode set temp cell tooltip", cell.attributes.title, "control disabled in Dry mode.");
+
+    autoWidget.dataset.dragging = "true";
+    updateSetTempForDevice({ device_id: 12, mode: "AUTO" });
+    check("auto mode clears set temp cell tooltip", cell.attributes.title, undefined);
 
     updateSetTempForDevice({
       device_id: 12,
@@ -681,6 +710,7 @@ withSetTempDocument(
     );
     check("cool mode set temp down button enabled", downButton.disabled, false);
     check("cool mode set temp up button enabled", upButton.disabled, false);
+    check("cool mode clears set temp cell tooltip", cell.attributes.title, undefined);
   },
 );
 

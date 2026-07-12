@@ -128,6 +128,13 @@ function isFanOperationMode(rawMode) {
   return String(rawMode || "").toUpperCase() === "FAN";
 }
 
+function setTempDisabledTooltip(rawMode) {
+  const mode = String(rawMode || "").toUpperCase();
+  return mode === "DRY" || mode === "FAN"
+    ? `control disabled in ${AE200_MODE_LABELS[mode]} mode.`
+    : "";
+}
+
 function deviceUpdateTimestampSeconds(dev) {
   if (!dev || dev.logtime == null) {
     return null;
@@ -508,6 +515,7 @@ function updateSetTempForDevice(dev) {
   const operationMode = modeValueForDevice(dev);
   if (isAutoOperationMode(operationMode)) {
     setSingleSetTempControlsDisabled(setTempControls, setTempDisplay, false);
+    setTempCell.removeAttribute("title");
     setTempControls.classList.add("hidden");
     autoWidget.classList.remove("hidden");
     if (
@@ -524,11 +532,17 @@ function updateSetTempForDevice(dev) {
 
   autoWidget.classList.add("hidden");
   setTempControls.classList.remove("hidden");
+  const disabledTooltip = setTempDisabledTooltip(operationMode);
   setSingleSetTempControlsDisabled(
     setTempControls,
     setTempDisplay,
-    isFanOperationMode(operationMode),
+    Boolean(disabledTooltip),
   );
+  if (disabledTooltip) {
+    setTempCell.setAttribute("title", disabledTooltip);
+  } else {
+    setTempCell.removeAttribute("title");
+  }
   const rawSetTemp = dev.set_temp_c ?? status.SetTemp;
 
   if (rawSetTemp !== undefined && rawSetTemp !== "") {
@@ -3122,6 +3136,7 @@ if (typeof module !== "undefined" && module.exports) {
     fcuTempSourcesTitle,
     isAutoOperationMode,
     isFanOperationMode,
+    setTempDisabledTooltip,
     modeLabelForDevice,
     modeValueForDevice,
     enableRulesForDevice,
