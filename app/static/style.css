@@ -195,6 +195,18 @@ body {
     outline-offset: 1px;
 }
 
+.settemp-thermostat.settemp-disabled .settemp-display {
+    color: #94a3b8;
+}
+
+.settemp-thermostat .settemp-btn:disabled,
+.settemp-thermostat .settemp-btn:disabled:hover,
+.settemp-thermostat .settemp-btn:disabled:active {
+    color: #cbd5e1;
+    background: transparent;
+    cursor: not-allowed;
+}
+
 /* main grid */
 
 #main-grid {
@@ -257,6 +269,14 @@ button {
 .column-temp-range,
 .cell-temp-range {
     min-width: 210px;
+}
+
+.column-computed-room,
+.column-fcu-set,
+.column-room-humidity,
+.cell-room-humidity {
+    min-width: 3.5em;
+    text-align: center;
 }
 
 .column-mode,
@@ -346,6 +366,11 @@ button {
 
 .data-table tbody tr.device-row td.cell-temp.cell-temp-link.cell-fcu-temp,
 .data-table tbody tr.device-row td.cell-temp.cell-temp-link.cell-room-temp {
+    text-align: center;
+}
+
+.data-table thead th.column-room-humidity,
+.data-table tbody td.cell-room-humidity:not(.cell-unit):not(.cell-notes):not(.cell-conditions):not(.cell-disable-for) {
     text-align: center;
 }
 

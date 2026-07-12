@@ -124,6 +124,10 @@ function isAutoOperationMode(rawMode) {
   return AE200_AUTO_MODE_VALUES.includes(String(rawMode || "").toUpperCase());
 }
 
+function isFanOperationMode(rawMode) {
+  return String(rawMode || "").toUpperCase() === "FAN";
+}
+
 function deviceUpdateTimestampSeconds(dev) {
   if (!dev || dev.logtime == null) {
     return null;
@@ -501,7 +505,9 @@ function updateSetTempForDevice(dev) {
   }
 
   const status = dev.status || {};
-  if (isAutoOperationMode(modeValueForDevice(dev))) {
+  const operationMode = modeValueForDevice(dev);
+  if (isAutoOperationMode(operationMode)) {
+    setSingleSetTempControlsDisabled(setTempControls, setTempDisplay, false);
     setTempControls.classList.add("hidden");
     autoWidget.classList.remove("hidden");
     if (
@@ -518,6 +524,11 @@ function updateSetTempForDevice(dev) {
 
   autoWidget.classList.add("hidden");
   setTempControls.classList.remove("hidden");
+  setSingleSetTempControlsDisabled(
+    setTempControls,
+    setTempDisplay,
+    isFanOperationMode(operationMode),
+  );
   const rawSetTemp = dev.set_temp_c ?? status.SetTemp;
 
   if (rawSetTemp !== undefined && rawSetTemp !== "") {
@@ -547,6 +558,18 @@ function updateSetTempForDevice(dev) {
   setTempCell.removeAttribute("data-temp-c");
   setTempDisplay.removeAttribute("data-temp-c");
   setTempDisplay.textContent = "--";
+}
+
+function setSingleSetTempControlsDisabled(setTempControls, setTempDisplay, disabled) {
+  setTempControls.classList.toggle("settemp-disabled", disabled);
+  setTempControls.querySelectorAll(".settemp-btn").forEach((button) => {
+    button.disabled = disabled;
+  });
+  if (disabled) {
+    setTempDisplay.setAttribute("aria-disabled", "true");
+  } else {
+    setTempDisplay.removeAttribute("aria-disabled");
+  }
 }
 
 /**
@@ -3098,6 +3121,7 @@ if (typeof module !== "undefined" && module.exports) {
     FCU_MODE_OPTIONS,
     fcuTempSourcesTitle,
     isAutoOperationMode,
+    isFanOperationMode,
     modeLabelForDevice,
     modeValueForDevice,
     enableRulesForDevice,
@@ -3118,6 +3142,7 @@ if (typeof module !== "undefined" && module.exports) {
     updateSetRangeModeState,
     sortedFcuTempSources,
     tableUpdateSummaryText,
+    updateSetTempForDevice,
     updateTemperatureCell,
   };
 }
