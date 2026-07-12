@@ -15,7 +15,7 @@ becomes a mapping.
 """
 
 from typing import Annotated, Any, Dict, Iterable, Literal
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from . import ae200
 
@@ -103,6 +103,16 @@ def _rule_name(
             return codes_to_names[code]
         raise ValueError(f"unknown {field_name}: {value!r}")
     return value
+
+
+class ApplicationMetadata(BaseModel):
+    """Runtime metadata displayed in the site footer."""
+
+    app_version: str = Field(description="Application version string.")
+    deployment_date: str = Field(description="Local mtime of the app directory.")
+    deployment_year: int = Field(description="Year from the deployment date.")
+    git_branch_url: str = Field(description="GitHub URL for the deployed branch.")
+    git_commit: str = Field(description="Git commit for the deployed checkout.")
 
 
 def _optional_stripped(value):
@@ -374,6 +384,20 @@ class SetTempControl(BaseModel):
 
     device_id: int = Field(description="Local device id from the devices table.")
     set_temp_c: float = Field(description="Requested set point in degrees Celsius.")
+
+
+class AutoSetTempControl(BaseModel):
+    """Request body for changing AE-200 Auto Heat/Cool setpoints."""
+
+    device_id: int = Field(description="Local device id from the devices table.")
+    heat_set_temp_c: float = Field(description="Requested Auto Heat set point in Celsius.")
+    cool_set_temp_c: float = Field(description="Requested Auto Cool set point in Celsius.")
+
+    @model_validator(mode="after")
+    def validate_range(self):
+        if self.heat_set_temp_c >= self.cool_set_temp_c:
+            raise ValueError("heat_set_temp_c must be lower than cool_set_temp_c")
+        return self
 
 
 class SetRangeControl(BaseModel):

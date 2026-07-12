@@ -167,6 +167,9 @@ function updateTempChart() {
         let output = `${formatTime(ts)}<br>`;
         for (const p of params) {
           const tempValue = p.value[1];
+          if (typeof tempValue !== "number" || !Number.isFinite(tempValue)) {
+            continue;
+          }
           const unit = TemperatureUtils.getTemperatureUnit();
           output += `${p.marker} ${p.seriesName}: ${tempValue.toFixed(
             1,

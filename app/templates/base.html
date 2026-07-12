@@ -113,12 +113,13 @@
 
   {% block body %}
   {% endblock %}
-  {% if current_page == 'about' %}
   <footer class="pure-u-1 footer">
     <p>
-      © 2025-6 BasisTech LLC.
+      © {{ deployment_year }} BasisTech.
+      Version {{ app_version }}.
+      Deployed {{ deployment_date }}.
+      Git <a href="{{ git_branch_url }}">{{ git_commit }}</a>.
     </p>
   </footer>
-  {% endif %}
 </body>
 </html>

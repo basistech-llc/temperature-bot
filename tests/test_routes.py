@@ -3,9 +3,12 @@
 Simple test to check if Flask routes are working
 """
 # pylint: disable=unused-import
+import datetime
+from html import unescape
 from unittest.mock import patch
 
 from conftest import flask_test_client  # noqa: F401
+from app.main import APP_DIR, application_metadata
 from app.routes_web import (
     _dashboard_air_quality_device_is_active,
     _dashboard_device_label,
@@ -15,6 +18,7 @@ from app.routes_web import (
     _table_update_summary,
 )
 from app import room_config
+from app.constants import __version__
 
 def test_status_endpoint(flask_test_client): # noqa: F811
     response = flask_test_client.get("/api/v1/status")
@@ -42,17 +46,41 @@ def test_about_route(flask_test_client):  # noqa: F811
     assert b"About" in response.data
 
 
-def test_footer_only_on_about(flask_test_client):  # noqa: F811
-    """Footer should appear on About page but not on the main dashboard."""
-    # About page should contain the site footer
-    about_response = flask_test_client.get("/about")
-    assert about_response.status_code == 200
-    assert b"BasisTech LLC" in about_response.data
+def test_footer_metadata_on_all_pages(flask_test_client):  # noqa: F811
+    """Footer metadata should appear on every rendered page."""
+    for path in ("/", "/about"):
+        response = flask_test_client.get(path)
+        assert response.status_code == 200
+        html = response.data.decode("utf-8")
+        metadata = application_metadata()
+        assert f"© {metadata.deployment_year} BasisTech." in html
+        assert "BasisTech LLC" not in html
+        assert f"Version {__version__}." in html
+        assert "Deployed " in html
+        assert (
+            f'Git <a href="{metadata.git_branch_url}">{metadata.git_commit}</a>.'
+            in html
+        )
 
-    # Main page should not contain the footer text anymore
-    index_response = flask_test_client.get("/")
-    assert index_response.status_code == 200
-    assert b"BasisTech LLC" not in index_response.data
+
+def test_application_metadata_uses_app_directory_mtime():
+    """Deployment date should come from the app directory mtime."""
+    application_metadata.cache_clear()
+    expected_deployment_date = datetime.datetime.fromtimestamp(
+        APP_DIR.stat().st_mtime
+    ).strftime("%Y-%m-%d %H:%M:%S")
+    expected_deployment_year = datetime.datetime.fromtimestamp(
+        APP_DIR.stat().st_mtime
+    ).year
+    metadata = application_metadata()
+
+    assert metadata.app_version == __version__
+    assert metadata.deployment_date == expected_deployment_date
+    assert metadata.deployment_year == expected_deployment_year
+    assert str(metadata.git_branch_url).startswith(
+        "https://github.com/basistech-llc/temperature-bot/tree/"
+    )
+    assert metadata.git_commit
 
 
 def test_simulator_banner_is_rendered(flask_test_client):  # noqa: F811
@@ -293,20 +321,31 @@ def test_fcu_matrix_has_raw_fcu_temp_and_room_temp_columns(
 
     response = flask_test_client.get("/")
     assert response.status_code == 200
-    html = response.data.decode("utf-8")
+    html = unescape(response.data.decode("utf-8"))
 
+    assert "Room (Unit)" in html
     assert "FCU Temp" in html
     assert "Room Temp" in html
+    assert "Rule Set Range" in html
     assert 'id="fcu-temp-12"' in html
+    assert "cell-fcu-temp" in html
+    assert 'data-chart-url="/chart?mode=raw&device_ids=12"' in html
+    assert "FCU temperature chart for Area 51; click to show graph." in html
     assert 'id="room-temp-12"' in html
+    assert "cell-room-temp" in html
+    assert 'data-chart-url="/chart?mode=calculated&device_ids=12"' in html
+    assert "Calculated room temperature chart for Area 51; click to show graph." in html
+    assert 'data-update-url="/api/v1/set_auto_temp"' in html
+    assert 'aria-label="Move Auto heat set temperature"' in html
+    assert 'aria-label="Move Auto cool set temperature"' in html
 
 
 @patch("app.routes_web.hubitat.get_name_to_label", return_value={})
 @patch("app.routes_web.db.get_device_status")
-def test_fcu_matrix_room_temp_cell_opens_weight_popup(
+def test_fcu_matrix_room_unit_cell_opens_room_editor(
     mock_get_status, _mock_labels, flask_test_client
 ):  # noqa: F811
-    """Room Temp cells must expose the source-weight popup contract."""
+    """Room (Unit) cells must expose the editor/source-weight popup contract."""
     mock_get_status.return_value = [
         {
             "device_id": 12,
@@ -323,20 +362,27 @@ def test_fcu_matrix_room_temp_cell_opens_weight_popup(
 
     response = flask_test_client.get("/")
     assert response.status_code == 200
-    html = response.data.decode("utf-8")
+    html = unescape(response.data.decode("utf-8"))
 
     assert 'id="fcu-temp-sources-popup"' in html
+    assert 'class="device-name-context fcu-room-editor-trigger"' in html
+    assert 'role="button"' in html
+    assert 'tabindex="0"' in html
+    assert 'data-device-update-url="/api/v1/devices/12"' in html
     assert (
         'data-fcu-temp-sources-url="/api/v1/fcu_temp_sources?fcu_device_id=12"'
         in html
     )
     assert 'data-fcu-temp-source-update-url="/api/v1/fcu_temp_source"' in html
     assert 'data-fcu-temp-sources-room-name="Area 51"' in html
+    assert 'id="fcu-room-display-name"' in html
+    assert "Room (Unit) name" in html
     assert "Readings older than 10 minutes are ignored" in html
     assert 'data-action="save-fcu-temp-sources"' in html
     assert 'data-action="revert-fcu-temp-sources"' in html
     assert 'data-action="cancel-fcu-temp-sources"' in html
     assert 'data-action="close-fcu-temp-sources"' not in html
+    assert "room-temp-link" not in html
 
 
 @patch("app.routes_web.hubitat.get_name_to_label", return_value={})
@@ -363,9 +409,9 @@ def test_index_device_names_expose_rename_popup_contract(
 
     response = flask_test_client.get("/")
     assert response.status_code == 200
-    html = response.data.decode("utf-8")
+    html = unescape(response.data.decode("utf-8"))
 
-    assert 'class="device-name-context"' in html
+    assert 'class="device-name-context fcu-room-editor-trigger"' in html
     assert 'data-device-id="12"' in html
     assert 'data-device-name="Area 51"' in html
     assert 'data-display-name="Server Room"' in html

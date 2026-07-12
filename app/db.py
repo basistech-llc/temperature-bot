@@ -75,7 +75,7 @@ from .aq_metrics import (
 logger = logging.getLogger(__name__)
 
 DEVICE_MAP: dict[str, int] = {}
-MAX_DURATION = 3600  # don't extend more than an hour
+MAX_DURATION = 20 * 60  # don't extend a compressed row beyond 20 minutes
 ROOM_MAP_JSON_KEY = "map_json"
 FLYWAY_SCHEMA_HISTORY_TABLE = "flyway_schema_history"
 SCHEMA_UPGRADE_COMMAND = "make migrate-db"
@@ -890,7 +890,7 @@ def insert_devlog_entry(
         ):
             row_logtime = int(r["logtime"])
             duration = logtime - row_logtime + 1
-            if duration < MAX_DURATION:
+            if duration <= MAX_DURATION:
                 logger.info(
                     "Updated devlog entry: device_id=%s temp10x=%s logtime=%s duration=%s",
                     device_id,

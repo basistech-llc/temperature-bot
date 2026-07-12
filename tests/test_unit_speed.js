@@ -5,7 +5,10 @@
  * Regression coverage for the "Off jumps back to Auto" bug: an off unit that is
  * holding the Auto (-1) fan speed must select the Off radio, not Auto.
  */
+global.TemperatureUtils = require("../app/static/temperature_utils.js");
+
 const {
+  collectFcuRoomEditorDisplayNameChange,
   collectFcuTempSourceChanges,
   autoSetTempRangeForDevice,
   compactAgeFromSeconds,
@@ -16,23 +19,32 @@ const {
   deviceUpdateText,
   deviceUpdateTooltipText,
   deviceUpdateTimestampSeconds,
+  enableRulesForDevice,
   ensureModeSelectOption,
   fanRadioIdForDevice,
   FCU_MODE_OPTIONS,
   fcuTempSourcesTitle,
   isAutoOperationMode,
+  markRangePending,
+  markSingleSetTempPending,
   modeLabelForDevice,
   modeValueForDevice,
-  moveSetRange,
   normalizeSetRange,
   oldestUpdateTimestampForTable,
   parseFcuTempSourceMultiplier,
+  pendingRangeUpdateDecision,
+  pendingSingleSetTempUpdateDecision,
   renderDisableCell,
+  renderAutoSetTempRange,
   resizeSetRangeEndpoint,
+  saveAutoSetTempWidget,
   saveFcuTempSourceMultipliers,
   setAutoSetTempUnavailable,
+  setRangePartFromPointerTarget,
   sortedFcuTempSources,
   tableUpdateSummaryText,
+  updateTemperatureCell,
+  updateSetRangeModeState,
 } = require("../app/static/unit_speed.js");
 
 let passed = 0;
@@ -71,6 +83,33 @@ function checkContains(label, actual, expectedFragment) {
       `FAIL ${label}: got "${actual}", expected to include "${expectedFragment}"`,
     );
   }
+}
+
+function fakeClassList() {
+  const classes = new Set();
+  return {
+    contains(className) {
+      return classes.has(className);
+    },
+    toggle(className, enabled) {
+      if (enabled) {
+        classes.add(className);
+      } else {
+        classes.delete(className);
+      }
+    },
+  };
+}
+
+function fakeWidget() {
+  return {
+    attributes: {},
+    classList: fakeClassList(),
+    dataset: {},
+    setAttribute(name, value) {
+      this.attributes[name] = String(value);
+    },
+  };
 }
 
 // -- The bug: off unit holding Auto must show Off, not Auto --
@@ -265,6 +304,82 @@ check(
   }
 }
 
+async function testEnableRulesForDevicePost() {
+  const originalDocument = global.document;
+  const originalFetch = global.fetch;
+  const classListFromSet = (set) => ({
+    add: (name) => set.add(name),
+    remove: (name) => set.delete(name),
+    contains: (name) => set.has(name),
+  });
+  const cellClasses = new Set(["rules-disabled-active"]);
+  const badgeClasses = new Set();
+  const display = {
+    attributes: { "data-disabled-until": "9999999999" },
+    textContent: "1:00",
+    removeAttribute: (name) => {
+      delete display.attributes[name];
+    },
+    setAttribute: (name, value) => {
+      display.attributes[name] = String(value);
+    },
+  };
+  const badge = {
+    attributes: { title: "Rules disabled until later" },
+    children: ["rules disabled"],
+    classList: classListFromSet(badgeClasses),
+    replaceChildren(...children) {
+      this.children = children;
+    },
+    removeAttribute(name) {
+      delete this.attributes[name];
+    },
+  };
+  const cell = {
+    classList: classListFromSet(cellClasses),
+    querySelectorAll: () => [],
+  };
+  const requests = [];
+  global.document = {
+    getElementById: (id) => {
+      if (id === "disable-display-44") return display;
+      if (id === "disable-for-44") return cell;
+      if (id === "rules-disabled-44") return badge;
+      return null;
+    },
+  };
+  global.fetch = async (url, options) => {
+    requests.push({ url, options });
+    return {
+      ok: true,
+      json: async () => ({ status: "ok", device_id: 44, disabled_until: 0 }),
+    };
+  };
+  try {
+    enableRulesForDevice(44);
+    await Promise.resolve();
+  } finally {
+    global.document = originalDocument;
+    global.fetch = originalFetch;
+  }
+
+  const body = JSON.parse(requests[0].options.body);
+  check("enable rules posts one request", requests.length, 1);
+  check(
+    "enable rules posts disabled-until endpoint",
+    requests[0].url,
+    "/api/v1/set_device_disabled_until",
+  );
+  check("enable rules posts zero disabled_until", body.disabled_until, 0);
+  check("enable rules clears display", display.textContent, "—");
+  check("enable rules hides badge", badgeClasses.has("hidden"), true);
+  check(
+    "enable rules removes active alignment class",
+    cellClasses.has("rules-disabled-active"),
+    false,
+  );
+}
+
 // -- On states still resolve correctly --
 check(
   "on + Auto (-1) -> Auto",
@@ -322,6 +437,40 @@ check(
 );
 check("auto mode token is auto operation", isAutoOperationMode("AUTO"), true);
 check("lc_auto mode token is auto operation", isAutoOperationMode("LC_AUTO"), true);
+
+const coolSetRangeWidget = fakeWidget();
+updateSetRangeModeState(coolSetRangeWidget, "COOL");
+check(
+  "non-auto rule set range has no hatch",
+  coolSetRangeWidget.classList.contains("setrange-widget-local"),
+  false,
+);
+checkContains(
+  "non-auto rule set range title names local rules",
+  coolSetRangeWidget.attributes.title,
+  "local rules",
+);
+
+const autoSetRangeWidget = fakeWidget();
+updateSetRangeModeState(autoSetRangeWidget, "AUTO");
+check(
+  "auto rule set range has no hatch",
+  autoSetRangeWidget.classList.contains("setrange-widget-local"),
+  false,
+);
+checkContains(
+  "auto rule set range title names local rules",
+  autoSetRangeWidget.attributes.title,
+  "local rules",
+);
+
+const lcAutoSetRangeWidget = fakeWidget();
+updateSetRangeModeState(lcAutoSetRangeWidget, "LC_AUTO");
+check(
+  "lc_auto rule set range has no hatch",
+  lcAutoSetRangeWidget.classList.contains("setrange-widget-local"),
+  false,
+);
 check(
   "unknown mode passes through",
   modeLabelForDevice({ mode: "SOMETHING_NEW" }),
@@ -335,14 +484,14 @@ check(
 
 // -- FCU temperature source popup behavior --
 check(
-  "temperature source title includes room name",
+  "room editor title includes room name",
   fcuTempSourcesTitle("Area 51"),
-  "Area 51: Temperature Sources",
+  "Area 51: Room Editor",
 );
 check(
-  "temperature source title without room name",
+  "room editor title without room name",
   fcuTempSourcesTitle(""),
-  "Temperature Sources",
+  "Room Editor",
 );
 
 const unsortedSources = [
@@ -363,7 +512,11 @@ check(
   unsortedSources.map((source) => source.source_device_id).join(","),
   "1,2,3,4",
 );
-check("nonnegative multiplier parses", parseFcuTempSourceMultiplier(" 1.5 "), 1.5);
+check(
+  "nonnegative multiplier parses",
+  parseFcuTempSourceMultiplier(" 1.5 "),
+  1.5,
+);
 check("negative multiplier is invalid", parseFcuTempSourceMultiplier("-0.1"), null);
 
 const autoSetTempRange = autoSetTempRangeForDevice({
@@ -378,7 +531,11 @@ const promotedAutoSetTempRange = autoSetTempRangeForDevice({
   auto_min_c: 18,
   auto_max_c: 27,
 });
-check("promoted auto set temp range heat bottom", promotedAutoSetTempRange.lowC, 20);
+check(
+  "promoted auto set temp range heat bottom",
+  promotedAutoSetTempRange.lowC,
+  20,
+);
 check("promoted auto set temp range cool top", promotedAutoSetTempRange.highC, 25);
 
 function fakeElement(attributes = {}, styles = {}) {
@@ -386,11 +543,49 @@ function fakeElement(attributes = {}, styles = {}) {
     attributes: { ...attributes },
     style: { ...styles },
     textContent: "",
+    setAttribute(name, value) {
+      this.attributes[name] = String(value);
+    },
     removeAttribute(name) {
       delete this.attributes[name];
     },
   };
 }
+
+const tooltipCellClasses = new Set(["cell-temp-link"]);
+const tooltipCell = {
+  attributes: {},
+  classList: {
+    add(name) {
+      tooltipCellClasses.add(name);
+    },
+    remove(name) {
+      tooltipCellClasses.delete(name);
+    },
+    contains(name) {
+      return tooltipCellClasses.has(name);
+    },
+  },
+  dataset: { chartUrl: "/chart?mode=raw&device_ids=12" },
+  innerHTML: "",
+  removeAttribute(name) {
+    delete this.attributes[name];
+  },
+  setAttribute(name, value) {
+    this.attributes[name] = String(value);
+  },
+  textContent: "",
+};
+updateTemperatureCell(tooltipCell, 745, {
+  age: "1m",
+  duration: 60,
+  logtime: Math.floor(Date.now() / 1000),
+});
+checkContains(
+  "refreshed chart temperature tooltip keeps graph hint",
+  tooltipCell.attributes.title,
+  "click to show graph",
+);
 
 const autoFill = fakeElement({}, { left: "20%", width: "50%" });
 const autoHeatHandle = fakeElement({}, { left: "20%" });
@@ -422,15 +617,104 @@ const autoWidget = {
   },
 };
 setAutoSetTempUnavailable(autoWidget);
-check("auto unavailable clears heat data", autoWidget.attributes["data-heat-set-temp-c"], undefined);
-check("auto unavailable clears cool data", autoWidget.attributes["data-cool-set-temp-c"], undefined);
+check(
+  "auto unavailable clears heat data",
+  autoWidget.attributes["data-heat-set-temp-c"],
+  undefined,
+);
+check(
+  "auto unavailable clears cool data",
+  autoWidget.attributes["data-cool-set-temp-c"],
+  undefined,
+);
 check("auto unavailable clears title", autoWidget.attributes.title, undefined);
 check("auto unavailable clears fill left", autoFill.style.left, "");
 check("auto unavailable clears fill width", autoFill.style.width, "");
 check("auto unavailable clears heat handle", autoHeatHandle.style.left, "");
 check("auto unavailable clears cool handle", autoCoolHandle.style.left, "");
 check("auto unavailable clears heat label", autoLabels[0].textContent, "--");
-check("auto unavailable clears cool label data", autoLabels[1].attributes["data-temp-c"], undefined);
+check(
+  "auto unavailable clears cool label data",
+  autoLabels[1].attributes["data-temp-c"],
+  undefined,
+);
+
+async function testAutoSetTempSavePost() {
+  const fill = fakeElement({}, { left: "", width: "" });
+  const heatHandle = fakeElement({}, { left: "" });
+  const coolHandle = fakeElement({}, { left: "" });
+  const heatLabel = fakeElement();
+  const coolLabel = fakeElement();
+  const labels = [heatLabel, coolLabel];
+  const widget = {
+    attributes: {},
+    dataset: {
+      deviceId: "12",
+      updateUrl: "/api/v1/set_auto_temp",
+      heatSetTempC: "19",
+      coolSetTempC: "24",
+      autoMinC: "18",
+      autoMaxC: "27",
+    },
+    querySelector(selector) {
+      return {
+        "[data-role='auto-range']": fill,
+        "[data-role='heat']": heatHandle,
+        "[data-role='cool']": coolHandle,
+        "[data-role='heat-label']": heatLabel,
+        "[data-role='cool-label']": coolLabel,
+      }[selector];
+    },
+    querySelectorAll(selector) {
+      return selector === ".autosettemp-end-label" ? labels : [];
+    },
+    setAttribute(name, value) {
+      this.attributes[name] = String(value);
+    },
+    removeAttribute(name) {
+      delete this.attributes[name];
+    },
+  };
+  const requests = [];
+  const originalFetch = global.fetch;
+  global.fetch = async (url, options) => {
+    requests.push({ url, options });
+    return {
+      ok: true,
+      json: async () => ({
+        heat_set_temp_c: 20,
+        cool_set_temp_c: 25,
+      }),
+    };
+  };
+  try {
+    await saveAutoSetTempWidget(widget);
+  } finally {
+    global.fetch = originalFetch;
+  }
+
+  const body = JSON.parse(requests[0].options.body);
+  check("auto set temp save sends one request", requests.length, 1);
+  check("auto set temp save posts endpoint", requests[0].url, "/api/v1/set_auto_temp");
+  check("auto set temp save uses POST", requests[0].options.method, "POST");
+  check(
+    "auto set temp save sends Heat and Cool",
+    JSON.stringify(body),
+    JSON.stringify({
+      device_id: 12,
+      heat_set_temp_c: 19,
+      cool_set_temp_c: 24,
+    }),
+  );
+  check("auto set temp save updates heat dataset", widget.dataset.heatSetTempC, "20");
+  check("auto set temp save updates cool dataset", widget.dataset.coolSetTempC, "25");
+  check("auto set temp save clears saving flag", widget.dataset.saving, undefined);
+  check("auto set temp save remains pending", widget.dataset.updateState, "pending");
+  check("auto set temp save retargets pending heat", widget.dataset.pendingRangeLowC, "20");
+  check("auto set temp save retargets pending cool", widget.dataset.pendingRangeHighC, "25");
+  check("auto heat handle aria value updates", heatHandle.attributes["aria-valuenow"], "20");
+  check("auto cool handle aria value updates", coolHandle.attributes["aria-valuenow"], "25");
+}
 
 // -- Device display-name rename behavior --
 check(
@@ -480,7 +764,11 @@ const popupWithChangedSource = {
 };
 const sourceChanges = collectFcuTempSourceChanges(popupWithChangedSource);
 check("changed source collection has no error", sourceChanges.error, "");
-check("changed source collection filters unchanged rows", sourceChanges.changes.length, 1);
+check(
+  "changed source collection filters unchanged rows",
+  sourceChanges.changes.length,
+  1,
+);
 check(
   "changed source collection builds API payload",
   JSON.stringify(sourceChanges.changes[0]),
@@ -503,6 +791,37 @@ check(
   "invalid source collection reports validation error",
   invalidSourceChanges.error,
   "Weight must be a nonnegative number.",
+);
+
+const unchangedRoomName = collectFcuRoomEditorDisplayNameChange({
+  dataset: { currentDisplayName: "Area 51" },
+  querySelector: (selector) =>
+    selector === "[data-role='display-name']" ? { value: "Area 51" } : null,
+});
+check("unchanged room editor name is ignored", unchangedRoomName.changed, false);
+check("unchanged room editor name has no error", unchangedRoomName.error, "");
+
+const changedRoomName = collectFcuRoomEditorDisplayNameChange({
+  dataset: { currentDisplayName: "Area 51" },
+  querySelector: (selector) =>
+    selector === "[data-role='display-name']" ? { value: " East Lab " } : null,
+});
+check("changed room editor name is detected", changedRoomName.changed, true);
+check(
+  "changed room editor name is trimmed",
+  changedRoomName.displayName,
+  "East Lab",
+);
+
+const blankRoomName = collectFcuRoomEditorDisplayNameChange({
+  dataset: { currentDisplayName: "Area 51" },
+  querySelector: (selector) =>
+    selector === "[data-role='display-name']" ? { value: " " } : null,
+});
+check(
+  "blank room editor name is invalid",
+  blankRoomName.error,
+  "Room (Unit) name is required.",
 );
 
 async function testFcuBatchSavePost() {
@@ -557,7 +876,8 @@ async function testFcuBatchSavePost() {
         return inputs;
       }
       if (
-        selector === ".fcu-temp-source-weight, .fcu-temp-sources-actions button"
+        selector ===
+        ".fcu-temp-source-weight, .fcu-room-display-name, .fcu-temp-sources-actions button"
       ) {
         return inputs.concat(buttons);
       }
@@ -597,6 +917,108 @@ async function testFcuBatchSavePost() {
       { fcu_device_id: 12, source_device_id: 22, multiplier: 0.25 },
     ]),
   );
+}
+
+async function testFcuRoomEditorNamePatch() {
+  const input = {
+    disabled: false,
+    value: "East Lab",
+    dataset: { initialDisplayName: "Area 51" },
+  };
+  const message = {
+    textContent: "",
+    classList: {
+      toggle: () => {},
+    },
+  };
+  const popup = {
+    dataset: {
+      updateUrl: "/api/v1/fcu_temp_source",
+      deviceUpdateUrl: "/api/v1/devices/12",
+      deviceId: "12",
+      deviceName: "Area 51",
+      currentDisplayName: "Area 51",
+    },
+    classList: {
+      hidden: false,
+      add: (name) => {
+        popup.classList.hidden = name === "hidden";
+      },
+    },
+    querySelector: (selector) => {
+      if (selector === "[data-role='message']") {
+        return message;
+      }
+      if (selector === "[data-role='display-name']") {
+        return input;
+      }
+      if (selector === "[data-role='title']") {
+        return { textContent: "" };
+      }
+      return null;
+    },
+    querySelectorAll: (selector) => {
+      if (selector === ".fcu-temp-source-weight") {
+        return [];
+      }
+      if (
+        selector ===
+        ".fcu-temp-source-weight, .fcu-room-display-name, .fcu-temp-sources-actions button"
+      ) {
+        return [input];
+      }
+      return [];
+    },
+  };
+  const label = {
+    dataset: { deviceUpdate: "", deviceName: "Area 51" },
+    classList: { contains: (name) => name === "fcu-room-editor-trigger" },
+    textContent: "",
+    setAttribute(name, value) {
+      this[name] = value;
+    },
+  };
+  const requests = [];
+  const originalDocumentForSave = global.document;
+  const originalFetch = global.fetch;
+  global.document = {
+    getElementById: (id) => (id === "fcu-temp-sources-popup" ? popup : null),
+    querySelectorAll: () => [label],
+  };
+  global.fetch = async (url, options) => {
+    requests.push({ url, options });
+    return {
+      ok: true,
+      json: async () => ({
+        device_id: 12,
+        device_name: "Area 51",
+        display_name: "East Lab",
+        device_type: "FCU",
+        rules_enabled: true,
+      }),
+    };
+  };
+  try {
+    await saveFcuTempSourceMultipliers();
+  } finally {
+    global.document = originalDocumentForSave;
+    global.fetch = originalFetch;
+  }
+
+  const patchBody = JSON.parse(requests[0].options.body);
+  check("room editor name save sends one request", requests.length, 1);
+  check(
+    "room editor name save patches device URL",
+    requests[0].url,
+    "/api/v1/devices/12",
+  );
+  check("room editor name save uses PATCH", requests[0].options.method, "PATCH");
+  check(
+    "room editor name save sends display name",
+    JSON.stringify(patchBody),
+    JSON.stringify({ display_name: "East Lab" }),
+  );
+  check("room editor name save updates label", label.textContent, "East Lab");
 }
 
 // -- FCU mode select option updates --
@@ -651,6 +1073,12 @@ try {
 
 // -- FCU set-range math --
 checkRange(
+  "default set temp slider scale is 55F to 85F",
+  normalizeSetRange(0, 40),
+  12.8,
+  29.4,
+);
+checkRange(
   "too narrow range expands to minimum",
   normalizeSetRange(20, 22, { minRangeC: 3, trackMinC: 10, trackMaxC: 30 }),
   20,
@@ -666,14 +1094,75 @@ checkRange(
   21,
   24,
 );
-checkRange(
-  "moving middle preserves width and clamps to track",
-  moveSetRange(20, 24, -20, { minRangeC: 3, trackMinC: 10, trackMaxC: 30 }),
-  10,
-  14,
+check(
+  "set range low handle starts drag",
+  setRangePartFromPointerTarget({ currentTarget: { dataset: { role: "low" } } }),
+  "low",
+);
+check(
+  "set range high handle starts drag",
+  setRangePartFromPointerTarget({ currentTarget: { dataset: { role: "high" } } }),
+  "high",
+);
+check(
+  "set range middle fill does not start drag",
+  setRangePartFromPointerTarget({ currentTarget: { dataset: { role: "middle" } } }),
+  null,
+);
+check(
+  "set range track does not start drag",
+  setRangePartFromPointerTarget({ currentTarget: { dataset: { role: "track" } } }),
+  null,
 );
 
-testFcuBatchSavePost()
+// -- Pending set-temperature refresh state --
+const pendingSingleDisplay = { dataset: {} };
+markSingleSetTempPending(pendingSingleDisplay, 23.9, 1000);
+check("single set temp starts pending", pendingSingleDisplay.dataset.updateState, "pending");
+check(
+  "single set temp stale mismatch is held",
+  pendingSingleSetTempUpdateDecision(pendingSingleDisplay, 22.2, 2000),
+  "hold",
+);
+check(
+  "single set temp expired mismatch fails",
+  pendingSingleSetTempUpdateDecision(pendingSingleDisplay, 22.2, 32001),
+  "failed",
+);
+check("single set temp failed state is red", pendingSingleDisplay.dataset.updateState, "failed");
+check(
+  "single set temp matching update applies",
+  pendingSingleSetTempUpdateDecision(pendingSingleDisplay, 23.95, 33000),
+  "apply",
+);
+check("single set temp matching update clears state", pendingSingleDisplay.dataset.updateState, undefined);
+
+const pendingRangeWidget = { dataset: {} };
+markRangePending(pendingRangeWidget, 19, 24, 5000);
+check("range set temp starts pending", pendingRangeWidget.dataset.updateState, "pending");
+check(
+  "range set temp stale mismatch is held",
+  pendingRangeUpdateDecision(pendingRangeWidget, 18, 23, 6000),
+  "hold",
+);
+check(
+  "range set temp expired mismatch fails",
+  pendingRangeUpdateDecision(pendingRangeWidget, 18, 23, 36001),
+  "failed",
+);
+check("range set temp failed state is red", pendingRangeWidget.dataset.updateState, "failed");
+check(
+  "range set temp matching update applies",
+  pendingRangeUpdateDecision(pendingRangeWidget, 19.05, 24.05, 37000),
+  "apply",
+);
+check("range set temp matching update clears state", pendingRangeWidget.dataset.updateState, undefined);
+
+Promise.resolve()
+  .then(testEnableRulesForDevicePost)
+  .then(testFcuBatchSavePost)
+  .then(testFcuRoomEditorNamePatch)
+  .then(testAutoSetTempSavePost)
   .catch((error) => {
     failed++;
     console.error(error);

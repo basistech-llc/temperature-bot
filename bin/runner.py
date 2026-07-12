@@ -146,6 +146,12 @@ def combine_temp_measurements(conn, start_time, end_time, seconds):
     :param end_time: unix time_t of end of time period.
     :param divisions: number of divisions to create
     """
+    if seconds > db.MAX_DURATION:
+        raise ValueError(
+            f"combine_temp_measurements seconds={seconds} exceeds "
+            f"MAX_DURATION={db.MAX_DURATION}"
+        )
+
     logger.info("combine_temp_measurements(%s,%s,%s", start_time, end_time, seconds)
     conn.isolation_level = None
     c = conn.cursor()

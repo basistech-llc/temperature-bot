@@ -30,17 +30,31 @@ const FCU_MODE_OPTIONS = ["FAN", "COOL", "DRY", "HEAT", "AUTO"];
 const FCU_MODE_DEVICE_ID_KEY = "device_id";
 const FCU_MODE_MODE_KEY = "mode";
 const AE200_AUTO_MODE_VALUES = ["AUTO", "LC_AUTO"];
-const SET_RANGE_TRACK_MIN_C = 10;
-const SET_RANGE_TRACK_MAX_C = 30;
+const SET_TEMP_TRACK_MIN_F = 55;
+const SET_TEMP_TRACK_MAX_F = 85;
+const SET_TEMP_TRACK_MIN_C = ((SET_TEMP_TRACK_MIN_F - 32) * 5) / 9;
+const SET_TEMP_TRACK_MAX_C = ((SET_TEMP_TRACK_MAX_F - 32) * 5) / 9;
+const SET_RANGE_TRACK_MIN_C = SET_TEMP_TRACK_MIN_C;
+const SET_RANGE_TRACK_MAX_C = SET_TEMP_TRACK_MAX_C;
 const SET_RANGE_STEP_C = 0.5;
 const DEFAULT_MIN_SET_RANGE_C = 3.0;
+const SET_TEMP_PENDING_TIMEOUT_MS = 30 * 1000;
+const SET_TEMP_MATCH_TOLERANCE_C = 0.11;
+const UPDATE_STATE_PENDING = "pending";
+const UPDATE_STATE_FAILED = "failed";
+const UPDATE_DECISION_APPLY = "apply";
+const UPDATE_DECISION_HOLD = "hold";
+const UPDATE_DECISION_FAILED = "failed";
 const SET_RANGE_DEVICE_ID_KEY = "device_id";
 const SET_RANGE_LOW_KEY = "set_range_low_c";
 const SET_RANGE_HIGH_KEY = "set_range_high_c";
+const AUTO_SET_TEMP_DEVICE_ID_KEY = "device_id";
+const AUTO_SET_TEMP_HEAT_KEY = "heat_set_temp_c";
+const AUTO_SET_TEMP_COOL_KEY = "cool_set_temp_c";
 const FCU_TEMP_SOURCE_FCU_DEVICE_ID_KEY = "fcu_device_id";
 const FCU_TEMP_SOURCE_SOURCE_DEVICE_ID_KEY = "source_device_id";
 const FCU_TEMP_SOURCE_MULTIPLIER_KEY = "multiplier";
-const FCU_TEMP_SOURCE_TITLE = "Temperature Sources";
+const FCU_TEMP_SOURCE_TITLE = "Room Editor";
 const DEVICE_DISPLAY_NAME_KEY = "display_name";
 
 // Refresh logic
@@ -339,14 +353,16 @@ function autoSetTempRangeForDevice(dev) {
   }
   return normalizeSetRange(heatSetTempC, coolSetTempC, {
     minRangeC: 0.5,
-    trackMinC: finiteNumber(dev.auto_min_c, finiteNumber(status.AutoMin, SET_RANGE_TRACK_MIN_C)),
-    trackMaxC: finiteNumber(dev.auto_max_c, finiteNumber(status.AutoMax, SET_RANGE_TRACK_MAX_C)),
+    trackMinC: SET_RANGE_TRACK_MIN_C,
+    trackMaxC: SET_RANGE_TRACK_MAX_C,
   });
 }
 
 function setAutoSetTempUnavailable(widget) {
   widget.removeAttribute("data-heat-set-temp-c");
   widget.removeAttribute("data-cool-set-temp-c");
+  widget.removeAttribute("data-auto-min-c");
+  widget.removeAttribute("data-auto-max-c");
   widget.removeAttribute("title");
   const fill = widget.querySelector("[data-role='auto-range']");
   const heatHandle = widget.querySelector("[data-role='heat']");
@@ -367,20 +383,57 @@ function setAutoSetTempUnavailable(widget) {
   });
 }
 
-function renderAutoSetTempWidget(widget, dev) {
-  const range = autoSetTempRangeForDevice(dev);
-  if (!range) {
+function getAutoSetTempWidgetOptions(widget) {
+  const trackMinC = SET_RANGE_TRACK_MIN_C;
+  const trackMaxC = SET_RANGE_TRACK_MAX_C;
+  return setRangeOptions({
+    minRangeC: SET_RANGE_STEP_C,
+    trackMinC,
+    trackMaxC,
+  });
+}
+
+function getAutoSetTempRangeFromWidget(widget) {
+  const heatC = finiteNumber(widget.dataset.heatSetTempC);
+  const coolC = finiteNumber(widget.dataset.coolSetTempC);
+  if (heatC === null || coolC === null) {
+    return null;
+  }
+  return normalizeSetRange(heatC, coolC, getAutoSetTempWidgetOptions(widget));
+}
+
+function setAutoSetTempSelectedPart(widget, part) {
+  widget.dataset.selectedPart = part;
+  widget
+    .querySelectorAll("[data-role='heat'], [data-role='cool']")
+    .forEach((element) => {
+      element.classList.toggle("selected", element.dataset.role === part);
+    });
+}
+
+function renderAutoSetTempRange(widget, heatC, coolC, options = null) {
+  if (options) {
+    widget.dataset.autoMinC = String(options.trackMinC);
+    widget.dataset.autoMaxC = String(options.trackMaxC);
+  }
+
+  const initialRange = normalizeSetRange(
+    heatC,
+    coolC,
+    getAutoSetTempWidgetOptions(widget),
+  );
+  if (!initialRange) {
     setAutoSetTempUnavailable(widget);
     return;
   }
-  const status = dev.status || {};
-  const options = setRangeOptions({
-    minRangeC: 0.5,
-    trackMinC: finiteNumber(dev.auto_min_c, finiteNumber(status.AutoMin, SET_RANGE_TRACK_MIN_C)),
-    trackMaxC: finiteNumber(dev.auto_max_c, finiteNumber(status.AutoMax, SET_RANGE_TRACK_MAX_C)),
-  });
-  const heatPercent = rangeTempToPercent(range.lowC, options);
-  const coolPercent = rangeTempToPercent(range.highC, options);
+  const resolvedOptions = getAutoSetTempWidgetOptions(widget, initialRange);
+  const range = normalizeSetRange(
+    initialRange.lowC,
+    initialRange.highC,
+    resolvedOptions,
+  );
+  const heatPercent = rangeTempToPercent(range.lowC, resolvedOptions);
+  const coolPercent = rangeTempToPercent(range.highC, resolvedOptions);
   const fill = widget.querySelector("[data-role='auto-range']");
   const heatHandle = widget.querySelector("[data-role='heat']");
   const coolHandle = widget.querySelector("[data-role='cool']");
@@ -401,10 +454,41 @@ function renderAutoSetTempWidget(widget, dev) {
     label.setAttribute("data-temp-c", String(value));
     label.textContent = TemperatureUtils.formatTemperature(value, false);
   }
+
+  for (const [handle, value, label] of [
+    [heatHandle, range.lowC, "Heat"],
+    [coolHandle, range.highC, "Cool"],
+  ]) {
+    handle.setAttribute("title", `${label} ${TemperatureUtils.formatTemperature(value)}`);
+    handle.setAttribute("aria-valuemin", String(resolvedOptions.trackMinC));
+    handle.setAttribute("aria-valuemax", String(resolvedOptions.trackMaxC));
+    handle.setAttribute("aria-valuenow", String(value));
+  }
   widget.setAttribute(
     "title",
     `Auto Heat ${TemperatureUtils.formatTemperature(range.lowC)} / Cool ${TemperatureUtils.formatTemperature(range.highC)}`,
   );
+}
+
+function renderAutoSetTempWidget(widget, dev) {
+  const range = autoSetTempRangeForDevice(dev);
+  if (!range) {
+    setAutoSetTempUnavailable(widget);
+    return;
+  }
+  const options = setRangeOptions({
+    minRangeC: 0.5,
+    trackMinC: SET_RANGE_TRACK_MIN_C,
+    trackMaxC: SET_RANGE_TRACK_MAX_C,
+  });
+  const decision = pendingRangeUpdateDecision(widget, range.lowC, range.highC);
+  if (decision === UPDATE_DECISION_HOLD) {
+    return;
+  }
+  renderAutoSetTempRange(widget, range.lowC, range.highC, options);
+  if (decision === UPDATE_DECISION_FAILED) {
+    markRangeFailed(widget);
+  }
 }
 
 function updateSetTempForDevice(dev) {
@@ -420,9 +504,15 @@ function updateSetTempForDevice(dev) {
   if (isAutoOperationMode(modeValueForDevice(dev))) {
     setTempControls.classList.add("hidden");
     autoWidget.classList.remove("hidden");
-    renderAutoSetTempWidget(autoWidget, dev);
+    if (
+      autoWidget.dataset.dragging !== "true" &&
+      autoWidget.dataset.saving !== "true"
+    ) {
+      renderAutoSetTempWidget(autoWidget, dev);
+    }
     setTempCell.removeAttribute("data-temp-c");
     setTempDisplay.removeAttribute("data-temp-c");
+    clearSingleSetTempPending(setTempDisplay);
     return;
   }
 
@@ -434,12 +524,25 @@ function updateSetTempForDevice(dev) {
     const setTempValue = parseFloat(rawSetTemp);
     if (!Number.isNaN(setTempValue)) {
       const setTempC = setTempValue;
+      const decision = pendingSingleSetTempUpdateDecision(setTempDisplay, setTempC);
+      if (decision === UPDATE_DECISION_HOLD) {
+        return;
+      }
       setTempCell.setAttribute("data-temp-c", setTempC.toString());
       setTempDisplay.setAttribute("data-temp-c", setTempC.toString());
       updateStalenessAndTooltip(setTempDisplay, dev);
       setTempDisplay.textContent = TemperatureUtils.formatTemperature(setTempC, false);
+      if (decision === UPDATE_DECISION_FAILED) {
+        markSingleSetTempFailed(setTempDisplay);
+      }
       return;
     }
+  }
+  if (
+    setTempDisplay.dataset.pendingSetTempC &&
+    pendingSingleSetTempUpdateDecision(setTempDisplay, null) === UPDATE_DECISION_HOLD
+  ) {
+    return;
   }
   setTempCell.removeAttribute("data-temp-c");
   setTempDisplay.removeAttribute("data-temp-c");
@@ -465,7 +568,8 @@ function updateStalenessAndTooltip(cell, dev) {
 
   // Set title attribute for hover tooltip
   if (dev.age) {
-    cell.setAttribute("title", `Last updated: ${dev.age} ago`);
+    const graphHint = cell.dataset?.chartUrl ? "; click to show graph." : "";
+    cell.setAttribute("title", `Last updated: ${dev.age} ago${graphHint}`);
   }
 
   // Apply color class based on staleness
@@ -530,6 +634,149 @@ function roundTempC(value) {
   return Math.round(value * 10) / 10;
 }
 
+function tempValuesMatchC(actualC, expectedC) {
+  const actual = finiteNumber(actualC);
+  const expected = finiteNumber(expectedC);
+  return (
+    actual !== null &&
+    expected !== null &&
+    Math.abs(actual - expected) <= SET_TEMP_MATCH_TOLERANCE_C
+  );
+}
+
+function setUpdateState(element, state) {
+  if (!element || !element.dataset) {
+    return;
+  }
+  if (state) {
+    element.dataset.updateState = state;
+  } else {
+    delete element.dataset.updateState;
+  }
+}
+
+function markSingleSetTempPending(display, requestedC, nowMs = Date.now()) {
+  if (!display || !display.dataset) {
+    return;
+  }
+  display.dataset.pendingSetTempC = String(requestedC);
+  display.dataset.pendingUntilMs = String(nowMs + SET_TEMP_PENDING_TIMEOUT_MS);
+  setUpdateState(display, UPDATE_STATE_PENDING);
+}
+
+function updateSingleSetTempPendingTarget(display, requestedC) {
+  if (!display || !display.dataset) {
+    return;
+  }
+  if (!display.dataset.pendingUntilMs) {
+    markSingleSetTempPending(display, requestedC);
+    return;
+  }
+  display.dataset.pendingSetTempC = String(requestedC);
+  setUpdateState(display, UPDATE_STATE_PENDING);
+}
+
+function markSingleSetTempFailed(display) {
+  setUpdateState(display, UPDATE_STATE_FAILED);
+}
+
+function clearSingleSetTempPending(display) {
+  if (!display || !display.dataset) {
+    return;
+  }
+  delete display.dataset.pendingSetTempC;
+  delete display.dataset.pendingUntilMs;
+  setUpdateState(display, null);
+}
+
+function pendingSingleSetTempUpdateDecision(
+  display,
+  incomingC,
+  nowMs = Date.now(),
+) {
+  const requestedC = finiteNumber(display?.dataset?.pendingSetTempC);
+  if (requestedC === null) {
+    setUpdateState(display, null);
+    return UPDATE_DECISION_APPLY;
+  }
+  if (tempValuesMatchC(incomingC, requestedC)) {
+    clearSingleSetTempPending(display);
+    return UPDATE_DECISION_APPLY;
+  }
+  const pendingUntilMs = finiteNumber(display.dataset.pendingUntilMs, 0);
+  if (nowMs <= pendingUntilMs) {
+    setUpdateState(display, UPDATE_STATE_PENDING);
+    return UPDATE_DECISION_HOLD;
+  }
+  markSingleSetTempFailed(display);
+  return UPDATE_DECISION_FAILED;
+}
+
+function markRangePending(widget, lowC, highC, nowMs = Date.now()) {
+  if (!widget || !widget.dataset) {
+    return;
+  }
+  widget.dataset.pendingRangeLowC = String(lowC);
+  widget.dataset.pendingRangeHighC = String(highC);
+  widget.dataset.pendingUntilMs = String(nowMs + SET_TEMP_PENDING_TIMEOUT_MS);
+  setUpdateState(widget, UPDATE_STATE_PENDING);
+}
+
+function updateRangePendingTarget(widget, lowC, highC) {
+  if (!widget || !widget.dataset) {
+    return;
+  }
+  if (!widget.dataset.pendingUntilMs) {
+    markRangePending(widget, lowC, highC);
+    return;
+  }
+  widget.dataset.pendingRangeLowC = String(lowC);
+  widget.dataset.pendingRangeHighC = String(highC);
+  setUpdateState(widget, UPDATE_STATE_PENDING);
+}
+
+function markRangeFailed(widget) {
+  setUpdateState(widget, UPDATE_STATE_FAILED);
+}
+
+function clearRangePending(widget) {
+  if (!widget || !widget.dataset) {
+    return;
+  }
+  delete widget.dataset.pendingRangeLowC;
+  delete widget.dataset.pendingRangeHighC;
+  delete widget.dataset.pendingUntilMs;
+  setUpdateState(widget, null);
+}
+
+function pendingRangeUpdateDecision(
+  widget,
+  incomingLowC,
+  incomingHighC,
+  nowMs = Date.now(),
+) {
+  const requestedLowC = finiteNumber(widget?.dataset?.pendingRangeLowC);
+  const requestedHighC = finiteNumber(widget?.dataset?.pendingRangeHighC);
+  if (requestedLowC === null || requestedHighC === null) {
+    setUpdateState(widget, null);
+    return UPDATE_DECISION_APPLY;
+  }
+  if (
+    tempValuesMatchC(incomingLowC, requestedLowC) &&
+    tempValuesMatchC(incomingHighC, requestedHighC)
+  ) {
+    clearRangePending(widget);
+    return UPDATE_DECISION_APPLY;
+  }
+  const pendingUntilMs = finiteNumber(widget.dataset.pendingUntilMs, 0);
+  if (nowMs <= pendingUntilMs) {
+    setUpdateState(widget, UPDATE_STATE_PENDING);
+    return UPDATE_DECISION_HOLD;
+  }
+  markRangeFailed(widget);
+  return UPDATE_DECISION_FAILED;
+}
+
 function setRangeOptions(options = {}) {
   const minRangeC = finiteNumber(
     options.minRangeC,
@@ -591,27 +838,6 @@ function resizeSetRangeEndpoint(lowC, highC, endpoint, valueC, options = {}) {
     high = Math.min(opts.trackMaxC, high);
   }
   return normalizeSetRange(low, high, opts);
-}
-
-function moveSetRange(lowC, highC, deltaC, options = {}) {
-  const opts = setRangeOptions(options);
-  const current = normalizeSetRange(lowC, highC, opts);
-  if (!current) {
-    return null;
-  }
-
-  const width = current.highC - current.lowC;
-  let low = current.lowC + deltaC;
-  if (low < opts.trackMinC) {
-    low = opts.trackMinC;
-  }
-  if (low + width > opts.trackMaxC) {
-    low = opts.trackMaxC - width;
-  }
-  return {
-    lowC: roundTempC(low),
-    highC: roundTempC(low + width),
-  };
 }
 
 function setRangesEqual(first, second) {
@@ -694,7 +920,9 @@ function setFcuTempSourcesMessage(popup, message, isError = false) {
 function setFcuTempSourcesControlsDisabled(popup, disabled) {
   popup.dataset.saving = disabled ? "true" : "false";
   popup
-    .querySelectorAll(".fcu-temp-source-weight, .fcu-temp-sources-actions button")
+    .querySelectorAll(
+      ".fcu-temp-source-weight, .fcu-room-display-name, .fcu-temp-sources-actions button",
+    )
     .forEach((control) => {
       control.disabled = disabled;
     });
@@ -746,10 +974,42 @@ function collectFcuTempSourceChanges(popup) {
   return { changes, error: "" };
 }
 
+function setFcuRoomEditorDisplayName(popup, displayName) {
+  const input = popup.querySelector("[data-role='display-name']");
+  const normalizedName = normalizedDeviceDisplayName(displayName);
+  popup.dataset.currentDisplayName = normalizedName;
+  if (input) {
+    input.value = normalizedName;
+    input.dataset.initialDisplayName = normalizedName;
+  }
+}
+
+function collectFcuRoomEditorDisplayNameChange(popup) {
+  const input = popup.querySelector("[data-role='display-name']");
+  if (!input) {
+    return { changed: false, displayName: "", error: "" };
+  }
+  const displayName = normalizedDeviceDisplayName(input.value);
+  if (!displayName) {
+    return {
+      changed: false,
+      displayName: "",
+      error: "Room (Unit) name is required.",
+    };
+  }
+  return {
+    changed:
+      displayName !== normalizedDeviceDisplayName(popup.dataset.currentDisplayName),
+    displayName,
+    error: "",
+  };
+}
+
 function revertFcuTempSourceChanges(popup) {
   popup.querySelectorAll(".fcu-temp-source-weight").forEach((input) => {
     input.value = input.dataset.initialMultiplier;
   });
+  setFcuRoomEditorDisplayName(popup, popup.dataset.currentDisplayName);
   setFcuTempSourcesMessage(popup, "");
 }
 
@@ -827,9 +1087,16 @@ async function loadFcuTempSourcesForCell(cell) {
     return;
   }
 
+  const deviceId = parseInt(cell.dataset.deviceId, 10);
+  const displayName = cell.dataset.displayName || cell.textContent;
   popup.dataset.updateUrl = updateUrl;
-  setFcuTempSourcesTitle(popup, cell.dataset.fcuTempSourcesRoomName);
+  popup.dataset.deviceUpdateUrl = cell.dataset.deviceUpdateUrl || "";
+  popup.dataset.deviceId = Number.isInteger(deviceId) ? String(deviceId) : "";
+  popup.dataset.deviceName = cell.dataset.deviceName || "";
+  setFcuRoomEditorDisplayName(popup, displayName);
+  setFcuTempSourcesTitle(popup, displayName);
   popup.classList.remove("hidden");
+  setFcuTempSourcesControlsDisabled(popup, false);
   setFcuTempSourcesMessage(popup, "Loading...");
   const tbody = popup.querySelector("[data-role='sources-body']");
   if (tbody) {
@@ -858,15 +1125,20 @@ async function saveFcuTempSourceMultipliers() {
 
   const updateUrl = popup.dataset.updateUrl;
   const { changes, error } = collectFcuTempSourceChanges(popup);
+  const displayNameChange = collectFcuRoomEditorDisplayNameChange(popup);
   if (error) {
     setFcuTempSourcesMessage(popup, error, true);
+    return;
+  }
+  if (displayNameChange.error) {
+    setFcuTempSourcesMessage(popup, displayNameChange.error, true);
     return;
   }
   if (!updateUrl) {
     setFcuTempSourcesMessage(popup, "Unable to save without an update URL.", true);
     return;
   }
-  if (changes.length === 0) {
+  if (changes.length === 0 && !displayNameChange.changed) {
     closeFcuTempSourcesPopup();
     return;
   }
@@ -874,14 +1146,40 @@ async function saveFcuTempSourceMultipliers() {
   setFcuTempSourcesControlsDisabled(popup, true);
   setFcuTempSourcesMessage(popup, "Saving...");
   try {
-    const response = await fetch(updateUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(changes),
-    });
-    const data = await response.json();
-    if (!response.ok) {
-      throw new Error(data.error || "Unable to save weights.");
+    const deviceId = parseInt(popup.dataset.deviceId, 10);
+    const deviceName = popup.dataset.deviceName || "";
+    if (displayNameChange.changed) {
+      if (!Number.isInteger(deviceId) || !deviceName) {
+        throw new Error("Unable to save without device metadata.");
+      }
+      const data = await patchDeviceDisplayName(
+        deviceId,
+        displayNameChange.displayName,
+        popup.dataset.deviceUpdateUrl,
+      );
+      const savedDisplayName =
+        data.display_name || displayNameChange.displayName || deviceName;
+      applyDeviceDisplayName(
+        deviceId,
+        data.device_name || deviceName,
+        savedDisplayName,
+        data.device_type ?? undefined,
+        data.rules_enabled ?? undefined,
+      );
+      setFcuRoomEditorDisplayName(popup, savedDisplayName);
+      setFcuTempSourcesTitle(popup, savedDisplayName);
+    }
+
+    if (changes.length > 0) {
+      const response = await fetch(updateUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(changes),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || "Unable to save weights.");
+      }
     }
     forceRefresh = true;
     closeFcuTempSourcesPopup({ force: true });
@@ -1050,10 +1348,10 @@ function openDeviceRenamePopup(target, event) {
   displayNameInput.select();
 }
 
-async function patchDeviceDisplayName(deviceId, displayName) {
+async function patchDeviceDisplayName(deviceId, displayName, updateUrl = undefined) {
   let response;
   try {
-    response = await fetch(deviceMetadataUrl(deviceId), {
+    response = await fetch(updateUrl || deviceMetadataUrl(deviceId), {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(deviceDisplayNamePatchBody(displayName)),
@@ -1097,12 +1395,18 @@ function applyDeviceDisplayName(
           deviceRulesEnabledValue(rulesEnabled),
         );
       }
-      element.setAttribute(
-        "title",
-        element.dataset.deviceUpdate
+      const isRoomEditorTrigger =
+        element.classList?.contains("fcu-room-editor-trigger");
+      if (isRoomEditorTrigger) {
+        element.dataset.fcuTempSourcesRoomName = label;
+        element.setAttribute("aria-label", `Edit room settings for ${label}`);
+      }
+      const title = isRoomEditorTrigger
+        ? `Edit room settings for ${label}`
+        : element.dataset.deviceUpdate
           ? `${deviceName}\nLast updated at ${element.dataset.deviceUpdate}`
-          : deviceName,
-      );
+          : deviceName;
+      element.setAttribute("title", title);
     });
 }
 
@@ -1426,6 +1730,9 @@ function setupMatrixListeners() {
   // Add event listeners for set temperature controls
   setupSetTempControls();
 
+  // Add event listeners for Auto Heat/Cool set temperature controls
+  setupAutoSetTempControls();
+
   // Add event listeners for FCU set ranges.
   setupSetRangeControls();
 
@@ -1434,6 +1741,9 @@ function setupMatrixListeners() {
 
   // Add event listeners for "Disable for" ± controls
   setupDisableForControls();
+
+  // Add event listener for the inline rules-disabled [x] button.
+  setupRulesDisabledBadgeControls();
 
   // Add event listeners for calculated room-temperature source weights.
   setupFcuTempSourcePopupControls();
@@ -1459,17 +1769,29 @@ function setupModeControls() {
       this.dataset.saving = "true";
       this.dataset.currentMode = mode;
       this.disabled = true;
+      updateSetRangeModeState(
+        document.getElementById(`setrange-widget-${deviceId}`),
+        mode,
+      );
       setDeviceMode(deviceId, mode)
         .then((result) => {
           const savedMode = result.mode || mode;
           ensureModeSelectOption(this, savedMode);
           this.value = savedMode;
           this.dataset.currentMode = savedMode;
+          updateSetRangeModeState(
+            document.getElementById(`setrange-widget-${deviceId}`),
+            savedMode,
+          );
         })
         .catch(() => {
           ensureModeSelectOption(this, previousMode);
           this.value = previousMode;
           this.dataset.currentMode = previousMode;
+          updateSetRangeModeState(
+            document.getElementById(`setrange-widget-${deviceId}`),
+            previousMode,
+          );
           alert("Error setting mode.");
         })
         .finally(() => {
@@ -1481,10 +1803,16 @@ function setupModeControls() {
 }
 
 function setupFcuTempSourcePopupControls() {
-  document.querySelectorAll(".room-temp-link").forEach((cell) => {
-    cell.addEventListener("click", function (event) {
+  document.querySelectorAll(".fcu-room-editor-trigger").forEach((trigger) => {
+    trigger.addEventListener("click", function (event) {
       event.preventDefault();
       loadFcuTempSourcesForCell(this);
+    });
+    trigger.addEventListener("keydown", function (event) {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        loadFcuTempSourcesForCell(this);
+      }
     });
   });
 
@@ -1576,9 +1904,8 @@ function setupSetTempControls() {
 
       let newUI = currentUI + delta;
 
-      // Clamp to a reasonable range in UI units
-      const minUI = useFahrenheit ? 50 : 10; // ~10°C / 50°F
-      const maxUI = useFahrenheit ? 86 : 30; // ~30°C / 86°F
+      const minUI = useFahrenheit ? SET_TEMP_TRACK_MIN_F : SET_TEMP_TRACK_MIN_C;
+      const maxUI = useFahrenheit ? SET_TEMP_TRACK_MAX_F : SET_TEMP_TRACK_MAX_C;
       if (newUI < minUI) {
         newUI = minUI;
       } else if (newUI > maxUI) {
@@ -1596,9 +1923,10 @@ function setupSetTempControls() {
       // Optimistically update UI
       display.setAttribute("data-temp-c", newC.toString());
       display.textContent = TemperatureUtils.formatTemperature(newC, false);
+      markSingleSetTempPending(display, newC);
 
       // Send to backend in Celsius
-      setDeviceSetTemp(deviceId, newC);
+      setDeviceSetTemp(deviceId, newC, display);
     });
   });
 }
@@ -1607,8 +1935,9 @@ function setupSetTempControls() {
  * Call backend API to set device set temperature in Celsius.
  * @param {number} deviceId
  * @param {number} setTempC
+ * @param {HTMLElement|null} display
  */
-async function setDeviceSetTemp(deviceId, setTempC) {
+async function setDeviceSetTemp(deviceId, setTempC, display = null) {
   try {
     const response = await fetch("/api/v1/set_temp", {
       method: "POST",
@@ -1616,28 +1945,239 @@ async function setDeviceSetTemp(deviceId, setTempC) {
       body: JSON.stringify({ device_id: deviceId, set_temp_c: setTempC }),
     });
     const result = await response.json();
+    if (!response.ok) {
+      throw new Error(result.error || "Unable to save set temperature.");
+    }
     if (DEBUG) {
       console.log("Set temp result:", result);
+    }
+    if (result.set_temp_c !== undefined) {
+      updateSingleSetTempPendingTarget(display, result.set_temp_c);
     }
     // Force data refresh to pick up canonical values from AE-200
     forceRefresh = true;
   } catch (e) {
     console.error("Failed to set temperature:", e);
+    markSingleSetTempFailed(display);
     alert("Error setting temperature.");
   }
 }
 
-function getSetRangeWidgetOptions(widget, range = null) {
+function pointerEventToAutoSetTemp(widget, event) {
+  const track = widget.querySelector(".autosettemp-track");
+  const range = getAutoSetTempRangeFromWidget(widget);
+  const options = getAutoSetTempWidgetOptions(widget, range);
+  const rect = track.getBoundingClientRect();
+  const fraction = Math.min(
+    1,
+    Math.max(0, (event.clientX - rect.left) / rect.width),
+  );
+  return roundTempC(
+    options.trackMinC + fraction * (options.trackMaxC - options.trackMinC),
+  );
+}
+
+function autoSetTempEndpointForPart(part) {
+  if (part === "heat") {
+    return "low";
+  }
+  if (part === "cool") {
+    return "high";
+  }
+  return null;
+}
+
+function applyAutoSetTempPointerValue(widget, event) {
+  const drag = widget._autoSetTempDrag;
+  const current = getAutoSetTempRangeFromWidget(widget);
+  if (!drag || !current) {
+    return;
+  }
+
+  const endpoint = autoSetTempEndpointForPart(drag.part);
+  if (!endpoint) {
+    return;
+  }
+  const options = getAutoSetTempWidgetOptions(widget, current);
+  const nextRange = resizeSetRangeEndpoint(
+    current.lowC,
+    current.highC,
+    endpoint,
+    pointerEventToAutoSetTemp(widget, event),
+    options,
+  );
+  if (nextRange && !setRangesEqual(current, nextRange)) {
+    drag.changed = true;
+    renderAutoSetTempRange(widget, nextRange.lowC, nextRange.highC);
+  }
+}
+
+function autoSetTempPartFromPointerTarget(event) {
+  const role = event.currentTarget?.dataset?.role || event.target?.dataset?.role;
+  if (role === "heat" || role === "cool") {
+    return role;
+  }
+  return null;
+}
+
+function handleAutoSetTempPointerDown(event) {
+  const widget = event.currentTarget.closest(".autosettemp-widget");
+  const current = getAutoSetTempRangeFromWidget(widget);
+  if (!current) {
+    return;
+  }
+
+  const part = autoSetTempPartFromPointerTarget(event);
+  if (!part) {
+    return;
+  }
+  event.preventDefault();
+  setAutoSetTempSelectedPart(widget, part);
+  if (typeof event.target.focus === "function") {
+    event.target.focus();
+  }
+
+  widget.dataset.dragging = "true";
+  widget._autoSetTempDrag = {
+    part,
+    changed: false,
+  };
+  event.currentTarget.setPointerCapture(event.pointerId);
+}
+
+function handleAutoSetTempPointerMove(event) {
+  const widget = event.currentTarget.closest(".autosettemp-widget");
+  if (widget.dataset.dragging !== "true") {
+    return;
+  }
+  applyAutoSetTempPointerValue(widget, event);
+}
+
+function finishAutoSetTempPointerDrag(event) {
+  const widget = event.currentTarget.closest(".autosettemp-widget");
+  if (widget.dataset.dragging !== "true") {
+    return;
+  }
+  delete widget.dataset.dragging;
+  const shouldSave = Boolean(widget._autoSetTempDrag?.changed);
+  delete widget._autoSetTempDrag;
+  event.currentTarget.releasePointerCapture(event.pointerId);
+  if (shouldSave) {
+    saveAutoSetTempWidget(widget);
+  }
+}
+
+function handleAutoSetTempKeyDown(event) {
+  const widget = event.currentTarget.closest(".autosettemp-widget");
+  const current = getAutoSetTempRangeFromWidget(widget);
+  if (!current) {
+    return;
+  }
+
+  const keyDeltas = {
+    ArrowLeft: -SET_RANGE_STEP_C,
+    ArrowDown: -SET_RANGE_STEP_C,
+    ArrowRight: SET_RANGE_STEP_C,
+    ArrowUp: SET_RANGE_STEP_C,
+  };
+  const delta = keyDeltas[event.key];
+  if (delta === undefined) {
+    return;
+  }
+  event.preventDefault();
+
+  const part = event.currentTarget.dataset.role || widget.dataset.selectedPart;
+  const endpoint = autoSetTempEndpointForPart(part);
+  if (!endpoint) {
+    return;
+  }
+  setAutoSetTempSelectedPart(widget, part);
+  const options = getAutoSetTempWidgetOptions(widget, current);
+  const currentValue = endpoint === "low" ? current.lowC : current.highC;
+  const nextRange = resizeSetRangeEndpoint(
+    current.lowC,
+    current.highC,
+    endpoint,
+    currentValue + delta,
+    options,
+  );
+  if (nextRange) {
+    renderAutoSetTempRange(widget, nextRange.lowC, nextRange.highC);
+    saveAutoSetTempWidget(widget);
+  }
+}
+
+function saveAutoSetTempWidget(widget) {
+  const range = getAutoSetTempRangeFromWidget(widget);
+  if (!range) {
+    return Promise.resolve();
+  }
+  const deviceId = parseInt(widget.dataset.deviceId, 10);
+  const updateUrl = widget.dataset.updateUrl || "/api/v1/set_auto_temp";
+  widget.dataset.saving = "true";
+  markRangePending(widget, range.lowC, range.highC);
+  return fetch(updateUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      [AUTO_SET_TEMP_DEVICE_ID_KEY]: deviceId,
+      [AUTO_SET_TEMP_HEAT_KEY]: range.lowC,
+      [AUTO_SET_TEMP_COOL_KEY]: range.highC,
+    }),
+  })
+    .then(async (response) => {
+      const result = await response.json();
+      if (!response.ok) {
+        throw new Error(result.error || "Unable to save Auto setpoints.");
+      }
+      renderAutoSetTempRange(
+        widget,
+        result.heat_set_temp_c,
+        result.cool_set_temp_c,
+      );
+      updateRangePendingTarget(
+        widget,
+        result.heat_set_temp_c,
+        result.cool_set_temp_c,
+      );
+      forceRefresh = true;
+    })
+    .catch((error) => {
+      console.error("Failed to save Auto setpoints:", error);
+      markRangeFailed(widget);
+      alert("Error setting Auto heat/cool temperatures.");
+    })
+    .finally(() => {
+      delete widget.dataset.saving;
+    });
+}
+
+function setupAutoSetTempControls() {
+  document.querySelectorAll(".autosettemp-widget").forEach((widget) => {
+    setAutoSetTempSelectedPart(
+      widget,
+      widget.dataset.selectedPart === "cool" ? "cool" : "heat",
+    );
+
+    widget
+      .querySelectorAll("[data-role='heat'], [data-role='cool']")
+      .forEach((element) => {
+        element.addEventListener("pointerdown", handleAutoSetTempPointerDown);
+        element.addEventListener("pointermove", handleAutoSetTempPointerMove);
+        element.addEventListener("pointerup", finishAutoSetTempPointerDrag);
+        element.addEventListener("pointercancel", finishAutoSetTempPointerDrag);
+        element.addEventListener("keydown", handleAutoSetTempKeyDown);
+      });
+  });
+}
+
+function getSetRangeWidgetOptions(widget) {
   const minRangeC = finiteNumber(
     widget.dataset.minRangeC,
     DEFAULT_MIN_SET_RANGE_C,
   );
-  let trackMinC = SET_RANGE_TRACK_MIN_C;
-  let trackMaxC = SET_RANGE_TRACK_MAX_C;
-  if (range) {
-    trackMinC = Math.min(trackMinC, range.lowC);
-    trackMaxC = Math.max(trackMaxC, range.highC);
-  }
+  const trackMinC = SET_RANGE_TRACK_MIN_C;
+  const trackMaxC = SET_RANGE_TRACK_MAX_C;
   return setRangeOptions({ minRangeC, trackMinC, trackMaxC });
 }
 
@@ -1653,7 +2193,7 @@ function getSetRangeFromWidget(widget) {
 function setSetRangeSelectedPart(widget, part) {
   widget.dataset.selectedPart = part;
   widget
-    .querySelectorAll("[data-role='low'], [data-role='high'], [data-role='middle']")
+    .querySelectorAll("[data-role='low'], [data-role='high']")
     .forEach((element) => {
       element.classList.toggle("selected", element.dataset.role === part);
     });
@@ -1666,6 +2206,18 @@ function setSetRangeUnavailable(widget) {
     label.removeAttribute("data-temp-c");
     label.textContent = "--";
   });
+}
+
+function updateSetRangeModeState(widget, rawMode) {
+  if (!widget) {
+    return;
+  }
+  const mode = String(rawMode || "").toUpperCase();
+  widget.dataset.mode = mode;
+  widget.setAttribute(
+    "title",
+    "Rule Set Range is stored for local rules.",
+  );
 }
 
 function rangeTempToPercent(valueC, options) {
@@ -1693,8 +2245,8 @@ function renderSetRangeWidget(widget, lowC, highC, minRangeC = null) {
 
   const initialRange = normalizeSetRange(lowC, highC, {
     minRangeC: finiteNumber(widget.dataset.minRangeC, DEFAULT_MIN_SET_RANGE_C),
-    trackMinC: Math.min(SET_RANGE_TRACK_MIN_C, finiteNumber(lowC, SET_RANGE_TRACK_MIN_C)),
-    trackMaxC: Math.max(SET_RANGE_TRACK_MAX_C, finiteNumber(highC, SET_RANGE_TRACK_MAX_C)),
+    trackMinC: SET_RANGE_TRACK_MIN_C,
+    trackMaxC: SET_RANGE_TRACK_MAX_C,
   });
   if (!initialRange) {
     setSetRangeUnavailable(widget);
@@ -1750,6 +2302,7 @@ function saveSetRangeWidget(widget) {
   const deviceId = parseInt(widget.dataset.deviceId, 10);
   const updateUrl = widget.dataset.updateUrl || "/api/v1/set_range";
   widget.dataset.saving = "true";
+  markRangePending(widget, range.lowC, range.highC);
   return fetch(updateUrl, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -1770,10 +2323,16 @@ function saveSetRangeWidget(widget) {
         result.set_range_high_c,
         result.min_set_range_c,
       );
+      updateRangePendingTarget(
+        widget,
+        result.set_range_low_c,
+        result.set_range_high_c,
+      );
       forceRefresh = true;
     })
     .catch((error) => {
       console.error("Failed to save set range:", error);
+      markRangeFailed(widget);
       alert("Error setting range.");
     })
     .finally(() => {
@@ -1783,9 +2342,14 @@ function saveSetRangeWidget(widget) {
 
 function updateSetRangeForDevice(dev) {
   const widget = document.getElementById(`setrange-widget-${dev.device_id}`);
-  if (!widget || widget.dataset.dragging === "true") {
+  if (
+    !widget ||
+    widget.dataset.dragging === "true" ||
+    widget.dataset.saving === "true"
+  ) {
     return;
   }
+  updateSetRangeModeState(widget, modeValueForDevice(dev));
   if (
     dev.set_range_low_c === undefined ||
     dev.set_range_high_c === undefined
@@ -1793,12 +2357,32 @@ function updateSetRangeForDevice(dev) {
     setSetRangeUnavailable(widget);
     return;
   }
-  renderSetRangeWidget(
-    widget,
+  const incomingRange = normalizeSetRange(
     dev.set_range_low_c,
     dev.set_range_high_c,
+    getSetRangeWidgetOptions(widget),
+  );
+  if (!incomingRange) {
+    setSetRangeUnavailable(widget);
+    return;
+  }
+  const decision = pendingRangeUpdateDecision(
+    widget,
+    incomingRange.lowC,
+    incomingRange.highC,
+  );
+  if (decision === UPDATE_DECISION_HOLD) {
+    return;
+  }
+  renderSetRangeWidget(
+    widget,
+    incomingRange.lowC,
+    incomingRange.highC,
     dev.min_set_range_c,
   );
+  if (decision === UPDATE_DECISION_FAILED) {
+    markRangeFailed(widget);
+  }
 }
 
 function applySetRangePointerValue(widget, event) {
@@ -1809,44 +2393,25 @@ function applySetRangePointerValue(widget, event) {
   }
 
   const options = getSetRangeWidgetOptions(widget, current);
-  let nextRange;
-  if (drag.part === "middle") {
-    const currentPointerC = pointerEventToRangeTemp(widget, event);
-    nextRange = moveSetRange(
-      drag.startLowC,
-      drag.startHighC,
-      currentPointerC - drag.startPointerC,
-      options,
-    );
-  } else {
-    nextRange = resizeSetRangeEndpoint(
-      current.lowC,
-      current.highC,
-      drag.part,
-      pointerEventToRangeTemp(widget, event),
-      options,
-    );
-  }
+  const nextRange = resizeSetRangeEndpoint(
+    current.lowC,
+    current.highC,
+    drag.part,
+    pointerEventToRangeTemp(widget, event),
+    options,
+  );
   if (nextRange && !setRangesEqual(current, nextRange)) {
     drag.changed = true;
     renderSetRangeWidget(widget, nextRange.lowC, nextRange.highC);
   }
 }
 
-function setRangePartFromPointerTarget(widget, event) {
-  const role = event.target.dataset.role;
-  if (role === "low" || role === "high" || role === "middle") {
+function setRangePartFromPointerTarget(event) {
+  const role = event.currentTarget?.dataset?.role || event.target?.dataset?.role;
+  if (role === "low" || role === "high") {
     return role;
   }
-
-  const current = getSetRangeFromWidget(widget);
-  if (!current) {
-    return "middle";
-  }
-  const pointerC = pointerEventToRangeTemp(widget, event);
-  return Math.abs(pointerC - current.lowC) <= Math.abs(pointerC - current.highC)
-    ? "low"
-    : "high";
+  return null;
 }
 
 function handleSetRangePointerDown(event) {
@@ -1855,9 +2420,12 @@ function handleSetRangePointerDown(event) {
   if (!current) {
     return;
   }
-  event.preventDefault();
 
-  const part = setRangePartFromPointerTarget(widget, event);
+  const part = setRangePartFromPointerTarget(event);
+  if (!part) {
+    return;
+  }
+  event.preventDefault();
   setSetRangeSelectedPart(widget, part);
   if (typeof event.target.focus === "function") {
     event.target.focus();
@@ -1867,15 +2435,8 @@ function handleSetRangePointerDown(event) {
   widget._setRangeDrag = {
     part,
     changed: false,
-    startLowC: current.lowC,
-    startHighC: current.highC,
-    startPointerC: pointerEventToRangeTemp(widget, event),
   };
   event.currentTarget.setPointerCapture(event.pointerId);
-
-  if (event.target.dataset.role === "track") {
-    applySetRangePointerValue(widget, event);
-  }
 }
 
 function handleSetRangePointerMove(event) {
@@ -1920,18 +2481,18 @@ function handleSetRangeKeyDown(event) {
   event.preventDefault();
 
   const part = event.currentTarget.dataset.role || widget.dataset.selectedPart;
+  if (part !== "low" && part !== "high") {
+    return;
+  }
   setSetRangeSelectedPart(widget, part);
   const options = getSetRangeWidgetOptions(widget, current);
-  const nextRange =
-    part === "middle"
-      ? moveSetRange(current.lowC, current.highC, delta, options)
-      : resizeSetRangeEndpoint(
-          current.lowC,
-          current.highC,
-          part,
-          current[`${part}C`] + delta,
-          options,
-        );
+  const nextRange = resizeSetRangeEndpoint(
+    current.lowC,
+    current.highC,
+    part,
+    current[`${part}C`] + delta,
+    options,
+  );
   if (nextRange) {
     renderSetRangeWidget(widget, nextRange.lowC, nextRange.highC);
     saveSetRangeWidget(widget);
@@ -1940,21 +2501,24 @@ function handleSetRangeKeyDown(event) {
 
 function setupSetRangeControls() {
   document.querySelectorAll(".setrange-widget").forEach((widget) => {
+    updateSetRangeModeState(widget, widget.dataset.mode);
     const lowC = finiteNumber(widget.dataset.setRangeLowC);
     const highC = finiteNumber(widget.dataset.setRangeHighC);
     if (lowC !== null && highC !== null) {
       renderSetRangeWidget(widget, lowC, highC, widget.dataset.minRangeC);
     }
-    setSetRangeSelectedPart(widget, widget.dataset.selectedPart || "middle");
+    setSetRangeSelectedPart(
+      widget,
+      widget.dataset.selectedPart === "high" ? "high" : "low",
+    );
 
-    const track = widget.querySelector(".setrange-track");
-    track.addEventListener("pointerdown", handleSetRangePointerDown);
-    track.addEventListener("pointermove", handleSetRangePointerMove);
-    track.addEventListener("pointerup", finishSetRangePointerDrag);
-    track.addEventListener("pointercancel", finishSetRangePointerDrag);
     widget
-      .querySelectorAll("[data-role='low'], [data-role='high'], [data-role='middle']")
+      .querySelectorAll("[data-role='low'], [data-role='high']")
       .forEach((element) => {
+        element.addEventListener("pointerdown", handleSetRangePointerDown);
+        element.addEventListener("pointermove", handleSetRangePointerMove);
+        element.addEventListener("pointerup", finishSetRangePointerDrag);
+        element.addEventListener("pointercancel", finishSetRangePointerDrag);
         element.addEventListener("keydown", handleSetRangeKeyDown);
       });
   });
@@ -2395,6 +2959,49 @@ async function setDeviceDisabledUntil(deviceId, disabledUntil, seq) {
   }
 }
 
+function clearPendingDisableWrite(deviceId) {
+  const existing = pendingDisableWrites.get(deviceId);
+  if (existing?.timer) {
+    clearTimeout(existing.timer);
+  }
+  pendingDisableWrites.delete(deviceId);
+}
+
+function hideRulesDisabledBadge(deviceId) {
+  const badge = document.getElementById(`rules-disabled-${deviceId}`);
+  if (!badge) {
+    return;
+  }
+  badge.classList.add("hidden");
+  badge.replaceChildren();
+  badge.removeAttribute("title");
+}
+
+function enableRulesForDevice(deviceId) {
+  clearPendingDisableWrite(deviceId);
+  const seq = ++disableWriteSeq;
+  pendingDisableWrites.set(deviceId, { seq });
+  renderDisableCell(deviceId, 0);
+  hideRulesDisabledBadge(deviceId);
+  setDeviceDisabledUntil(deviceId, 0, seq);
+}
+
+function setupRulesDisabledBadgeControls() {
+  document.addEventListener("click", (event) => {
+    const button = event.target.closest(".rules-disabled-clear");
+    if (!button) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    const deviceId = parseInt(button.dataset.deviceId, 10);
+    if (Number.isNaN(deviceId)) {
+      return;
+    }
+    enableRulesForDevice(deviceId);
+  });
+}
+
 /**
  * Render the disable-for cell for a given device_id and disabled_until (epoch sec).
  * @param {number} deviceId
@@ -2435,16 +3042,25 @@ function updateRulesDisabledBadge(dev) {
     return;
   }
 
-  if (dev.disabled_until) {
+  const now = Math.floor(Date.now() / 1000);
+  if (dev.disabled_until && dev.disabled_until > now) {
     const dt = new Date(dev.disabled_until * 1000);
-    const now = Math.floor(Date.now() / 1000);
     const hoursRemaining = Math.ceil((dev.disabled_until - now) / 3600);
     const tooltipText = `Rules disabled until ${asctime(dt)} (${hoursRemaining} hour${hoursRemaining !== 1 ? "s" : ""})`;
-    badge.textContent = "rules disabled";
+    const label = document.createElement("span");
+    label.textContent = "rules disabled";
+    const clearButton = document.createElement("button");
+    clearButton.type = "button";
+    clearButton.className = "rules-disabled-clear";
+    clearButton.dataset.deviceId = String(dev.device_id);
+    clearButton.setAttribute("aria-label", "Enable rules for this FCU");
+    clearButton.setAttribute("title", "Enable rules for this FCU");
+    clearButton.textContent = "[x]";
+    badge.replaceChildren(label, " ", clearButton);
     badge.setAttribute("title", tooltipText);
     badge.classList.remove("hidden");
   } else {
-    badge.classList.add("hidden");
+    hideRulesDisabledBadge(dev.device_id);
   }
 }
 
@@ -2466,6 +3082,7 @@ if (typeof window !== "undefined") {
 // Node.js export for testing
 if (typeof module !== "undefined" && module.exports) {
   module.exports = {
+    collectFcuRoomEditorDisplayNameChange,
     collectFcuTempSourceChanges,
     autoSetTempRangeForDevice,
     compactAgeFromSeconds,
@@ -2483,15 +3100,24 @@ if (typeof module !== "undefined" && module.exports) {
     isAutoOperationMode,
     modeLabelForDevice,
     modeValueForDevice,
-    moveSetRange,
+    enableRulesForDevice,
+    markRangePending,
+    markSingleSetTempPending,
     normalizeSetRange,
     oldestUpdateTimestampForTable,
     parseFcuTempSourceMultiplier,
+    pendingRangeUpdateDecision,
+    pendingSingleSetTempUpdateDecision,
     renderDisableCell,
+    renderAutoSetTempRange,
     resizeSetRangeEndpoint,
+    saveAutoSetTempWidget,
     saveFcuTempSourceMultipliers,
+    setRangePartFromPointerTarget,
     setAutoSetTempUnavailable,
+    updateSetRangeModeState,
     sortedFcuTempSources,
     tableUpdateSummaryText,
+    updateTemperatureCell,
   };
 }

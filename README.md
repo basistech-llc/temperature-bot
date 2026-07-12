@@ -76,6 +76,7 @@ Tests and local runs use simulator flags for external systems where possible:
 
 Hubitat Maker API resources:
 
+- Temperature Bot Hubitat integration notes: `doc/Hubitat_Info.md`
 - https://hubitat.com/home-automation/maker-api
 - https://community.hubitat.com/t/dummies-questions-on-how-to-get-started-with-maker-api/52822
 - https://community.hubitat.com/t/consuming-rest-api/100981

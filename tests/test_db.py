@@ -5,6 +5,8 @@ test for db.py
 import logging
 import json
 
+import pytest
+
 from app import db
 from app import aq_metrics
 from app.main import app
@@ -77,6 +79,17 @@ def test_temperature_insert(test_database_conn_with_test_data):
     assert rows[0]['temp10x']==210 # 1 seconds at 20, 1 second at 21, 1 second at 22
 
 
+def test_combine_temp_measurements_refuses_duration_over_max(test_database_conn):
+    """Combining should never create rows wider than the devlog duration cap."""
+    with pytest.raises(ValueError, match="MAX_DURATION"):
+        runner.combine_temp_measurements(
+            test_database_conn,
+            100,
+            200,
+            db.MAX_DURATION + 1,
+        )
+
+
 def test_insert_devlog_entry_normalizes_float_logtime(
     test_database_conn_with_test_data,
 ):
@@ -130,6 +143,56 @@ def test_insert_devlog_entry_extends_legacy_float_logtime_with_integer_duration(
         (device_id,),
     ).fetchone()
     assert row["duration"] == 6
+
+
+def test_insert_devlog_entry_starts_new_row_after_twenty_minutes(
+    test_database_conn,
+):
+    """Unchanged readings are compressed only up to the 20-minute chart cadence."""
+    conn = test_database_conn
+    c = conn.cursor()
+    c.execute("DELETE FROM devlog")
+    c.execute("DELETE FROM devices")
+    conn.commit()
+
+    db.insert_devlog_entry(
+        conn,
+        device_name="twenty-minute-device",
+        temp=20,
+        logtime=100,
+    )
+    db.insert_devlog_entry(
+        conn,
+        device_name="twenty-minute-device",
+        temp=20,
+        logtime=100 + db.MAX_DURATION - 1,
+    )
+    db.insert_devlog_entry(
+        conn,
+        device_name="twenty-minute-device",
+        temp=20,
+        logtime=100 + db.MAX_DURATION,
+    )
+
+    device_id = db.get_or_create_device_id(conn, "twenty-minute-device")
+    rows = conn.execute(
+        """
+        SELECT logtime, duration, temp10x
+        FROM devlog
+        WHERE device_id=?
+        ORDER BY logtime
+        """,
+        (device_id,),
+    ).fetchall()
+
+    assert [dict(row) for row in rows] == [
+        {"logtime": 100, "duration": db.MAX_DURATION, "temp10x": 200},
+        {
+            "logtime": 100 + db.MAX_DURATION,
+            "duration": 1,
+            "temp10x": 200,
+        },
+    ]
 
 
 def test_time_series_builders_normalize_legacy_float_logtime(

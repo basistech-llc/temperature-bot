@@ -29,9 +29,11 @@ TemperatureBot currently allows users to command these AE-200 operation modes:
 - `AUTO`
 
 TemperatureBot displays other reported AE-200 modes when present. This includes
-`LC_AUTO` and Setback-like values. The UI inserts unsupported reported modes as
-disabled options so operators can see the controller state without using
-TemperatureBot to re-command that state.
+`LC_AUTO`, which is displayed as `Auto` while preserving the raw `LC_AUTO`
+status value. `LC_AUTO` is not commandable: when an operator selects Auto,
+TemperatureBot sends `Mode="AUTO"`. If the AE-200 later reports
+`Mode="LC_AUTO"`, TemperatureBot displays it as `Auto` and inserts the raw value
+only as a disabled option.
 
 The command path is:
 
@@ -43,18 +45,19 @@ The command path is:
    Pydantic model.
 4. `app/ae200.py` validates the mode against `AE200_ALLOWED_SET_MODES`.
 5. `app/ae200.py` sends the selected token as the AE-200 XML attribute
-   `Mode="<token>"`.
+   `Mode="<token>"`. Selecting Auto sends `Mode="AUTO"`; TemperatureBot does
+   not translate it to `LC_AUTO`.
 
 ## Mode Handling
 
 | AE-200 mode | Meaning in AE-200 terms | TemperatureBot handling |
 | --- | --- | --- |
 | `COOL` | Cooling operation. Uses the normal cooling set-temperature range for the indoor unit model. | Commandable from the FCU UI and `/api/v1/set_mode`. Sent as `Mode="COOL"`. |
-| `DRY` | Dry/dehumidification operation. The AE-200 manuals list this as `Dry`; TemperatureBot uses the uppercase protocol token `DRY`, matching the existing uppercase mode tokens. | Commandable from the FCU UI and `/api/v1/set_mode`. Sent as `Mode="DRY"`. |
+| `DRY` | Dry/dehumidification operation. The AE-200 manuals list this as `Dry`; TemperatureBot uses the uppercase protocol token `DRY`, matching the existing uppercase mode tokens. The manuals also list a normal `Cool/Dry` set-temperature range, so TemperatureBot treats `SetTemp` as active in Dry mode. | Commandable from the FCU UI and `/api/v1/set_mode`. Sent as `Mode="DRY"`. Rule Set Range remains editable for local rules, but AE-200 Auto range behavior is not active in Dry mode. |
 | `FAN` | Fan-only operation. This is the AE-200 operation mode, not the same as TemperatureBot's fan-speed control. | Commandable from the FCU UI and `/api/v1/set_mode`. Sent as `Mode="FAN"`. |
 | `HEAT` | Heating operation. Uses the normal heating set-temperature range for the indoor unit model. | Commandable from the FCU UI and `/api/v1/set_mode`. Sent as `Mode="HEAT"`. |
-| `AUTO` | Automatic heat/cool changeover. The unit/controller chooses heating or cooling. The AE-200 manuals describe Auto dual setpoint in terms of separate Cool and Heat set temperatures; Dry and Fan are listed as separate operation modes, not Auto outcomes. | Commandable from the FCU mode dropdown. TemperatureBot displays the Auto Heat/Cool setpoint range, but does not yet write the two Auto setpoints. |
-| `LC_AUTO` | A reported AE-200 auto-like token seen in TemperatureBot sample data. | Displayed as `Auto`, but not commandable. TemperatureBot treats it as reported controller state. |
+| `AUTO` | Automatic heat/cool changeover. The unit/controller chooses heating or cooling. The AE-200 manuals describe Auto dual setpoint in terms of separate Cool and Heat set temperatures; Dry and Fan are listed as separate operation modes, not Auto outcomes. | Commandable from the FCU mode dropdown. Sent as `Mode="AUTO"`, not `Mode="LC_AUTO"`. TemperatureBot displays and writes the Auto Heat/Cool setpoint range. |
+| `LC_AUTO` | A reported AE-200 auto-like token seen in TemperatureBot sample data. | Received from the AE-200 as status, displayed as `Auto`, but not commandable. TemperatureBot treats it as reported controller state and does not send it as a mode command. |
 | `SETBACK` or other Setback-like value | AE-200 Setback is range-protection behavior. The manuals describe Setback Control as starting heating when a stopped group drops below a minimum temperature, and starting cooling when a stopped group rises above a maximum temperature, during the configured Setback Control period. The controller stops that operation and restores the original set temperature when the control period ends or when the room temperature returns by the documented hysteresis. | Displayed if reported, but not commandable. TemperatureBot does not configure Setback Control time periods, minimum/maximum setback temperatures, dual set points, or the AE-200A/AE-50A vs AE-200E/AE-50E availability distinction. |
 
 ## Setback Details
@@ -85,8 +88,10 @@ read-back support.
 ## Auto Mode Details
 
 Our AE-200 handles Auto mode. In TemperatureBot, Auto is commandable as an
-operation mode, but the Auto Heat/Cool setpoints are display-only until we
-verify the exact AE-200 write payload for `SetTemp1` and `SetTemp2`.
+operation mode. When the reported mode is `AUTO` or `LC_AUTO`, the FCU Set Temp
+column exposes an editable Heat/Cool range. TemperatureBot writes that range by
+sending one AE-200 set request containing both `SetTemp1="<cool set temp>"` and
+`SetTemp2="<heat set temp>"` for the target Mnet group.
 
 The AE-200 manuals list Auto as an air-conditioner operation mode, but also note
 that indoor units with dual-set-point support can use separate Cool and Heat set
@@ -99,10 +104,10 @@ In the AE-200 UI, Auto's range is set by editing the two Auto setpoints:
 - The top of the range is the Cool set temperature.
 - The bottom of the range is the Heat set temperature.
 
-In AE-200 status payloads, the corresponding values appear to be `SetTemp1` for
-the Cool set temperature and `SetTemp2` for the Heat set temperature. The
-`AutoMin` and `AutoMax` fields are the allowable Auto-mode limits for the unit,
-not the operator-selected top and bottom of the current Auto range. TemperatureBot
+In AE-200 status payloads, the corresponding values are `SetTemp1` for the Cool
+set temperature and `SetTemp2` for the Heat set temperature. The `AutoMin` and
+`AutoMax` fields are the allowable Auto-mode limits for the unit, not the
+operator-selected top and bottom of the current Auto range. TemperatureBot
 promotes these fields to `/api/v1/status` as:
 
 - `cool_set_temp_c`
@@ -111,8 +116,15 @@ promotes these fields to `/api/v1/status` as:
 - `auto_max_c`
 
 When the reported operation mode is `AUTO` or `LC_AUTO`, the FCU Set Temp column
-shows a read-only Heat/Cool range display rather than the single setpoint
-increment/decrement control.
+shows an editable Heat/Cool range control rather than the single setpoint
+increment/decrement control. Both values display as `Auto` in the operation-mode
+UI, but only `AUTO` is sent back to the AE-200 when Auto is commanded.
+
+Live verification on July 11, 2026 confirmed that a single AE-200 set request
+with both `SetTemp1` and `SetTemp2` updates the Auto Heat/Cool range. The test
+used Mnet group `2` (`Area 51`) while `Drive="OFF"`: `SetTemp1`/`SetTemp2`
+changed from `24`/`19` to `25`/`20`, and then restored to `24`/`19`, with each
+state confirmed by an AE-200 readback.
 
 ## Humidity and Dry
 
@@ -129,7 +141,13 @@ usable per-FCU humidity: `RoomHumidity` is empty, `InletHumidity` and
 `SetHumidity` are `0`, and `Humid` is `OFF`.
 
 TemperatureBot therefore treats `DRY` as an explicit operator-selected mode, not
-as an automatic consequence of Auto mode or a humidity automation.
+as an automatic consequence of Auto mode or a humidity automation. The checked-in
+AE-200 manual does not indicate that temperature is ignored in Dry mode: it lists
+`Cool/Dry` as sharing the `19°C-30°C` set-temperature range, and the External
+Temperature Interlock section explicitly describes set-temperature adjustment for
+`Cool` and `Dry` modes. TemperatureBot should therefore continue to send and
+display the single `SetTemp` control in Dry mode, while leaving Rule Set Range as a
+local/rules value unless the mode is Auto.
 
 ## Fan Speed Auto Is Separate
 
