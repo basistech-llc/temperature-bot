@@ -378,12 +378,15 @@ function setupTemperatureEventListeners() {
           return;
         }
         temperatureMode = radio.value;
+        updateTemperatureModeExplanation();
         currentDeviceIds = [];
         preSelectedDeviceIds = [];
         excludedSensorNames.clear();
         reloadData();
       });
     });
+
+  updateTemperatureModeExplanation();
 
   // Temporal buttons
   const dayBtn = document.getElementById("dayBtn");
@@ -525,6 +528,15 @@ function setupTemperatureEventListeners() {
       programmaticCheckboxUpdate = false;
       updateTempChart();
     });
+  }
+}
+
+function updateTemperatureModeExplanation() {
+  const explanation = document.getElementById(
+    "calculated-temperature-explanation",
+  );
+  if (explanation) {
+    explanation.classList.toggle("hidden", temperatureMode !== "calculated");
   }
 }
 

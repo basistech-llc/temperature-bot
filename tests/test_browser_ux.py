@@ -123,6 +123,13 @@ def test_chart_page_no_dom_errors(test_database_conn_with_test_data):  # noqa: F
         # Wait a bit for JS to run
         page.wait_for_timeout(1000)
 
+        explanation = page.locator("#calculated-temperature-explanation")
+        expect(explanation).to_be_hidden()
+        page.locator('input[name="temperature-mode"][value="calculated"]').check()
+        expect(explanation).to_be_visible()
+        page.locator('input[name="temperature-mode"][value="raw"]').check()
+        expect(explanation).to_be_hidden()
+
         expect(page.locator("#earlierDataBtn")).to_be_enabled()
         expect(page.locator("#laterDataBtn")).to_be_disabled()
         toolbox_features = page.evaluate(

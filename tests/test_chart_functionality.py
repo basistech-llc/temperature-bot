@@ -46,6 +46,8 @@ def test_temperature_chart_page_has_exclusion_controls(flask_test_client):  # no
     assert 'id="temp-chart"' in content
     assert 'id="earlierDataBtn"' in content
     assert 'id="laterDataBtn"' in content
+    assert 'id="calculated-temperature-explanation"' in content
+    assert "current room temperature weights, not historical weights" in content
 
 
 def test_chart_aqi_page_loads(flask_test_client):  # noqa: F811

@@ -1250,6 +1250,10 @@ table.data-table tbody tr.device-row td.cell-temp-set {
   cursor: default;
   opacity: 0.25;
 }
+
+.temperature-mode-explanation {
+  margin: 0.25rem 0 0.5rem;
+}
 #downloadCsv {
     width: auto;
     padding: 0.3em 0.8em;
