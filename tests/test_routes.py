@@ -18,7 +18,7 @@ from app.routes_web import (
     _table_update_summary,
 )
 from app import room_config
-from app.constants import __version__
+from app.version import __version__
 
 def test_status_endpoint(flask_test_client): # noqa: F811
     response = flask_test_client.get("/api/v1/status")
@@ -29,14 +29,24 @@ def test_logs_today_route(flask_test_client):  # noqa: F811
     """Test the /logs_today route"""
     response = flask_test_client.get("/logs_today")
     assert response.status_code == 200
-    assert b"logs_today" in response.data or b"Today" in response.data
+    assert b"Activity Log" in response.data
 
 
 def test_all_devices_route(flask_test_client):  # noqa: F811
     """Test the /all_devices route"""
     response = flask_test_client.get("/all_devices")
     assert response.status_code == 200
-    assert b"all_devices" in response.data or b"devices" in response.data
+    assert b"Raw Device Details" in response.data
+
+
+def test_deep_dive_labels_are_descriptive(flask_test_client):  # noqa: F811
+    response = flask_test_client.get("/about")
+    assert response.status_code == 200
+    html = response.data.decode("utf-8")
+    assert "Lighting Chart" in html
+    assert "Edit Devices" in html
+    assert "Activity Log" in html
+    assert "Raw Device Details" in html
 
 
 def test_about_route(flask_test_client):  # noqa: F811
