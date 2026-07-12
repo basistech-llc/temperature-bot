@@ -1921,14 +1921,9 @@ def _fcu_devices_from_current_status(conn) -> list[dict[str, Any]]:
     return fcus
 
 
-def get_calculated_temperature_series(
-    conn, device_ids: List[int] | None = None
+def _get_calculated_temperature_series_for_fcus(
+    conn, fcus: list[dict[str, Any]]
 ) -> List[Dict[str, Any]]:
-    fcus = _fcu_devices_from_current_status(conn)
-    if device_ids:
-        wanted = set(device_ids)
-        fcus = [fcu for fcu in fcus if fcu["device_id"] in wanted]
-
     c = conn.cursor()
     series: list[TimeSeries] = []
     for fcu in fcus:
@@ -1982,6 +1977,27 @@ def get_calculated_temperature_series(
     return json_ready_list(series)
 
 
+def get_calculated_temperature_series_and_device_ids(
+    conn, device_ids: list[int] | None = None
+) -> tuple[List[Dict[str, Any]], list[int]]:
+    """Build calculated series and return the FCU ids from the same status scan."""
+    fcus = _fcu_devices_from_current_status(conn)
+    if device_ids:
+        wanted = set(device_ids)
+        fcus = [fcu for fcu in fcus if fcu["device_id"] in wanted]
+    return (
+        _get_calculated_temperature_series_for_fcus(conn, fcus),
+        [fcu["device_id"] for fcu in fcus],
+    )
+
+
+def get_calculated_temperature_series(
+    conn, device_ids: List[int] | None = None
+) -> List[Dict[str, Any]]:
+    series, _ = get_calculated_temperature_series_and_device_ids(conn, device_ids)
+    return series
+
+
 def get_temperature_series(
     conn, device_ids: List[int] | None = None
 ) -> List[Dict[str, Any]]:
@@ -2018,6 +2034,45 @@ def get_temperature_series(
                     )
                 )
     return json_ready_list(series)
+
+
+def temperature_data_availability(
+    conn,
+    device_ids: list[int] | None,
+    start: int | None,
+    end: int | None,
+) -> tuple[bool, bool]:
+    """Return whether selected devices have temperature samples outside a window."""
+    if device_ids is None:
+        device_ids = [
+            row["device_id"]
+            for row in conn.execute("SELECT device_id FROM devices").fetchall()
+        ]
+    if not device_ids:
+        return (False, False)
+
+    placeholders = ",".join("?" for _ in device_ids)
+
+    def exists_outside(boundary: int | None, before_window: bool) -> bool:
+        if boundary is None:
+            return False
+        sql = f"""
+            SELECT logtime
+            FROM devlog INDEXED BY idx_devlog_temperature_logtime_device
+            WHERE device_id IN ({placeholders})
+                AND temp10x IS NOT NULL
+        """
+        sql += (
+            " AND logtime < ? ORDER BY logtime DESC LIMIT 1"
+            if before_window
+            else " AND logtime > ? ORDER BY logtime ASC LIMIT 1"
+        )
+        return conn.execute(sql, [*device_ids, boundary]).fetchone() is not None
+
+    return (
+        exists_outside(start, True),
+        exists_outside(end, False),
+    )
 
 
 def get_device_metric_series(

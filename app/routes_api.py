@@ -38,6 +38,7 @@ from .models import (
     Room,
     SetTempControl,
     SpeedControl,
+    TemperatureSeriesResponse,
     json_ready,
     json_ready_list,
 )
@@ -266,10 +267,19 @@ def get_temperature(conn):
         return jsonify({"error": "Invalid device_ids format"}), 400
     if mode == "raw":
         series = db.get_temperature_series(conn, device_ids)
+        boundary_device_ids = device_ids
     elif mode == "calculated":
-        series = db.get_calculated_temperature_series(conn, device_ids)
+        series, boundary_device_ids = db.get_calculated_temperature_series_and_device_ids(
+            conn, device_ids
+        )
     else:
         return jsonify({"error": "mode must be 'raw' or 'calculated'"}), 400
+    has_earlier_data, has_later_data = db.temperature_data_availability(
+        conn,
+        boundary_device_ids,
+        request.args.get("start", type=int),
+        request.args.get("end", type=int),
+    )
     # Use centralized helper for series display names, preferring Hubitat label when available
     # and applying display-only transforms.
     name_to_label = hubitat.get_name_to_label()
@@ -281,7 +291,17 @@ def get_temperature(conn):
             hubitat_label=hub_label,
             source="hubitat",
         )
-    return jsonify({"series": series})
+    return jsonify(
+        json_ready(
+            TemperatureSeriesResponse.model_validate(
+                {
+                    "series": series,
+                    "has_earlier_data": has_earlier_data,
+                    "has_later_data": has_later_data,
+                }
+            )
+        )
+    )
 
 
 @api_v1.route("/air_quality")

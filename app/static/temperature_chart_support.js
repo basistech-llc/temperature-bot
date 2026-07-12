@@ -13,6 +13,8 @@ let currentDeviceIds = []; // devices to load; [] means all
 let preSelectedDeviceIds = []; // device IDs from URL ?device_ids=; pre-checks specific sensor(s)
 let allDevices = []; // reserved for future use
 let temperatureMode = "raw"; // raw device readings or calculated FCU room temps
+let hasEarlierData = false;
+let hasLaterData = false;
 
 const TEMP_ENDPOINT = "/api/v1/temperature";
 
@@ -47,13 +49,71 @@ function loadTempData() {
     .then((response) => response.json())
     .then((json) => {
       tempData = json.series || [];
+      hasEarlierData = Boolean(json.has_earlier_data);
+      hasLaterData = Boolean(json.has_later_data);
       console.log("tempData=", tempData);
 
       createAllSensorCheckboxes();
 
       updateTempRecordCount();
+      updateChartNavigationButtons();
       updateTempChart();
     });
+}
+
+function updateChartNavigationButtons() {
+  const earlierButton = document.getElementById("earlierDataBtn");
+  const laterButton = document.getElementById("laterDataBtn");
+  if (earlierButton) earlierButton.disabled = !hasEarlierData;
+  if (laterButton) laterButton.disabled = !hasLaterData;
+}
+
+function chartTimeWindow() {
+  if (Number.isFinite(currentStart) && Number.isFinite(currentEnd)) {
+    return { start: currentStart, end: currentEnd };
+  }
+  return timeExtentForSeries(tempData);
+}
+
+function setChartTimeWindow(window) {
+  currentStart = window.start;
+  currentEnd = window.end;
+  clearTemporalButtonSelection();
+  setPickersFromRange();
+  return reloadData();
+}
+
+function navigateTemperatureWindow(direction) {
+  const window = chartTimeWindow();
+  if (!window) return Promise.resolve();
+  return setChartTimeWindow(shiftTimeWindow(window.start, window.end, direction));
+}
+
+function zoomTemperatureWindow(durationFactor) {
+  const window = chartTimeWindow();
+  if (!window) return Promise.resolve();
+  return setChartTimeWindow(
+    zoomTimeWindow(window.start, window.end, durationFactor),
+  );
+}
+
+function selectedZoomWindow(params) {
+  const selection = params.batch ? params.batch[0] : params;
+  const window = chartTimeWindow();
+  if (
+    !window ||
+    !Number.isFinite(selection.start) ||
+    !Number.isFinite(selection.end) ||
+    selection.end - selection.start >= 99.999
+  ) {
+    return null;
+  }
+  return timeWindowFromPercent(
+    window.start,
+    window.end,
+    selection.start,
+    selection.end,
+  );
 }
 
 /****************************************************************
@@ -66,12 +126,21 @@ function createAllSensorCheckboxes() {
     const fromStatus = allSensorsFromStatus.find(
       (s) => s.device_id === series.device_id,
     );
+    const deviceType = fromStatus && fromStatus.deviceType;
     return {
       device_id: series.device_id,
-      displayName: series.name,
-      fullName: (fromStatus && fromStatus.fullName) || series.name,
+      displayName: temperatureSeriesLabel(series.name, deviceType, temperatureMode),
+      fullName: temperatureSeriesLabel(
+        (fromStatus && fromStatus.fullName) || series.name,
+        deviceType,
+        temperatureMode,
+      ),
       exclusionKey: series.device_id,
-      legendLabel: (fromStatus && fromStatus.fullName) || series.name,
+      legendLabel: temperatureSeriesLabel(
+        (fromStatus && fromStatus.fullName) || series.name,
+        deviceType,
+        temperatureMode,
+      ),
     };
   });
   allSensors = sensorsFromTemp.sort((a, b) => {
@@ -184,6 +253,34 @@ function updateTempChart() {
       selectedMode: series.length <= 1 ? false : true,
       selected: legendSelected,
     },
+    toolbox: {
+      right: 30,
+      feature: {
+        myZoomIn: {
+          title: "Zoom in 1.5x",
+          icon: "path://M448 64a384 384 0 1 0 220 699l165 165 95-95-165-165A384 384 0 0 0 448 64zm-64 192h128v128h128v128H512v128H384V512H256V384h128V256z",
+          onclick: () => zoomTemperatureWindow(1 / 1.5),
+        },
+        myZoomOut: {
+          title: "Zoom out 1.5x",
+          icon: "path://M448 64a384 384 0 1 0 220 699l165 165 95-95-165-165A384 384 0 0 0 448 64zM256 384h384v128H256V384z",
+          onclick: () => zoomTemperatureWindow(1.5),
+        },
+        dataZoom: {
+          title: { zoom: "Zoom to selected region", back: "Undo region zoom" },
+          yAxisIndex: "none",
+        },
+      },
+    },
+    dataZoom: [
+      {
+        type: "inside",
+        filterMode: "none",
+        zoomOnMouseWheel: false,
+        moveOnMouseMove: false,
+        moveOnMouseWheel: false,
+      },
+    ],
     grid: { top: 200, left: 100, right: 100, bottom: 120 },
     xAxis: {
       type: "time",
@@ -226,6 +323,12 @@ function updateTempChart() {
   }
   tempChart.setOption(option, { notMerge: true });
 
+  tempChart.dispatchAction({
+    type: "takeGlobalCursor",
+    key: "dataZoomSelect",
+    dataZoomSelectActive: true,
+  });
+
   tempChart.off("legendselectchanged");
   tempChart.on("legendselectchanged", function (params) {
     const checkboxes = document.querySelectorAll(
@@ -240,12 +343,29 @@ function updateTempChart() {
       }
     });
   });
+
+  tempChart.off("datazoom");
+  tempChart.on("datazoom", function (params) {
+    const window = selectedZoomWindow(params);
+    if (!window) return;
+    tempChart.off("datazoom");
+    setChartTimeWindow(window);
+  });
 }
 
 /****************************************************************
  * Controls & wiring
  ****************************************************************/
 function setupTemperatureEventListeners() {
+  const earlierButton = document.getElementById("earlierDataBtn");
+  const laterButton = document.getElementById("laterDataBtn");
+  if (earlierButton) {
+    earlierButton.addEventListener("click", () => navigateTemperatureWindow(-1));
+  }
+  if (laterButton) {
+    laterButton.addEventListener("click", () => navigateTemperatureWindow(1));
+  }
+
   document
     .querySelectorAll('input[name="temperature-mode"]')
     .forEach((radio) => {
@@ -254,12 +374,15 @@ function setupTemperatureEventListeners() {
           return;
         }
         temperatureMode = radio.value;
+        updateTemperatureModeExplanation();
         currentDeviceIds = [];
         preSelectedDeviceIds = [];
         excludedSensorNames.clear();
         reloadData();
       });
     });
+
+  updateTemperatureModeExplanation();
 
   // Temporal buttons
   const dayBtn = document.getElementById("dayBtn");
@@ -401,6 +524,15 @@ function setupTemperatureEventListeners() {
       programmaticCheckboxUpdate = false;
       updateTempChart();
     });
+  }
+}
+
+function updateTemperatureModeExplanation() {
+  const explanation = document.getElementById(
+    "calculated-temperature-explanation",
+  );
+  if (explanation) {
+    explanation.classList.toggle("hidden", temperatureMode !== "calculated");
   }
 }
 

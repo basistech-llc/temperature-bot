@@ -22,7 +22,51 @@ let programmaticCheckboxUpdate = false;
 const STATUS_ENDPOINT = "/api/v1/status";
 const CHART_GAP_BREAK_SECONDS = 60 * 60;
 
-function buildSensor(displayName, deviceName, deviceId) {
+function shiftTimeWindow(start, end, direction) {
+  const width = end - start;
+  const offset = direction * width;
+  return { start: start + offset, end: end + offset };
+}
+
+function zoomTimeWindow(start, end, durationFactor) {
+  const center = (start + end) / 2;
+  const halfWidth = ((end - start) * durationFactor) / 2;
+  return {
+    start: Math.floor(center - halfWidth),
+    end: Math.ceil(center + halfWidth),
+  };
+}
+
+function timeWindowFromPercent(start, end, startPercent, endPercent) {
+  const width = end - start;
+  return {
+    start: Math.floor(start + (width * startPercent) / 100),
+    end: Math.ceil(start + (width * endPercent) / 100),
+  };
+}
+
+function timeExtentForSeries(seriesList) {
+  let minTimestamp = Infinity;
+  let maxTimestamp = -Infinity;
+  let timestampCount = 0;
+  seriesList.forEach((series) => {
+    series.data.forEach(([timestamp]) => {
+      if (!isFiniteNumber(timestamp)) return;
+      minTimestamp = Math.min(minTimestamp, timestamp);
+      maxTimestamp = Math.max(maxTimestamp, timestamp);
+      timestampCount += 1;
+    });
+  });
+  return timestampCount >= 2 && minTimestamp < maxTimestamp
+    ? { start: minTimestamp, end: maxTimestamp }
+    : null;
+}
+
+function temperatureSeriesLabel(label, deviceType, mode) {
+  return mode === "raw" && deviceType === "FCU" ? `${label} (FCU)` : label;
+}
+
+function buildSensor(displayName, deviceName, deviceId, deviceType) {
   const safeDisplay = displayName || deviceName || "";
   const fullName = deviceName || displayName || "";
   if (!safeDisplay) return null;
@@ -30,6 +74,7 @@ function buildSensor(displayName, deviceName, deviceId) {
     displayName: safeDisplay,
     fullName,
     device_id: deviceId,
+    deviceType,
   };
 }
 
@@ -174,7 +219,12 @@ async function loadAllSensors() {
 
     allSensors = data.devices
       .map((device) =>
-        buildSensor(device.display_name, device.device_name, device.device_id),
+        buildSensor(
+          device.display_name,
+          device.device_name,
+          device.device_id,
+          device.device_type,
+        ),
       )
       .filter((sensor) => sensor !== null)
       .sort((a, b) =>
@@ -365,5 +415,10 @@ if (typeof module !== "undefined" && module.exports) {
     buildSeriesAndAxis,
     CHART_GAP_BREAK_SECONDS,
     lineDataWithGapBreaks,
+    shiftTimeWindow,
+    timeWindowFromPercent,
+    timeExtentForSeries,
+    temperatureSeriesLabel,
+    zoomTimeWindow,
   };
 }
