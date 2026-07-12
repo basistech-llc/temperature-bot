@@ -2038,7 +2038,7 @@ def temperature_data_availability(
     end: int | None,
 ) -> tuple[bool, bool]:
     """Return whether selected devices have temperature samples outside a window."""
-    if not device_ids:
+    if device_ids is None:
         device_ids = [
             row["device_id"]
             for row in conn.execute("SELECT device_id FROM devices").fetchall()

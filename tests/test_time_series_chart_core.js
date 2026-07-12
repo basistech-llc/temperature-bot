@@ -8,6 +8,7 @@ const {
   lineDataWithGapBreaks,
   shiftTimeWindow,
   timeWindowFromPercent,
+  timeExtentForSeries,
   temperatureSeriesLabel,
   zoomTimeWindow,
 } = require("../app/static/time_series_chart_core.js");
@@ -135,6 +136,16 @@ check(
   temperatureSeriesLabel("Area 51 Sensor", null, "raw"),
   "Area 51 Sensor",
 );
+
+const largeSeries = [{
+  data: Array.from({ length: 150000 }, (_, timestamp) => [timestamp, 20]),
+}];
+check(
+  "large series extent is computed without argument spreading",
+  timeExtentForSeries(largeSeries),
+  { start: 0, end: 149999 },
+);
+check("empty series has no extent", timeExtentForSeries([]), null);
 
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed === 0 ? 0 : 1);

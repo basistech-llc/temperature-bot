@@ -72,11 +72,7 @@ function chartTimeWindow() {
   if (Number.isFinite(currentStart) && Number.isFinite(currentEnd)) {
     return { start: currentStart, end: currentEnd };
   }
-  const timestamps = tempData.flatMap((series) =>
-    series.data.map(([timestamp]) => timestamp),
-  );
-  if (timestamps.length < 2) return null;
-  return { start: Math.min(...timestamps), end: Math.max(...timestamps) };
+  return timeExtentForSeries(tempData);
 }
 
 function setChartTimeWindow(window) {

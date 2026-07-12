@@ -45,6 +45,23 @@ function timeWindowFromPercent(start, end, startPercent, endPercent) {
   };
 }
 
+function timeExtentForSeries(seriesList) {
+  let minTimestamp = Infinity;
+  let maxTimestamp = -Infinity;
+  let timestampCount = 0;
+  seriesList.forEach((series) => {
+    series.data.forEach(([timestamp]) => {
+      if (!isFiniteNumber(timestamp)) return;
+      minTimestamp = Math.min(minTimestamp, timestamp);
+      maxTimestamp = Math.max(maxTimestamp, timestamp);
+      timestampCount += 1;
+    });
+  });
+  return timestampCount >= 2 && minTimestamp < maxTimestamp
+    ? { start: minTimestamp, end: maxTimestamp }
+    : null;
+}
+
 function temperatureSeriesLabel(label, deviceType, mode) {
   return mode === "raw" && deviceType === "FCU" ? `${label} (FCU)` : label;
 }
@@ -400,6 +417,7 @@ if (typeof module !== "undefined" && module.exports) {
     lineDataWithGapBreaks,
     shiftTimeWindow,
     timeWindowFromPercent,
+    timeExtentForSeries,
     temperatureSeriesLabel,
     zoomTimeWindow,
   };

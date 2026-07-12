@@ -54,6 +54,9 @@ def test_temperature_data_availability_checks_selected_devices(test_database_con
     assert db.temperature_data_availability(
         test_database_conn, [second_id], 150, 250
     ) == (False, False)
+    assert db.temperature_data_availability(
+        test_database_conn, [], 150, 250
+    ) == (False, False)
 
 def test_temperature_insert(test_database_conn_with_test_data):
     conn = test_database_conn_with_test_data[0]
