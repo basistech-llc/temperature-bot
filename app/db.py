@@ -2053,22 +2053,25 @@ def temperature_data_availability(
 
     placeholders = ",".join("?" for _ in device_ids)
 
-    def exists_outside(boundary: int | None, operator: str, order: str) -> bool:
+    def exists_outside(boundary: int | None, before_window: bool) -> bool:
         if boundary is None:
             return False
         sql = f"""
             SELECT logtime
             FROM devlog INDEXED BY idx_devlog_temperature_logtime_device
             WHERE device_id IN ({placeholders})
-                AND temp10x IS NOT NULL AND logtime {operator} ?
-            ORDER BY logtime {order}
-            LIMIT 1
+                AND temp10x IS NOT NULL
         """
+        sql += (
+            " AND logtime < ? ORDER BY logtime DESC LIMIT 1"
+            if before_window
+            else " AND logtime > ? ORDER BY logtime ASC LIMIT 1"
+        )
         return conn.execute(sql, [*device_ids, boundary]).fetchone() is not None
 
     return (
-        exists_outside(start, "<", "DESC"),
-        exists_outside(end, ">", "ASC"),
+        exists_outside(start, True),
+        exists_outside(end, False),
     )
 
 
