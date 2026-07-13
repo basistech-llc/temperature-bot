@@ -250,31 +250,36 @@ JavaScript logic tests. Tests run through Makefile targets and must not modify
 
 ### Phase 1: core rooms
 
-1. Implement and verify topology bootstrap and discovery.
-2. Extract the shared room metric service.
-3. Apply room eligibility to current and historical temperature and to room
-   humidity.
-4. Harden typed room APIs.
-5. Render the grouped matrix.
-6. Add drag/drop and rename behavior.
-7. Refactor the Room Editor and value formatting.
-8. Update core documentation and run the relevant Makefile quality gates.
+- [ ] Implement and verify topology bootstrap and discovery (`hvac-9re.1`).
+- [ ] Extract the shared room metric service (`hvac-9re.2`).
+- [ ] Apply room eligibility to current and historical temperature and to room
+  humidity (`hvac-9re.3`).
+- [ ] Harden typed room APIs (`hvac-9re.4`).
+- [ ] Render the grouped matrix (`hvac-9re.5`).
+- [ ] Add drag/drop and rename behavior (`hvac-9re.6`).
+- [ ] Refactor the Room Editor and value formatting (`hvac-9re.7`).
+- [ ] Update core documentation and run the relevant Makefile quality gates
+  (`hvac-9re.8`).
 
 ### Phase 2: canonical room consumers
 
-9. Build the room-backed map and combined FCU graph independently after their
-   shared data prerequisites are complete.
-10. Migrate room dashboards away from exact-name sensor membership.
-11. Add room-based presence storage, presentation, and rules.
-12. Correct Hickory per-device reads, then generalize room control endpoints.
+- [ ] Build the room-backed map (`hvac-9re.9`) and combined FCU graph
+  (`hvac-9re.10`) independently after their shared data prerequisites are
+  complete.
+- [ ] Migrate room dashboards away from exact-name sensor membership
+  (`hvac-9re.11`).
+- [ ] Add room-based presence storage, presentation, and rules
+  (`hvac-9re.12`).
+- [ ] Correct Hickory per-device reads (`hvac-1mz`), then generalize room
+  control endpoints (`hvac-8tp`).
 
 ### Phase 3: integration and issue reconciliation
 
-13. Verify rename, reassignment, Unassigned, stale-data, and missing-data
-    behavior across every consumer.
-14. Update each canonical GitHub issue with evidence. Close only the issues
-    whose full acceptance criteria are satisfied; record residual work on broad
-    issues such as #127 and #152.
+- [ ] Verify rename, reassignment, Unassigned, stale-data, and missing-data
+  behavior across every consumer (`hvac-9re.13`).
+- [ ] Update each canonical GitHub issue with evidence. Close only the issues
+  whose full acceptance criteria are satisfied; record residual work on broad
+  issues such as #127 and #152.
 
 The production assignment bootstrap should run only after the deployment path
 has taken a consistent database backup and prevented concurrent writers for the
