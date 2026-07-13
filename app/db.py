@@ -91,26 +91,6 @@ def _chart_logtime(row: sqlite3.Row) -> int:
     return int(row["logtime"])
 
 
-# Cache the schema file's modification time so we only re-apply the schema
-# when the file actually changes on disk. This keeps the convenient
-# auto-setup behavior without running the full schema on every request.
-# We do this here (rather than at "server startup") because this module
-# is also used by CLI tools and schedulers that may not go through a single
-# well-defined startup path.
-_SCHEMA_MTIME: float | None = None
-
-
-def reset_schema_mtime_cache() -> None:
-    """Reset the schema mtime cache. For use by tests only."""
-    global _SCHEMA_MTIME  # pylint: disable=global-statement
-    _SCHEMA_MTIME = None
-
-
-def get_schema_mtime() -> float | None:
-    """Return the cached schema mtime. For use by tests only."""
-    return _SCHEMA_MTIME
-
-
 def connect_db(db_path):
     """Establishes a connection to the SQLite database."""
     logger.debug("connect_db(%s)", db_path)
@@ -359,6 +339,40 @@ def validate_configured_database_schema() -> None:
         conn.close()
 
 
+def should_validate_database_schema_on_startup() -> bool:
+    """Return whether this process should validate the runtime DB at startup."""
+    return "PYTEST" not in os.environ and TEST_DB_NAME not in os.environ
+
+
+def validate_database_schema_on_startup() -> None:
+    """Stop a runtime entry point cleanly when a populated database is stale."""
+    if not should_validate_database_schema_on_startup():
+        return
+    try:
+        db_path = os.environ[DB_PATH]
+        conn = connect_db(db_path)
+        try:
+            has_tables = conn.execute(
+                "SELECT 1 FROM sqlite_master "
+                "WHERE type='table' AND name NOT LIKE 'sqlite_%' LIMIT 1"
+            ).fetchone()
+        finally:
+            conn.close()
+        if has_tables:
+            validate_configured_database_schema()
+    except KeyError as e:
+        issue = DatabaseSchemaIssue(
+            issue_type="missing_config",
+            object_name=e.args[0],
+            detail="database path environment variable is not set",
+        )
+        print(format_schema_mismatch_message("<unset>", [issue]), file=sys.stderr)
+        raise SystemExit(1) from None
+    except DatabaseSchemaMismatchError as e:
+        print(str(e), file=sys.stderr)
+        raise SystemExit(1) from None
+
+
 def get_db_connection():
     """
     Returns a new SQLite connection for each request.
@@ -373,35 +387,12 @@ def get_db_connection():
             db_path = os.environ[DB_PATH]
         conn = connect_db(db_path)
 
-        # Ensure the database schema is applied for fresh/empty DBs
-        # and optionally when the schema file is newer than the DB file.
-        needs_schema = False
-
-        try:
-            cursor = conn.execute(
-                "SELECT name FROM sqlite_master "
-                "WHERE type='table' AND name NOT LIKE 'sqlite_%';"
-            )
-            existing_tables = [row[0] for row in cursor.fetchall()]
-            if not existing_tables:
-                # Fresh database with no user tables.
-                needs_schema = True
-        except sqlite3.Error:
-            # If we cannot introspect the schema, fall back to applying it.
-            needs_schema = True
-
-        if not needs_schema:
-            # Best-effort mtime-based schema auto-apply for existing DBs.
-            try:
-                schema_mtime = os.path.getmtime(SCHEMA_FILE_PATH)
-                db_mtime = os.path.getmtime(db_path)
-            except OSError:
-                schema_mtime = None
-                db_mtime = None
-
-            if schema_mtime is not None and db_mtime is not None:
-                if schema_mtime > db_mtime:
-                    needs_schema = True
+        # Compatibility schema setup is only safe for a fresh, empty database.
+        cursor = conn.execute(
+            "SELECT name FROM sqlite_master "
+            "WHERE type='table' AND name NOT LIKE 'sqlite_%';"
+        )
+        needs_schema = cursor.fetchone() is None
 
         if needs_schema:
             logger.info(

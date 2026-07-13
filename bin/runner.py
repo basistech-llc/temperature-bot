@@ -385,6 +385,7 @@ def main():
         update_from_airthings(None)
         sys.exit(0)
 
+    db.validate_database_schema_on_startup()
     conn = db.get_db_connection()
     if args.report:
         report(conn)
