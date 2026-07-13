@@ -189,6 +189,24 @@ class Room(BaseModel):
     map: RoomMap | None = None
 
 
+class RoomCreate(BaseModel):
+    """Client-settable fields for creating a room."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    room_name: str = Field(min_length=1)
+    map: RoomMap | None = None
+
+
+class RoomPatch(BaseModel):
+    """Client-settable fields for updating a room."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    room_name: str | None = Field(default=None, min_length=1)
+    map: RoomMap | None = None
+
+
 class RoomTopologyReconciliation(BaseModel):
     """Summary of an idempotent FCU-room topology reconciliation."""
 

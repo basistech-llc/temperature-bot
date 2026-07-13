@@ -74,9 +74,9 @@ CREATE INDEX IF NOT EXISTS idx_devlog_temperature_device_logtime
     ON devlog (device_id, logtime) WHERE temp10x IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_devlog_temperature_logtime_device
     ON devlog (logtime, device_id) WHERE temp10x IS NOT NULL;
-CREATE UNIQUE INDEX idx_rooms_fcu_device_id
+CREATE UNIQUE INDEX IF NOT EXISTS idx_rooms_fcu_device_id
 ON rooms(fcu_device_id)
 WHERE fcu_device_id IS NOT NULL;
-CREATE UNIQUE INDEX idx_devices_fcu_room_id
+CREATE UNIQUE INDEX IF NOT EXISTS idx_devices_fcu_room_id
 ON devices(room_id)
 WHERE device_type = 'FCU' AND room_id IS NOT NULL;

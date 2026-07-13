@@ -1,7 +1,7 @@
 ALTER TABLE rooms
 ADD COLUMN fcu_device_id INTEGER REFERENCES devices(device_id);
 
-CREATE UNIQUE INDEX idx_rooms_fcu_device_id
+CREATE UNIQUE INDEX IF NOT EXISTS idx_rooms_fcu_device_id
 ON rooms(fcu_device_id)
 WHERE fcu_device_id IS NOT NULL;
 
@@ -94,6 +94,6 @@ UPDATE devices
 SET room_id = NULL
 WHERE device_type IS NULL OR device_type <> 'FCU';
 
-CREATE UNIQUE INDEX idx_devices_fcu_room_id
+CREATE UNIQUE INDEX IF NOT EXISTS idx_devices_fcu_room_id
 ON devices(room_id)
 WHERE device_type = 'FCU' AND room_id IS NOT NULL;

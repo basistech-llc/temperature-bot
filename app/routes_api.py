@@ -36,6 +36,8 @@ from .models import (
     NoteControl,
     SetRangeControl,
     Room,
+    RoomCreate,
+    RoomPatch,
     SetTempControl,
     SpeedControl,
     TemperatureSeriesResponse,
@@ -428,8 +430,11 @@ def rooms(conn):
         return jsonify({"rooms": json_ready_list(db.get_rooms(conn))})
 
     try:
-        body = Room.model_validate(request.get_json(silent=True) or {})
-        room = db.create_room(conn, body)
+        body = RoomCreate.model_validate(request.get_json(silent=True) or {})
+        room = db.create_room(
+            conn,
+            Room(room_name=body.room_name, map=body.map),
+        )
     except ValidationError as e:
         return _validation_error_response(e)
     except ValueError as e:
@@ -454,10 +459,13 @@ def room_detail(conn, room_id: int):
 def update_room(conn, room_id: int):
     """Update one room."""
     try:
-        body = Room.model_validate(
-            {**(request.get_json(silent=True) or {}), "room_id": room_id}
-        )
-        room = db.update_room(conn, body)
+        body = RoomPatch.model_validate(request.get_json(silent=True) or {})
+        update = Room(room_id=room_id)
+        if "room_name" in body.model_fields_set:
+            update.room_name = body.room_name
+        if "map" in body.model_fields_set:
+            update.map = body.map
+        room = db.update_room(conn, update)
     except ValidationError as e:
         return _validation_error_response(e)
     except ValueError as e:

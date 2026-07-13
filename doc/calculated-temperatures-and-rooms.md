@@ -164,11 +164,12 @@ Room endpoints:
 - `GET /api/v1/rooms/<room_id>`
 - `PATCH /api/v1/rooms/<room_id>`
 
-Room endpoints use one Pydantic `Room` object for create, update, and response
-payloads. `room_name` is required when creating a room. `room_id` is omitted
-when creating a new room. Other `None` fields are not serialized into JSON, and
-updates write only fields that are set. Room payloads use `map` at the API
-boundary and `map_json` in SQLite:
+Room endpoints use separate Pydantic write contracts: `RoomCreate` requires
+`room_name`, while `RoomPatch` accepts only `room_name` and `map`. Both reject
+unknown fields. In particular, clients cannot set the response-only
+`fcu_device_id`; FCU ownership is maintained by discovery and reconciliation.
+The `Room` response omits `None` fields, and updates write only fields that are
+set. Room payloads use `map` at the API boundary and `map_json` in SQLite:
 
 ```json
 {

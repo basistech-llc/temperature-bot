@@ -53,6 +53,14 @@ def test_schema_file_contains_application_tables_only():
     assert "flyway_schema_history" not in tables
 
 
+def test_schema_file_can_be_applied_twice():
+    """The generated compatibility schema must remain idempotent."""
+    with closing(sqlite3.connect(":memory:")) as conn:
+        schema_sql = Path(SCHEMA_FILE_PATH).read_text(encoding="utf-8")
+        conn.executescript(schema_sql)
+        conn.executescript(schema_sql)
+
+
 def test_baseline_migration_does_not_create_flyway_history_table():
     tables = table_names_created_by(BASELINE_MIGRATION_PATH)
     assert BASELINE_APP_TABLES <= tables

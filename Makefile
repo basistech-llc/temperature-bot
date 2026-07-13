@@ -136,7 +136,8 @@ etc/schema.sql: $(wildcard $(FLYWAY_SQL_DIR)/*.sql)
 		"SELECT sql || ';' FROM sqlite_master WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%' AND name <> 'flyway_schema_history' AND COALESCE(tbl_name, '') <> 'flyway_schema_history' ORDER BY rowid;" \
 		> $(FLYWAY_SCHEMA_DUMP)
 	test -s $(FLYWAY_SCHEMA_DUMP)
-	sed 's/CREATE INDEX/CREATE INDEX IF NOT EXISTS/' $(FLYWAY_SCHEMA_DUMP) \
+	sed 's/CREATE UNIQUE INDEX/CREATE UNIQUE INDEX IF NOT EXISTS/' $(FLYWAY_SCHEMA_DUMP) \
+		| sed 's/CREATE INDEX/CREATE INDEX IF NOT EXISTS/' \
 		| sed 's/CREATE TABLE/CREATE TABLE IF NOT EXISTS/' \
 		> etc/schema.sql
 	test -s etc/schema.sql
