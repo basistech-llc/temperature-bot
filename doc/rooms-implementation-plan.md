@@ -4,7 +4,9 @@ Approved on 2026-07-13 after review of the current implementation, every open
 GitHub issue, and the open local Beads queue.
 
 GitHub issue #144 is the canonical umbrella. The local implementation epic is
-Beads `hvac-9re`.
+Beads `hvac-9re`. The plan delivers the room model in a core phase, then moves
+every identified room-oriented GitHub issue onto that canonical topology. The
+follow-on phase is part of the plan, but does not delay the core room release.
 
 ## Product Decisions
 
@@ -131,6 +133,32 @@ Refactor `app/static/unit_speed.js` so FCU room humidity comes from the API and
 the Room Editor consumes the same in-room source contract. Do not duplicate
 humidity aggregation in the browser.
 
+### Room-oriented consumers
+
+After the core room release, migrate the remaining room consumers without
+creating any parallel location or membership mapping:
+
+- GitHub #32: resolve map regions through stable room identity and use shared
+  room status for temperature, humidity, and FCU state. Map geometry is
+  presentation data and must survive room rename.
+- GitHub #62: build the combined FCU history graph from canonical calculated
+  room temperature, recorded FCU temperature, mode, and fan data. Preserve the
+  stale gaps required by #117.
+- GitHub #152: replace exact-name sensor membership in Hickory and other room
+  dashboards with persisted room assignments. Keep deliberate actuator and
+  layout configuration separate from membership.
+- GitHub #107: assign presence-capable devices through the same room topology,
+  while keeping presence event retention and rule policy metric-specific.
+- GitHub #157: correct Hickory status reads before generalizing its controls.
+  The existing Bead `hvac-1mz` owns this work.
+- GitHub #158: generalize the corrected Hickory control APIs around stable room
+  identity after canonical room dashboards exist. The existing Bead
+  `hvac-8tp` owns this work.
+
+GitHub #127 remains broader than rooms. The room service removes route and data
+coupling for this feature, but the canonical issue stays open for unrelated
+routes unless its remaining acceptance criteria are completed separately.
+
 ## Beads Work Breakdown
 
 | Bead | Work | Blocks on |
@@ -144,6 +172,13 @@ humidity aggregation in the browser.
 | `hvac-9re.6` | Add sensor drag/drop and room rename interactions | `.4`, `.5` |
 | `hvac-9re.7` | Refactor FCU Room Editor and dashboard value formatting | `.3`, `.4` |
 | `hvac-9re.8` | Document and verify the rooms implementation | `.1`–`.7` |
+| `hvac-9re.9` | Build room-backed HVAC map overlay (#32) | `.3`, `.4` |
+| `hvac-9re.10` | Add combined FCU and room history graph (#62) | `.3` |
+| `hvac-9re.11` | Drive room dashboards from canonical assignments (#152) | `.4`, `.7` |
+| `hvac-9re.12` | Integrate presence sensors and room presence rules (#107) | `.4` |
+| `hvac-1mz` | Correct Hickory per-device status reads (#157) | — |
+| `hvac-8tp` | Generalize room control APIs (#158) | `hvac-1mz`, `.11` |
+| `hvac-9re.13` | Verify integrated consumers and canonical issue closure | `.8`–`.12`, `hvac-1mz`, `hvac-8tp` |
 
 Each implementation bead includes substantive SQLite, Flask-client, or pure
 JavaScript logic tests. Tests run through Makefile targets and must not modify
@@ -160,31 +195,31 @@ JavaScript logic tests. Tests run through Makefile targets and must not modify
   creation.
 - [#127, reduce route/data-layer coupling](https://github.com/basistech-llc/temperature-bot/issues/127)
   is partially advanced by the typed `room_metrics` service. The broader
-  request parsing and integration refactor remains outside this plan.
+  request parsing and integration refactor remains in the canonical issue and
+  is not implied complete by the rooms release.
 - [#62, create an FCU graph with room and FCU state](https://github.com/basistech-llc/temperature-bot/issues/62)
-  depends on the room-temperature semantics defined here. This plan does not
-  add the combined graph.
+  is delivered after the core room-temperature semantics by `hvac-9re.10`.
 - [#117, do not draw through missing chart data](https://github.com/basistech-llc/temperature-bot/issues/117)
   requires calculated room-temperature history to preserve stale gaps rather
-  than merely omitting samples and allowing the chart to connect across them.
+  than merely omitting samples and allowing the chart to connect across them;
+  `hvac-9re.3` establishes the data contract and `.10` preserves it in the
+  combined graph.
 
 ### Downstream room consumers
 
 - [#32, overlay map](https://github.com/basistech-llc/temperature-bot/issues/32)
-  should consume the canonical rooms and assignments created here; map UI is
-  outside this plan.
+  is delivered by `hvac-9re.9` using canonical rooms and assignments.
 - [#107, add presence table](https://github.com/basistech-llc/temperature-bot/issues/107)
-  can later use room-assigned motion sensors; presence storage and rules remain
-  separate work.
+  is delivered by `hvac-9re.12`; presence storage and policy remain
+  presence-specific while room membership is shared.
 - [#152, Hickory dashboard design](https://github.com/basistech-llc/temperature-bot/issues/152)
-  can later replace exact-name sensor membership with room membership. The
-  current plan changes the main Air Quality matrix, not room dashboard layout.
+  is advanced by `hvac-9re.11`, which migrates room dashboard data membership.
+  The GitHub issue should close only when its broader layout acceptance is also
+  satisfied.
 - [#158, generalize hardcoded Hickory APIs](https://github.com/basistech-llc/temperature-bot/issues/158)
-  should reuse canonical room identity later. Generic room control endpoints
-  remain out of scope.
+  is delivered by existing Bead `hvac-8tp` after canonical dashboards exist.
 - [#157, use per-device calls in Hickory room status](https://github.com/basistech-llc/temperature-bot/issues/157)
-  remains an independent Hubitat correctness fix and is not blocked by this
-  plan.
+  is delivered by existing Bead `hvac-1mz` and blocks generic control API work.
 
 ### Historical and presentation overlap
 
@@ -208,10 +243,12 @@ JavaScript logic tests. Tests run through Makefile targets and must not modify
   provides substantive coverage.
 - `hvac-hem`: humidity threshold coloring is separate from calculating and
   displaying integer room humidity.
-- `hvac-1mz` and `hvac-8tp`: these mirror GitHub #157 and #158 and remain
-  outside the implementation scope above.
+- `hvac-1mz` and `hvac-8tp`: these mirror GitHub #157 and #158. They are reused
+  directly in this plan rather than duplicated under `hvac-9re`.
 
 ## Delivery Sequence
+
+### Phase 1: core rooms
 
 1. Implement and verify topology bootstrap and discovery.
 2. Extract the shared room metric service.
@@ -221,7 +258,23 @@ JavaScript logic tests. Tests run through Makefile targets and must not modify
 5. Render the grouped matrix.
 6. Add drag/drop and rename behavior.
 7. Refactor the Room Editor and value formatting.
-8. Update final documentation and run the relevant Makefile quality gates.
+8. Update core documentation and run the relevant Makefile quality gates.
+
+### Phase 2: canonical room consumers
+
+9. Build the room-backed map and combined FCU graph independently after their
+   shared data prerequisites are complete.
+10. Migrate room dashboards away from exact-name sensor membership.
+11. Add room-based presence storage, presentation, and rules.
+12. Correct Hickory per-device reads, then generalize room control endpoints.
+
+### Phase 3: integration and issue reconciliation
+
+13. Verify rename, reassignment, Unassigned, stale-data, and missing-data
+    behavior across every consumer.
+14. Update each canonical GitHub issue with evidence. Close only the issues
+    whose full acceptance criteria are satisfied; record residual work on broad
+    issues such as #127 and #152.
 
 The production assignment bootstrap should run only after the deployment path
 has taken a consistent database backup and prevented concurrent writers for the
