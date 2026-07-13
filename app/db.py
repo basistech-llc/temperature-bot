@@ -60,6 +60,7 @@ from .models import (
     Room,
     RoomMap,
     RoomTopologyReconciliation,
+    StatusPayload,
     TimeSeries,
     json_ready,
     json_ready_list,
@@ -73,7 +74,8 @@ from .aq_metrics import (
     AQ_METRIC_STATUS_KEYS,
     extract_metric_from_status,
 )
-from .device_types import DEVICE_TYPE_INTERNAL
+from .device_types import DEVICE_TYPE_ERV, DEVICE_TYPE_FCU, DEVICE_TYPE_INTERNAL
+from .room_metrics import RoomMetricSnapshot
 
 logger = logging.getLogger(__name__)
 
@@ -82,8 +84,6 @@ MAX_DURATION = 20 * 60  # don't extend a compressed row beyond 20 minutes
 ROOM_MAP_JSON_KEY = "map_json"
 FLYWAY_SCHEMA_HISTORY_TABLE = "flyway_schema_history"
 SCHEMA_UPGRADE_COMMAND = "make migrate-db"
-DEVICE_TYPE_ERV = "ERV"
-DEVICE_TYPE_FCU = "FCU"
 FCU_DEFAULT_TEMP_SOURCE_MULTIPLIER = 1.0
 
 
@@ -820,6 +820,68 @@ def update_device_room(conn, device_id: int, room_id: int | None) -> int:
         raise ValueError(f"Unknown device_id: {device_id}")
     conn.commit()
     return device_id
+
+
+def _status_payload_from_json(status_json: str | None) -> StatusPayload | None:
+    if not status_json:
+        return None
+    try:
+        return StatusPayload.model_validate_json(status_json)
+    except ValueError:
+        return None
+
+
+def fetch_latest_room_metric_snapshots(
+    conn,
+    *,
+    at_time: float | None = None,
+) -> list[RoomMetricSnapshot]:
+    """Return each device's latest raw reading at or before ``at_time``."""
+    boundary = at_time if at_time is not None else float("inf")
+    c = conn.cursor()
+    c.execute(
+        """
+        WITH ranked AS (
+            SELECT
+                l.*,
+                ROW_NUMBER() OVER (
+                    PARTITION BY l.device_id
+                    ORDER BY l.logtime DESC, l.log_id DESC
+                ) AS reading_rank
+            FROM devlog l
+            WHERE l.logtime <= ?
+        )
+        SELECT
+            d.device_id,
+            d.device_name,
+            d.display_name,
+            d.device_type,
+            d.room_id,
+            l.logtime,
+            l.duration,
+            l.temp10x,
+            l.status_json
+        FROM ranked l
+        JOIN devices d ON d.device_id = l.device_id
+        WHERE l.reading_rank = 1
+        ORDER BY d.device_name
+        """,
+        (boundary,),
+    )
+    return [
+        RoomMetricSnapshot(
+            device_id=row["device_id"],
+            device_name=row["device_name"],
+            display_name=row["display_name"],
+            device_type=normalize_device_type(row["device_type"]),
+            room_id=row["room_id"],
+            logtime=row["logtime"],
+            duration=row["duration"] or 0,
+            temp10x=row["temp10x"],
+            status=_status_payload_from_json(row["status_json"]),
+        )
+        for row in c.fetchall()
+    ]
 
 
 EVERY_DEVICE=1

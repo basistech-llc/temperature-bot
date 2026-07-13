@@ -37,6 +37,19 @@ calculation. The constant is defined once in `app/constants.py` and is currently
 10 minutes. The FCU temperature popup must tell users that readings older than
 10 minutes are ignored.
 
+`app/room_metrics.py` is the shared source-selection boundary for current room
+temperature and humidity. `db.fetch_latest_room_metric_snapshots()` performs
+the raw SQLite lookup and returns typed snapshots; `select_room_metric_sources()`
+then applies room membership, excludes ERV and `INTERNAL` devices, calculates
+age from `logtime + duration`, rejects stale readings, and extracts the chosen
+metric. Temperature is normalized to Celsius and humidity supports both
+Hubitat scalar/`attributes` payloads and Airthings `{value, unit}` payloads.
+Missing or malformed metrics are returned as explicit exclusion outcomes.
+
+The selector accepts an explicit evaluation time and does not read Flask
+request state. This keeps route and calculation callers on one deterministic
+mechanism and allows historical callers to use the same freshness boundary.
+
 For the current `/api/v1/status` display payload, the room temperature falls
 back to the raw FCU temperature when the weighted calculation has no usable
 source and the FCU's own source multiplier has not been explicitly set to `0`.

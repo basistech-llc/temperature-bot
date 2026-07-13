@@ -251,7 +251,7 @@ JavaScript logic tests. Tests run through Makefile targets and must not modify
 ### Phase 1: core rooms
 
 - [x] Implement and verify topology bootstrap and discovery (`hvac-9re.1`).
-- [ ] Extract the shared room metric service (`hvac-9re.2`).
+- [x] Extract the shared room metric service (`hvac-9re.2`).
 - [ ] Apply room eligibility to current and historical temperature and to room
   humidity (`hvac-9re.3`).
 - [ ] Harden typed room APIs (`hvac-9re.4`).

@@ -46,6 +46,18 @@ dashboard frontend work.
   - `/api/v1/hickory/room_status`, `/dimmer`, `/wall_light`, `/tv`: current
     Hickory-specific control APIs.
 
+## Canonical Room Metrics
+
+- `app/room_metrics.py`
+  - Typed room membership, device eligibility, metric extraction, and shared
+    10-minute freshness selection for temperature and humidity.
+- `app/db.py`
+  - `fetch_latest_room_metric_snapshots()`: raw SQLite latest-reading lookup
+    that feeds the room metric selector without Flask request state.
+- `tests/test_room_metrics.py`
+  - SQLite-backed coverage of membership, staleness, exclusions, missing
+    values, and Hubitat/Airthings payload shapes.
+
 ## Hickory Life Easter Egg
 
 Recommended implementation shape:
