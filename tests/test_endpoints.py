@@ -14,12 +14,10 @@ from conftest import flask_test_client, skip_on_github  # noqa: F401  # pylint: 
 from helpers.data_factories import DeviceTestData
 from helpers.mock_helpers import MockHelper
 
-from app import ae200
-from app import db
-from app import rules_engine
+from app import ae200, db, rules_engine
+from app.constants import RULES_MASTER_DEVICE_NAME
 from app.version import __version__, git_sha
 from app.models import DriveControl, SpeedControl
-
 logger = logging.getLogger(__name__)
 
 
@@ -979,7 +977,8 @@ def test_rules_master_api_default_and_toggle(
     # Verify underlying RULES_MASTER device row has a future disabled_until
     cursor = conn.cursor()
     cursor.execute(
-        "SELECT disabled_until FROM devices WHERE device_name = ?", ("rules_master",)
+        "SELECT disabled_until FROM devices WHERE device_name = ?",
+        (RULES_MASTER_DEVICE_NAME,),
     )
     row = cursor.fetchone()
     assert row is not None
@@ -993,7 +992,8 @@ def test_rules_master_api_default_and_toggle(
     assert db.get_rules_master_enabled(conn) is True
 
     cursor.execute(
-        "SELECT disabled_until FROM devices WHERE device_name = ?", ("rules_master",)
+        "SELECT disabled_until FROM devices WHERE device_name = ?",
+        (RULES_MASTER_DEVICE_NAME,),
     )
     row = cursor.fetchone()
     assert row is not None

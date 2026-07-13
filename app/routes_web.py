@@ -557,11 +557,14 @@ def _register_room_routes(app):
                 body = DeviceMetadataControl(
                     device_id=int(raw_device_id),
                     display_name=request.form.get(f"display_name_{raw_device_id}"),
-                    device_type=request.form.get(f"device_type_{raw_device_id}"),
                     rules_enabled=f"rules_enabled_{raw_device_id}" in request.form,
                     notes=request.form.get(f"notes_{raw_device_id}"),
                 )
-                db.update_device_metadata(conn, body)
+                db.update_device_metadata(
+                    conn,
+                    body,
+                    fields={"display_name", "rules_enabled", "notes"},
+                )
             return redirect(url_for("edit_devices"))
         return render_template(
             "devices.html",

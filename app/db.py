@@ -40,6 +40,7 @@ from .constants import (
     MIN_SET_RANGE_C,
     TEMP_SOURCE_STALE_SECONDS,
     TEST_DB_NAME,
+    RULES_MASTER_DEVICE_NAME,
 )
 from .models import (
     AqiSummary,
@@ -71,6 +72,7 @@ from .aq_metrics import (
     AQ_METRIC_STATUS_KEYS,
     extract_metric_from_status,
 )
+from .device_types import DEVICE_TYPE_INTERNAL
 
 logger = logging.getLogger(__name__)
 
@@ -447,7 +449,9 @@ def setup_database(conn, schema_file):
 ## Device management
 
 
-def get_or_create_device_id(conn, device_name, use_cache=True):
+def get_or_create_device_id(
+    conn, device_name, use_cache=True, *, device_type: str | None = None
+):
     """
     Retrieves the ID for a given device name. If the device name does not exist
     in the devices table, it inserts it and returns the newly generated ID.
@@ -458,7 +462,7 @@ def get_or_create_device_id(conn, device_name, use_cache=True):
     if "PYTEST" in os.environ:
         use_cache = False
 
-    if use_cache and (device_name in DEVICE_MAP):
+    if use_cache and (device_name in DEVICE_MAP) and device_type is None:
         logger.debug(
             "get_or_create_device_id DEVICE_MAP[%s]=%s",
             device_name,
@@ -471,6 +475,15 @@ def get_or_create_device_id(conn, device_name, use_cache=True):
         cursor.execute(
             "INSERT OR IGNORE INTO devices (device_name) VALUES (?);", (device_name,)
         )
+        normalized_type = normalize_device_type(device_type)
+        if normalized_type:
+            cursor.execute(
+                """
+                UPDATE devices SET device_type=?
+                WHERE device_name=? AND device_type IS NULL
+                """,
+                (normalized_type, device_name),
+            )
         conn.commit()
 
         cursor.execute("SELECT * FROM devices WHERE device_name = ?;", (device_name,))
@@ -964,7 +977,10 @@ def insert_changelog(
 def update_devlog_map(conn, device_name: str, ae200_device_id: int):
     logger.debug("device_name=%s ae200_device_id=%s", device_name, ae200_device_id)
     c = conn.cursor()
-    device_id = get_or_create_device_id(conn, device_name)
+    device_type = DEVICE_TYPE_ERV if device_name.lower().startswith("erv") else DEVICE_TYPE_FCU
+    device_id = get_or_create_device_id(
+        conn, device_name, device_type=device_type
+    )
     c.execute(
         "UPDATE devices set ae200_device_id = ? where device_id=?",
         (ae200_device_id, device_id),
@@ -995,7 +1011,7 @@ def get_rules_master_enabled(conn) -> bool:
     the underlying storage, so we can distinguish it from time-limited rules
     disablement on the rules_engine device.
     """
-    device_id = get_device_id(conn, "rules_master")
+    device_id = get_device_id(conn, RULES_MASTER_DEVICE_NAME)
     if device_id is None:
         return True
     disabled_until = device_rules_disabled_until(conn, device_id)
@@ -1010,7 +1026,9 @@ def set_rules_master_enabled(conn, enabled: bool):
     Set the global master rules switch enabled/disabled using the RULES_MASTER
     pseudo-device's disabled_until.
     """
-    device_id = get_or_create_device_id(conn, "rules_master")
+    device_id = get_or_create_device_id(
+        conn, RULES_MASTER_DEVICE_NAME, device_type=DEVICE_TYPE_INTERNAL
+    )
     now = int(time.time())
     if enabled:
         until = 0
