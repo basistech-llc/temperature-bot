@@ -59,6 +59,7 @@ from .models import (
     FcuTempSourcesResponse,
     Room,
     RoomMap,
+    RoomTopologyReconciliation,
     TimeSeries,
     json_ready,
     json_ready_list,
@@ -484,12 +485,13 @@ def get_or_create_device_id(
                 """,
                 (normalized_type, device_name),
             )
-        conn.commit()
-
         cursor.execute("SELECT * FROM devices WHERE device_name = ?;", (device_name,))
         result = cursor.fetchone()
 
         if result:
+            if normalized_type == DEVICE_TYPE_FCU:
+                _ensure_fcu_room(cursor, result["device_id"])
+            conn.commit()
             logger.debug(
                 "get_or_create_device_id(%s) result=%s", device_name, dict(result)
             )
@@ -651,7 +653,101 @@ def _room_from_row(row: sqlite3.Row) -> Room:
     return Room(
         room_id=row["room_id"],
         room_name=row["room_name"],
+        fcu_device_id=row["fcu_device_id"],
         map=_room_map_from_json(row[ROOM_MAP_JSON_KEY]),
+    )
+
+
+def _next_room_name(cursor: sqlite3.Cursor, base_name: str) -> str:
+    """Return the first available room name using Name (N) suffixes."""
+    suffix = 1
+    while True:
+        candidate = base_name if suffix == 1 else f"{base_name} ({suffix})"
+        cursor.execute("SELECT 1 FROM rooms WHERE room_name=?", (candidate,))
+        if cursor.fetchone() is None:
+            return candidate
+        suffix += 1
+
+
+def _ensure_fcu_room(cursor: sqlite3.Cursor, device_id: int) -> tuple[bool, bool, bool]:
+    """Ensure one FCU owns and is assigned to one room within a transaction."""
+    cursor.execute(
+        """
+        SELECT device_id, device_name, display_name, device_type, room_id
+        FROM devices
+        WHERE device_id=?
+        """,
+        (device_id,),
+    )
+    device = cursor.fetchone()
+    if device is None:
+        raise ValueError(f"Unknown device_id: {device_id}")
+    if normalize_device_type(device["device_type"]) != DEVICE_TYPE_FCU:
+        raise ValueError(f"Device {device_id} is not an FCU")
+
+    cursor.execute(
+        "SELECT room_id FROM rooms WHERE fcu_device_id=?",
+        (device_id,),
+    )
+    owned_room = cursor.fetchone()
+    room_id = int(owned_room["room_id"]) if owned_room is not None else None
+    created = False
+    claimed = False
+    if room_id is None and device["room_id"] is not None:
+        cursor.execute(
+            """
+            UPDATE rooms
+            SET fcu_device_id=?
+            WHERE room_id=? AND fcu_device_id IS NULL
+            """,
+            (device_id, device["room_id"]),
+        )
+        if cursor.rowcount:
+            room_id = int(device["room_id"])
+            claimed = True
+
+    if room_id is None:
+        base_name = (device["display_name"] or "").strip() or device["device_name"]
+        room_name = _next_room_name(cursor, base_name)
+        cursor.execute(
+            "INSERT INTO rooms (room_name, fcu_device_id) VALUES (?, ?)",
+            (room_name, device_id),
+        )
+        assert cursor.lastrowid is not None
+        room_id = int(cursor.lastrowid)
+        created = True
+
+    assignment_changed = device["room_id"] != room_id
+    if assignment_changed:
+        cursor.execute(
+            "UPDATE devices SET room_id=? WHERE device_id=?",
+            (room_id, device_id),
+        )
+    return created, claimed, assignment_changed
+
+
+def reconcile_fcu_rooms(conn) -> RoomTopologyReconciliation:
+    """Idempotently give every persisted FCU one owned room and assignment."""
+    rooms_created = 0
+    rooms_claimed = 0
+    assignments_changed = 0
+    with conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT device_id FROM devices WHERE device_type=? ORDER BY device_id",
+            (DEVICE_TYPE_FCU,),
+        )
+        fcu_device_ids = [row["device_id"] for row in cursor.fetchall()]
+        for device_id in fcu_device_ids:
+            created, claimed, changed = _ensure_fcu_room(cursor, device_id)
+            rooms_created += int(created)
+            rooms_claimed += int(claimed)
+            assignments_changed += int(changed)
+    return RoomTopologyReconciliation(
+        fcu_count=len(fcu_device_ids),
+        rooms_created=rooms_created,
+        rooms_claimed=rooms_claimed,
+        assignments_changed=assignments_changed,
     )
 
 

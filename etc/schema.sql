@@ -49,7 +49,7 @@ CREATE TABLE IF NOT EXISTS rooms (
     room_id INTEGER PRIMARY KEY AUTOINCREMENT,
     room_name TEXT NOT NULL UNIQUE,
     map_json TEXT NOT NULL DEFAULT '{}'
-);
+, fcu_device_id INTEGER REFERENCES devices(device_id));
 CREATE TABLE IF NOT EXISTS fcu_temp_sources (
     fcu_device_id INTEGER NOT NULL,
     source_device_id INTEGER NOT NULL,
@@ -74,3 +74,9 @@ CREATE INDEX IF NOT EXISTS idx_devlog_temperature_device_logtime
     ON devlog (device_id, logtime) WHERE temp10x IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_devlog_temperature_logtime_device
     ON devlog (logtime, device_id) WHERE temp10x IS NOT NULL;
+CREATE UNIQUE INDEX idx_rooms_fcu_device_id
+ON rooms(fcu_device_id)
+WHERE fcu_device_id IS NOT NULL;
+CREATE UNIQUE INDEX idx_devices_fcu_room_id
+ON devices(room_id)
+WHERE device_type = 'FCU' AND room_id IS NOT NULL;

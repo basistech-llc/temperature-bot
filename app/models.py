@@ -182,7 +182,20 @@ class Room(BaseModel):
 
     room_id: int | None = None
     room_name: str | None = Field(default=None, min_length=1)
+    fcu_device_id: int | None = Field(
+        default=None,
+        description="FCU that owns this room, when assigned.",
+    )
     map: RoomMap | None = None
+
+
+class RoomTopologyReconciliation(BaseModel):
+    """Summary of an idempotent FCU-room topology reconciliation."""
+
+    fcu_count: int
+    rooms_created: int
+    rooms_claimed: int
+    assignments_changed: int
 
 
 class DatabaseColumn(BaseModel):

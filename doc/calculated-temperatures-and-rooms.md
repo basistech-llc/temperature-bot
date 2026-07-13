@@ -60,9 +60,23 @@ Rooms are stored in `rooms`:
 CREATE TABLE rooms (
     room_id INTEGER PRIMARY KEY AUTOINCREMENT,
     room_name TEXT NOT NULL UNIQUE,
-    map_json TEXT NOT NULL DEFAULT '{}'
+    map_json TEXT NOT NULL DEFAULT '{}',
+    fcu_device_id INTEGER REFERENCES devices(device_id)
 );
 ```
+
+Every FCU owns exactly one room and is assigned to that room. FCU discovery
+creates both records in one transaction. The default room name is the FCU
+display name, falling back to its device name; collisions use `Name (2)`,
+`Name (3)`, and so on. Migration V9 claims compatible legacy assignments,
+creates missing FCU rooms, and clears non-FCU assignments so physical sensors
+start in the virtual **Unassigned** group. ERVs and internal pseudo-devices are
+also left unassigned.
+
+Unique partial indexes on `rooms.fcu_device_id` and FCU `devices.room_id`
+prevent an FCU from owning several rooms or several FCUs from sharing a room.
+`db.reconcile_fcu_rooms()` provides an idempotent repair path for persisted FCU
+topology.
 
 `rooms.map_json` is JSON validated by the Pydantic `RoomMap` model:
 

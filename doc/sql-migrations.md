@@ -9,6 +9,9 @@ Temperature Bot now tracks SQL schema versions with Flyway.
 - `etc/flyway/sql/V2__changelog_device_logtime_index.sql` upgrades the changelog device index to the current application schema.
 - `etc/flyway/sql/V7__devlog_temperature_device_logtime_index.sql` adds the device-first partial index used by per-device temperature queries.
 - `etc/flyway/sql/V8__devlog_temperature_logtime_device_index.sql` adds the time-first partial index used by multi-device chart boundary probes.
+- `etc/flyway/sql/V9__fcu_owned_rooms.sql` gives every existing FCU one owned
+  room, resets non-FCU devices to Unassigned, and adds uniqueness constraints
+  for FCU ownership and assignment.
 - Flyway creates and manages `flyway_schema_history`; do not add that table to a versioned migration or to `etc/schema.sql`.
 - Existing populated databases are baselined at V1 by `make migrate-db` and `make deploy`, then any later migrations are applied.
 - `etc/schema.sql` is generated from the Flyway migration history for tests and compatibility. Do not hand-edit it for schema changes.
