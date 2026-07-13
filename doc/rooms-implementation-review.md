@@ -1,5 +1,8 @@
 # Rooms Implementation Review
 
+The approved implementation sequence and updated issue relationships are in
+`doc/rooms-implementation-plan.md`.
+
 Reviewed on 2026-06-30 against the local checkout, rooms-related
 documentation/source, open GitHub issues, and the read-only local DB copy at
 `var/db/temperature-bot.db`.

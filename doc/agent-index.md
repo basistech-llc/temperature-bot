@@ -16,6 +16,8 @@ surface quickly.
   JSON APIs, and static JavaScript belong.
 - `doc/rooms-implementation-review.md`: room dashboard debt, open room issues,
   and Hickory/Kitchen dashboard generalization notes.
+- `doc/rooms-implementation-plan.md`: approved FCU-owned room model, grouped
+  sensor matrix, room calculations, implementation beads, and issue map.
 
 ## Hickory Dashboard Map
 
