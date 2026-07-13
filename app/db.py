@@ -501,8 +501,8 @@ def get_or_create_device_id(
             logger.error("Could not retrieve ID for device name: %s", device_name)
             raise ValueError(f"Could not retrieve ID for device name: {device_name}")
 
-    except sqlite3.Error as e:
-        logger.error("Database error in get_or_create_device_id: %s", e)
+    except (sqlite3.Error, ValueError) as e:
+        logger.error("Error in get_or_create_device_id: %s", e)
         conn.rollback()  # Rollback any partial transaction
         raise  # Re-raise the exception
 

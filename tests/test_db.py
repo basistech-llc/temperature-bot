@@ -598,6 +598,30 @@ def test_fcu_discovery_creates_and_assigns_owned_room(test_database_conn):
     assert test_database_conn.execute("SELECT COUNT(*) FROM rooms").fetchone()[0] == 1
 
 
+def test_fcu_discovery_rolls_back_rejected_type_change(test_database_conn):
+    """A rejected FCU promotion must not leave a transaction open."""
+    device_id = db.get_or_create_device_id(
+        test_database_conn,
+        "Existing Sensor",
+        device_type="SENSOR",
+    )
+
+    with pytest.raises(ValueError, match=f"Device {device_id} is not an FCU"):
+        db.get_or_create_device_id(
+            test_database_conn,
+            "Existing Sensor",
+            device_type="FCU",
+        )
+
+    assert test_database_conn.in_transaction is False
+    device = test_database_conn.execute(
+        "SELECT device_type, room_id FROM devices WHERE device_id=?",
+        (device_id,),
+    ).fetchone()
+    assert dict(device) == {"device_type": "SENSOR", "room_id": None}
+    assert test_database_conn.execute("SELECT COUNT(*) FROM rooms").fetchone()[0] == 0
+
+
 def test_reconcile_fcu_rooms_is_idempotent_and_suffixes_duplicate_names(
     test_database_conn,
 ):
