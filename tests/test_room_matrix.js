@@ -47,6 +47,10 @@ assert.deepStrictEqual(roomDeleteCountdown(1000, 1000), {
   enabled: false,
   label: "OK (5)",
 });
+assert.deepStrictEqual(roomDeleteCountdown(1000, 5999), {
+  enabled: false,
+  label: "OK (1)",
+});
 assert.deepStrictEqual(roomDeleteCountdown(1000, 6000), {
   enabled: true,
   label: "OK",

@@ -574,6 +574,11 @@ check(
 );
 check("FCU label has fan icon", deviceLabelWithIcon("Area 51", "FCU"), "Area 51 🌀");
 check("sensor label has sensor icon", deviceLabelWithIcon("Wave", "SENSOR"), "Wave 📡");
+check(
+  "sensor label does not duplicate its existing icon",
+  deviceLabelWithIcon("Wave 📡", "SENSOR"),
+  "Wave 📡",
+);
 check("ERV label has exchange icon", deviceLabelWithIcon("ERV 1", "ERV"), "ERV 1 ♻️");
 
 const unsortedSources = [

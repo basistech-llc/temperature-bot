@@ -948,7 +948,7 @@ function fcuTempSourcesTitle(roomName) {
 
 function deviceLabelWithIcon(label, deviceType) {
   const icon = DEVICE_TYPE_ICONS[normalizedDeviceType(deviceType)];
-  return icon ? `${label} ${icon}` : label;
+  return icon && !label.trimEnd().endsWith(icon) ? `${label} ${icon}` : label;
 }
 
 function setFcuTempSourcesTitle(popup, roomName) {

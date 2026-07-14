@@ -3,6 +3,7 @@
 const ROOM_LONG_PRESS_MS = 650;
 const ROOM_POINTER_SLOP_PX = 10;
 const ROOM_SHIFT_MS = 140;
+const ROOM_DELETE_CONFIRM_MS = 5000;
 
 function roomIdFromValue(value) {
   const normalized = String(value ?? "").trim();
@@ -60,7 +61,10 @@ function roomDisplayName(roomName, hasFcu) {
 }
 
 function roomDeleteCountdown(startedAt, now = Date.now()) {
-  const remaining = Math.max(0, Math.ceil((startedAt + 5000 - now) / 1000));
+  const remaining = Math.max(
+    0,
+    Math.ceil((startedAt + ROOM_DELETE_CONFIRM_MS - now) / 1000),
+  );
   return { enabled: remaining === 0, label: remaining ? `OK (${remaining})` : "OK" };
 }
 
