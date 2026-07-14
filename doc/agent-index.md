@@ -57,6 +57,12 @@ dashboard frontend work.
 - `tests/test_room_metrics.py`
   - SQLite-backed coverage of membership, staleness, exclusions, missing
     values, and Hubitat/Airthings payload shapes.
+- `app/static/room_matrix.js`
+  - Air Quality matrix drag assignment, sorted placement, optimistic rollback,
+    room rename, and live room summary updates.
+- `tests/test_room_matrix_routes.py` and `tests/test_room_matrix.js`
+  - SQLite-backed grouping/rendering contracts and substantive client state
+    transitions.
 
 ## Hickory Life Easter Egg
 

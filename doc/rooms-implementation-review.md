@@ -3,37 +3,38 @@
 The approved implementation sequence and updated issue relationships are in
 `doc/rooms-implementation-plan.md`.
 
-Reviewed on 2026-06-30 against the local checkout, rooms-related
-documentation/source, open GitHub issues, and the read-only local DB copy at
-`var/db/temperature-bot.db`.
+Updated on 2026-07-13 after completion of the core rooms topology, calculation,
+API, and Air Quality matrix work. Downstream consumer work remains tracked in
+`doc/rooms-implementation-plan.md`.
 
 ## Current State
 
-The repo has a partial rooms implementation. The durable data model exists, but
-the product surfaces are still split between database-backed room metadata and
-hardcoded Kitchen/Hickory dashboard configuration.
+The repo now has a canonical FCU-owned room topology for calculation and the
+main Air Quality matrix. Some downstream surfaces are still split between that
+topology and hardcoded Kitchen/Hickory configuration.
 
 Implemented:
 
-- Flyway migration `V3__rooms_and_fcu_temp_sources.sql` creates `rooms`,
-  `devices.room_id`, and `fcu_temp_sources`.
+- Flyway migrations V3 and V9 create the room data model and bootstrap one owned
+  room per FCU, including automatic room creation during later FCU discovery.
 - `app/models.py` defines `Room`, `RoomMap`, `MapPoint`, and
   `DeviceRoomControl` Pydantic models.
 - `/api/v1/rooms`, `/api/v1/rooms/<room_id>`, and
   `/api/v1/update_device_room` can create/update rooms and assign devices.
 - `/api/v1/status` includes `room_id` and `room_name` when devices are assigned.
-- FCU calculated room temperatures and source multipliers are documented and
-  implemented.
+- FCU temperature uses only fresh, in-room sources with persisted weights;
+  humidity uses an equal-weight mean of fresh in-room humidity sensors.
+- The Air Quality matrix renders every room and virtual Unassigned group in one
+  table, supports immediate drag assignment, and supports duplicate-safe room
+  rename by right-click or touch long-press.
 - `/devices` can edit display name, device type, rules state, and notes.
 - `/kitchen` and `/hickory` render room-specific dashboards using
   `app/room_config.py`.
 
 Not yet implemented:
 
-- The persistent `rooms` table does not drive navigation, room dashboards, map
-  rendering, or the device metadata editor.
-- The local DB copy currently has 0 rows in `rooms` and 0 of 45 devices assigned
-  to a room.
+- The persistent `rooms` table does not yet drive room dashboards or map
+  rendering.
 - `/devices` receives `room_id` and `room_name` from `db.get_device_metadata()`
   but does not show or save room assignments.
 - Room dashboard membership is hardcoded by exact device names in
@@ -45,8 +46,8 @@ Not yet implemented:
 - The map exists only as standalone static prototypes under `app/static/map/`;
   it is not a Flask page, is not linked from navigation, and does not load room
   polygons or status data from APIs.
-- Both static map prototypes have a JavaScript syntax error: the `dungeon`
-  region is missing a comma before `bamboo`.
+- Presence and generic room-control behavior are not yet represented by the
+  canonical room model.
 
 ## Open Issues
 
@@ -66,6 +67,12 @@ Related or dependent:
   integrations".
 - #107, "add presence table" for Hickory motion-based behavior.
 - #62, "Create FCU graph that shows room temp, fcu temp, fcu mode and fcu fan".
+- #117, stale/missing calculated-temperature behavior.
+
+Core work for #144, #153, #127, and #117 is implemented, but those broad issues
+should be closed only after their full GitHub acceptance criteria are checked.
+The map (#32), combined graph (#62), presence (#107), dashboard migration
+(#152), and generic controls (#158) are explicit downstream beads.
 
 ## Work Needed
 

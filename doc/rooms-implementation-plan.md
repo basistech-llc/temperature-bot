@@ -273,7 +273,7 @@ The UI-first slice and its backend metric prerequisites are complete:
 - [x] Render the grouped matrix (`hvac-9re.5`).
 - [x] Add drag/drop and rename behavior (`hvac-9re.6`).
 - [x] Refactor the Room Editor and value formatting (`hvac-9re.7`).
-- [ ] Update core documentation and run the relevant Makefile quality gates
+- [x] Update core documentation and run the relevant Makefile quality gates
   (`hvac-9re.8`).
 
 ### Phase 2: canonical room consumers

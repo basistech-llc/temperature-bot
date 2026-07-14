@@ -50,11 +50,15 @@ The selector accepts an explicit evaluation time and does not read Flask
 request state. This keeps route and calculation callers on one deterministic
 mechanism and allows historical callers to use the same freshness boundary.
 
-For the current `/api/v1/status` display payload, the room temperature falls
-back to the raw FCU temperature when the weighted calculation has no usable
-source and the FCU's own source multiplier has not been explicitly set to `0`.
-Historical calculated series and the calculation helper still exclude stale
-rows.
+Current status and historical calculated series use the same freshness rule.
+If a room has no usable temperature reading, its calculated temperature is
+missing and the UI displays `--`; stale raw FCU data is never used as a
+fallback. Historical series include explicit gaps so charts do not connect
+stale intervals as though they were valid measurements.
+
+Room humidity is the equal-weight arithmetic mean of every fresh in-room
+humidity reading. It does not use `fcu_temp_sources` weights. A room with no
+usable humidity reading has no calculated humidity and displays `--`.
 
 The dashboard charts these values separately: clicking **FCU Temp** opens the
 raw temperature chart (`mode=raw`), while clicking **Room Temp** opens the
@@ -85,6 +89,13 @@ display name, falling back to its device name; collisions use `Name (2)`,
 creates missing FCU rooms, and clears non-FCU assignments so physical sensors
 start in the virtual **Unassigned** group. ERVs and internal pseudo-devices are
 also left unassigned.
+
+Apply migrations through the normal Flyway-backed startup/deployment path, not
+by applying `etc/schema.sql` to an existing database. Back up the database and
+stop concurrent writers before the production migration. Rollback is a database
+restore: SQLite cannot safely reverse the new columns and ownership constraints
+in place while preserving concurrent writes. `etc/schema.sql` remains the
+idempotent compatibility schema for creating new databases and tests.
 
 Unique partial indexes on `rooms.fcu_device_id` and FCU `devices.room_id`
 prevent an FCU from owning several rooms or several FCUs from sharing a room.
@@ -150,6 +161,7 @@ available:
   "room_name": "Hickory",
   "temp10x": 224,
   "calculated_temp10x": 231,
+  "calculated_humidity": 43.0,
   "temp_source_stale_seconds": 600,
   "set_range_low_c": 20.0,
   "set_range_high_c": 23.5,
@@ -193,6 +205,11 @@ POST /api/v1/update_device_room
   "room_id": 203
 }
 ```
+
+Assignment requests reject unknown fields and unknown device or room ids. ERV
+and `INTERNAL` devices cannot be assigned, and an FCU cannot be moved away from
+the room it owns. Passing `null` as `room_id` places an eligible device in the
+virtual **Unassigned** group. Successful changes are committed immediately.
 
 FCU temperature source endpoints:
 
