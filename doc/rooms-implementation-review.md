@@ -39,10 +39,9 @@ Not yet implemented:
   but does not show or save room assignments.
 - Room dashboard membership is hardcoded by exact device names in
   `app/room_config.py`, not by `devices.room_id`.
-- Room control APIs are hardcoded under `/api/v1/hickory/...`.
-- `room_dashboard.js` is also hardcoded to `/api/v1/hickory/room_status`,
-  `/api/v1/hickory/dimmer`, `/api/v1/hickory/wall_light`, and
-  `/api/v1/hickory/tv`.
+- Resolved: room control APIs use `/api/v1/room/<room_key>/...`, and
+  `room_dashboard.js` derives that key from the rendered dashboard contract.
+  Legacy Hickory paths remain compatibility aliases.
 - The map exists only as standalone static prototypes under `app/static/map/`;
   it is not a Flask page, is not linked from navigation, and does not load room
   polygons or status data from APIs.

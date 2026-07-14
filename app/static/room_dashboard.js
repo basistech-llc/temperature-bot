@@ -436,13 +436,24 @@ function debounce(fn, delay) {
     };
 }
 
+/** Build a configured-room control endpoint from the dashboard contract. */
+function roomControlEndpoint(action, roomKeyOverride = null) {
+    const wrapper = typeof document === 'undefined'
+        ? null
+        : document.getElementById('room-scale-wrap');
+    const roomKey = roomKeyOverride === null
+        ? (wrapper ? wrapper.dataset.roomControlKey : '')
+        : roomKeyOverride;
+    return `/api/v1/room/${encodeURIComponent(roomKey)}/${action}`;
+}
+
 /**
  * Set the dimmer level via API.
  * @param {number} level - 0-100
  */
 function setDimmerLevel(level) {
     apiCall(
-        '/api/v1/hickory/dimmer',
+        roomControlEndpoint('dimmer'),
         { level },
         'Error setting dimmer.'
     );
@@ -452,7 +463,7 @@ function setDimmerLevel(level) {
  * Fetch room control status and update UI.
  */
 function refreshRoomStatus() {
-    fetch('/api/v1/hickory/room_status')
+    fetch(roomControlEndpoint('room_status'))
         .then(response => response.json())
         .then(data => {
             if (data.dimmer) {
@@ -526,7 +537,7 @@ function handleWallButton(button) {
 
     button.disabled = true;
     apiCall(
-        '/api/v1/hickory/wall_light',
+        roomControlEndpoint('wall_light'),
         { light, state: newState },
         'Error toggling wall light.'
     ).then(() => {
@@ -547,7 +558,7 @@ function handleTvButton(button) {
     buttons.forEach(b => { b.disabled = true; });
 
     apiCall(
-        '/api/v1/hickory/tv',
+        roomControlEndpoint('tv'),
         { direction },
         'Error controlling TV.'
     ).then(() => {
@@ -722,5 +733,5 @@ if (typeof window !== 'undefined') {
 
 // Node.js export for testing.
 if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { computeFitScale };
+    module.exports = { computeFitScale, roomControlEndpoint };
 }

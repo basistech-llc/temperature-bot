@@ -645,6 +645,7 @@ def _render_room_dashboard_with_data(conn, location: str, room_id: int | None = 
         dimmer_id=config.dimmer_id,
         wall_inner_id=config.wall_inner_id,
         wall_outer_id=config.wall_outer_id,
+        room_control_key=room_key,
     )
 
 

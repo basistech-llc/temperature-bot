@@ -287,7 +287,7 @@ The UI-first slice and its backend metric prerequisites are complete:
   (`hvac-9re.11`).
 - [x] Add room-based presence storage, presentation, and rules
   (`hvac-9re.12`).
-- [ ] Correct Hickory per-device reads (`hvac-1mz`), then generalize room
+- [x] Correct Hickory per-device reads (`hvac-1mz`), then generalize room
   control endpoints (`hvac-8tp`).
 
 ### Phase 3: integration and issue reconciliation

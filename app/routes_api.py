@@ -643,10 +643,11 @@ def update_note(conn, body: NoteControl):
     return jsonify(json_ready(CommandResponse(device_id=device_id)))
 
 
-@api_v1.route("/hickory/room_status")
-def hickory_room_status():
-    """Return current state of Hickory room control devices."""
-    config = room_config.get_room_config("hickory")
+@api_v1.route("/hickory/room_status", defaults={"room_key": "hickory"})
+@api_v1.route("/room/<room_key>/room_status")
+def room_control_status(room_key: str):
+    """Return current state of one configured room's control devices."""
+    config = room_config.get_room_config(room_key.casefold())
     result = RoomControlStatus()
 
     def read_device(device_id: str | None) -> HubitatControlDevice | None:
@@ -674,10 +675,11 @@ def hickory_room_status():
     return jsonify(json_ready(result))
 
 
-@api_v1.route("/hickory/dimmer", methods=["POST"])
-def hickory_dimmer():
-    """Set the Hickory room light dimmer level (0-100)."""
-    config = room_config.get_room_config("hickory")
+@api_v1.route("/hickory/dimmer", methods=["POST"], defaults={"room_key": "hickory"})
+@api_v1.route("/room/<room_key>/dimmer", methods=["POST"])
+def room_dimmer(room_key: str):
+    """Set a configured room's light dimmer level (0-100)."""
+    config = room_config.get_room_config(room_key.casefold())
     device_id = config.dimmer_id
     if not device_id:
         return jsonify({"error": "No dimmer configured"}), 404
@@ -693,10 +695,11 @@ def hickory_dimmer():
         return jsonify({"error": str(e)}), 500
 
 
-@api_v1.route("/hickory/wall_light", methods=["POST"])
-def hickory_wall_light():
-    """Toggle a Hickory wall light on or off."""
-    config = room_config.get_room_config("hickory")
+@api_v1.route("/hickory/wall_light", methods=["POST"], defaults={"room_key": "hickory"})
+@api_v1.route("/room/<room_key>/wall_light", methods=["POST"])
+def room_wall_light(room_key: str):
+    """Toggle a configured room's wall light on or off."""
+    config = room_config.get_room_config(room_key.casefold())
     payload = request.get_json(silent=True) or {}
     light = payload.get("light")
     state = payload.get("state")
@@ -717,15 +720,23 @@ def hickory_wall_light():
         return jsonify({"error": str(e)}), 500
 
 
-@api_v1.route("/hickory/tv", methods=["POST"])
-def hickory_tv():
-    """Control the Hickory TV lift (up/down)."""
+@api_v1.route("/hickory/tv", methods=["POST"], defaults={"room_key": "hickory"})
+@api_v1.route("/room/<room_key>/tv", methods=["POST"])
+def room_tv(room_key: str):
+    """Control a configured room's TV lift (up/down)."""
+    config = room_config.get_room_config(room_key.casefold())
+    if not config.tv_up_label or not config.tv_down_label:
+        return jsonify({"error": "No TV configured"}), 404
     payload = request.get_json(silent=True) or {}
     direction = payload.get("direction")
     if direction not in ("up", "down"):
         return jsonify({"error": "direction must be 'up' or 'down'"}), 400
     try:
-        hubitat.control_hickory_tv(direction)
+        hubitat.control_room_tv(
+            direction,
+            up_label=config.tv_up_label,
+            down_label=config.tv_down_label,
+        )
         return jsonify(json_ready(CommandResponse(direction=direction)))
     except (RuntimeError, OSError) as e:
         logger.warning("TV control failed: %s", e)

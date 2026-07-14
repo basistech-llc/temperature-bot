@@ -36,15 +36,15 @@ dashboard frontend work.
   - Pre-renders HVAC cards, room controls, sensors, live clock, and script
     includes.
 - `app/static/room_dashboard.js`
-  - Room dashboard behavior: speed buttons, set temperature controls, Hickory
+  - Room dashboard behavior: speed buttons, set temperature controls, configured
     room controls, polling, and scale-to-fit.
-  - Hardcodes Hickory control endpoints today.
+  - Derives room-control endpoints from the template's room key.
 - `app/routes_api.py`
   - `/api/v1/status`: live HVAC/device status.
   - `/api/v1/set_drive`, `/api/v1/set_fan_speed`, `/api/v1/set_temp`: HVAC
     control APIs.
-  - `/api/v1/hickory/room_status`, `/dimmer`, `/wall_light`, `/tv`: current
-    Hickory-specific control APIs.
+  - `/api/v1/room/<room_key>/room_status`, `/dimmer`, `/wall_light`, `/tv`:
+    configured room-control APIs. Legacy Hickory aliases remain compatible.
 
 ## Canonical Room Metrics
 

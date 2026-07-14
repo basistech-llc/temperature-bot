@@ -155,6 +155,8 @@ class RoomConfig(BaseModel):
     fans: list[str] = Field(default_factory=list, description="AE-200 fan names.")
     sensors: list[str] = Field(default_factory=list, description="Hubitat sensor names.")
     tv_control: bool = Field(default=False, description="Whether to render TV controls.")
+    tv_up_label: str | None = Field(default=None, description="Hubitat TV-up label.")
+    tv_down_label: str | None = Field(default=None, description="Hubitat TV-down label.")
     dimmer_id: str | None = Field(default=None, description="Hubitat dimmer device id.")
     wall_inner_id: str | None = Field(default=None, description="Inner wall light device id.")
     wall_outer_id: str | None = Field(default=None, description="Outer wall light device id.")

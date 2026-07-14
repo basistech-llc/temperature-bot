@@ -484,6 +484,7 @@ def test_hickory_route(flask_test_client):  # noqa: F811
     """Test the /hickory route"""
     response = flask_test_client.get("/hickory")
     assert response.status_code == 200
+    assert b'data-room-control-key="hickory"' in response.data
     assert b"Hickory" in response.data or b"room_dashboard" in response.data
     assert b"/static/hickory_life.js" in response.data
 
@@ -889,7 +890,7 @@ def test_wall_light_hubitat_error(_mock, flask_test_client):  # noqa: F811
 
 # /api/v1/hickory/tv
 
-@patch("app.routes_api.hubitat.control_hickory_tv")
+@patch("app.routes_api.hubitat.control_room_tv")
 def test_tv_up(_mock, flask_test_client):  # noqa: F811
     """TV up returns ok."""
     resp = flask_test_client.post(
@@ -898,10 +899,12 @@ def test_tv_up(_mock, flask_test_client):  # noqa: F811
     )
     assert resp.status_code == 200
     assert resp.get_json()["direction"] == "up"
-    _mock.assert_called_once_with("up")
+    _mock.assert_called_once_with(
+        "up", up_label="TV Up", down_label="TV Down"
+    )
 
 
-@patch("app.routes_api.hubitat.control_hickory_tv")
+@patch("app.routes_api.hubitat.control_room_tv")
 def test_tv_down(_mock, flask_test_client):  # noqa: F811
     """TV down returns ok."""
     resp = flask_test_client.post(
@@ -909,7 +912,9 @@ def test_tv_down(_mock, flask_test_client):  # noqa: F811
         json={"direction": "down"},
     )
     assert resp.status_code == 200
-    _mock.assert_called_once_with("down")
+    _mock.assert_called_once_with(
+        "down", up_label="TV Up", down_label="TV Down"
+    )
 
 
 def test_tv_invalid_direction(flask_test_client):  # noqa: F811
@@ -930,7 +935,7 @@ def test_tv_missing_direction(flask_test_client):  # noqa: F811
     assert resp.status_code == 400
 
 
-@patch("app.routes_api.hubitat.control_hickory_tv", side_effect=RuntimeError("not found"))
+@patch("app.routes_api.hubitat.control_room_tv", side_effect=RuntimeError("not found"))
 def test_tv_hubitat_error(_mock, flask_test_client):  # noqa: F811
     """Hubitat failure returns 500."""
     resp = flask_test_client.post(
@@ -939,6 +944,19 @@ def test_tv_hubitat_error(_mock, flask_test_client):  # noqa: F811
     )
     assert resp.status_code == 500
     assert "error" in resp.get_json()
+
+
+def test_generic_room_control_routes_resolve_config(flask_test_client):  # noqa: F811
+    """Dynamic room keys select controls without adding another route."""
+    no_controls = flask_test_client.post(
+        "/api/v1/room/kitchen/dimmer", json={"level": 50}
+    )
+    assert no_controls.status_code == 404
+
+    unknown_tv = flask_test_client.post(
+        "/api/v1/room/unknown/tv", json={"direction": "up"}
+    )
+    assert unknown_tv.status_code == 404
 
 
 # -- Room config tests --
