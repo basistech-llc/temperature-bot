@@ -664,6 +664,23 @@ class RoomMatrixGroup(BaseModel):
     devices: list[DeviceStatus] = Field(default_factory=list)
 
 
+class RoomDashboardSensorAttributes(BaseModel):
+    """Fresh canonical metrics rendered on a room sensor tile."""
+
+    temperature: float | None = None
+    humidity: int | None = None
+
+
+class RoomDashboardSensor(BaseModel):
+    """One assigned sensor rendered by a canonical room dashboard."""
+
+    id: int
+    name: str
+    display_name: str
+    offline: bool = False
+    attributes: RoomDashboardSensorAttributes
+
+
 class TableUpdateSummary(BaseModel):
     """Oldest timestamp represented by the data currently shown in a table."""
 

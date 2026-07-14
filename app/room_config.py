@@ -1,7 +1,7 @@
 """Configuration for room dashboards (kitchen/hickory).
 
-Each room specifies which ERVs, fans, and sensors to display.
-All device names must match exactly with names in the database or Hubitat.
+Each legacy dashboard specifies actuator controls. Sensor membership comes from
+canonical ``devices.room_id`` assignments.
 """
 
 from .models import RoomConfig
@@ -13,21 +13,11 @@ ROOM_CONFIGS: dict[str, RoomConfig] = {
         url="/kitchen",
         ervs=["ERV Kitchen"],
         fans=["Kitchen"],
-        sensors=[
-            "Lobby Sensor on Somerville Broadway",
-            "Broadway Sensor Center on Somerville Broadway",
-            "Broadway Sensor North on Somerville Broadway",
-            "Broadway Sensor South on Somerville Broadway",
-        ],
     ),
     "hickory": RoomConfig(
         url="/hickory",
         ervs=["ERV Restrooms"],
         fans=["Restrooms/BOH", "Dungeon"],
-        sensors=[
-            "Hickory Sensor",
-            "Dungeon Cage",
-        ],
         tv_control=True,
         dimmer_id="581",
         wall_inner_id="454",
