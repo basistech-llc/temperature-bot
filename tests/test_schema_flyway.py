@@ -165,6 +165,24 @@ def test_shared_startup_schema_check_stops_for_stale_database(
     assert "Traceback" not in captured.err
 
 
+def test_shared_startup_schema_check_requires_db_path(monkeypatch, capsys):
+    monkeypatch.delenv("PYTEST", raising=False)
+    monkeypatch.delenv(TEST_DB_NAME, raising=False)
+    monkeypatch.delenv(DB_PATH, raising=False)
+
+    with pytest.raises(SystemExit) as excinfo:
+        db.validate_database_schema_on_startup()
+
+    captured = capsys.readouterr()
+    assert excinfo.value.code == 1
+    assert captured.out == ""
+    assert (
+        f"Missing required environment variable {DB_PATH} "
+        "(path to SQLite database)." in captured.err
+    )
+    assert "Traceback" not in captured.err
+
+
 def test_runner_uses_shared_schema_check_before_opening_database(
     tmp_path, monkeypatch, capsys
 ):

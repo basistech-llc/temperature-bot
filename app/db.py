@@ -361,8 +361,12 @@ def validate_database_schema_on_startup() -> None:
         if has_tables:
             validate_configured_database_schema()
     except KeyError as e:
-        print(f"Missing required environment variable e.args[0] (path to SQLite database).",
-              file=sys.stderr )
+        missing_variable = e.args[0] if e.args else DB_PATH
+        print(
+            f"Missing required environment variable {missing_variable} "
+            "(path to SQLite database).",
+            file=sys.stderr,
+        )
         raise SystemExit(1) from None
     except DatabaseSchemaMismatchError as e:
         print(str(e), file=sys.stderr)
