@@ -127,7 +127,7 @@ def format_schema_mismatch_message(
     lines = [
         f"Database schema does not match expected application schema: {db_path}",
         (
-            "Please upgrade the database before starting Flask. "
+            "Please upgrade the database before starting the application. "
             f"Run `{SCHEMA_UPGRADE_COMMAND}`."
         ),
     ]
