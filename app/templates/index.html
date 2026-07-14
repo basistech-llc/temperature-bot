@@ -41,6 +41,7 @@
                           data-device-name="{{ device.device_name }}"
                           data-display-name="{{ device.device_label }}"
                           data-device-type="{{ device.device_type or '' }}"
+                          data-air-quality-active="{{ 'true' if device.dashboard_air_quality_active else 'false' }}"
                           data-rules-enabled="{{ 'true' if device.rules_enabled|default(true) else 'false' }}"
                           data-device-update="{{ device.device_update_text|default('', true) }}"
                           title="{{ device.device_update_tooltip|default(device.device_name, true) }}">{{ device.device_label_with_icon }}</span><span class="rules-disabled-superscript hidden" id="rules-disabled-{{ device.device_id }}" title=""></span>
@@ -144,6 +145,7 @@
                           data-device-name="{{ device.device_name }}"
                           data-display-name="{{ device.device_label }}"
                           data-device-type="{{ device.device_type or '' }}"
+                          data-air-quality-active="{{ 'true' if device.dashboard_air_quality_active else 'false' }}"
                           data-rules-enabled="{{ 'true' if device.rules_enabled|default(true) else 'false' }}"
                           data-device-update="{{ device.device_update_text|default('', true) }}"
                           data-device-update-url="/api/v1/devices/{{ device.device_id }}"
@@ -373,6 +375,7 @@
                           data-device-name="{{ device.device_name }}"
                           data-display-name="{{ device.device_label }}"
                           data-device-type="{{ device.device_type or '' }}"
+                          data-air-quality-active="{{ 'true' if device.dashboard_air_quality_active else 'false' }}"
                           data-rules-enabled="{{ 'true' if device.rules_enabled|default(true) else 'false' }}"
                           data-device-update="{{ device.device_update_text|default('', true) }}"
                           title="{{ device.device_update_tooltip|default(device.device_name, true) }}">{{ device.device_label_with_icon }}</span><span class="rules-disabled-superscript hidden" id="rules-disabled-{{ device.device_id }}" title=""></span>

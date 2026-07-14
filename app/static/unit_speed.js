@@ -946,8 +946,10 @@ function fcuTempSourcesTitle(unitLabel) {
     : FCU_TEMP_SOURCE_TITLE;
 }
 
-function deviceLabelWithIcon(label, deviceType) {
-  const icon = DEVICE_TYPE_ICONS[normalizedDeviceType(deviceType)];
+function deviceLabelWithIcon(label, deviceType, airQualityActive = false) {
+  const icon =
+    DEVICE_TYPE_ICONS[normalizedDeviceType(deviceType)] ||
+    (airQualityActive ? DEVICE_TYPE_ICONS.SENSOR : "");
   return icon && !label.trimEnd().endsWith(icon) ? `${label} ${icon}` : label;
 }
 
@@ -1424,12 +1426,21 @@ function applyDeviceDisplayName(
   displayName,
   deviceType = undefined,
   rulesEnabled = undefined,
+  airQualityActive = undefined,
 ) {
   const label = normalizedDeviceDisplayName(displayName) || deviceName;
   document
     .querySelectorAll(`.device-name-context[data-device-id="${deviceId}"]`)
     .forEach((element) => {
-      element.textContent = deviceLabelWithIcon(label, deviceType);
+      const elementAirQualityActive =
+        airQualityActive === undefined
+          ? element.dataset.airQualityActive === "true"
+          : Boolean(airQualityActive);
+      element.textContent = deviceLabelWithIcon(
+        label,
+        deviceType,
+        elementAirQualityActive,
+      );
       element.dataset.deviceName = deviceName;
       element.dataset.displayName = label;
       if (deviceType !== undefined) {
@@ -1439,6 +1450,9 @@ function applyDeviceDisplayName(
         element.dataset.rulesEnabled = String(
           deviceRulesEnabledValue(rulesEnabled),
         );
+      }
+      if (airQualityActive !== undefined) {
+        element.dataset.airQualityActive = String(elementAirQualityActive);
       }
       const isFcuTempSourcesTrigger =
         element.classList?.contains("fcu-temp-sources-trigger");
@@ -2960,6 +2974,7 @@ function updateDeviceDisplayName(dev) {
     displayName,
     deviceType,
     rulesEnabled,
+    dashboardAirQualityDeviceIsActive(dev),
   );
 }
 

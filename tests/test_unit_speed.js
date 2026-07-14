@@ -575,6 +575,16 @@ check(
 check("FCU label has fan icon", deviceLabelWithIcon("Area 51", "FCU"), "Area 51 🌀");
 check("sensor label has sensor icon", deviceLabelWithIcon("Wave", "SENSOR"), "Wave 📡");
 check(
+  "active air-quality label with unknown type has sensor icon",
+  deviceLabelWithIcon("Wave", null, true),
+  "Wave 📡",
+);
+check(
+  "inactive label with unknown type has no sensor icon",
+  deviceLabelWithIcon("Wave", null, false),
+  "Wave",
+);
+check(
   "sensor label does not duplicate its existing icon",
   deviceLabelWithIcon("Wave 📡", "SENSOR"),
   "Wave 📡",
