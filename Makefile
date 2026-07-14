@@ -256,6 +256,7 @@ test-js: $(REQ) ## Run the JavaScript unit tests
 	node tests/test_hickory_life.js
 	node tests/test_room_matrix.js
 	node tests/test_room_map.js
+	node tests/test_fcu_history_chart.js
 test: $(REQ) ## Run both Python and JavaScript test suites
 	@python_exit=0; js_exit=0; \
 	make pytest || python_exit=$$?; \

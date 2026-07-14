@@ -348,8 +348,8 @@ def test_fcu_matrix_has_raw_fcu_temp_and_room_temp_columns(
     assert 'id="room-temp-12"' in html
     assert "cell-room-temp" in html
     assert "cell-room-humidity" in html
-    assert 'data-chart-url="/chart?mode=calculated&device_ids=12"' in html
-    assert "Calculated room temperature chart for Area 51; click to show graph." in html
+    assert 'data-chart-url="/fcu_chart?fcu_device_id=12"' in html
+    assert "Combined room temperature and FCU history for Area 51" in html
     assert 'data-update-url="/api/v1/set_auto_temp"' in html
     assert 'aria-label="Move Auto heat set temperature"' in html
     assert 'aria-label="Move Auto cool set temperature"' in html
@@ -505,6 +505,15 @@ def test_room_map_route_uses_canonical_room_api_contract(flask_test_client):  # 
     assert 'id="room-map-unmapped"' in html
     assert '/static/map/basistech_floorplan.png' in html
     assert '/static/room_map.js' in html
+
+
+def test_fcu_history_chart_route_has_explicit_series_contract(flask_test_client):  # noqa: F811
+    response = flask_test_client.get("/fcu_chart?fcu_device_id=12")
+    assert response.status_code == 200
+    html = response.data.decode("utf-8")
+    assert 'data-fcu-device-id="12"' in html
+    assert 'id="fcu-history-chart"' in html
+    assert '/static/fcu_history_chart.js' in html
 
 
 def test_air_quality_route(flask_test_client):  # noqa: F811

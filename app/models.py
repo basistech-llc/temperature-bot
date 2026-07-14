@@ -275,6 +275,25 @@ class TemperatureSeriesResponse(BaseModel):
     has_later_data: bool = False
 
 
+class FcuStateSample(BaseModel):
+    """One recorded FCU operating-state sample on the history timeline."""
+
+    timestamp: int
+    mode: str | None = None
+    drive: str | None = None
+    fan_speed: str | None = None
+
+
+class FcuHistoryResponse(BaseModel):
+    """Combined calculated-room, inlet-temperature, and FCU-state history."""
+
+    fcu_device_id: int
+    room_id: int
+    room_name: str
+    temperature_series: list[TimeSeries] = Field(default_factory=list)
+    states: list[FcuStateSample] = Field(default_factory=list)
+
+
 class ChangelogRow(BaseModel):
     """One changelog row returned to the DataTables endpoint."""
 

@@ -179,8 +179,8 @@
                   <td class="cell-temp cell-temp-na">n/a</td>
                   {% endif %}
                   <td class="cell-temp cell-temp-link cell-room-temp temp-display temp-display-no-unit" id="room-temp-{{ device.device_id }}"
-                      data-chart-url="/chart?mode=calculated&device_ids={{ device.device_id }}"
-                      title="Calculated room temperature chart for {{ device.device_label }}; click to show graph.">--</td>
+                      data-chart-url="/fcu_chart?fcu_device_id={{ device.device_id }}"
+                      title="Combined room temperature and FCU history for {{ device.device_label }}; click to show graph.">--</td>
                   <td class="cell-room-humidity" id="room-humidity-{{ device.device_id }}">--</td>
                   <td class="cell-temp cell-temp-range" id="setrange-{{ device.device_id }}">
                     <div class="setrange-widget"

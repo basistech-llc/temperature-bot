@@ -133,3 +133,44 @@ def test_calculated_temperature_series_preserves_stale_gap(test_database_conn):
         series = db.get_calculated_temperature_series(conn, [fcu_id])
 
     assert series[0]["data"] == [[base + 100, 30.0], [base + 900, None]]
+
+
+def test_fcu_history_combines_labeled_temperature_and_state_series(
+    flask_test_client, test_database_conn_with_test_data
+):
+    conn, _, _ = test_database_conn_with_test_data
+    _clear(conn)
+    base = int(time.time()) - 100
+    fcu_id = _device(
+        conn, "History FCU", logtime=base, temp10x=210, status=_fcu_status()
+    )
+    conn.execute(
+        "UPDATE devices SET device_type='FCU' WHERE device_id=?", (fcu_id,)
+    )
+    room_id = db.create_room(conn, Room(room_name="History Room")).room_id
+    assert room_id is not None
+    conn.execute(
+        "UPDATE rooms SET fcu_device_id=? WHERE room_id=?", (fcu_id, room_id)
+    )
+    conn.execute(
+        "UPDATE devices SET room_id=? WHERE device_id=?", (room_id, fcu_id)
+    )
+    conn.commit()
+
+    response = flask_test_client.get(
+        f"/api/v1/fcu_history?fcu_device_id={fcu_id}"
+    )
+    assert response.status_code == 200
+    assert response.json["room_name"] == "History Room"
+    assert [item["name"] for item in response.json["temperature_series"]] == [
+        "History Room - FCU inlet",
+        "History Room - Room Temp",
+    ]
+    assert response.json["states"] == [
+        {
+            "timestamp": base,
+            "mode": "COOL",
+            "drive": "ON",
+            "fan_speed": "LOW",
+        }
+    ]

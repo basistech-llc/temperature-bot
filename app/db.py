@@ -53,7 +53,9 @@ from .models import (
     DatabaseSchemaSnapshot,
     DeviceMetadataControl,
     DeviceStatus,
+    FcuHistoryResponse,
     FcuSetRange,
+    FcuStateSample,
     FcuTempSourceControl,
     FcuTempSourceRow,
     FcuTempSourcesResponse,
@@ -2167,6 +2169,73 @@ def get_calculated_temperature_series(
 ) -> List[Dict[str, Any]]:
     series, _ = get_calculated_temperature_series_and_device_ids(conn, device_ids)
     return series
+
+
+def get_fcu_history(conn, fcu_device_id: int) -> FcuHistoryResponse:
+    """Return canonical room/inlet temperatures and recorded FCU state."""
+    row = conn.execute(
+        """
+        SELECT d.device_id, d.device_name, d.display_name, d.room_id, r.room_name
+        FROM devices d
+        JOIN rooms r ON r.room_id = d.room_id
+        WHERE d.device_id=? AND d.device_type=?
+        """,
+        (fcu_device_id, DEVICE_TYPE_FCU),
+    ).fetchone()
+    if row is None:
+        raise LookupError(f"Unknown FCU device_id: {fcu_device_id}")
+
+    inlet = get_temperature_series(conn, [fcu_device_id])
+    calculated = get_calculated_temperature_series(conn, [fcu_device_id])
+    temperature_series = []
+    if inlet:
+        temperature_series.append(
+            TimeSeries.model_validate(
+                {**inlet[0], "name": f"{row['room_name']} - FCU inlet"}
+            )
+        )
+    if calculated:
+        temperature_series.append(
+            TimeSeries.model_validate(
+                {**calculated[0], "name": f"{row['room_name']} - Room Temp"}
+            )
+        )
+
+    cmd = "SELECT logtime, status_json FROM devlog WHERE device_id=?"
+    args: list[Any] = [fcu_device_id]
+    cmd, args = temporal_quantification(cmd, args)
+    cmd += " ORDER BY logtime"
+    states = []
+    for status_row in conn.execute(cmd, args):
+        payload = _status_payload_from_json(status_row["status_json"])
+        extracted = ae200.extract_drive_and_fan_speed(
+            payload.model_dump(exclude_none=True) if payload else {}
+        )
+        states.append(
+            FcuStateSample(
+                timestamp=_chart_logtime(status_row),
+                mode=extracted.get("mode"),
+                drive=(
+                    ae200.DRIVES.get(extracted["drive"], str(extracted["drive"]))
+                    if extracted.get("drive") is not None
+                    else None
+                ),
+                fan_speed=(
+                    ae200.FAN_SPEEDS.get(
+                        extracted["fan_speed"], str(extracted["fan_speed"])
+                    )
+                    if extracted.get("fan_speed") is not None
+                    else None
+                ),
+            )
+        )
+    return FcuHistoryResponse(
+        fcu_device_id=fcu_device_id,
+        room_id=row["room_id"],
+        room_name=row["room_name"],
+        temperature_series=temperature_series,
+        states=states,
+    )
 
 
 def get_temperature_series(

@@ -32,6 +32,7 @@ from .models import (
     FcuTempSourceBatchControl,
     DriveControl,
     FcuTempSourceControl,
+    FcuHistoryResponse,
     ModeControl,
     NoteControl,
     SetRangeControl,
@@ -304,6 +305,20 @@ def get_temperature(conn):
             )
         )
     )
+
+
+@api_v1.get("/fcu_history")
+@with_db_connection
+def get_fcu_history(conn):
+    """Return time-aligned calculated room, inlet, mode, and fan history."""
+    fcu_device_id = request.args.get("fcu_device_id", type=int)
+    if fcu_device_id is None:
+        return jsonify({"error": "fcu_device_id is required"}), 400
+    try:
+        history = db.get_fcu_history(conn, fcu_device_id)
+    except LookupError as error:
+        return jsonify({"error": str(error)}), 404
+    return jsonify(json_ready(FcuHistoryResponse.model_validate(history)))
 
 
 @api_v1.route("/air_quality")

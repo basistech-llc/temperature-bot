@@ -374,6 +374,15 @@ def _register_core_routes(app):
             current_page="temperature_chart",
         )
 
+    @app.get("/fcu_chart")
+    def show_fcu_chart():
+        """Combined FCU inlet, calculated room, and operating-state chart."""
+        return render_template(
+            "fcu_history_chart.html",
+            fcu_device_id=request.args.get("fcu_device_id", type=int),
+            current_page="temperature_chart",
+        )
+
     @app.route("/lighting_chart")
     def show_lighting_chart():
         """Lighting (illuminance) chart page"""

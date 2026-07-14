@@ -279,7 +279,7 @@ The UI-first slice and its backend metric prerequisites are complete:
 ### Phase 2: canonical room consumers
 
 - [x] Build the room-backed map (`hvac-9re.9`).
-- [ ] Build the combined FCU graph (`hvac-9re.10`) after its shared data
+- [x] Build the combined FCU graph (`hvac-9re.10`) after its shared data
   prerequisites are complete.
 - [ ] Migrate room dashboards away from exact-name sensor membership
   (`hvac-9re.11`).
