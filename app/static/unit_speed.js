@@ -939,10 +939,10 @@ function formatAgeSeconds(seconds) {
   return remainder ? `${hours}h ${remainder}m` : `${hours}h`;
 }
 
-function fcuTempSourcesTitle(roomName) {
-  const trimmedRoomName = String(roomName || "").trim();
-  return trimmedRoomName
-    ? `${trimmedRoomName}: ${FCU_TEMP_SOURCE_TITLE}`
+function fcuTempSourcesTitle(unitLabel) {
+  const trimmedUnitLabel = String(unitLabel || "").trim();
+  return trimmedUnitLabel
+    ? `${trimmedUnitLabel}: ${FCU_TEMP_SOURCE_TITLE}`
     : FCU_TEMP_SOURCE_TITLE;
 }
 
@@ -951,10 +951,10 @@ function deviceLabelWithIcon(label, deviceType) {
   return icon && !label.trimEnd().endsWith(icon) ? `${label} ${icon}` : label;
 }
 
-function setFcuTempSourcesTitle(popup, roomName) {
+function setFcuTempSourcesTitle(popup, unitLabel) {
   const title = popup.querySelector("[data-role='title']");
   if (title) {
-    title.textContent = fcuTempSourcesTitle(roomName);
+    title.textContent = fcuTempSourcesTitle(unitLabel);
   }
 }
 

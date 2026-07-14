@@ -110,6 +110,37 @@ def test_only_empty_rooms_can_be_deleted(
     assert not conn.in_transaction
 
 
+def test_deleting_empty_room_preserves_presence_history(
+    flask_test_client, test_database_conn_with_test_data
+):
+    conn, _, _ = test_database_conn_with_test_data
+    room = flask_test_client.post(
+        "/api/v1/rooms", json={"room_name": "Former Sensor Room"}
+    ).json
+    sensor_id = conn.execute(
+        "INSERT INTO devices (device_name, device_type, room_id) VALUES (?, ?, ?)",
+        ("Historical Presence Sensor", "SENSOR", room["room_id"]),
+    ).lastrowid
+    event_id = conn.execute(
+        """
+        INSERT INTO presence_events (device_id, room_id, observed_at, present)
+        VALUES (?, ?, ?, ?)
+        """,
+        (sensor_id, room["room_id"], 1_700_000_000, 1),
+    ).lastrowid
+    conn.execute("UPDATE devices SET room_id=NULL WHERE device_id=?", (sensor_id,))
+    conn.commit()
+
+    deleted = flask_test_client.delete(f"/api/v1/rooms/{room['room_id']}")
+
+    assert deleted.status_code == 204
+    event = conn.execute(
+        "SELECT room_id, present FROM presence_events WHERE presence_event_id=?",
+        (event_id,),
+    ).fetchone()
+    assert dict(event) == {"room_id": None, "present": 1}
+
+
 def test_room_assignment_rejects_unknown_and_ineligible_devices(
     flask_test_client,
     test_database_conn_with_test_data,
