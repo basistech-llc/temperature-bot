@@ -15,6 +15,28 @@ function deviceRoomRequest(deviceId, roomId) {
   return { device_id: Number(deviceId), room_id: roomIdFromValue(roomId) };
 }
 
+async function persistSensorRoom(deviceId, roomId, request = fetch) {
+  const response = await request("/api/v1/update_device_room", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(deviceRoomRequest(deviceId, roomId)),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.error || "Unable to move sensor.");
+  return data;
+}
+
+async function persistRoomName(roomId, roomName, request = fetch) {
+  const response = await request(`/api/v1/rooms/${roomId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ room_name: roomName }),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.error || "Unable to rename room.");
+  return data;
+}
+
 function longPressTriggered(elapsedMs, movementPx) {
   return elapsedMs >= ROOM_LONG_PRESS_MS && movementPx <= ROOM_POINTER_SLOP_PX;
 }
@@ -60,6 +82,11 @@ function insertRowInRoom(row, separator) {
   const nextSeparator = nextRoomSeparator(separator);
   separator.parentElement.insertBefore(row, nextSeparator);
   row.dataset.roomId = separator.dataset.roomId || "";
+}
+
+function restoreSensorPosition(row, separator, nextRow) {
+  row.parentElement.insertBefore(row, nextRow);
+  row.dataset.roomId = separator?.dataset.roomId || "";
 }
 
 function showRoomMatrixMessage(message, isError = false) {
@@ -172,19 +199,12 @@ async function saveSensorMove(row, targetSeparator, beforeRow = null) {
     insertRowInRoom(row, targetSeparator);
   }
   try {
-    const response = await fetch("/api/v1/update_device_room", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(request),
-    });
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(data.error || "Unable to move sensor.");
+    await persistSensorRoom(row.dataset.deviceId, targetSeparator.dataset.roomId);
     showRoomMatrixMessage(`Moved sensor to ${targetSeparator.dataset.roomName}.`);
     window.dispatchEvent(new CustomEvent("roomassignmentchange", { detail: request }));
     return true;
   } catch (error) {
-    row.parentElement.insertBefore(row, oldNext);
-    row.dataset.roomId = oldSeparator?.dataset.roomId || "";
+    restoreSensorPosition(row, oldSeparator, oldNext);
     showRoomMatrixMessage(error.message || "Unable to move sensor.", true);
     return false;
   }
@@ -274,13 +294,7 @@ async function renameRoom(dialog) {
     return;
   }
   try {
-    const response = await fetch(`/api/v1/rooms/${roomId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ room_name: roomName }),
-    });
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(data.error || "Unable to rename room.");
+    const data = await persistRoomName(roomId, roomName);
     const savedRoomName = data.room_name || roomName;
     applyMatrixRoomName(roomId, savedRoomName);
     document
@@ -436,6 +450,9 @@ if (typeof module !== "undefined" && module.exports) {
     compareSensors,
     deviceRoomRequest,
     longPressTriggered,
+    persistRoomName,
+    persistSensorRoom,
+    restoreSensorPosition,
     roomHumidityText,
     roomIdFromValue,
     roomNameSortKey,

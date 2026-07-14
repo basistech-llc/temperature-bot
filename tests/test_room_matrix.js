@@ -5,6 +5,9 @@ const {
   compareSensors,
   deviceRoomRequest,
   longPressTriggered,
+  persistRoomName,
+  persistSensorRoom,
+  restoreSensorPosition,
   roomHumidityText,
   roomIdFromValue,
   roomNameSortKey,
@@ -47,4 +50,53 @@ assert.deepStrictEqual(
   ["Area 51", "bamboo", "Unassigned"],
 );
 
-console.log("room_matrix tests passed");
+async function testPersistenceTransitions() {
+  const requests = [];
+  const successfulRequest = async (url, options) => {
+    requests.push({ url, options });
+    return { ok: true, json: async () => ({ room_name: "Bravo" }) };
+  };
+  await persistSensorRoom(42, 7, successfulRequest);
+  assert.strictEqual(requests.length, 1);
+  assert.strictEqual(requests[0].url, "/api/v1/update_device_room");
+  assert.deepStrictEqual(JSON.parse(requests[0].options.body), {
+    device_id: 42,
+    room_id: 7,
+  });
+
+  const renamed = await persistRoomName(7, "Bravo", successfulRequest);
+  assert.strictEqual(renamed.room_name, "Bravo");
+  assert.strictEqual(requests[1].url, "/api/v1/rooms/7");
+  assert.deepStrictEqual(JSON.parse(requests[1].options.body), {
+    room_name: "Bravo",
+  });
+
+  await assert.rejects(
+    persistRoomName(7, "Alpha", async () => ({
+      ok: false,
+      json: async () => ({ error: "Room name already exists" }),
+    })),
+    /Room name already exists/,
+  );
+
+  const row = {
+    dataset: { roomId: "7" },
+    parentElement: {
+      insertBefore(movedRow, nextRow) {
+        assert.strictEqual(movedRow, row);
+        assert.strictEqual(nextRow, originalNextRow);
+      },
+    },
+  };
+  const originalSeparator = { dataset: { roomId: "3" } };
+  const originalNextRow = {};
+  restoreSensorPosition(row, originalSeparator, originalNextRow);
+  assert.strictEqual(row.dataset.roomId, "3");
+}
+
+testPersistenceTransitions()
+  .then(() => console.log("room_matrix tests passed"))
+  .catch((error) => {
+    console.error(error);
+    process.exitCode = 1;
+  });

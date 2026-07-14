@@ -271,7 +271,7 @@ The UI-first slice and its backend metric prerequisites are complete:
   humidity (`hvac-9re.3`).
 - [x] Harden typed room APIs (`hvac-9re.4`).
 - [x] Render the grouped matrix (`hvac-9re.5`).
-- [ ] Add drag/drop and rename behavior (`hvac-9re.6`).
+- [x] Add drag/drop and rename behavior (`hvac-9re.6`).
 - [ ] Refactor the Room Editor and value formatting (`hvac-9re.7`).
 - [ ] Update core documentation and run the relevant Makefile quality gates
   (`hvac-9re.8`).
