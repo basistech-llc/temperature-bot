@@ -41,6 +41,7 @@ from .routes_web_airquality_utils import (
     format_unix_as_asc,
 )
 from .room_metrics import RoomMetric, select_room_metric_sources
+from .presence import PRESENCE_STALE_SECONDS, get_room_presence
 
 logger = logging.getLogger(__name__)
 
@@ -687,6 +688,17 @@ def _register_room_routes(app):
     def room_map():
         """Render the canonical room-backed HVAC floor-plan overlay."""
         return render_template("map.html", current_page="map")
+
+    @app.get("/presence")
+    @with_db_connection
+    def presence_table(conn):
+        """Render room presence with explicit unknown and stale states."""
+        return render_template(
+            "presence.html",
+            current_page="presence",
+            rooms=get_room_presence(conn),
+            stale_minutes=PRESENCE_STALE_SECONDS // 60,
+        )
 
     @app.route("/kitchen")
     @with_db_connection

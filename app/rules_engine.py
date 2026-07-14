@@ -19,6 +19,7 @@ from .constants import RULES_ENGINE_DEVICE_NAME
 from .device_types import DEVICE_TYPE_INTERNAL
 from .paths import BIN_DIR
 from . import db
+from . import presence
 from . import ae200
 from .models import (
     AutoSetTempControl,
@@ -37,6 +38,11 @@ RULES_PATH = Path(BIN_DIR) / "rules.py"
 
 RULES_DISABLED_MESSAGE = "Master rules switch is OFF; skipping all rules execution"
 RULES_TIME_SUSPENDED_MESSAGE = "all rules disabled (time-limited suspension)"
+
+
+def get_room_presence(conn, room_id: int, *, when: int | None = None):
+    """Return canonical room presence for rule implementations."""
+    return presence.get_presence_for_room(conn, room_id, at_time=when)
 
 def rules_id(conn):
     return db.get_or_create_device_id(

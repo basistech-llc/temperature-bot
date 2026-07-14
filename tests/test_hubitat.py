@@ -103,3 +103,10 @@ def test_update_from_hubitat_persists_status_json(
     assert len(discovered) == len(hubdict)
     assert all(row["device_type"] is not None for row in discovered)
     assert all(row["room_id"] is None for row in discovered)
+    expected_motion_observations = sum(
+        (device.get("attributes") or {}).get("motion") in {"active", "inactive"}
+        for device in hubdict
+    )
+    assert conn.execute("SELECT COUNT(*) FROM presence_events").fetchone()[0] == (
+        expected_motion_observations
+    )

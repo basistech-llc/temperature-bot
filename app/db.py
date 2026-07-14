@@ -59,6 +59,7 @@ from .models import (
     FcuTempSourceControl,
     FcuTempSourceRow,
     FcuTempSourcesResponse,
+    PresenceEvent,
     Room,
     RoomMap,
     RoomTopologyReconciliation,
@@ -842,6 +843,61 @@ def update_device_room(conn, device_id: int, room_id: int | None) -> int:
     c.execute("UPDATE devices SET room_id=? WHERE device_id=?", (room_id, device_id))
     conn.commit()
     return device_id
+
+
+def record_presence_observation(
+    conn,
+    *,
+    device_id: int,
+    present: bool,
+    observed_at: int | None = None,
+    commit: bool = True,
+) -> int:
+    """Store presence using the device's canonical room at observation time."""
+    timestamp = int(time.time()) if observed_at is None else int(observed_at)
+    c = conn.cursor()
+    c.execute("SELECT room_id FROM devices WHERE device_id=?", (device_id,))
+    device = c.fetchone()
+    if device is None:
+        raise LookupError(f"Unknown device_id: {device_id}")
+    c.execute(
+        """
+        INSERT INTO presence_events (device_id, room_id, observed_at, present)
+        VALUES (?, ?, ?, ?)
+        """,
+        (device_id, device["room_id"], timestamp, int(present)),
+    )
+    event_id = int(c.lastrowid)
+    if commit:
+        conn.commit()
+    return event_id
+
+
+def get_presence_events(
+    conn, *, room_id: int | None = None, since: int | None = None
+):
+    """Return typed presence history, retaining room identity at observation."""
+    clauses: list[str] = []
+    args: list[int] = []
+    if room_id is not None:
+        clauses.append("p.room_id=?")
+        args.append(room_id)
+    if since is not None:
+        clauses.append("p.observed_at>=?")
+        args.append(since)
+    where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+    rows = conn.execute(
+        f"""
+        SELECT p.*, d.device_name, r.room_name
+        FROM presence_events p
+        JOIN devices d ON d.device_id=p.device_id
+        LEFT JOIN rooms r ON r.room_id=p.room_id
+        {where}
+        ORDER BY p.observed_at DESC, p.presence_event_id DESC
+        """,
+        args,
+    ).fetchall()
+    return [PresenceEvent.model_validate(dict(row)) for row in rows]
 
 
 def _status_payload_from_json(status_json: str | None) -> StatusPayload | None:

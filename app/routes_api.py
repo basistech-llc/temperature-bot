@@ -21,6 +21,7 @@ from . import hubitat
 from . import ae200
 from .display_names import display_device_name
 from . import room_config
+from . import presence
 from .utils.request_utils import parse_device_ids
 from .utils.db_utils import with_db_connection
 
@@ -40,6 +41,8 @@ from .models import (
     RoomCreate,
     RoomListResponse,
     RoomPatch,
+    PresenceHistoryResponse,
+    RoomPresenceResponse,
     SetTempControl,
     SpeedControl,
     TemperatureSeriesResponse,
@@ -467,6 +470,37 @@ def room_detail(conn, room_id: int):
     if room is None:
         return jsonify({"error": "room not found"}), 404
     return jsonify(json_ready(room))
+
+
+@api_v1.get("/presence")
+@with_db_connection
+def room_presence(conn):
+    """Return current presence for every canonical room."""
+    return jsonify(
+        json_ready(
+            RoomPresenceResponse(
+                stale_after_seconds=presence.PRESENCE_STALE_SECONDS,
+                rooms=presence.get_room_presence(conn),
+            )
+        )
+    )
+
+
+@api_v1.get("/presence/history")
+@with_db_connection
+def room_presence_history(conn):
+    """Return room-at-observation presence history."""
+    room_id = request.args.get("room_id", type=int)
+    since = request.args.get("since", type=int)
+    if room_id is not None and db.get_room(conn, room_id) is None:
+        return jsonify({"error": "room not found"}), 404
+    return jsonify(
+        json_ready(
+            PresenceHistoryResponse(
+                events=db.get_presence_events(conn, room_id=room_id, since=since)
+            )
+        )
+    )
 
 
 @api_v1.patch("/rooms/<int:room_id>")

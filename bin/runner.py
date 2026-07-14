@@ -89,17 +89,28 @@ def update_from_hubitat(conn):
     except RuntimeError as e:
         logger.error("update_from_hubitat: %s", e)
         return
-    for device in typed_devices:
+    device_ids: dict[str, int] = {}
+    observed_at = int(time.time())
+    for device, raw_device in zip(typed_devices, devices):
         device_type, _evidence = classify_hubitat_device(device)
-        db.get_or_create_device_id(
+        device_id = db.get_or_create_device_id(
             conn, device.name, device_type=device_type
         )
+        device_ids[device.name] = device_id
+        motion = (raw_device.get("attributes") or {}).get("motion")
+        if motion in {"active", "inactive"}:
+            db.record_presence_observation(
+                conn,
+                device_id=device_id,
+                present=motion == "active",
+                observed_at=observed_at,
+            )
     updated_names = []
     for item in temps:
         statusdict = item.get("status") or {}
         db.insert_devlog_entry(
             conn,
-            device_name=item["name"],
+            device_id=device_ids[item["name"]],
             temp=item["temperature"],
             statusdict=statusdict,
         )

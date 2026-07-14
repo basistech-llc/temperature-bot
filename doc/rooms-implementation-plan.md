@@ -210,8 +210,10 @@ JavaScript logic tests. Tests run through Makefile targets and must not modify
 - [#32, overlay map](https://github.com/basistech-llc/temperature-bot/issues/32)
   is delivered by `hvac-9re.9` using canonical rooms and assignments.
 - [#107, add presence table](https://github.com/basistech-llc/temperature-bot/issues/107)
-  is delivered by `hvac-9re.12`; presence storage and policy remain
-  presence-specific while room membership is shared.
+  is delivered by `hvac-9re.12`. Hubitat motion observations retain the
+  canonical room identity they had when recorded. Current UI and rule results
+  share a 15-minute presence policy and explicitly distinguish stale readings
+  from rooms that have no observations.
 - [#152, Hickory dashboard design](https://github.com/basistech-llc/temperature-bot/issues/152)
   is advanced by `hvac-9re.11`, which migrates room dashboard data membership.
   The GitHub issue should close only when its broader layout acceptance is also
@@ -283,7 +285,7 @@ The UI-first slice and its backend metric prerequisites are complete:
   prerequisites are complete.
 - [x] Migrate room dashboards away from exact-name sensor membership
   (`hvac-9re.11`).
-- [ ] Add room-based presence storage, presentation, and rules
+- [x] Add room-based presence storage, presentation, and rules
   (`hvac-9re.12`).
 - [ ] Correct Hickory per-device reads (`hvac-1mz`), then generalize room
   control endpoints (`hvac-8tp`).

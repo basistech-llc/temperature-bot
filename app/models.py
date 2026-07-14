@@ -14,6 +14,7 @@ boundaries instead of ``typing.cast`` so the data is actually validated before i
 becomes a mapping.
 """
 
+from enum import StrEnum
 from typing import Annotated, Any, Dict, Iterable, Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -679,6 +680,50 @@ class RoomDashboardSensor(BaseModel):
     display_name: str
     offline: bool = False
     attributes: RoomDashboardSensorAttributes
+
+
+class PresenceState(StrEnum):
+    """Room presence result, including absence of trustworthy observations."""
+
+    PRESENT = "present"
+    ABSENT = "absent"
+    STALE = "stale"
+    UNKNOWN = "unknown"
+
+
+class PresenceEvent(BaseModel):
+    """One stored observation attributed to the device's room at that time."""
+
+    presence_event_id: int
+    device_id: int
+    device_name: str
+    room_id: int | None = None
+    room_name: str | None = None
+    observed_at: int
+    present: bool
+
+
+class RoomPresence(BaseModel):
+    """Current presence result for one canonical room."""
+
+    room_id: int
+    room_name: str
+    state: PresenceState
+    observed_at: int | None = None
+    source_device_ids: list[int] = Field(default_factory=list)
+
+
+class RoomPresenceResponse(BaseModel):
+    """Current presence for all canonical rooms."""
+
+    stale_after_seconds: int
+    rooms: list[RoomPresence]
+
+
+class PresenceHistoryResponse(BaseModel):
+    """Presence observations retained with their room-at-observation identity."""
+
+    events: list[PresenceEvent]
 
 
 class TableUpdateSummary(BaseModel):
