@@ -218,17 +218,17 @@ They use Maker API command URLs:
 GET /apps/api/{appId}/devices/{device_id}/{command}/{secondary_value}?access_token={access_token}
 ```
 
-Current app routes expose Hickory-specific controls:
+Current app routes expose configured room controls:
 
-- `POST /api/v1/hickory/dimmer` with integer `level` from 0 to 100.
-- `POST /api/v1/hickory/wall_light` with `light` of `inner` or `outer`, and
+- `POST /api/v1/room/<room_key>/dimmer` with integer `level` from 0 to 100.
+- `POST /api/v1/room/<room_key>/wall_light` with `light` of `inner` or `outer`, and
   `state` of `on` or `off`.
-- `POST /api/v1/hickory/tv` with `direction` of `up` or `down`.
-- `GET /api/v1/hickory/room_status` for current control states.
+- `POST /api/v1/room/<room_key>/tv` with `direction` of `up` or `down`.
+- `GET /api/v1/room/<room_key>/room_status` for current control states.
 
-The Hickory dimmer and wall-light device ids are hard-coded in
-`app/room_config.py`. The TV lift is found by Hubitat label: `TV Up` or
-`TV Down`; the helper sends `on` to that component switch.
+Device ids and TV component labels are configured per room in
+`app/room_config.py`. The helper sends `on` to the selected TV component
+switch. The old `/api/v1/hickory/...` paths remain compatibility aliases.
 
 Simulator mode only simulates `get_all_devices()`. Command helpers still build
 Maker API command URLs and are not safe to assume simulated.

@@ -494,7 +494,7 @@ body {
 {% endblock %}
 
 {% block body %}
-<div id="room-scale-wrap"><div id="room-scale-content">
+<div id="room-scale-wrap" data-room-control-key="{{ room_control_key }}"><div id="room-scale-content">
 {% if notes %}
 <div class="notes-banner">{{ notes }}</div>
 {% endif %}

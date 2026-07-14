@@ -16,6 +16,8 @@ surface quickly.
   JSON APIs, and static JavaScript belong.
 - `doc/rooms-implementation-review.md`: room dashboard debt, open room issues,
   and Hickory/Kitchen dashboard generalization notes.
+- `doc/rooms-implementation-plan.md`: approved FCU-owned room model, grouped
+  sensor matrix, room calculations, implementation beads, and issue map.
 
 ## Hickory Dashboard Map
 
@@ -34,15 +36,33 @@ dashboard frontend work.
   - Pre-renders HVAC cards, room controls, sensors, live clock, and script
     includes.
 - `app/static/room_dashboard.js`
-  - Room dashboard behavior: speed buttons, set temperature controls, Hickory
+  - Room dashboard behavior: speed buttons, set temperature controls, configured
     room controls, polling, and scale-to-fit.
-  - Hardcodes Hickory control endpoints today.
+  - Derives room-control endpoints from the template's room key.
 - `app/routes_api.py`
   - `/api/v1/status`: live HVAC/device status.
   - `/api/v1/set_drive`, `/api/v1/set_fan_speed`, `/api/v1/set_temp`: HVAC
     control APIs.
-  - `/api/v1/hickory/room_status`, `/dimmer`, `/wall_light`, `/tv`: current
-    Hickory-specific control APIs.
+  - `/api/v1/room/<room_key>/room_status`, `/dimmer`, `/wall_light`, `/tv`:
+    configured room-control APIs. Legacy Hickory aliases remain compatible.
+
+## Canonical Room Metrics
+
+- `app/room_metrics.py`
+  - Typed room membership, device eligibility, metric extraction, and shared
+    10-minute freshness selection for temperature and humidity.
+- `app/db.py`
+  - `fetch_latest_room_metric_snapshots()`: raw SQLite latest-reading lookup
+    that feeds the room metric selector without Flask request state.
+- `tests/test_room_metrics.py`
+  - SQLite-backed coverage of membership, staleness, exclusions, missing
+    values, and Hubitat/Airthings payload shapes.
+- `app/static/room_matrix.js`
+  - Air Quality matrix drag assignment, sorted placement, optimistic rollback,
+    room rename, and live room summary updates.
+- `tests/test_room_matrix_routes.py` and `tests/test_room_matrix.js`
+  - SQLite-backed grouping/rendering contracts and substantive client state
+    transitions.
 
 ## Hickory Life Easter Egg
 

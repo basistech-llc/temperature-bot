@@ -2,7 +2,7 @@
 """
 Simple test to check if Flask routes are working
 """
-# pylint: disable=unused-import
+# pylint: disable=unused-import,too-many-lines
 import datetime
 from html import unescape
 from unittest.mock import patch
@@ -348,8 +348,8 @@ def test_fcu_matrix_has_raw_fcu_temp_and_room_temp_columns(
     assert 'id="room-temp-12"' in html
     assert "cell-room-temp" in html
     assert "cell-room-humidity" in html
-    assert 'data-chart-url="/chart?mode=calculated&device_ids=12"' in html
-    assert "Calculated room temperature chart for Area 51; click to show graph." in html
+    assert 'data-chart-url="/fcu_chart?fcu_device_id=12"' in html
+    assert "Combined room temperature and FCU history for Area 51" in html
     assert 'data-update-url="/api/v1/set_auto_temp"' in html
     assert 'aria-label="Move Auto heat set temperature"' in html
     assert 'aria-label="Move Auto cool set temperature"' in html
@@ -371,6 +371,7 @@ def test_fcu_matrix_room_unit_cell_opens_room_editor(
             "calculated_temp10x": 235,
             "temp_source_stale_seconds": 600,
             "room_name": "Area 51",
+            "room_id": 3,
             "status": {"Mode": "COOL"},
         }
     ]
@@ -383,7 +384,8 @@ def test_fcu_matrix_room_unit_cell_opens_room_editor(
     assert 'class="device-name-context fcu-room-editor-trigger"' in html
     assert 'role="button"' in html
     assert 'tabindex="0"' in html
-    assert 'data-device-update-url="/api/v1/devices/12"' in html
+    assert 'data-room-id="3"' in html
+    assert 'data-room-update-url="/api/v1/rooms/3"' in html
     assert (
         'data-fcu-temp-sources-url="/api/v1/fcu_temp_sources?fcu_device_id=12"'
         in html
@@ -391,7 +393,7 @@ def test_fcu_matrix_room_unit_cell_opens_room_editor(
     assert 'data-fcu-temp-source-update-url="/api/v1/fcu_temp_source"' in html
     assert 'data-fcu-temp-sources-room-name="Area 51"' in html
     assert 'id="fcu-room-display-name"' in html
-    assert "Room (Unit) name" in html
+    assert "Room name" in html
     assert "Readings older than 10 minutes are ignored" in html
     assert 'data-action="save-fcu-temp-sources"' in html
     assert 'data-action="revert-fcu-temp-sources"' in html
@@ -482,6 +484,7 @@ def test_hickory_route(flask_test_client):  # noqa: F811
     """Test the /hickory route"""
     response = flask_test_client.get("/hickory")
     assert response.status_code == 200
+    assert b'data-room-control-key="hickory"' in response.data
     assert b"Hickory" in response.data or b"room_dashboard" in response.data
     assert b"/static/hickory_life.js" in response.data
 
@@ -493,6 +496,25 @@ def test_weather_route(flask_test_client):  # noqa: F811
     assert b"Current Conditions" in response.data
     assert b"Forecast for CALA" in response.data
     assert b"Outdoor Air Quality" in response.data
+
+
+def test_room_map_route_uses_canonical_room_api_contract(flask_test_client):  # noqa: F811
+    response = flask_test_client.get("/map")
+    assert response.status_code == 200
+    html = response.data.decode("utf-8")
+    assert 'id="room-map-overlay"' in html
+    assert 'id="room-map-unmapped"' in html
+    assert '/static/map/basistech_floorplan.png' in html
+    assert '/static/room_map.js' in html
+
+
+def test_fcu_history_chart_route_has_explicit_series_contract(flask_test_client):  # noqa: F811
+    response = flask_test_client.get("/fcu_chart?fcu_device_id=12")
+    assert response.status_code == 200
+    html = response.data.decode("utf-8")
+    assert 'data-fcu-device-id="12"' in html
+    assert 'id="fcu-history-chart"' in html
+    assert '/static/fcu_history_chart.js' in html
 
 
 def test_air_quality_route(flask_test_client):  # noqa: F811
@@ -691,9 +713,11 @@ _FAKE_ALL_DEVICES = [
 
 # /api/v1/hickory/room_status
 
-@patch("app.routes_api.hubitat.get_all_devices", return_value=_FAKE_ALL_DEVICES)
-def test_room_status_returns_device_states(_mock, flask_test_client):  # noqa: F811
+@patch("app.routes_api.hubitat.get_device_info")
+def test_room_status_returns_device_states(mock_get_device_info, flask_test_client):  # noqa: F811
     """Room status returns dimmer level and wall light states."""
+    devices = {device["id"]: device for device in _FAKE_ALL_DEVICES}
+    mock_get_device_info.side_effect = devices.__getitem__
     resp = flask_test_client.get("/api/v1/hickory/room_status")
     assert resp.status_code == 200
     data = resp.get_json()
@@ -701,9 +725,14 @@ def test_room_status_returns_device_states(_mock, flask_test_client):  # noqa: F
     assert data["dimmer"]["switch"] == "on"
     assert data["wall_inner"]["switch"] == "on"
     assert data["wall_outer"]["switch"] == "off"
+    assert [call.args[0] for call in mock_get_device_info.call_args_list] == [
+        "581",
+        "454",
+        "550",
+    ]
 
 
-@patch("app.routes_api.hubitat.get_all_devices", return_value=[])
+@patch("app.routes_api.hubitat.get_device_info", side_effect=RuntimeError("missing"))
 def test_room_status_missing_devices(_mock, flask_test_client):  # noqa: F811
     """When configured devices aren't in Hubitat, they're omitted from response."""
     resp = flask_test_client.get("/api/v1/hickory/room_status")
@@ -714,12 +743,21 @@ def test_room_status_missing_devices(_mock, flask_test_client):  # noqa: F811
     assert "wall_outer" not in data
 
 
-@patch("app.routes_api.hubitat.get_all_devices", side_effect=RuntimeError("hub down"))
-def test_room_status_hubitat_error(_mock, flask_test_client):  # noqa: F811
-    """Hubitat failure returns 500."""
+@patch("app.routes_api.hubitat.get_device_info")
+def test_room_status_one_device_error_keeps_other_states(mock_get_device_info, flask_test_client):  # noqa: F811
+    """One failed per-device read does not hide reachable device states."""
+    devices = {device["id"]: device for device in _FAKE_ALL_DEVICES}
+    mock_get_device_info.side_effect = lambda device_id: (
+        (_ for _ in ()).throw(RuntimeError("hub down"))
+        if device_id == "454"
+        else devices[device_id]
+    )
     resp = flask_test_client.get("/api/v1/hickory/room_status")
-    assert resp.status_code == 500
-    assert "error" in resp.get_json()
+    assert resp.status_code == 200
+    assert resp.get_json() == {
+        "dimmer": {"level": 75, "switch": "on"},
+        "wall_outer": {"switch": "off"},
+    }
 
 
 # /api/v1/hickory/dimmer
@@ -852,7 +890,7 @@ def test_wall_light_hubitat_error(_mock, flask_test_client):  # noqa: F811
 
 # /api/v1/hickory/tv
 
-@patch("app.routes_api.hubitat.control_hickory_tv")
+@patch("app.routes_api.hubitat.control_room_tv")
 def test_tv_up(_mock, flask_test_client):  # noqa: F811
     """TV up returns ok."""
     resp = flask_test_client.post(
@@ -861,10 +899,12 @@ def test_tv_up(_mock, flask_test_client):  # noqa: F811
     )
     assert resp.status_code == 200
     assert resp.get_json()["direction"] == "up"
-    _mock.assert_called_once_with("up")
+    _mock.assert_called_once_with(
+        "up", up_label="TV Up", down_label="TV Down"
+    )
 
 
-@patch("app.routes_api.hubitat.control_hickory_tv")
+@patch("app.routes_api.hubitat.control_room_tv")
 def test_tv_down(_mock, flask_test_client):  # noqa: F811
     """TV down returns ok."""
     resp = flask_test_client.post(
@@ -872,7 +912,9 @@ def test_tv_down(_mock, flask_test_client):  # noqa: F811
         json={"direction": "down"},
     )
     assert resp.status_code == 200
-    _mock.assert_called_once_with("down")
+    _mock.assert_called_once_with(
+        "down", up_label="TV Up", down_label="TV Down"
+    )
 
 
 def test_tv_invalid_direction(flask_test_client):  # noqa: F811
@@ -893,7 +935,7 @@ def test_tv_missing_direction(flask_test_client):  # noqa: F811
     assert resp.status_code == 400
 
 
-@patch("app.routes_api.hubitat.control_hickory_tv", side_effect=RuntimeError("not found"))
+@patch("app.routes_api.hubitat.control_room_tv", side_effect=RuntimeError("not found"))
 def test_tv_hubitat_error(_mock, flask_test_client):  # noqa: F811
     """Hubitat failure returns 500."""
     resp = flask_test_client.post(
@@ -902,6 +944,26 @@ def test_tv_hubitat_error(_mock, flask_test_client):  # noqa: F811
     )
     assert resp.status_code == 500
     assert "error" in resp.get_json()
+
+
+def test_generic_room_control_routes_resolve_config(flask_test_client):  # noqa: F811
+    """Dynamic room keys select controls without adding another route."""
+    no_controls = flask_test_client.post(
+        "/api/v1/room/kitchen/dimmer", json={"level": 50}
+    )
+    assert no_controls.status_code == 404
+
+    unknown_tv = flask_test_client.post(
+        "/api/v1/room/unknown/tv", json={"direction": "up"}
+    )
+    assert unknown_tv.status_code == 404
+    assert flask_test_client.get(
+        "/api/v1/room/unknown/room_status"
+    ).status_code == 404
+    assert flask_test_client.post(
+        "/api/v1/room/unknown/wall_light",
+        json={"light": "inner", "state": "on"},
+    ).status_code == 404
 
 
 # -- Room config tests --

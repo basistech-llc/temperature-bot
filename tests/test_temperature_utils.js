@@ -38,8 +38,8 @@ check("getTemperatureUnit C", getTemperatureUnit(), "°C");
 
 // -- formatTemperature in Fahrenheit mode --
 _setUseFahrenheit(true);
-check("formatTemp 0C as F", formatTemperature(0), "32.0°F");
-check("formatTemp 20C as F", formatTemperature(20, false), "68.0");
+check("formatTemp 0C as F", formatTemperature(0), "32°F");
+check("formatTemp 20C as F", formatTemperature(20, false), "68");
 check("getTemperatureUnit F", getTemperatureUnit(), "°F");
 
 // -- Radon in Celsius (Bq/m3) mode --

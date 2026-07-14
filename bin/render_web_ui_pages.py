@@ -428,14 +428,22 @@ def create_database(db_path: Path) -> dict[str, int]:
         now = int(time.time())
         device_ids: dict[str, int] = {}
         for device in seed_devices():
+            device_type = (
+                "ERV"
+                if device.name.startswith("ERV ")
+                else "FCU"
+                if device.ae200_device_id is not None
+                else "SENSOR"
+            )
             cursor = conn.execute(
                 """
                 INSERT INTO devices
-                    (device_name, ae200_device_id, disabled_until, notes, aqi_mon)
-                VALUES (?, ?, ?, ?, ?)
+                    (device_name, device_type, ae200_device_id, disabled_until, notes, aqi_mon)
+                VALUES (?, ?, ?, ?, ?, ?)
                 """,
                 (
                     device.name,
+                    device_type,
                     device.ae200_device_id,
                     0,
                     device.notes,
@@ -461,6 +469,35 @@ def create_database(db_path: Path) -> dict[str, int]:
                         json.dumps(status, sort_keys=True),
                     ),
                 )
+
+        room_ids: dict[str, int] = {}
+        for room_name, fcu_name in (
+            ("Atrium", None),
+            ("Dungeon", "Dungeon"),
+            ("Hickory", None),
+            ("Kitchen", "Kitchen"),
+            ("Restrooms/BOH", "Restrooms/BOH"),
+        ):
+            cursor = conn.execute(
+                "INSERT INTO rooms (room_name, fcu_device_id) VALUES (?, ?)",
+                (room_name, device_ids.get(fcu_name) if fcu_name else None),
+            )
+            room_ids[room_name] = int(cursor.lastrowid)
+            if fcu_name:
+                conn.execute(
+                    "UPDATE devices SET room_id=? WHERE device_id=?",
+                    (room_ids[room_name], device_ids[fcu_name]),
+                )
+        for device_name, room_name in (
+            ("Airthings Kitchen", "Kitchen"),
+            ("Airthings Hickory", "Hickory"),
+            ("Hickory Sensor", "Hickory"),
+            ("Dungeon Cage", "Dungeon"),
+        ):
+            conn.execute(
+                "UPDATE devices SET room_id=? WHERE device_id=?",
+                (room_ids[room_name], device_ids[device_name]),
+            )
 
         conn.execute(
             """

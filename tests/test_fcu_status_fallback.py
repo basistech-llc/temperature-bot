@@ -21,7 +21,7 @@ def _fcu_status():
     return {"Drive": "ON", "FanSpeed": "LOW", "Mode": "COOL", "InletTemp": "21.5"}
 
 
-def test_status_room_temp_defaults_to_stale_raw_fcu_temp(test_database_conn):
+def test_status_room_temp_does_not_use_stale_raw_fcu_temp(test_database_conn):
     conn = test_database_conn
     _clear_devices(conn)
     now = int(time.time())
@@ -45,4 +45,4 @@ def test_status_room_temp_defaults_to_stale_raw_fcu_temp(test_database_conn):
     status = db.get_device_status(conn)
     fcu = next(device for device in status if device["device_id"] == fcu_id)
     assert fcu["temp10x"] == 215
-    assert fcu["calculated_temp10x"] == 215
+    assert "calculated_temp10x" not in fcu

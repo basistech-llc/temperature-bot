@@ -430,10 +430,9 @@ def test_rooms_api_round_trips_map_and_device_assignment(
     assert room["room_name"] == "Hickory"
     assert room["map"] == room_payload["map"]
 
-    updated_room = {**room, "map": {**room_payload["map"], "color": "#3366cc"}}
     patch_response = flask_test_client.patch(
         f"/api/v1/rooms/{room['room_id']}",
-        json=updated_room,
+        json={"map": {**room_payload["map"], "color": "#3366cc"}},
     )
     assert patch_response.status_code == 200
     assert patch_response.json["map"]["color"] == "#3366cc"
@@ -500,7 +499,7 @@ def test_room_omits_none_values_and_updates_only_supplied_fields(flask_test_clie
         json={"map": {"color": "#abcdef"}},
     )
     assert missing_name_response.status_code == 400
-    assert missing_name_response.json["error"] == "room_name is required"
+    assert missing_name_response.json["error"] == "validation error"
 
 
 def test_fcu_temp_source_api_persists_multiplier_and_logs_old_new_values(

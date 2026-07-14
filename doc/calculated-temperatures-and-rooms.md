@@ -37,11 +37,28 @@ calculation. The constant is defined once in `app/constants.py` and is currently
 10 minutes. The FCU temperature popup must tell users that readings older than
 10 minutes are ignored.
 
-For the current `/api/v1/status` display payload, the room temperature falls
-back to the raw FCU temperature when the weighted calculation has no usable
-source and the FCU's own source multiplier has not been explicitly set to `0`.
-Historical calculated series and the calculation helper still exclude stale
-rows.
+`app/room_metrics.py` is the shared source-selection boundary for current room
+temperature and humidity. `db.fetch_latest_room_metric_snapshots()` performs
+the raw SQLite lookup and returns typed snapshots; `select_room_metric_sources()`
+then applies room membership, excludes ERV and `INTERNAL` devices, calculates
+age from `logtime + duration`, rejects stale readings, and extracts the chosen
+metric. Temperature is normalized to Celsius and humidity supports both
+Hubitat scalar/`attributes` payloads and Airthings `{value, unit}` payloads.
+Missing or malformed metrics are returned as explicit exclusion outcomes.
+
+The selector accepts an explicit evaluation time and does not read Flask
+request state. This keeps route and calculation callers on one deterministic
+mechanism and allows historical callers to use the same freshness boundary.
+
+Current status and historical calculated series use the same freshness rule.
+If a room has no usable temperature reading, its calculated temperature is
+missing and the UI displays `--`; stale raw FCU data is never used as a
+fallback. Historical series include explicit gaps so charts do not connect
+stale intervals as though they were valid measurements.
+
+Room humidity is the equal-weight arithmetic mean of every fresh in-room
+humidity reading. It does not use `fcu_temp_sources` weights. A room with no
+usable humidity reading has no calculated humidity and displays `--`.
 
 The dashboard charts these values separately: clicking **FCU Temp** opens the
 raw temperature chart (`mode=raw`), while clicking **Room Temp** opens the
@@ -60,9 +77,30 @@ Rooms are stored in `rooms`:
 CREATE TABLE rooms (
     room_id INTEGER PRIMARY KEY AUTOINCREMENT,
     room_name TEXT NOT NULL UNIQUE,
-    map_json TEXT NOT NULL DEFAULT '{}'
+    map_json TEXT NOT NULL DEFAULT '{}',
+    fcu_device_id INTEGER REFERENCES devices(device_id)
 );
 ```
+
+Every FCU owns exactly one room and is assigned to that room. FCU discovery
+creates both records in one transaction. The default room name is the FCU
+display name, falling back to its device name; collisions use `Name (2)`,
+`Name (3)`, and so on. Migration V9 claims compatible legacy assignments,
+creates missing FCU rooms, and clears non-FCU assignments so physical sensors
+start in the virtual **Unassigned** group. ERVs and internal pseudo-devices are
+also left unassigned.
+
+Apply migrations through the normal Flyway-backed startup/deployment path, not
+by applying `etc/schema.sql` to an existing database. Back up the database and
+stop concurrent writers before the production migration. Rollback is a database
+restore: SQLite cannot safely reverse the new columns and ownership constraints
+in place while preserving concurrent writes. `etc/schema.sql` remains the
+idempotent compatibility schema for creating new databases and tests.
+
+Unique partial indexes on `rooms.fcu_device_id` and FCU `devices.room_id`
+prevent an FCU from owning several rooms or several FCUs from sharing a room.
+`db.reconcile_fcu_rooms()` provides an idempotent repair path for persisted FCU
+topology.
 
 `rooms.map_json` is JSON validated by the Pydantic `RoomMap` model:
 
@@ -123,6 +161,7 @@ available:
   "room_name": "Hickory",
   "temp10x": 224,
   "calculated_temp10x": 231,
+  "calculated_humidity": 43.0,
   "temp_source_stale_seconds": 600,
   "set_range_low_c": 20.0,
   "set_range_high_c": 23.5,
@@ -137,11 +176,12 @@ Room endpoints:
 - `GET /api/v1/rooms/<room_id>`
 - `PATCH /api/v1/rooms/<room_id>`
 
-Room endpoints use one Pydantic `Room` object for create, update, and response
-payloads. `room_name` is required when creating a room. `room_id` is omitted
-when creating a new room. Other `None` fields are not serialized into JSON, and
-updates write only fields that are set. Room payloads use `map` at the API
-boundary and `map_json` in SQLite:
+Room endpoints use separate Pydantic write contracts: `RoomCreate` requires
+`room_name`, while `RoomPatch` accepts only `room_name` and `map`. Both reject
+unknown fields. In particular, clients cannot set the response-only
+`fcu_device_id`; FCU ownership is maintained by discovery and reconciliation.
+The `Room` response omits `None` fields, and updates write only fields that are
+set. Room payloads use `map` at the API boundary and `map_json` in SQLite:
 
 ```json
 {
@@ -165,6 +205,11 @@ POST /api/v1/update_device_room
   "room_id": 203
 }
 ```
+
+Assignment requests reject unknown fields and unknown device or room ids. ERV
+and `INTERNAL` devices cannot be assigned, and an FCU cannot be moved away from
+the room it owns. Passing `null` as `room_id` places an eligible device in the
+virtual **Unassigned** group. Successful changes are committed immediately.
 
 FCU temperature source endpoints:
 

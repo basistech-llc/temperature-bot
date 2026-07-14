@@ -136,7 +136,8 @@ etc/schema.sql: $(wildcard $(FLYWAY_SQL_DIR)/*.sql)
 		"SELECT sql || ';' FROM sqlite_master WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%' AND name <> 'flyway_schema_history' AND COALESCE(tbl_name, '') <> 'flyway_schema_history' ORDER BY rowid;" \
 		> $(FLYWAY_SCHEMA_DUMP)
 	test -s $(FLYWAY_SCHEMA_DUMP)
-	sed 's/CREATE INDEX/CREATE INDEX IF NOT EXISTS/' $(FLYWAY_SCHEMA_DUMP) \
+	sed 's/CREATE UNIQUE INDEX/CREATE UNIQUE INDEX IF NOT EXISTS/' $(FLYWAY_SCHEMA_DUMP) \
+		| sed 's/CREATE INDEX/CREATE INDEX IF NOT EXISTS/' \
 		| sed 's/CREATE TABLE/CREATE TABLE IF NOT EXISTS/' \
 		> etc/schema.sql
 	test -s etc/schema.sql
@@ -180,6 +181,9 @@ local-dev: $(REQ) ## Run the web backend locally with simulated hardware data
 	@echo Running with simulator
 	export AE200_SIMULATOR=1 HUBITAT_SIMULATOR=1 AIRTHINGS_SIMULATOR=1 && $(MAKE) _local-dev-web
 
+rooms-ui-demo: $(REQ) ## Run the room matrix against disposable synthetic data
+	$(PYTHON) -m bin.rooms_ui_demo --database /tmp/temperature-bot-rooms-ui-demo.db
+
 local-live-dev: $(REQ) ## Run the web backend locally against live AE-200 hardware
 	@echo updating database
 	AE200_SIMULATOR= HUBITAT_SIMULATOR= AIRTHINGS_SIMULATOR= $(MAKE) every-minute
@@ -195,7 +199,7 @@ live-dev-runner: $(REQ) ## Run the collection agent and rules runner against liv
 tags: ## Build an etags TAGS file for all Python sources
 	etags */*.py
 
-.PHONY: local-dev local-live-dev _local-dev-web live-dev-runner tags
+.PHONY: local-dev rooms-ui-demo local-live-dev _local-dev-web live-dev-runner tags
 ################################################################
 ## Analysis tools
 ## Static Analysis
@@ -250,6 +254,9 @@ test-js: $(REQ) ## Run the JavaScript unit tests
 	node tests/test_metric_chart_support.js
 	node tests/test_room_scale.js
 	node tests/test_hickory_life.js
+	node tests/test_room_matrix.js
+	node tests/test_room_map.js
+	node tests/test_fcu_history_chart.js
 test: $(REQ) ## Run both Python and JavaScript test suites
 	@python_exit=0; js_exit=0; \
 	make pytest || python_exit=$$?; \

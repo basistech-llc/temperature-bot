@@ -568,6 +568,117 @@ def test_get_device_status_includes_ae200_device_id(test_database_conn):
     assert row["rules_enabled"] is True
 
 
+def test_fcu_discovery_creates_and_assigns_owned_room(test_database_conn):
+    """Creating a typed FCU atomically creates its canonical room."""
+    device_id = db.get_or_create_device_id(
+        test_database_conn,
+        "Broadway FCU",
+        device_type="FCU",
+    )
+
+    row = test_database_conn.execute(
+        """
+        SELECT d.room_id, r.room_name, r.fcu_device_id
+        FROM devices d
+        JOIN rooms r ON r.room_id = d.room_id
+        WHERE d.device_id=?
+        """,
+        (device_id,),
+    ).fetchone()
+    assert row["room_id"] is not None
+    assert row["room_name"] == "Broadway FCU"
+    assert row["fcu_device_id"] == device_id
+
+    repeated_id = db.get_or_create_device_id(
+        test_database_conn,
+        "Broadway FCU",
+        device_type="FCU",
+    )
+    assert repeated_id == device_id
+    assert test_database_conn.execute("SELECT COUNT(*) FROM rooms").fetchone()[0] == 1
+
+
+def test_fcu_discovery_rolls_back_rejected_type_change(test_database_conn):
+    """A rejected FCU promotion must not leave a transaction open."""
+    device_id = db.get_or_create_device_id(
+        test_database_conn,
+        "Existing Sensor",
+        device_type="SENSOR",
+    )
+
+    with pytest.raises(ValueError, match=f"Device {device_id} is not an FCU"):
+        db.get_or_create_device_id(
+            test_database_conn,
+            "Existing Sensor",
+            device_type="FCU",
+        )
+
+    assert test_database_conn.in_transaction is False
+    device = test_database_conn.execute(
+        "SELECT device_type, room_id FROM devices WHERE device_id=?",
+        (device_id,),
+    ).fetchone()
+    assert dict(device) == {"device_type": "SENSOR", "room_id": None}
+    assert test_database_conn.execute("SELECT COUNT(*) FROM rooms").fetchone()[0] == 0
+
+
+def test_reconcile_fcu_rooms_is_idempotent_and_suffixes_duplicate_names(
+    test_database_conn,
+):
+    """Reconciliation preserves assignments and allocates collision-safe names."""
+    cursor = test_database_conn.cursor()
+    cursor.execute("INSERT INTO rooms (room_name) VALUES ('Hickory')")
+    existing_room_id = cursor.lastrowid
+    cursor.execute(
+        """
+        INSERT INTO devices (device_name, display_name, device_type, room_id)
+        VALUES ('Hickory East', 'Hickory', 'FCU', ?)
+        """,
+        (existing_room_id,),
+    )
+    first_fcu_id = cursor.lastrowid
+    cursor.execute(
+        """
+        INSERT INTO devices (device_name, display_name, device_type)
+        VALUES ('Hickory West', 'Hickory', 'FCU')
+        """
+    )
+    second_fcu_id = cursor.lastrowid
+    cursor.execute(
+        "INSERT INTO devices (device_name, device_type) VALUES ('Room Sensor', 'SENSOR')"
+    )
+    sensor_id = cursor.lastrowid
+    cursor.execute(
+        "INSERT INTO devices (device_name, device_type) VALUES ('ERV 1', 'ERV')"
+    )
+    erv_id = cursor.lastrowid
+    test_database_conn.commit()
+
+    summary = db.reconcile_fcu_rooms(test_database_conn)
+    assert summary.fcu_count == 2
+    assert summary.rooms_created == 1
+    assert summary.rooms_claimed == 1
+    assert summary.assignments_changed == 1
+    rooms = test_database_conn.execute(
+        "SELECT room_name, fcu_device_id FROM rooms ORDER BY room_name"
+    ).fetchall()
+    assert [tuple(row) for row in rooms] == [
+        ("Hickory", first_fcu_id),
+        ("Hickory (2)", second_fcu_id),
+    ]
+    unassigned = test_database_conn.execute(
+        "SELECT device_id, room_id FROM devices WHERE device_id IN (?, ?) ORDER BY device_id",
+        (sensor_id, erv_id),
+    ).fetchall()
+    assert [tuple(row) for row in unassigned] == [(sensor_id, None), (erv_id, None)]
+
+    repeated = db.reconcile_fcu_rooms(test_database_conn)
+    assert repeated.fcu_count == 2
+    assert repeated.rooms_created == 0
+    assert repeated.rooms_claimed == 0
+    assert repeated.assignments_changed == 0
+
+
 def test_get_temperature_series_includes_device_id(test_database_conn_with_test_data):
     """get_temperature_series returns each series with device_id, name, and data."""
     conn = test_database_conn_with_test_data[0]

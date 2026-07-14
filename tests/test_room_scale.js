@@ -9,7 +9,10 @@
  * big screen would zoom up and look broken. These tests lock that in, plus the
  * "fit the tighter of the two axes" and degenerate-size guards.
  */
-const { computeFitScale } = require("../app/static/room_dashboard.js");
+const {
+  computeFitScale,
+  roomControlEndpoint,
+} = require("../app/static/room_dashboard.js");
 
 let passed = 0;
 let failed = 0;
@@ -52,6 +55,14 @@ approx("zero width -> 1", computeFitScale(0, 400, 1000, 1000), 1);
 // which is exactly the failure this feature exists to prevent.
 approx("negative avail height -> 1", computeFitScale(800, 400, 1000, -50), 1);
 approx("zero avail width -> 1", computeFitScale(800, 400, 0, 1000), 1);
+
+if (roomControlEndpoint("wall_light", "Hickory & East") ===
+    "/api/v1/room/Hickory%20%26%20East/wall_light") {
+  passed++;
+} else {
+  failed++;
+  console.error("FAIL room control endpoint must encode the dynamic room key");
+}
 
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed === 0 ? 0 : 1);

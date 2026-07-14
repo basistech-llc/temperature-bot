@@ -253,14 +253,19 @@ def _find_device_by_label(label):
     return target
 
 
-def control_hickory_tv(direction):
-    """Activate the TV Up or TV Down component switch.
+def control_room_tv(direction, *, up_label, down_label):
+    """Activate a configured room's TV up or down component switch.
 
     direction: 'up' or 'down'
     """
-    label = "TV Up" if direction == "up" else "TV Down"
+    label = up_label if direction == "up" else down_label
     target = _find_device_by_label(label)
     return send_device_command(target['id'], "on")
+
+
+def control_hickory_tv(direction):
+    """Backward-compatible Hickory TV helper."""
+    return control_room_tv(direction, up_label="TV Up", down_label="TV Down")
 
 if __name__=="__main__":
     """A little test program"""

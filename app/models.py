@@ -14,6 +14,7 @@ boundaries instead of ``typing.cast`` so the data is actually validated before i
 becomes a mapping.
 """
 
+from enum import StrEnum
 from typing import Annotated, Any, Dict, Iterable, Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -154,6 +155,8 @@ class RoomConfig(BaseModel):
     fans: list[str] = Field(default_factory=list, description="AE-200 fan names.")
     sensors: list[str] = Field(default_factory=list, description="Hubitat sensor names.")
     tv_control: bool = Field(default=False, description="Whether to render TV controls.")
+    tv_up_label: str | None = Field(default=None, description="Hubitat TV-up label.")
+    tv_down_label: str | None = Field(default=None, description="Hubitat TV-down label.")
     dimmer_id: str | None = Field(default=None, description="Hubitat dimmer device id.")
     wall_inner_id: str | None = Field(default=None, description="Inner wall light device id.")
     wall_outer_id: str | None = Field(default=None, description="Outer wall light device id.")
@@ -182,7 +185,44 @@ class Room(BaseModel):
 
     room_id: int | None = None
     room_name: str | None = Field(default=None, min_length=1)
+    fcu_device_id: int | None = Field(
+        default=None,
+        description="FCU that owns this room, when assigned.",
+    )
     map: RoomMap | None = None
+
+
+class RoomCreate(BaseModel):
+    """Client-settable fields for creating a room."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    room_name: str = Field(min_length=1)
+    map: RoomMap | None = None
+
+
+class RoomPatch(BaseModel):
+    """Client-settable fields for updating a room."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    room_name: str | None = Field(default=None, min_length=1)
+    map: RoomMap | None = None
+
+
+class RoomListResponse(BaseModel):
+    """Alphabetized persisted room topology returned by the API."""
+
+    rooms: list[Room]
+
+
+class RoomTopologyReconciliation(BaseModel):
+    """Summary of an idempotent FCU-room topology reconciliation."""
+
+    fcu_count: int
+    rooms_created: int
+    rooms_claimed: int
+    assignments_changed: int
 
 
 class DatabaseColumn(BaseModel):
@@ -225,7 +265,9 @@ class TimeSeries(BaseModel):
 
     device_id: int = Field(description="Local device id from the devices table.")
     name: str = Field(description="Display name for the chart series.")
-    data: list[tuple[int, float]] = Field(description="Ordered (unix time, value) samples.")
+    data: list[tuple[int, float | None]] = Field(
+        description="Ordered (unix time, value) samples; null preserves a data gap."
+    )
 
 
 class TemperatureSeriesResponse(BaseModel):
@@ -234,6 +276,25 @@ class TemperatureSeriesResponse(BaseModel):
     series: list[TimeSeries] = Field(default_factory=list)
     has_earlier_data: bool = False
     has_later_data: bool = False
+
+
+class FcuStateSample(BaseModel):
+    """One recorded FCU operating-state sample on the history timeline."""
+
+    timestamp: int
+    mode: str | None = None
+    drive: str | None = None
+    fan_speed: str | None = None
+
+
+class FcuHistoryResponse(BaseModel):
+    """Combined calculated-room, inlet-temperature, and FCU-state history."""
+
+    fcu_device_id: int
+    room_id: int
+    room_name: str
+    temperature_series: list[TimeSeries] = Field(default_factory=list)
+    states: list[FcuStateSample] = Field(default_factory=list)
 
 
 class ChangelogRow(BaseModel):
@@ -429,6 +490,8 @@ class FcuSetRange(BaseModel):
 class DeviceRoomControl(BaseModel):
     """Request body for assigning a device to a room."""
 
+    model_config = ConfigDict(extra="forbid")
+
     device_id: int = Field(description="Local device id from the devices table.")
     room_id: int | None = Field(description="Room id, or null to clear assignment.")
 
@@ -515,6 +578,10 @@ class DeviceStatus(BaseModel):
         default=None,
         description="Weighted calculated room temperature in Celsius tenths.",
     )
+    calculated_humidity: float | None = Field(
+        default=None,
+        description="Equal-weight calculated room humidity percent.",
+    )
     temp_source_stale_seconds: int | None = Field(
         default=None,
         description="Age cutoff for excluding stale calculated-temperature sources.",
@@ -587,6 +654,98 @@ class DeviceStatus(BaseModel):
         default=None,
         description="System-wide minimum FCU set-range width in degrees Celsius.",
     )
+
+
+class RoomMatrixGroup(BaseModel):
+    """One room section in the main-page sensor matrix."""
+
+    room_id: int | None = None
+    room_name: str
+    fcu_device_id: int | None = None
+    calculated_temp10x: int | None = None
+    calculated_humidity: float | None = None
+    devices: list[DeviceStatus] = Field(default_factory=list)
+
+
+class RoomDashboardSensorAttributes(BaseModel):
+    """Fresh canonical metrics rendered on a room sensor tile."""
+
+    temperature: float | None = None
+    humidity: int | None = None
+
+
+class RoomDashboardSensor(BaseModel):
+    """One assigned sensor rendered by a canonical room dashboard."""
+
+    id: int
+    name: str
+    display_name: str
+    offline: bool = False
+    attributes: RoomDashboardSensorAttributes
+
+
+class PresenceState(StrEnum):
+    """Room presence result, including absence of trustworthy observations."""
+
+    PRESENT = "present"
+    ABSENT = "absent"
+    STALE = "stale"
+    UNKNOWN = "unknown"
+
+
+class PresenceEvent(BaseModel):
+    """One stored observation attributed to the device's room at that time."""
+
+    presence_event_id: int
+    device_id: int
+    device_name: str
+    room_id: int | None = None
+    room_name: str | None = None
+    observed_at: int
+    present: bool
+
+
+class RoomPresence(BaseModel):
+    """Current presence result for one canonical room."""
+
+    room_id: int
+    room_name: str
+    state: PresenceState
+    observed_at: int | None = None
+    source_device_ids: list[int] = Field(default_factory=list)
+
+
+class RoomPresenceResponse(BaseModel):
+    """Current presence for all canonical rooms."""
+
+    stale_after_seconds: int
+    rooms: list[RoomPresence]
+
+
+class RoomSwitchState(BaseModel):
+    """Current state of one room switch."""
+
+    switch: Literal["on", "off"]
+
+
+class RoomDimmerState(RoomSwitchState):
+    """Current level and switch state of one room dimmer."""
+
+    level: int = Field(ge=0, le=100)
+
+
+class RoomControlStatus(BaseModel):
+    """Available actuator states for a room dashboard."""
+
+    dimmer: RoomDimmerState | None = None
+    wall_inner: RoomSwitchState | None = None
+    wall_outer: RoomSwitchState | None = None
+
+
+class PresenceHistoryResponse(BaseModel):
+    """Presence observations retained with their room-at-observation identity."""
+
+    events: list[PresenceEvent]
 
 
 class TableUpdateSummary(BaseModel):
