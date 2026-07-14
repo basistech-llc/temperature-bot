@@ -43,6 +43,7 @@ def test_room_matrix_groups_include_empty_rooms_and_unassigned():
             Room(room_id=2, room_name="Zulu"),
             Room(room_id=1, room_name="Alpha"),
         ],
+        {2},
     )
 
     assert [group.room_name for group in groups] == ["Alpha", "Unassigned", "Zulu"]
@@ -72,6 +73,7 @@ def test_room_matrix_groups_exclude_non_sensor_infrastructure_rows():
             )
         ],
         [Room(room_id=1, room_name="Alpha")],
+        {1},
     )
 
     assert [group.room_name for group in groups] == ["Alpha", "Unassigned"]
@@ -84,6 +86,10 @@ def test_index_renders_room_sections_and_each_sensor_once(
     conn, _, _ = test_database_conn_with_test_data
     alpha_id = conn.execute(
         "INSERT INTO rooms (room_name) VALUES ('Alpha')"
+    ).lastrowid
+    conn.execute("INSERT INTO rooms (room_name) VALUES ('Bravo')")
+    charlie_id = conn.execute(
+        "INSERT INTO rooms (room_name) VALUES ('Charlie')"
     ).lastrowid
     zulu_id = conn.execute(
         "INSERT INTO rooms (room_name) VALUES ('Zulu')"
@@ -111,17 +117,46 @@ def test_index_renders_room_sections_and_each_sensor_once(
         )
         device_ids[name] = device_id
     conn.commit()
+    conn.execute(
+        """
+        INSERT INTO devices (device_name, device_type, room_id)
+        VALUES ('New sensor without readings', 'SENSOR', ?)
+        """,
+        (charlie_id,),
+    )
+    conn.commit()
 
     response = flask_test_client.get("/")
     assert response.status_code == 200
     html = response.data.decode("utf-8")
     room_names = re.findall(
         r'<tr class="room-separator"\s+data-room-id="[^"]*"\s+'
-        r'data-room-name="([^"]+)">',
+        r'data-room-name="([^"]+)"[^>]*>',
         html,
     )
 
-    assert room_names == ["Alpha", "Unassigned", "Zulu"]
+    assert room_names == ["Alpha", "Bravo", "Charlie", "Unassigned", "Zulu"]
+    assert re.search(
+        r'data-room-name="Alpha"\s+data-has-fcu="false"\s+data-can-delete="false"',
+        html,
+    )
+    assert re.search(
+        r'data-room-name="Bravo"\s+data-has-fcu="false"\s+data-can-delete="true"',
+        html,
+    )
+    assert re.search(
+        r'data-room-name="Charlie"\s+data-has-fcu="false"\s+data-can-delete="false"',
+        html,
+    )
+    assert re.search(
+        r'data-room-name="Zulu"\s+data-has-fcu="false"\s+data-can-delete="false"',
+        html,
+    )
+    assert "Air Quality and Room Assignments" in html
+    assert 'id="new-room-button"' in html
+    assert 'id="room-create-dialog"' in html
+    assert 'id="room-delete-dialog"' in html
+    assert "Assigned Sensor 📡" in html
     assert html.count(f'x-data-device-id="{device_ids["Assigned Sensor"]}"') == 1
     assert html.count(f'x-data-device-id="{device_ids["Loose Sensor"]}"') == 1
     assert f'x-data-device-id="{device_ids["Internal Reading"]}"' not in html

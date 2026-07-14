@@ -54,8 +54,9 @@ const AUTO_SET_TEMP_COOL_KEY = "cool_set_temp_c";
 const FCU_TEMP_SOURCE_FCU_DEVICE_ID_KEY = "fcu_device_id";
 const FCU_TEMP_SOURCE_SOURCE_DEVICE_ID_KEY = "source_device_id";
 const FCU_TEMP_SOURCE_MULTIPLIER_KEY = "multiplier";
-const FCU_TEMP_SOURCE_TITLE = "Room Editor";
+const FCU_TEMP_SOURCE_TITLE = "FCU Temperature Sources";
 const DEVICE_DISPLAY_NAME_KEY = "display_name";
+const DEVICE_TYPE_ICONS = { ERV: "♻️", FCU: "🌀", SENSOR: "📡" };
 
 // Refresh logic
 var start = Date.now();
@@ -938,17 +939,24 @@ function formatAgeSeconds(seconds) {
   return remainder ? `${hours}h ${remainder}m` : `${hours}h`;
 }
 
-function fcuTempSourcesTitle(roomName) {
-  const trimmedRoomName = String(roomName || "").trim();
-  return trimmedRoomName
-    ? `${trimmedRoomName}: ${FCU_TEMP_SOURCE_TITLE}`
+function fcuTempSourcesTitle(unitLabel) {
+  const trimmedUnitLabel = String(unitLabel || "").trim();
+  return trimmedUnitLabel
+    ? `${trimmedUnitLabel}: ${FCU_TEMP_SOURCE_TITLE}`
     : FCU_TEMP_SOURCE_TITLE;
 }
 
-function setFcuTempSourcesTitle(popup, roomName) {
+function deviceLabelWithIcon(label, deviceType, airQualityActive = false) {
+  const icon =
+    DEVICE_TYPE_ICONS[normalizedDeviceType(deviceType)] ||
+    (airQualityActive ? DEVICE_TYPE_ICONS.SENSOR : "");
+  return icon && !label.trimEnd().endsWith(icon) ? `${label} ${icon}` : label;
+}
+
+function setFcuTempSourcesTitle(popup, unitLabel) {
   const title = popup.querySelector("[data-role='title']");
   if (title) {
-    title.textContent = fcuTempSourcesTitle(roomName);
+    title.textContent = fcuTempSourcesTitle(unitLabel);
   }
 }
 
@@ -1007,7 +1015,7 @@ function setFcuTempSourcesControlsDisabled(popup, disabled) {
   popup.dataset.saving = disabled ? "true" : "false";
   popup
     .querySelectorAll(
-      ".fcu-temp-source-weight, .fcu-room-display-name, .fcu-temp-sources-actions button",
+      ".fcu-temp-source-weight, .fcu-temp-sources-actions button",
     )
     .forEach((control) => {
       control.disabled = disabled;
@@ -1060,42 +1068,10 @@ function collectFcuTempSourceChanges(popup) {
   return { changes, error: "" };
 }
 
-function setFcuRoomEditorDisplayName(popup, displayName) {
-  const input = popup.querySelector("[data-role='display-name']");
-  const normalizedName = normalizedDeviceDisplayName(displayName);
-  popup.dataset.currentDisplayName = normalizedName;
-  if (input) {
-    input.value = normalizedName;
-    input.dataset.initialDisplayName = normalizedName;
-  }
-}
-
-function collectFcuRoomEditorDisplayNameChange(popup) {
-  const input = popup.querySelector("[data-role='display-name']");
-  if (!input) {
-    return { changed: false, displayName: "", error: "" };
-  }
-  const displayName = normalizedDeviceDisplayName(input.value);
-  if (!displayName) {
-    return {
-      changed: false,
-      displayName: "",
-      error: "Room name is required.",
-    };
-  }
-  return {
-    changed:
-      displayName !== normalizedDeviceDisplayName(popup.dataset.currentDisplayName),
-    displayName,
-    error: "",
-  };
-}
-
 function revertFcuTempSourceChanges(popup) {
   popup.querySelectorAll(".fcu-temp-source-weight").forEach((input) => {
     input.value = input.dataset.initialMultiplier;
   });
-  setFcuRoomEditorDisplayName(popup, popup.dataset.currentDisplayName);
   setFcuTempSourcesMessage(popup, "");
 }
 
@@ -1174,15 +1150,14 @@ async function loadFcuTempSourcesForCell(cell) {
   }
 
   const deviceId = parseInt(cell.dataset.deviceId, 10);
-  const displayName =
-    cell.dataset.fcuTempSourcesRoomName || cell.dataset.displayName || cell.textContent;
+  const displayName = cell.dataset.displayName || cell.dataset.deviceName;
   popup.dataset.updateUrl = updateUrl;
-  popup.dataset.roomUpdateUrl = cell.dataset.roomUpdateUrl || "";
   popup.dataset.roomId = cell.dataset.roomId || "";
   popup.dataset.deviceId = Number.isInteger(deviceId) ? String(deviceId) : "";
   popup.dataset.deviceName = cell.dataset.deviceName || "";
-  setFcuRoomEditorDisplayName(popup, displayName);
   setFcuTempSourcesTitle(popup, displayName);
+  const roomName = popup.querySelector("[data-role='room-name']");
+  if (roomName) roomName.textContent = cell.dataset.roomName || "Unassigned";
   popup.classList.remove("hidden");
   setFcuTempSourcesControlsDisabled(popup, false);
   setFcuTempSourcesMessage(popup, "Loading...");
@@ -1205,17 +1180,17 @@ async function loadFcuTempSourcesForCell(cell) {
   }
 }
 
-function refreshOpenFcuRoomEditor(loadSources = loadFcuTempSourcesForCell) {
+function refreshOpenFcuTempSources(loadSources = loadFcuTempSourcesForCell) {
   const popup = document.getElementById("fcu-temp-sources-popup");
   if (!popup || popup.classList.contains("hidden") || !popup.dataset.deviceId) {
     return false;
   }
   const trigger = document.querySelector(
-    `.fcu-room-editor-trigger[data-device-id="${popup.dataset.deviceId}"]`,
+    `.fcu-temp-sources-trigger[data-device-id="${popup.dataset.deviceId}"]`,
   );
   if (!trigger) return false;
   Promise.resolve(loadSources(trigger)).catch((error) => {
-    console.error("Failed to refresh FCU room editor:", error);
+    console.error("Failed to refresh FCU temperature sources:", error);
   });
   return true;
 }
@@ -1228,20 +1203,15 @@ async function saveFcuTempSourceMultipliers() {
 
   const updateUrl = popup.dataset.updateUrl;
   const { changes, error } = collectFcuTempSourceChanges(popup);
-  const displayNameChange = collectFcuRoomEditorDisplayNameChange(popup);
   if (error) {
     setFcuTempSourcesMessage(popup, error, true);
-    return;
-  }
-  if (displayNameChange.error) {
-    setFcuTempSourcesMessage(popup, displayNameChange.error, true);
     return;
   }
   if (!updateUrl) {
     setFcuTempSourcesMessage(popup, "Unable to save without an update URL.", true);
     return;
   }
-  if (changes.length === 0 && !displayNameChange.changed) {
+  if (changes.length === 0) {
     closeFcuTempSourcesPopup();
     return;
   }
@@ -1249,30 +1219,14 @@ async function saveFcuTempSourceMultipliers() {
   setFcuTempSourcesControlsDisabled(popup, true);
   setFcuTempSourcesMessage(popup, "Saving...");
   try {
-    if (displayNameChange.changed) {
-      if (!popup.dataset.roomUpdateUrl) {
-        throw new Error("This FCU does not have an editable room.");
-      }
-      const data = await patchRoomName(
-        popup.dataset.roomUpdateUrl,
-        displayNameChange.displayName,
-      );
-      const savedDisplayName = data.room_name || displayNameChange.displayName;
-      applyRoomName(popup.dataset.roomId, savedDisplayName);
-      setFcuRoomEditorDisplayName(popup, savedDisplayName);
-      setFcuTempSourcesTitle(popup, savedDisplayName);
-    }
-
-    if (changes.length > 0) {
-      const response = await fetch(updateUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(changes),
-      });
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.error || "Unable to save weights.");
-      }
+    const response = await fetch(updateUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(changes),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || "Unable to save weights.");
     }
     forceRefresh = true;
     closeFcuTempSourcesPopup({ force: true });
@@ -1466,54 +1420,27 @@ async function patchDeviceDisplayName(deviceId, displayName, updateUrl = undefin
   return data;
 }
 
-async function patchRoomName(updateUrl, roomName) {
-  let response;
-  try {
-    response = await fetch(updateUrl, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ room_name: roomName }),
-    });
-  } catch (error) {
-    throw new Error(`NETWORK ${error.message}`);
-  }
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    throw new Error(`${response.status} ${data.error || response.statusText}`);
-  }
-  return data;
-}
-
-function applyRoomName(roomId, roomName) {
-  document
-    .querySelectorAll(`[data-room-id="${roomId}"]`)
-    .forEach((element) => {
-      if (element.classList.contains("room-name")) element.textContent = roomName;
-      if (element.classList.contains("fcu-room-editor-trigger")) {
-        element.textContent = roomName;
-        element.dataset.fcuTempSourcesRoomName = roomName;
-        element.setAttribute("aria-label", `Edit room settings for ${roomName}`);
-        element.setAttribute("title", `Edit room settings for ${roomName}`);
-      }
-      element.dataset.roomName = roomName;
-    });
-  window.dispatchEvent(
-    new CustomEvent("roomnamechange", { detail: { roomId, roomName } }),
-  );
-}
-
 function applyDeviceDisplayName(
   deviceId,
   deviceName,
   displayName,
   deviceType = undefined,
   rulesEnabled = undefined,
+  airQualityActive = undefined,
 ) {
   const label = normalizedDeviceDisplayName(displayName) || deviceName;
   document
     .querySelectorAll(`.device-name-context[data-device-id="${deviceId}"]`)
     .forEach((element) => {
-      element.textContent = label;
+      const elementAirQualityActive =
+        airQualityActive === undefined
+          ? element.dataset.airQualityActive === "true"
+          : Boolean(airQualityActive);
+      element.textContent = deviceLabelWithIcon(
+        label,
+        deviceType,
+        elementAirQualityActive,
+      );
       element.dataset.deviceName = deviceName;
       element.dataset.displayName = label;
       if (deviceType !== undefined) {
@@ -1524,14 +1451,16 @@ function applyDeviceDisplayName(
           deviceRulesEnabledValue(rulesEnabled),
         );
       }
-      const isRoomEditorTrigger =
-        element.classList?.contains("fcu-room-editor-trigger");
-      if (isRoomEditorTrigger) {
-        element.dataset.fcuTempSourcesRoomName = label;
-        element.setAttribute("aria-label", `Edit room settings for ${label}`);
+      if (airQualityActive !== undefined) {
+        element.dataset.airQualityActive = String(elementAirQualityActive);
       }
-      const title = isRoomEditorTrigger
-        ? `Edit room settings for ${label}`
+      const isFcuTempSourcesTrigger =
+        element.classList?.contains("fcu-temp-sources-trigger");
+      if (isFcuTempSourcesTrigger) {
+        element.setAttribute("aria-label", `Edit temperature sources for ${label}`);
+      }
+      const title = isFcuTempSourcesTrigger
+        ? `Edit temperature sources for ${label}`
         : element.dataset.deviceUpdate
           ? `${deviceName}\nLast updated at ${element.dataset.deviceUpdate}`
           : deviceName;
@@ -1947,7 +1876,7 @@ function setupModeControls() {
 }
 
 function setupFcuTempSourcePopupControls() {
-  document.querySelectorAll(".fcu-room-editor-trigger").forEach((trigger) => {
+  document.querySelectorAll(".fcu-temp-sources-trigger").forEach((trigger) => {
     trigger.addEventListener("click", function (event) {
       event.preventDefault();
       loadFcuTempSourcesForCell(this);
@@ -3045,6 +2974,7 @@ function updateDeviceDisplayName(dev) {
     displayName,
     deviceType,
     rulesEnabled,
+    dashboardAirQualityDeviceIsActive(dev),
   );
 }
 
@@ -3257,14 +3187,13 @@ if (typeof window !== "undefined") {
   });
   window.addEventListener("roomassignmentchange", () => {
     forceRefresh = true;
-    refreshOpenFcuRoomEditor();
+    refreshOpenFcuTempSources();
   });
 }
 
 // Node.js export for testing
 if (typeof module !== "undefined" && module.exports) {
   module.exports = {
-    collectFcuRoomEditorDisplayNameChange,
     collectFcuTempSourceChanges,
     autoSetTempRangeForDevice,
     compactAgeFromSeconds,
@@ -3272,6 +3201,7 @@ if (typeof module !== "undefined" && module.exports) {
     createSingleFlight,
     dashboardAirQualityDeviceIsActive,
     deviceDisplayNameChanged,
+    deviceLabelWithIcon,
     deviceDisplayNamePatchBody,
     deviceRulesEnabledValue,
     deviceUpdateText,
@@ -3292,12 +3222,11 @@ if (typeof module !== "undefined" && module.exports) {
     normalizeSetRange,
     oldestUpdateTimestampForTable,
     parseFcuTempSourceMultiplier,
-    patchRoomName,
     pendingRangeUpdateDecision,
     pendingSingleSetTempUpdateDecision,
     renderDisableCell,
     renderAutoSetTempRange,
-    refreshOpenFcuRoomEditor,
+    refreshOpenFcuTempSources,
     resizeSetRangeEndpoint,
     saveAutoSetTempWidget,
     saveFcuTempSourceMultipliers,

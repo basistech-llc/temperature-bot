@@ -87,4 +87,9 @@ def display_device_name(
     return base
 
 
-__all__ = ["display_device_name"]
+def append_display_icon(label: str, icon: str) -> str:
+    """Append one presentation icon unless the label already ends with it."""
+    return f"{label} {icon}" if icon and not label.rstrip().endswith(icon) else label
+
+
+__all__ = ["append_display_icon", "display_device_name"]

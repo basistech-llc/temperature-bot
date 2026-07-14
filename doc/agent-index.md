@@ -59,7 +59,9 @@ dashboard frontend work.
     values, and Hubitat/Airthings payload shapes.
 - `app/static/room_matrix.js`
   - Air Quality matrix drag assignment, sorted placement, optimistic rollback,
-    room rename, and live room summary updates.
+    room creation/rename/deletion, and live room summary updates.
+  - The Air Quality matrix is the main-page room administration surface. FCU
+    unit names remain separate from their FCU-owned room names.
 - `tests/test_room_matrix_routes.py` and `tests/test_room_matrix.js`
   - SQLite-backed grouping/rendering contracts and substantive client state
     transitions.

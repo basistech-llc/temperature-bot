@@ -757,6 +757,13 @@ def get_rooms(conn) -> list[Room]:
     return [_room_from_row(row) for row in c.fetchall()]
 
 
+def get_assigned_room_ids(conn) -> set[int]:
+    """Return room ids referenced by any device, including devices without logs."""
+    c = conn.cursor()
+    c.execute("SELECT DISTINCT room_id FROM devices WHERE room_id IS NOT NULL")
+    return {int(row["room_id"]) for row in c.fetchall()}
+
+
 def get_room(conn, room_id: int) -> Room | None:
     c = conn.cursor()
     c.execute("SELECT * FROM rooms WHERE room_id=?", (room_id,))
@@ -807,6 +814,48 @@ def update_room(conn, room: Room) -> Room | None:
         return None
     conn.commit()
     return get_room(conn, room.room_id)
+
+
+def delete_empty_room(conn, room_id: int) -> bool:
+    """Delete a room only when it owns no FCU and has no assigned devices."""
+    with conn:
+        room = conn.execute(
+            """
+            SELECT fcu_device_id,
+                   EXISTS(
+                       SELECT 1 FROM devices WHERE devices.room_id=rooms.room_id
+                   ) AS has_assigned_devices
+            FROM rooms
+            WHERE room_id=?
+            """,
+            (room_id,),
+        ).fetchone()
+        if room is None:
+            return False
+        if room["fcu_device_id"] is not None:
+            raise ValueError("FCU-owned rooms cannot be deleted")
+        if room["has_assigned_devices"]:
+            raise ValueError("Only rooms without assigned devices can be deleted")
+
+        # Presence history describes where an observation happened. Preserve the
+        # event when its now-empty administrative room is removed.
+        conn.execute(
+            "UPDATE presence_events SET room_id=NULL WHERE room_id=?", (room_id,)
+        )
+        deleted = conn.execute(
+            """
+            DELETE FROM rooms
+            WHERE room_id=?
+              AND fcu_device_id IS NULL
+              AND NOT EXISTS(
+                  SELECT 1 FROM devices WHERE devices.room_id=rooms.room_id
+              )
+            """,
+            (room_id,),
+        )
+        if deleted.rowcount != 1:
+            raise ValueError("Only rooms without assigned devices can be deleted")
+    return True
 
 
 def update_device_room(conn, device_id: int, room_id: int | None) -> int:

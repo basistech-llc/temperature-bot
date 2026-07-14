@@ -864,12 +864,12 @@ table.rules-table th  {
     cursor: context-menu;
 }
 
-.fcu-room-editor-trigger {
+.fcu-temp-sources-trigger {
     cursor: pointer;
 }
 
-.fcu-room-editor-trigger:hover,
-.fcu-room-editor-trigger:focus {
+.fcu-temp-sources-trigger:hover,
+.fcu-temp-sources-trigger:focus {
     text-decoration: underline;
     text-underline-offset: 0.12em;
 }
@@ -1190,6 +1190,17 @@ table.rules-table th  {
     gap: 0.45rem;
 }
 
+.room-delete-choice {
+    margin-right: auto;
+    color: #b42318;
+}
+
+.room-matrix-actions {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 0.75rem;
+}
+
 .room-rename-message,
 .room-matrix-message.error {
     color: #b42318;
@@ -1214,6 +1225,11 @@ table.rules-table th  {
     white-space: normal;
     min-width: 150px;
     word-break: break-word;
+}
+
+.column-room,
+.cell-room {
+    min-width: 8rem;
 }
 
 /* Humidity column min width */

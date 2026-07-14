@@ -63,6 +63,84 @@ def test_room_list_is_typed_and_alphabetized(flask_test_client):
     ]
 
 
+def test_only_empty_rooms_can_be_deleted(
+    flask_test_client, test_database_conn_with_test_data
+):
+    conn, _, _ = test_database_conn_with_test_data
+    empty = flask_test_client.post("/api/v1/rooms", json={"room_name": "Empty"})
+    occupied = flask_test_client.post(
+        "/api/v1/rooms", json={"room_name": "Occupied"}
+    )
+    fcu_owned = flask_test_client.post(
+        "/api/v1/rooms", json={"room_name": "FCU Owned"}
+    )
+    sensor_id = conn.execute(
+        "INSERT INTO devices (device_name, device_type, room_id) VALUES (?, ?, ?)",
+        ("Deletion Guard Sensor", "SENSOR", occupied.json["room_id"]),
+    ).lastrowid
+    fcu_id = conn.execute(
+        "INSERT INTO devices (device_name, device_type, room_id) VALUES (?, ?, ?)",
+        ("Deletion Guard FCU", DEVICE_TYPE_FCU, fcu_owned.json["room_id"]),
+    ).lastrowid
+    conn.execute(
+        "UPDATE rooms SET fcu_device_id=? WHERE room_id=?",
+        (fcu_id, fcu_owned.json["room_id"]),
+    )
+    conn.commit()
+
+    rejected = flask_test_client.delete(f"/api/v1/rooms/{occupied.json['room_id']}")
+    assert rejected.status_code == 409
+    assert "without assigned devices" in rejected.json["error"]
+    assert not conn.in_transaction
+    assert conn.execute(
+        "SELECT room_id FROM devices WHERE device_id=?", (sensor_id,)
+    ).fetchone()["room_id"] == occupied.json["room_id"]
+
+    rejected_fcu = flask_test_client.delete(
+        f"/api/v1/rooms/{fcu_owned.json['room_id']}"
+    )
+    assert rejected_fcu.status_code == 409
+    assert rejected_fcu.json["error"] == "FCU-owned rooms cannot be deleted"
+    assert not conn.in_transaction
+
+    deleted = flask_test_client.delete(f"/api/v1/rooms/{empty.json['room_id']}")
+    assert deleted.status_code == 204
+    assert flask_test_client.get(f"/api/v1/rooms/{empty.json['room_id']}").status_code == 404
+    assert flask_test_client.delete("/api/v1/rooms/999999").status_code == 404
+    assert not conn.in_transaction
+
+
+def test_deleting_empty_room_preserves_presence_history(
+    flask_test_client, test_database_conn_with_test_data
+):
+    conn, _, _ = test_database_conn_with_test_data
+    room = flask_test_client.post(
+        "/api/v1/rooms", json={"room_name": "Former Sensor Room"}
+    ).json
+    sensor_id = conn.execute(
+        "INSERT INTO devices (device_name, device_type, room_id) VALUES (?, ?, ?)",
+        ("Historical Presence Sensor", "SENSOR", room["room_id"]),
+    ).lastrowid
+    event_id = conn.execute(
+        """
+        INSERT INTO presence_events (device_id, room_id, observed_at, present)
+        VALUES (?, ?, ?, ?)
+        """,
+        (sensor_id, room["room_id"], 1_700_000_000, 1),
+    ).lastrowid
+    conn.execute("UPDATE devices SET room_id=NULL WHERE device_id=?", (sensor_id,))
+    conn.commit()
+
+    deleted = flask_test_client.delete(f"/api/v1/rooms/{room['room_id']}")
+
+    assert deleted.status_code == 204
+    event = conn.execute(
+        "SELECT room_id, present FROM presence_events WHERE presence_event_id=?",
+        (event_id,),
+    ).fetchone()
+    assert dict(event) == {"room_id": None, "present": 1}
+
+
 def test_room_assignment_rejects_unknown_and_ineligible_devices(
     flask_test_client,
     test_database_conn_with_test_data,

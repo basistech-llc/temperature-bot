@@ -17,6 +17,7 @@
           <thead>
             <tr>
               <th class="column-unit" rowspan="2">Unit</th>
+              <th class="column-room" rowspan="2">Room</th>
               <th class="column-disable-for" rowspan="2" title="Remaining time rules are disabled for this device (H:MM)">Rules<br>disabled<br>for</th>
               <th class="column-temp" rowspan="2">Temp<br><small id="erv-temp-unit-label">°C</small></th>
               <th class="column-speed" colspan="5">Fan Speed</th>
@@ -40,11 +41,13 @@
                           data-device-name="{{ device.device_name }}"
                           data-display-name="{{ device.device_label }}"
                           data-device-type="{{ device.device_type or '' }}"
+                          data-air-quality-active="{{ 'true' if device.dashboard_air_quality_active else 'false' }}"
                           data-rules-enabled="{{ 'true' if device.rules_enabled|default(true) else 'false' }}"
                           data-device-update="{{ device.device_update_text|default('', true) }}"
-                          title="{{ device.device_update_tooltip|default(device.device_name, true) }}">{{ device.device_label }}</span><span class="rules-disabled-superscript hidden" id="rules-disabled-{{ device.device_id }}" title=""></span>
+                          title="{{ device.device_update_tooltip|default(device.device_name, true) }}">{{ device.device_label_with_icon }}</span><span class="rules-disabled-superscript hidden" id="rules-disabled-{{ device.device_id }}" title=""></span>
                     <span id="device-{{ device.device_id }}-notes"></span>
                   </td>
+                  <td class="cell-room">{{ device.room_name or '—' }}</td>
                   <td class="cell-disable-for" id="disable-for-{{ device.device_id }}">
                     <span class="disable-thermostat" role="group" aria-label="Adjust rules disable timer">
                       <button type="button"
@@ -96,7 +99,7 @@
           </tbody>
           <tfoot>
             <tr>
-              <td colspan="9" class="table-update-summary" id="oldest-update-erv">{{ table_update_summaries.erv.label if table_update_summaries.erv else '' }}</td>
+              <td colspan="10" class="table-update-summary" id="oldest-update-erv">{{ table_update_summaries.erv.label if table_update_summaries.erv else '' }}</td>
             </tr>
           </tfoot>
         </table>
@@ -105,7 +108,7 @@
         <table class="pure-table data-table fcu-table">
           <thead>
             <tr>
-              <th class="column-unit" rowspan="3">Room (Unit)</th>
+              <th class="column-unit" rowspan="3">Unit</th>
               <th class="column-disable-for" rowspan="3" title="Remaining time rules are disabled for this device (H:MM)">Rules<br>disabled<br>for</th>
               <th class="column-temp" rowspan="3">FCU Temp<br><small id="fcu-temp-unit-label">°C</small></th>
               <th class="column-computed-room" colspan="2">Computed Room</th>
@@ -135,23 +138,23 @@
                 {% set current_mode_value = current_mode|upper if current_mode else '' %}
                 <tr class="device-row" x-data-device-id="{{ device.device_id }}">
                   <td class="cell-unit">
-                    <span class="device-name-context fcu-room-editor-trigger"
+                    <span class="device-name-context fcu-temp-sources-trigger"
                           role="button"
                           tabindex="0"
                           data-device-id="{{ device.device_id }}"
                           data-device-name="{{ device.device_name }}"
                           data-display-name="{{ device.device_label }}"
                           data-device-type="{{ device.device_type or '' }}"
+                          data-air-quality-active="{{ 'true' if device.dashboard_air_quality_active else 'false' }}"
                           data-rules-enabled="{{ 'true' if device.rules_enabled|default(true) else 'false' }}"
                           data-device-update="{{ device.device_update_text|default('', true) }}"
                           data-device-update-url="/api/v1/devices/{{ device.device_id }}"
                           data-room-id="{{ device.room_id or '' }}"
-                          {% if device.room_id %}data-room-update-url="/api/v1/rooms/{{ device.room_id }}"{% endif %}
                           data-fcu-temp-sources-url="/api/v1/fcu_temp_sources?fcu_device_id={{ device.device_id }}"
                           data-fcu-temp-source-update-url="/api/v1/fcu_temp_source"
-                          data-fcu-temp-sources-room-name="{{ device.room_name or device.device_label }}"
-                          aria-label="Edit room settings for {{ device.room_name or device.device_label }}"
-                          title="Edit room settings for {{ device.room_name or device.device_label }}">{{ device.room_name or device.device_label }}</span><span class="rules-disabled-superscript hidden" id="rules-disabled-{{ device.device_id }}" title=""></span>
+                          data-room-name="{{ device.room_name or '' }}"
+                          aria-label="Edit temperature sources for {{ device.device_label }}"
+                          title="Edit temperature sources for {{ device.device_label }}">{{ device.device_label_with_icon }}</span><span class="rules-disabled-superscript hidden" id="rules-disabled-{{ device.device_id }}" title=""></span>
                     <span id="device-{{ device.device_id }}-notes"></span>
                   </td>
                   <td class="cell-disable-for" id="disable-for-{{ device.device_id }}">
@@ -308,7 +311,7 @@
         </table>
 
         <!-- Section 3: Air Quality — devices without speed control that have temp -->
-        <h2>Air Quality</h2>
+        <h2>Air Quality and Room Assignments</h2>
         <table class="pure-table data-table room-matrix" id="room-matrix">
           <thead>
             <tr>
@@ -328,13 +331,15 @@
             {% for group in room_groups %}
               <tr class="room-separator"
                   data-room-id="{{ group.room_id if group.room_id is not none else '' }}"
-                  data-room-name="{{ group.room_name }}">
+                  data-room-name="{{ group.room_name }}"
+                  data-has-fcu="{{ 'true' if group.fcu_device_id else 'false' }}"
+                  data-can-delete="{{ 'true' if group.can_delete else 'false' }}">
                 <td colspan="10">
                   <button type="button"
                           class="room-name{% if group.room_id is none %} room-name-unassigned{% endif %}"
                           data-room-id="{{ group.room_id if group.room_id is not none else '' }}"
                           data-room-name="{{ group.room_name }}"
-                          {% if group.room_id is none %}disabled{% else %}aria-label="Rename {{ group.room_name }}" title="Right-click or long-press to rename"{% endif %}>{{ group.room_name }}</button>
+                          {% if group.room_id is none %}disabled{% else %}aria-label="Manage room {{ group.room_name }}" title="Right-click or long-press to manage room"{% endif %}>{{ group.room_name }}{% if group.fcu_device_id %} 🌀{% endif %}</button>
                   {% if group.room_id is not none %}
                   <span class="room-summary"
                         data-room-id="{{ group.room_id }}"
@@ -370,9 +375,10 @@
                           data-device-name="{{ device.device_name }}"
                           data-display-name="{{ device.device_label }}"
                           data-device-type="{{ device.device_type or '' }}"
+                          data-air-quality-active="{{ 'true' if device.dashboard_air_quality_active else 'false' }}"
                           data-rules-enabled="{{ 'true' if device.rules_enabled|default(true) else 'false' }}"
                           data-device-update="{{ device.device_update_text|default('', true) }}"
-                          title="{{ device.device_update_tooltip|default(device.device_name, true) }}">{{ device.device_label }}</span><span class="rules-disabled-superscript hidden" id="rules-disabled-{{ device.device_id }}" title=""></span>
+                          title="{{ device.device_update_tooltip|default(device.device_name, true) }}">{{ device.device_label_with_icon }}</span><span class="rules-disabled-superscript hidden" id="rules-disabled-{{ device.device_id }}" title=""></span>
                     <span id="device-{{ device.device_id }}-notes"></span>
                   </td>
                   <td class="cell-humidity{% if device.has_humidity %} cell-metric-link{% endif %}" id="humidity-{{ device.device_id }}"
@@ -406,6 +412,9 @@
             </tr>
           </tfoot>
         </table>
+        <div class="room-matrix-actions">
+          <button type="button" class="pure-button pure-button-primary" id="new-room-button">New Room</button>
+        </div>
       </form>
     </div> <!-- main-grid -->
   </div>
@@ -449,10 +458,36 @@
     <input id="room-rename-name" type="text" maxlength="120" autocomplete="off" required>
     <div class="room-rename-message" data-role="message" aria-live="polite"></div>
     <div class="room-rename-actions">
+      <button type="button" class="pure-button room-delete-choice hidden" data-action="request-room-delete">Delete…</button>
       <button type="submit" class="pure-button pure-button-primary">Rename</button>
       <button type="button" class="pure-button" data-action="cancel-room-rename">Cancel</button>
     </div>
   </form>
+</div>
+
+<div id="room-create-dialog" class="room-rename-dialog hidden" role="dialog" aria-modal="true" aria-labelledby="room-create-title">
+  <form class="room-rename-card">
+    <h3 id="room-create-title">New room</h3>
+    <label for="room-create-name">Room name</label>
+    <input id="room-create-name" type="text" maxlength="120" autocomplete="off" required>
+    <div class="room-rename-message" data-role="message" aria-live="polite"></div>
+    <div class="room-rename-actions">
+      <button type="submit" class="pure-button pure-button-primary">Create</button>
+      <button type="button" class="pure-button" data-action="cancel-room-create">Cancel</button>
+    </div>
+  </form>
+</div>
+
+<div id="room-delete-dialog" class="room-rename-dialog hidden" role="dialog" aria-modal="true" aria-labelledby="room-delete-title">
+  <div class="room-rename-card">
+    <h3 id="room-delete-title">Delete empty room</h3>
+    <p>Delete <strong data-role="room-name"></strong>? This cannot be undone.</p>
+    <div class="room-rename-message" data-role="message" aria-live="polite"></div>
+    <div class="room-rename-actions">
+      <button type="button" class="pure-button pure-button-primary" data-action="confirm-room-delete" disabled>OK (5)</button>
+      <button type="button" class="pure-button" data-action="cancel-room-delete">Cancel</button>
+    </div>
+  </div>
 </div>
 
 <div id="room-matrix-message" class="room-matrix-message hidden" role="status" aria-live="polite"></div>
@@ -460,7 +495,7 @@
 <div id="fcu-temp-sources-popup" class="fcu-temp-sources-popup hidden" role="dialog" aria-modal="true" aria-labelledby="fcu-temp-sources-title">
   <div class="fcu-temp-sources-dialog">
     <div class="fcu-temp-sources-header">
-      <h3 id="fcu-temp-sources-title" data-role="title">Room Editor</h3>
+      <h3 id="fcu-temp-sources-title" data-role="title">FCU Temperature Sources</h3>
       <div class="fcu-temp-sources-actions">
         <button type="button" class="pure-button pure-button-primary" data-action="save-fcu-temp-sources">Save</button>
         <button type="button" class="pure-button" data-action="revert-fcu-temp-sources">Revert</button>
@@ -468,8 +503,8 @@
       </div>
     </div>
     <div class="fcu-room-editor-row">
-      <label for="fcu-room-display-name">Room name</label>
-      <input id="fcu-room-display-name" class="fcu-room-display-name" type="text" autocomplete="off" data-role="display-name">
+      <span>Room</span>
+      <strong data-role="room-name">Unassigned</strong>
     </div>
     <p class="fcu-temp-sources-note">Readings older than 10 minutes are ignored.</p>
     <div class="fcu-temp-sources-message" data-role="message" aria-live="polite"></div>
