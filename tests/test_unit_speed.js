@@ -38,6 +38,7 @@ const {
   pendingSingleSetTempUpdateDecision,
   renderDisableCell,
   renderAutoSetTempRange,
+  refreshOpenFcuRoomEditor,
   resizeSetRangeEndpoint,
   saveAutoSetTempWidget,
   saveFcuTempSourceMultipliers,
@@ -548,6 +549,25 @@ check(
     .join(","),
   "1",
 );
+const originalDocumentForRoomRefresh = global.document;
+let refreshedTrigger = null;
+const roomEditorTrigger = { dataset: { deviceId: "12" } };
+global.document = {
+  getElementById: () => ({
+    dataset: { deviceId: "12" },
+    classList: { contains: () => false },
+  }),
+  querySelector: () => roomEditorTrigger,
+};
+check(
+  "open room editor refreshes after assignment change",
+  refreshOpenFcuRoomEditor((trigger) => {
+    refreshedTrigger = trigger;
+  }),
+  true,
+);
+check("room editor refresh uses its FCU trigger", refreshedTrigger, roomEditorTrigger);
+global.document = originalDocumentForRoomRefresh;
 check(
   "nonnegative multiplier parses",
   parseFcuTempSourceMultiplier(" 1.5 "),

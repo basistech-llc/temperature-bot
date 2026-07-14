@@ -1162,6 +1162,19 @@ async function loadFcuTempSourcesForCell(cell) {
   }
 }
 
+function refreshOpenFcuRoomEditor(loadSources = loadFcuTempSourcesForCell) {
+  const popup = document.getElementById("fcu-temp-sources-popup");
+  if (!popup || popup.classList.contains("hidden") || !popup.dataset.deviceId) {
+    return false;
+  }
+  const trigger = document.querySelector(
+    `.fcu-room-editor-trigger[data-device-id="${popup.dataset.deviceId}"]`,
+  );
+  if (!trigger) return false;
+  loadSources(trigger);
+  return true;
+}
+
 async function saveFcuTempSourceMultipliers() {
   const popup = document.getElementById("fcu-temp-sources-popup");
   if (!popup) {
@@ -3174,6 +3187,7 @@ if (typeof window !== "undefined") {
   });
   window.addEventListener("roomassignmentchange", () => {
     forceRefresh = true;
+    refreshOpenFcuRoomEditor();
   });
 }
 
@@ -3211,6 +3225,7 @@ if (typeof module !== "undefined" && module.exports) {
     pendingSingleSetTempUpdateDecision,
     renderDisableCell,
     renderAutoSetTempRange,
+    refreshOpenFcuRoomEditor,
     resizeSetRangeEndpoint,
     saveAutoSetTempWidget,
     saveFcuTempSourceMultipliers,
