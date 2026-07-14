@@ -12,6 +12,7 @@ const {
   collectFcuTempSourceChanges,
   autoSetTempRangeForDevice,
   compactAgeFromSeconds,
+  clearPendingFanChange,
   createSingleFlight,
   dashboardAirQualityDeviceIsActive,
   deviceDisplayNameChanged,
@@ -151,6 +152,22 @@ async function testSingleFlightStatusRefresh() {
     true,
   );
   check("second sequential status refresh starts", calls, 2);
+}
+
+function testPendingFanChangeOwnership() {
+  const pendingChanges = new Map();
+  const olderChange = { radioId: "radio-7-4" };
+  const newerChange = { radioId: "radio-7-0" };
+  pendingChanges.set(7, newerChange);
+
+  clearPendingFanChange(pendingChanges, 7, olderChange);
+  check(
+    "older request cannot clear newer pending fan selection",
+    pendingChanges.get(7),
+    newerChange,
+  );
+  clearPendingFanChange(pendingChanges, 7, newerChange);
+  check("owning request clears pending fan selection", pendingChanges.has(7), false);
 }
 
 // -- The bug: off unit holding Auto must show Off, not Auto --
@@ -1417,6 +1434,7 @@ check(
 check("range set temp matching update clears state", pendingRangeWidget.dataset.updateState, undefined);
 
 Promise.resolve()
+  .then(testPendingFanChangeOwnership)
   .then(testSingleFlightStatusRefresh)
   .then(testRoomEditorRefreshHandlesRejection)
   .then(testEnableRulesForDevicePost)

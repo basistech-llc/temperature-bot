@@ -92,6 +92,13 @@ function createSingleFlight() {
 
 const runStatusRefresh = createSingleFlight();
 
+/** Clear a pending fan change only if this request still owns it. */
+function clearPendingFanChange(pendingChanges, deviceId, change) {
+  if (pendingChanges.get(deviceId) === change) {
+    pendingChanges.delete(deviceId);
+  }
+}
+
 /**
  * Decide which fan-speed radio button should be selected for a device.
  *
@@ -1839,7 +1846,8 @@ function setupMatrixListeners() {
     radio.addEventListener("change", async function () {
       const deviceId = parseInt(this.getAttribute("x-data-device-id"));
       const fan_speed = parseInt(this.getAttribute("x-data-fan_speed"));
-      pendingFanRadioIds.set(deviceId, this.id);
+      const pendingChange = { radioId: this.id };
+      pendingFanRadioIds.set(deviceId, pendingChange);
 
       try {
         // Off button (0): turn off drive
@@ -1854,7 +1862,7 @@ function setupMatrixListeners() {
           ]);
         }
       } finally {
-        pendingFanRadioIds.delete(deviceId);
+        clearPendingFanChange(pendingFanRadioIds, deviceId, pendingChange);
         forceRefresh = true;
       }
     });
@@ -2923,7 +2931,7 @@ const refreshGridRows = () => {
             // Update radio button selection based on drive and speed state.
             const radioId = fanRadioIdForDevice(
               dev,
-              pendingFanRadioIds.get(dev.device_id),
+              pendingFanRadioIds.get(dev.device_id)?.radioId,
             );
             if (radioId) {
               const radio = document.getElementById(radioId);
@@ -3260,6 +3268,7 @@ if (typeof module !== "undefined" && module.exports) {
     collectFcuTempSourceChanges,
     autoSetTempRangeForDevice,
     compactAgeFromSeconds,
+    clearPendingFanChange,
     createSingleFlight,
     dashboardAirQualityDeviceIsActive,
     deviceDisplayNameChanged,
