@@ -584,9 +584,6 @@ function setupRoomMatrix() {
 
 if (typeof window !== "undefined") {
   window.addEventListener("DOMContentLoaded", setupRoomMatrix);
-  window.addEventListener("roomnamechange", (event) => {
-    applyMatrixRoomName(event.detail.roomId, event.detail.roomName);
-  });
   window.addEventListener("roommetricschange", (event) => {
     applyRoomMetrics(
       event.detail.roomId,
