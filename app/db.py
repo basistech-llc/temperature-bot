@@ -361,12 +361,10 @@ def validate_database_schema_on_startup() -> None:
         if has_tables:
             validate_configured_database_schema()
     except KeyError as e:
-        issue = DatabaseSchemaIssue(
-            issue_type="missing_config",
-            object_name=e.args[0],
-            detail="database path environment variable is not set",
+        print(
+            "Missing required environment variable %s (path to SQLite database)." % e.args[0],
+            file=sys.stderr,
         )
-        print(format_schema_mismatch_message("<unset>", [issue]), file=sys.stderr)
         raise SystemExit(1) from None
     except DatabaseSchemaMismatchError as e:
         print(str(e), file=sys.stderr)
