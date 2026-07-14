@@ -1,5 +1,7 @@
 """Deterministic device classification from discovery metadata."""
 
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict, Field
 
 DEVICE_TYPE_SENSOR = "SENSOR"
@@ -25,6 +27,21 @@ class HubitatDevice(BaseModel):
     id: str | int | None = None
     capabilities: set[str] = Field(default_factory=set)
     commands: list[HubitatCommand] = Field(default_factory=list)
+
+
+class HubitatControlAttributes(BaseModel):
+    """Control attributes returned by the Maker API single-device endpoint."""
+
+    model_config = ConfigDict(extra="ignore")
+    level: int | None = Field(default=None, ge=0, le=100)
+    switch: Literal["on", "off"] | None = None
+
+
+class HubitatControlDevice(BaseModel):
+    """Typed subset of a Maker API single-device response."""
+
+    model_config = ConfigDict(extra="ignore")
+    attributes: HubitatControlAttributes = Field(default_factory=HubitatControlAttributes)
 
 
 FAN_CAPABILITIES = frozenset({"FanControl"})

@@ -2,7 +2,7 @@
 """
 Simple test to check if Flask routes are working
 """
-# pylint: disable=unused-import
+# pylint: disable=unused-import,too-many-lines
 import datetime
 from html import unescape
 from unittest.mock import patch
@@ -712,9 +712,11 @@ _FAKE_ALL_DEVICES = [
 
 # /api/v1/hickory/room_status
 
-@patch("app.routes_api.hubitat.get_all_devices", return_value=_FAKE_ALL_DEVICES)
-def test_room_status_returns_device_states(_mock, flask_test_client):  # noqa: F811
+@patch("app.routes_api.hubitat.get_device_info")
+def test_room_status_returns_device_states(mock_get_device_info, flask_test_client):  # noqa: F811
     """Room status returns dimmer level and wall light states."""
+    devices = {device["id"]: device for device in _FAKE_ALL_DEVICES}
+    mock_get_device_info.side_effect = devices.__getitem__
     resp = flask_test_client.get("/api/v1/hickory/room_status")
     assert resp.status_code == 200
     data = resp.get_json()
@@ -722,9 +724,14 @@ def test_room_status_returns_device_states(_mock, flask_test_client):  # noqa: F
     assert data["dimmer"]["switch"] == "on"
     assert data["wall_inner"]["switch"] == "on"
     assert data["wall_outer"]["switch"] == "off"
+    assert [call.args[0] for call in mock_get_device_info.call_args_list] == [
+        "581",
+        "454",
+        "550",
+    ]
 
 
-@patch("app.routes_api.hubitat.get_all_devices", return_value=[])
+@patch("app.routes_api.hubitat.get_device_info", side_effect=RuntimeError("missing"))
 def test_room_status_missing_devices(_mock, flask_test_client):  # noqa: F811
     """When configured devices aren't in Hubitat, they're omitted from response."""
     resp = flask_test_client.get("/api/v1/hickory/room_status")
@@ -735,12 +742,21 @@ def test_room_status_missing_devices(_mock, flask_test_client):  # noqa: F811
     assert "wall_outer" not in data
 
 
-@patch("app.routes_api.hubitat.get_all_devices", side_effect=RuntimeError("hub down"))
-def test_room_status_hubitat_error(_mock, flask_test_client):  # noqa: F811
-    """Hubitat failure returns 500."""
+@patch("app.routes_api.hubitat.get_device_info")
+def test_room_status_one_device_error_keeps_other_states(mock_get_device_info, flask_test_client):  # noqa: F811
+    """One failed per-device read does not hide reachable device states."""
+    devices = {device["id"]: device for device in _FAKE_ALL_DEVICES}
+    mock_get_device_info.side_effect = lambda device_id: (
+        (_ for _ in ()).throw(RuntimeError("hub down"))
+        if device_id == "454"
+        else devices[device_id]
+    )
     resp = flask_test_client.get("/api/v1/hickory/room_status")
-    assert resp.status_code == 500
-    assert "error" in resp.get_json()
+    assert resp.status_code == 200
+    assert resp.get_json() == {
+        "dimmer": {"level": 75, "switch": "on"},
+        "wall_outer": {"switch": "off"},
+    }
 
 
 # /api/v1/hickory/dimmer

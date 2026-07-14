@@ -22,6 +22,7 @@ from . import ae200
 from .display_names import display_device_name
 from . import room_config
 from . import presence
+from .device_types import HubitatControlDevice
 from .utils.request_utils import parse_device_ids
 from .utils.db_utils import with_db_connection
 
@@ -43,6 +44,9 @@ from .models import (
     RoomPatch,
     PresenceHistoryResponse,
     RoomPresenceResponse,
+    RoomControlStatus,
+    RoomDimmerState,
+    RoomSwitchState,
     SetTempControl,
     SpeedControl,
     TemperatureSeriesResponse,
@@ -643,31 +647,31 @@ def update_note(conn, body: NoteControl):
 def hickory_room_status():
     """Return current state of Hickory room control devices."""
     config = room_config.get_room_config("hickory")
-    result = {}
-    try:
-        all_devices = hubitat.get_all_devices()
-        by_id = {str(d.get("id")): d for d in all_devices}
+    result = RoomControlStatus()
 
-        dimmer_id = config.dimmer_id
-        if dimmer_id and dimmer_id in by_id:
-            attrs = by_id[dimmer_id].get("attributes", {})
-            result["dimmer"] = {
-                "level": int(attrs.get("level", 0)),
-                "switch": attrs.get("switch", "off"),
-            }
-        for key, dev_id in {
-            "wall_inner_id": config.wall_inner_id,
-            "wall_outer_id": config.wall_outer_id,
-        }.items():
-            if dev_id and dev_id in by_id:
-                attrs = by_id[dev_id].get("attributes", {})
-                result[key.replace("_id", "")] = {
-                    "switch": attrs.get("switch", "off"),
-                }
-    except (RuntimeError, OSError) as e:
-        logger.warning("Room status fetch failed: %s", e)
-        return jsonify({"error": str(e)}), 500
-    return jsonify(result)
+    def read_device(device_id: str | None) -> HubitatControlDevice | None:
+        if device_id is None:
+            return None
+        try:
+            return HubitatControlDevice.model_validate(hubitat.get_device_info(device_id))
+        except (RuntimeError, OSError, ValueError) as e:
+            logger.warning("Room device %s status fetch failed: %s", device_id, e)
+            return None
+
+    if dimmer := read_device(config.dimmer_id):
+        result.dimmer = RoomDimmerState(
+            level=dimmer.attributes.level or 0,
+            switch=dimmer.attributes.switch or "off",
+        )
+    if wall_inner := read_device(config.wall_inner_id):
+        result.wall_inner = RoomSwitchState(
+            switch=wall_inner.attributes.switch or "off"
+        )
+    if wall_outer := read_device(config.wall_outer_id):
+        result.wall_outer = RoomSwitchState(
+            switch=wall_outer.attributes.switch or "off"
+        )
+    return jsonify(json_ready(result))
 
 
 @api_v1.route("/hickory/dimmer", methods=["POST"])

@@ -720,6 +720,26 @@ class RoomPresenceResponse(BaseModel):
     rooms: list[RoomPresence]
 
 
+class RoomSwitchState(BaseModel):
+    """Current state of one room switch."""
+
+    switch: Literal["on", "off"]
+
+
+class RoomDimmerState(RoomSwitchState):
+    """Current level and switch state of one room dimmer."""
+
+    level: int = Field(ge=0, le=100)
+
+
+class RoomControlStatus(BaseModel):
+    """Available actuator states for a room dashboard."""
+
+    dimmer: RoomDimmerState | None = None
+    wall_inner: RoomSwitchState | None = None
+    wall_outer: RoomSwitchState | None = None
+
+
 class PresenceHistoryResponse(BaseModel):
     """Presence observations retained with their room-at-observation identity."""
 
