@@ -16,14 +16,19 @@ from typing import Any
 from flask import render_template, request, redirect, url_for
 
 from .constants import DASHBOARD_AIR_QUALITY_DEVICE_EXPIRATION_SECONDS
-from .device_types import DEVICE_TYPE_ERV, DEVICE_TYPE_FCU, DEVICE_TYPE_INTERNAL
+from .device_types import (
+    DEVICE_TYPE_ERV,
+    DEVICE_TYPE_FCU,
+    DEVICE_TYPE_INTERNAL,
+    DEVICE_TYPE_SENSOR,
+)
 from .version import __version__
 from . import db
 from . import db_alerts
 from . import rules_engine
 from . import hubitat
 from . import room_config
-from .display_names import display_device_name
+from .display_names import append_display_icon, display_device_name
 from .models import (
     DeviceMetadataControl,
     DeviceStatus,
@@ -44,6 +49,12 @@ from .room_metrics import RoomMetric, select_room_metric_sources
 from .presence import PRESENCE_STALE_SECONDS, get_room_presence
 
 logger = logging.getLogger(__name__)
+
+DASHBOARD_DEVICE_ICONS = {
+    DEVICE_TYPE_ERV: "♻️",
+    DEVICE_TYPE_FCU: "🌀",
+    DEVICE_TYPE_SENSOR: "📡",
+}
 
 # Display metadata for per-metric chart pages. Keyed on the URL-safe metric
 # name (same keys as db.AQ_METRIC_STATUS_KEYS). Radon uses its default Bq/m³
@@ -246,6 +257,16 @@ def _dashboard_device_label(device: dict[str, Any]) -> str:
     )
 
 
+def _dashboard_device_label_with_icon(device: dict[str, Any]) -> str:
+    """Return the server-rendered label with one device-category marker."""
+    label = str(device.get("device_label") or _dashboard_device_label(device))
+    device_type = str(device.get("device_type") or "").upper()
+    icon = DASHBOARD_DEVICE_ICONS.get(device_type, "")
+    if not icon and device.get("dashboard_air_quality_active"):
+        icon = DASHBOARD_DEVICE_ICONS[DEVICE_TYPE_SENSOR]
+    return append_display_icon(label, icon)
+
+
 def _dashboard_device_tooltip(device: dict[str, Any], now: int) -> str:
     """Return the Unit-column tooltip for a device row."""
     raw_device_name = device.get("device_name", "")
@@ -281,11 +302,12 @@ def _register_core_routes(app):
 
         for d in device_data:
             d["device_label"] = _dashboard_device_label(d)
-            d["device_update_text"] = _dashboard_device_update_text(d, now)
-            d["device_update_tooltip"] = _dashboard_device_tooltip(d, now)
             d["dashboard_air_quality_active"] = (
                 _dashboard_air_quality_device_is_active(d, now)
             )
+            d["device_label_with_icon"] = _dashboard_device_label_with_icon(d)
+            d["device_update_text"] = _dashboard_device_update_text(d, now)
+            d["device_update_tooltip"] = _dashboard_device_tooltip(d, now)
 
         return render_template(
             "index.html",

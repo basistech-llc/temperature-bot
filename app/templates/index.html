@@ -43,7 +43,7 @@
                           data-device-type="{{ device.device_type or '' }}"
                           data-rules-enabled="{{ 'true' if device.rules_enabled|default(true) else 'false' }}"
                           data-device-update="{{ device.device_update_text|default('', true) }}"
-                          title="{{ device.device_update_tooltip|default(device.device_name, true) }}">{{ device.device_label }} ♻️</span><span class="rules-disabled-superscript hidden" id="rules-disabled-{{ device.device_id }}" title=""></span>
+                          title="{{ device.device_update_tooltip|default(device.device_name, true) }}">{{ device.device_label_with_icon }}</span><span class="rules-disabled-superscript hidden" id="rules-disabled-{{ device.device_id }}" title=""></span>
                     <span id="device-{{ device.device_id }}-notes"></span>
                   </td>
                   <td class="cell-room">{{ device.room_name or '—' }}</td>
@@ -152,7 +152,7 @@
                           data-fcu-temp-source-update-url="/api/v1/fcu_temp_source"
                           data-room-name="{{ device.room_name or '' }}"
                           aria-label="Edit temperature sources for {{ device.device_label }}"
-                          title="Edit temperature sources for {{ device.device_label }}">{{ device.device_label }} 🌀</span><span class="rules-disabled-superscript hidden" id="rules-disabled-{{ device.device_id }}" title=""></span>
+                          title="Edit temperature sources for {{ device.device_label }}">{{ device.device_label_with_icon }}</span><span class="rules-disabled-superscript hidden" id="rules-disabled-{{ device.device_id }}" title=""></span>
                     <span id="device-{{ device.device_id }}-notes"></span>
                   </td>
                   <td class="cell-disable-for" id="disable-for-{{ device.device_id }}">
@@ -375,7 +375,7 @@
                           data-device-type="{{ device.device_type or '' }}"
                           data-rules-enabled="{{ 'true' if device.rules_enabled|default(true) else 'false' }}"
                           data-device-update="{{ device.device_update_text|default('', true) }}"
-                          title="{{ device.device_update_tooltip|default(device.device_name, true) }}">{{ device.device_label }} 📡</span><span class="rules-disabled-superscript hidden" id="rules-disabled-{{ device.device_id }}" title=""></span>
+                          title="{{ device.device_update_tooltip|default(device.device_name, true) }}">{{ device.device_label_with_icon }}</span><span class="rules-disabled-superscript hidden" id="rules-disabled-{{ device.device_id }}" title=""></span>
                     <span id="device-{{ device.device_id }}-notes"></span>
                   </td>
                   <td class="cell-humidity{% if device.has_humidity %} cell-metric-link{% endif %}" id="humidity-{{ device.device_id }}"

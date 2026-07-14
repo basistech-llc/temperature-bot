@@ -12,6 +12,7 @@ from app.main import APP_DIR, application_metadata
 from app.routes_web import (
     _dashboard_air_quality_device_is_active,
     _dashboard_device_label,
+    _dashboard_device_label_with_icon,
     _dashboard_device_tooltip,
     _filter_speed_control_devices,
     _get_hubitat_sensors,
@@ -123,6 +124,39 @@ def test_dashboard_device_label_uses_stored_status_label():
     )
 
     assert label == "Lobby Sensor"
+
+
+def test_dashboard_device_label_icons_are_idempotent():
+    assert (
+        _dashboard_device_label_with_icon(
+            {
+                "device_name": "ERV 1",
+                "device_label": "ERV 1 ♻️",
+                "device_type": "ERV",
+            }
+        )
+        == "ERV 1 ♻️"
+    )
+    assert (
+        _dashboard_device_label_with_icon(
+            {
+                "device_name": "Area 51",
+                "device_label": "Area 51",
+                "device_type": "FCU",
+            }
+        )
+        == "Area 51 🌀"
+    )
+    assert (
+        _dashboard_device_label_with_icon(
+            {
+                "device_name": "Unknown monitor",
+                "device_label": "Unknown monitor 📡",
+                "dashboard_air_quality_active": True,
+            }
+        )
+        == "Unknown monitor 📡"
+    )
 
 
 def test_dashboard_device_tooltip_uses_device_update_time():
