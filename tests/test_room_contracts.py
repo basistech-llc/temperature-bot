@@ -71,10 +71,21 @@ def test_only_empty_rooms_can_be_deleted(
     occupied = flask_test_client.post(
         "/api/v1/rooms", json={"room_name": "Occupied"}
     )
+    fcu_owned = flask_test_client.post(
+        "/api/v1/rooms", json={"room_name": "FCU Owned"}
+    )
     sensor_id = conn.execute(
         "INSERT INTO devices (device_name, device_type, room_id) VALUES (?, ?, ?)",
         ("Deletion Guard Sensor", "SENSOR", occupied.json["room_id"]),
     ).lastrowid
+    fcu_id = conn.execute(
+        "INSERT INTO devices (device_name, device_type, room_id) VALUES (?, ?, ?)",
+        ("Deletion Guard FCU", DEVICE_TYPE_FCU, fcu_owned.json["room_id"]),
+    ).lastrowid
+    conn.execute(
+        "UPDATE rooms SET fcu_device_id=? WHERE room_id=?",
+        (fcu_id, fcu_owned.json["room_id"]),
+    )
     conn.commit()
 
     rejected = flask_test_client.delete(f"/api/v1/rooms/{occupied.json['room_id']}")
@@ -84,6 +95,13 @@ def test_only_empty_rooms_can_be_deleted(
     assert conn.execute(
         "SELECT room_id FROM devices WHERE device_id=?", (sensor_id,)
     ).fetchone()["room_id"] == occupied.json["room_id"]
+
+    rejected_fcu = flask_test_client.delete(
+        f"/api/v1/rooms/{fcu_owned.json['room_id']}"
+    )
+    assert rejected_fcu.status_code == 409
+    assert rejected_fcu.json["error"] == "FCU-owned rooms cannot be deleted"
+    assert not conn.in_transaction
 
     deleted = flask_test_client.delete(f"/api/v1/rooms/{empty.json['room_id']}")
     assert deleted.status_code == 204

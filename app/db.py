@@ -830,9 +830,12 @@ def delete_empty_room(conn, room_id: int) -> bool:
     )
     if c.rowcount == 0:
         conn.rollback()
-        c.execute("SELECT 1 FROM rooms WHERE room_id=?", (room_id,))
-        if c.fetchone() is None:
+        c.execute("SELECT fcu_device_id FROM rooms WHERE room_id=?", (room_id,))
+        room = c.fetchone()
+        if room is None:
             return False
+        if room["fcu_device_id"] is not None:
+            raise ValueError("FCU-owned rooms cannot be deleted")
         raise ValueError("Only rooms without assigned devices can be deleted")
     conn.commit()
     return True

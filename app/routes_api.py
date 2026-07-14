@@ -535,7 +535,7 @@ def update_room(conn, room_id: int):
 @api_v1.delete("/rooms/<int:room_id>")
 @with_db_connection
 def delete_room(conn, room_id: int):
-    """Delete a room only when it has no assigned devices."""
+    """Delete a room only when it has no FCU owner or assigned devices."""
     try:
         deleted = db.delete_empty_room(conn, room_id)
     except ValueError as e:
