@@ -10,7 +10,7 @@ WorkingDirectory=/home/deg/temperature-bot
 Environment="PATH=/home/deg/temperature-bot/.venv/bin"
 Environment="DB_PATH=/home/deg/temperature-bot/temperature-bot.db"
 Environment="LOG_LEVEL=DEBUG"
-ExecStart=/bin/bash -c 'LOG_LEVEL=DEBUG gunicorn app.main:app --log-level debug --reload --bind 127.0.0.1:8004 --workers $((2 * $(/usr/bin/nproc) + 1)) --access-logfile /home/deg/access.log --error-logfile /home/deg/error.log'
+ExecStart=/bin/bash -c 'LOG_LEVEL=DEBUG gunicorn app.main:app --log-level debug --bind 127.0.0.1:8004 --workers $((2 * $(/usr/bin/nproc) + 1)) --access-logfile /home/deg/access.log --error-logfile /home/deg/error.log'
 Restart=always
 RestartSec=1
 
