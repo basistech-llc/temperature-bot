@@ -136,10 +136,14 @@ async function testSingleFlightStatusRefresh() {
     calls++;
     await firstOperation;
   });
-  const overlappingRun = await runSingleFlight(async () => {
-    calls++;
-  });
-  check("overlapping status refresh is skipped", overlappingRun, false);
+  const overlappingRuns = await Promise.all(
+    Array.from({ length: 10 }, () => runSingleFlight(async () => { calls++; })),
+  );
+  check(
+    "forced refresh attempts are skipped while status is pending",
+    overlappingRuns.every(result => result === false),
+    true,
+  );
   check("only one status refresh starts", calls, 1);
 
   releaseFirst();
@@ -152,6 +156,22 @@ async function testSingleFlightStatusRefresh() {
     true,
   );
   check("second sequential status refresh starts", calls, 2);
+
+  let failureCalls = 0;
+  try {
+    await runSingleFlight(async () => {
+      failureCalls++;
+      throw new Error("temporary failure");
+    });
+  } catch (error) {
+    check("single-flight preserves operation errors", error.message, "temporary failure");
+  }
+  check(
+    "failed status refresh releases single-flight",
+    await runSingleFlight(async () => { failureCalls++; }),
+    true,
+  );
+  check("retry runs after failed status refresh", failureCalls, 2);
 }
 
 function testPendingFanChangeOwnership() {

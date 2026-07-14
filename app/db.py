@@ -95,6 +95,29 @@ FLYWAY_SCHEMA_HISTORY_TABLE = "flyway_schema_history"
 SCHEMA_UPGRADE_COMMAND = "make migrate-db"
 FCU_DEFAULT_TEMP_SOURCE_MULTIPLIER = 1.0
 
+LATEST_ROOM_METRIC_SNAPSHOTS_SQL = """
+    SELECT
+        d.device_id,
+        d.device_name,
+        d.display_name,
+        d.device_type,
+        d.room_id,
+        l.logtime,
+        l.duration,
+        l.temp10x,
+        l.status_json
+    FROM devices d
+    JOIN devlog l ON l.log_id = (
+        SELECT candidate.log_id
+        FROM devlog candidate
+        WHERE candidate.device_id = d.device_id
+          AND candidate.logtime <= ?
+        ORDER BY candidate.logtime DESC, candidate.log_id DESC
+        LIMIT 1
+    )
+    ORDER BY d.device_name
+"""
+
 
 def _chart_logtime(row: sqlite3.Row) -> int:
     """Return an integer timestamp for legacy rows that stored float times."""
@@ -959,35 +982,7 @@ def fetch_latest_room_metric_snapshots(
     """Return each device's latest raw reading at or before ``at_time``."""
     boundary = at_time if at_time is not None else float("inf")
     c = conn.cursor()
-    c.execute(
-        """
-        WITH ranked AS (
-            SELECT
-                l.*,
-                ROW_NUMBER() OVER (
-                    PARTITION BY l.device_id
-                    ORDER BY l.logtime DESC, l.log_id DESC
-                ) AS reading_rank
-            FROM devlog l
-            WHERE l.logtime <= ?
-        )
-        SELECT
-            d.device_id,
-            d.device_name,
-            d.display_name,
-            d.device_type,
-            d.room_id,
-            l.logtime,
-            l.duration,
-            l.temp10x,
-            l.status_json
-        FROM ranked l
-        JOIN devices d ON d.device_id = l.device_id
-        WHERE l.reading_rank = 1
-        ORDER BY d.device_name
-        """,
-        (boundary,),
-    )
+    c.execute(LATEST_ROOM_METRIC_SNAPSHOTS_SQL, (boundary,))
     return [
         RoomMetricSnapshot(
             device_id=row["device_id"],

@@ -91,3 +91,5 @@ CREATE INDEX IF NOT EXISTS idx_presence_events_room_observed_at
 ON presence_events(room_id, observed_at);
 CREATE INDEX IF NOT EXISTS idx_presence_events_device_observed_at
 ON presence_events(device_id, observed_at);
+CREATE INDEX IF NOT EXISTS idx_devlog_device_logtime_log_id
+ON devlog (device_id, logtime DESC, log_id DESC);

@@ -38,8 +38,10 @@ calculation. The constant is defined once in `app/constants.py` and is currently
 10 minutes are ignored.
 
 `app/room_metrics.py` is the shared source-selection boundary for current room
-temperature and humidity. `db.fetch_latest_room_metric_snapshots()` performs
-the raw SQLite lookup and returns typed snapshots; `select_room_metric_sources()`
+temperature and humidity. `db.fetch_latest_room_metric_snapshots()` performs an
+indexed latest-row lookup per device using
+`(device_id, logtime DESC, log_id DESC)` and returns typed snapshots;
+`select_room_metric_sources()`
 then applies room membership, excludes ERV and `INTERNAL` devices, calculates
 age from `logtime + duration`, rejects stale readings, and extracts the chosen
 metric. Temperature is normalized to Celsius and humidity supports both

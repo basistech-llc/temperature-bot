@@ -11,8 +11,8 @@
  */
 const {
   computeFitScale,
+  createRoomStatusRefresher,
   createStatusRefresher,
-  refreshRoomStatus,
   requestRoomStatus,
   roomControlEndpoint,
 } = require("../app/static/room_dashboard.js");
@@ -70,10 +70,11 @@ if (roomControlEndpoint("wall_light", "Hickory & East") ===
 async function testRoomStatusPolling() {
   let requests = 0;
   const unconfiguredDocument = { querySelector: () => null };
-  const refreshed = await refreshRoomStatus(
+  const refreshRoomStatus = createRoomStatusRefresher(
     () => { requests++; },
     unconfiguredDocument,
   );
+  const refreshed = await refreshRoomStatus();
   if (refreshed === false && requests === 0) {
     passed++;
   } else {
@@ -129,10 +130,67 @@ async function testDeviceStatusSingleFlight() {
     failed++;
     console.error('FAIL completed room device status must update once');
   }
+
+  let fail = true;
+  const retryingRefresh = createStatusRefresher(async () => {
+    if (fail) {
+      fail = false;
+      throw new Error('temporary failure');
+    }
+    return { ok: true, json: async () => ({ devices: [] }) };
+  }, () => {});
+  if (await retryingRefresh() === false && await retryingRefresh() === true) {
+    passed++;
+  } else {
+    failed++;
+    console.error('FAIL failed device status request must release single-flight');
+  }
+}
+
+async function testRoomControlStatusSingleFlight() {
+  let releaseRequest;
+  let requests = 0;
+  const responseReady = new Promise(resolve => { releaseRequest = resolve; });
+  const documentRef = {
+    querySelector: () => ({}),
+    getElementById: () => null,
+  };
+  const refreshRoomStatus = createRoomStatusRefresher(async () => {
+    requests++;
+    await responseReady;
+    return { ok: true, json: async () => ({}) };
+  }, documentRef);
+
+  const firstRefresh = refreshRoomStatus();
+  const overlaps = await Promise.all(Array.from({ length: 10 }, refreshRoomStatus));
+  if (overlaps.every(result => result === false) && requests === 1) {
+    passed++;
+  } else {
+    failed++;
+    console.error('FAIL room-control status requests must not overlap');
+  }
+  releaseRequest();
+  await firstRefresh;
+
+  let fail = true;
+  const retryingRefresh = createRoomStatusRefresher(async () => {
+    if (fail) {
+      fail = false;
+      throw new Error('temporary failure');
+    }
+    return { ok: true, json: async () => ({}) };
+  }, documentRef);
+  if (await retryingRefresh() === false && await retryingRefresh() === true) {
+    passed++;
+  } else {
+    failed++;
+    console.error('FAIL failed room-control request must release single-flight');
+  }
 }
 
 testRoomStatusPolling()
   .then(testDeviceStatusSingleFlight)
+  .then(testRoomControlStatusSingleFlight)
   .catch(error => {
     failed++;
     console.error(`FAIL room status polling tests: ${error.message}`);
