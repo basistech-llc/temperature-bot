@@ -11,7 +11,9 @@ const {
   roomHumidityText,
   roomIdFromValue,
   roomNameSortKey,
+  roomRenameKeyTriggered,
   roomTemperatureC,
+  stripElementIds,
 } = require("../app/static/room_matrix.js");
 
 assert.strictEqual(roomIdFromValue(""), null);
@@ -31,6 +33,22 @@ assert.deepStrictEqual(deviceRoomRequest(42, ""), {
 assert.strictEqual(longPressTriggered(649, 0), false);
 assert.strictEqual(longPressTriggered(650, 10), true);
 assert.strictEqual(longPressTriggered(800, 11), false);
+assert.strictEqual(roomRenameKeyTriggered("Enter"), true);
+assert.strictEqual(roomRenameKeyTriggered(" "), true);
+assert.strictEqual(roomRenameKeyTriggered("Escape"), false);
+
+const dragCloneChildren = [
+  { id: "temp-1", removeAttribute: (name) => { if (name === "id") delete dragCloneChildren[0].id; } },
+  { id: "notes-1", removeAttribute: (name) => { if (name === "id") delete dragCloneChildren[1].id; } },
+];
+const dragClone = {
+  id: "row-1",
+  removeAttribute(name) { if (name === "id") delete this.id; },
+  querySelectorAll: () => dragCloneChildren,
+};
+stripElementIds(dragClone);
+assert.strictEqual(dragClone.id, undefined);
+assert.deepStrictEqual(dragCloneChildren.map((child) => child.id), [undefined, undefined]);
 
 assert.strictEqual(roomTemperatureC(215), 21.5);
 assert.strictEqual(roomTemperatureC(null), null);

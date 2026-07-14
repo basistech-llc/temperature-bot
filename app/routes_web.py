@@ -188,7 +188,8 @@ def _room_matrix_groups(
     fcu_by_room = {
         device.get("room_id"): device
         for device in devices
-        if device.get("device_type") == "FCU" and device.get("room_id") is not None
+        if str(device.get("device_type") or "").upper() == DEVICE_TYPE_FCU
+        and device.get("room_id") is not None
     }
     groups = {
         room.room_id: RoomMatrixGroup(
@@ -599,20 +600,41 @@ def _collect_device_notes(devices):
     return " | ".join(notes) if notes else None
 
 
+def _room_control_key(conn, room: Room | None, fallback: str) -> str:
+    """Bind configured controls to the room's stable owning FCU identity."""
+    if room and room.fcu_device_id:
+        owner = db.get_device(conn, room.fcu_device_id)
+        owner_key = str((owner or {}).get("device_name") or "").casefold()
+        if room_config.find_room_config(owner_key) is not None:
+            return owner_key
+    return fallback.casefold()
+
+
 def _render_room_dashboard_with_data(conn, location: str, room_id: int | None = None):
     """Render room dashboard with device data filtered by configuration."""
     room_key = location.lower()
+    rooms = db.get_rooms(conn)
     room = db.get_room(conn, room_id) if room_id is not None else next(
         (
             candidate
-            for candidate in db.get_rooms(conn)
+            for candidate in rooms
             if (candidate.room_name or "").casefold() == room_key
         ),
         None,
     )
+    if room is None and room_id is None:
+        room = next(
+            (
+                candidate
+                for candidate in rooms
+                if _room_control_key(conn, candidate, "") == room_key
+            ),
+            None,
+        )
     if room_id is not None and room is None:
         return "Unknown room", 404
-    config = room_config.get_room_config(room_key)
+    control_key = _room_control_key(conn, room, room_key)
+    config = room_config.get_room_config(control_key)
 
     all_devices = db.get_device_status(conn)
 
@@ -645,7 +667,7 @@ def _render_room_dashboard_with_data(conn, location: str, room_id: int | None = 
         dimmer_id=config.dimmer_id,
         wall_inner_id=config.wall_inner_id,
         wall_outer_id=config.wall_outer_id,
-        room_control_key=room_key,
+        room_control_key=control_key,
     )
 
 

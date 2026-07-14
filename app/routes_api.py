@@ -61,7 +61,9 @@ FCU_TEMP_SOURCE_BATCH_ADAPTER = TypeAdapter(FcuTempSourceBatchControl)
 
 
 def _validation_error_response(error: ValidationError):
-    return jsonify({"error": "validation error", "details": error.errors()}), 400
+    return jsonify(
+        {"error": "validation error", "details": error.errors(include_context=False)}
+    ), 400
 
 
 def _rules_disabled_comment() -> str:
@@ -71,12 +73,12 @@ def _rules_disabled_comment() -> str:
 
 def _command_error_response(error: ValueError):
     logger.info("Command request rejected: %s", error)
-    return jsonify({"error": str(error)}), 400
+    return jsonify({"error": "Invalid command request"}), 400
 
 
 def _ae200_error_response(error):
     logger.warning("AE-200 request failed: %s", error)
-    return jsonify({"error": f"AE-200 request failed: {error}"}), 502
+    return jsonify({"error": "AE-200 request failed"}), 502
 
 
 @api_v1.route("/version")

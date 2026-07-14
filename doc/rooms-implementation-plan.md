@@ -20,7 +20,7 @@ follow-on phase is part of the plan, but does not delay the core room release.
   `Name (3)`, and so on.
 - An operator rename must reject a duplicate room name.
 - A newly discovered FCU automatically creates and joins its room.
-- Every physical non-ERV device is eligible for room assignment.
+- Every physical non-ERV, non-FCU device is eligible for room assignment.
 - ERVs and `INTERNAL` pseudo-devices such as `rules_engine` and `rules_master`
   remain outside the room model.
 - `room_id IS NULL` represents the virtual **Unassigned** room group. It is not

@@ -549,6 +549,28 @@ check(
     .join(","),
   "1",
 );
+check(
+  "blank room id does not filter room editor sources",
+  sortedFcuTempSources(
+    [
+      { source_device_id: 1, room_id: null, is_stale: false },
+      { source_device_id: 2, room_id: 3, is_stale: false },
+    ],
+    " ",
+  ).length,
+  2,
+);
+check(
+  "numeric room filter excludes unassigned sources",
+  sortedFcuTempSources(
+    [
+      { source_device_id: 1, room_id: null, is_stale: false },
+      { source_device_id: 2, room_id: 3, is_stale: false },
+    ],
+    "3",
+  ).map((source) => source.source_device_id).join(","),
+  "2",
+);
 const originalDocumentForRoomRefresh = global.document;
 let refreshedTrigger = null;
 const roomEditorTrigger = { dataset: { deviceId: "12" } };
@@ -568,6 +590,33 @@ check(
 );
 check("room editor refresh uses its FCU trigger", refreshedTrigger, roomEditorTrigger);
 global.document = originalDocumentForRoomRefresh;
+
+async function testRoomEditorRefreshHandlesRejection() {
+  const originalDocument = global.document;
+  const originalConsoleError = console.error;
+  let reported = null;
+  global.document = {
+    getElementById: () => ({
+      dataset: { deviceId: "12" },
+      classList: { contains: () => false },
+    }),
+    querySelector: () => roomEditorTrigger,
+  };
+  console.error = (_message, error) => { reported = error; };
+  try {
+    check(
+      "open room editor accepts an async refresh",
+      refreshOpenFcuRoomEditor(() => Promise.reject(new Error("refresh failed"))),
+      true,
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+    check("room editor refresh reports rejection", reported.message, "refresh failed");
+  } finally {
+    global.document = originalDocument;
+    console.error = originalConsoleError;
+  }
+}
 check(
   "nonnegative multiplier parses",
   parseFcuTempSourceMultiplier(" 1.5 "),
@@ -1329,6 +1378,7 @@ check(
 check("range set temp matching update clears state", pendingRangeWidget.dataset.updateState, undefined);
 
 Promise.resolve()
+  .then(testRoomEditorRefreshHandlesRejection)
   .then(testEnableRulesForDevicePost)
   .then(testFcuBatchSavePost)
   .then(testFcuRoomEditorNamePatch)

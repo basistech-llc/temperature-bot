@@ -237,7 +237,8 @@ def test_set_mode_endpoint_rejects_unmapped_simulator_unit(flask_test_client):  
     )
 
     assert response.status_code == 400
-    assert "AE-200 simulator has no unit" in response.json["error"]
+    assert response.json == {"error": "Invalid command request"}
+    assert "Missing Simulator Unit" not in response.get_data(as_text=True)
 
 
 def test_set_mode_endpoint_rejects_invalid_mode(flask_test_client):  # noqa: F811

@@ -93,11 +93,17 @@ def test_room_move_updates_temperature_and_equal_weight_humidity(
     )
     assert restored.status_code == 200
     assert db.calculate_fcu_temperature10x(conn, fcu_id) == 230
-    status = flask_test_client.get("/api/v1/status")
+    statements = []
+    conn.set_trace_callback(statements.append)
+    try:
+        status = db.get_device_status(conn)
+    finally:
+        conn.set_trace_callback(None)
     fcu = next(
-        device for device in status.json["devices"] if device["device_id"] == fcu_id
+        device for device in status if device["device_id"] == fcu_id
     )
     assert fcu["calculated_humidity"] == 50.0
+    assert sum("ROW_NUMBER() OVER" in statement for statement in statements) == 1
 
 
 def test_calculated_temperature_series_preserves_stale_gap(test_database_conn):

@@ -56,3 +56,27 @@ def test_canonical_room_dashboard_tracks_rename_and_assignment(
     moved = flask_test_client.get(f"/room/{room.room_id}")
     assert b"Friendly Sensor" not in moved.data
     assert b'<div class="sensors-card">' not in moved.data
+
+
+def test_configured_controls_follow_owned_fcu_after_room_rename(
+    flask_test_client, test_database_conn_with_test_data
+):
+    conn, _, _ = test_database_conn_with_test_data
+    fcu_id = conn.execute(
+        "INSERT INTO devices (device_name, device_type) VALUES ('Hickory', 'FCU')"
+    ).lastrowid
+    conn.commit()
+    db.reconcile_fcu_rooms(conn)
+    room = next(item for item in db.get_rooms(conn) if item.fcu_device_id == fcu_id)
+    assert room.room_id is not None
+    db.update_room(conn, Room(room_id=room.room_id, room_name="Library"))
+
+    canonical = flask_test_client.get(f"/room/{room.room_id}")
+    assert canonical.status_code == 200
+    assert b'data-room-control-key="hickory"' in canonical.data
+    assert b"Library" in canonical.data
+
+    legacy = flask_test_client.get("/hickory")
+    assert legacy.status_code == 200
+    assert b'data-room-control-key="hickory"' in legacy.data
+    assert b"Library" in legacy.data

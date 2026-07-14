@@ -31,6 +31,22 @@ def test_room_writes_reject_response_only_fcu_owner(flask_test_client):
     assert "fcu_device_id" not in unchanged.json
 
 
+def test_room_writes_reserve_virtual_unassigned_name(flask_test_client):
+    rejected_create = flask_test_client.post(
+        "/api/v1/rooms", json={"room_name": " unASSIGNED "}
+    )
+    assert rejected_create.status_code == 400
+
+    created = flask_test_client.post(
+        "/api/v1/rooms", json={"room_name": "Assignable"}
+    )
+    rejected_patch = flask_test_client.patch(
+        f"/api/v1/rooms/{created.json['room_id']}",
+        json={"room_name": "UNASSIGNED"},
+    )
+    assert rejected_patch.status_code == 400
+
+
 def test_room_list_is_typed_and_alphabetized(flask_test_client):
     for room_name in ("zulu", "Alpha", "bravo"):
         response = flask_test_client.post(
@@ -101,6 +117,22 @@ def test_room_assignment_rejects_unknown_and_ineligible_devices(
         json={"device_id": fcu_id, "room_id": room_id},
     )
     assert keep_fcu.status_code == 200
+
+
+def test_room_assignment_rejects_fcu_without_owned_room(
+    flask_test_client, test_database_conn_with_test_data
+):
+    conn, _, _ = test_database_conn_with_test_data
+    fcu_id = conn.execute(
+        "INSERT INTO devices (device_name, device_type) VALUES ('Orphan FCU', 'FCU')"
+    ).lastrowid
+    conn.commit()
+
+    response = flask_test_client.post(
+        "/api/v1/update_device_room", json={"device_id": fcu_id, "room_id": None}
+    )
+    assert response.status_code == 409
+    assert "owned room" in response.json["error"]
 
 
 def test_room_assignment_and_rename_contracts_are_strict(flask_test_client):
