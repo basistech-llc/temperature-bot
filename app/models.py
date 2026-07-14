@@ -680,6 +680,7 @@ class RoomMatrixGroup(BaseModel):
     fcu_device_id: int | None = None
     calculated_temp10x: int | None = None
     calculated_humidity: float | None = None
+    can_delete: bool = False
     devices: list[DeviceStatus] = Field(default_factory=list)
 
 

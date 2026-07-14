@@ -37,6 +37,33 @@ async function persistRoomName(roomId, roomName, request = fetch) {
   return data;
 }
 
+async function persistNewRoom(roomName, request = fetch) {
+  const response = await request("/api/v1/rooms", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ room_name: roomName }),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.error || "Unable to create room.");
+  return data;
+}
+
+async function persistRoomDeletion(roomId, request = fetch) {
+  const response = await request(`/api/v1/rooms/${roomId}`, { method: "DELETE" });
+  if (response.ok) return true;
+  const data = await response.json().catch(() => ({}));
+  throw new Error(data.error || "Unable to delete room.");
+}
+
+function roomDisplayName(roomName, hasFcu) {
+  return `${roomName}${String(hasFcu) === "true" ? " 🌀" : ""}`;
+}
+
+function roomDeleteCountdown(startedAt, now = Date.now()) {
+  const remaining = Math.max(0, Math.ceil((startedAt + 5000 - now) / 1000));
+  return { enabled: remaining === 0, label: remaining ? `OK (${remaining})` : "OK" };
+}
+
 function longPressTriggered(elapsedMs, movementPx) {
   return elapsedMs >= ROOM_LONG_PRESS_MS && movementPx <= ROOM_POINTER_SLOP_PX;
 }
@@ -255,8 +282,8 @@ function applyMatrixRoomName(roomId, roomName) {
   if (!separator || !button) return;
   separator.dataset.roomName = roomName;
   button.dataset.roomName = roomName;
-  button.textContent = roomName;
-  button.setAttribute("aria-label", `Rename ${roomName}`);
+  button.textContent = roomDisplayName(roomName, separator.dataset.hasFcu);
+  button.setAttribute("aria-label", `Manage room ${roomName}`);
   sortRoomGroups();
 }
 
@@ -288,8 +315,15 @@ function openRoomRenameDialog(button) {
   const input = document.getElementById("room-rename-name");
   if (!dialog || !input) return;
   dialog.dataset.roomId = button.dataset.roomId;
+  dialog.dataset.roomName = button.dataset.roomName || button.textContent.trim();
   input.value = button.dataset.roomName || button.textContent.trim();
   dialog.querySelector("[data-role='message']").textContent = "";
+  dialog
+    .querySelector("[data-action='request-room-delete']")
+    ?.classList.toggle(
+      "hidden",
+      button.closest(".room-separator")?.dataset.canDelete !== "true",
+    );
   dialog.classList.remove("hidden");
   input.focus();
   input.select();
@@ -309,17 +343,82 @@ async function renameRoom(dialog) {
     const savedRoomName = data.room_name || roomName;
     applyMatrixRoomName(roomId, savedRoomName);
     document
-      .querySelectorAll(`.fcu-room-editor-trigger[data-room-id="${roomId}"]`)
+      .querySelectorAll(`.fcu-temp-sources-trigger[data-room-id="${roomId}"]`)
       .forEach((trigger) => {
-        trigger.textContent = savedRoomName;
-        trigger.dataset.fcuTempSourcesRoomName = savedRoomName;
-        trigger.setAttribute("aria-label", `Edit room settings for ${savedRoomName}`);
-        trigger.setAttribute("title", `Edit room settings for ${savedRoomName}`);
+        trigger.dataset.roomName = savedRoomName;
       });
     closeRoomRenameDialog();
     showRoomMatrixMessage(`Renamed room to ${data.room_name || roomName}.`);
   } catch (error) {
     message.textContent = error.message || "Unable to rename room.";
+  }
+}
+
+function closeRoomCreateDialog() {
+  document.getElementById("room-create-dialog")?.classList.add("hidden");
+}
+
+function openRoomCreateDialog() {
+  const dialog = document.getElementById("room-create-dialog");
+  const input = document.getElementById("room-create-name");
+  if (!dialog || !input) return;
+  input.value = "";
+  dialog.querySelector("[data-role='message']").textContent = "";
+  dialog.classList.remove("hidden");
+  input.focus();
+}
+
+async function createRoom(dialog) {
+  const input = document.getElementById("room-create-name");
+  const message = dialog.querySelector("[data-role='message']");
+  const roomName = String(input?.value || "").trim();
+  if (!roomName) {
+    message.textContent = "Room name is required.";
+    return;
+  }
+  try {
+    await persistNewRoom(roomName);
+    window.location.reload();
+  } catch (error) {
+    message.textContent = error.message || "Unable to create room.";
+  }
+}
+
+function closeRoomDeleteDialog() {
+  const dialog = document.getElementById("room-delete-dialog");
+  if (!dialog) return;
+  clearInterval(dialog._countdownTimer);
+  dialog.classList.add("hidden");
+}
+
+function openRoomDeleteDialog(roomId, roomName) {
+  const dialog = document.getElementById("room-delete-dialog");
+  const button = dialog?.querySelector("[data-action='confirm-room-delete']");
+  if (!dialog || !button) return;
+  dialog.dataset.roomId = String(roomId);
+  dialog.querySelector("[data-role='room-name']").textContent = roomName;
+  dialog.querySelector("[data-role='message']").textContent = "";
+  dialog.classList.remove("hidden");
+  const startedAt = Date.now();
+  const update = () => {
+    const state = roomDeleteCountdown(startedAt);
+    button.disabled = !state.enabled;
+    button.textContent = state.label;
+    if (state.enabled) clearInterval(dialog._countdownTimer);
+  };
+  update();
+  dialog._countdownTimer = setInterval(update, 250);
+}
+
+async function deleteRoom(dialog) {
+  const roomId = roomIdFromValue(dialog.dataset.roomId);
+  const message = dialog.querySelector("[data-role='message']");
+  if (roomId === null) return;
+  try {
+    await persistRoomDeletion(roomId);
+    window.location.reload();
+  } catch (error) {
+    message.textContent = error.message || "Unable to delete room.";
   }
 }
 
@@ -369,6 +468,36 @@ function setupRoomRename() {
     "click",
     closeRoomRenameDialog,
   );
+  dialog?.querySelector("[data-action='request-room-delete']")?.addEventListener(
+    "click",
+    () => {
+      const roomId = roomIdFromValue(dialog.dataset.roomId);
+      if (roomId === null) return;
+      closeRoomRenameDialog();
+      openRoomDeleteDialog(roomId, dialog.dataset.roomName);
+    },
+  );
+
+  const createDialog = document.getElementById("room-create-dialog");
+  document.getElementById("new-room-button")?.addEventListener(
+    "click",
+    openRoomCreateDialog,
+  );
+  createDialog?.querySelector("form")?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    createRoom(createDialog);
+  });
+  createDialog
+    ?.querySelector("[data-action='cancel-room-create']")
+    ?.addEventListener("click", closeRoomCreateDialog);
+
+  const deleteDialog = document.getElementById("room-delete-dialog");
+  deleteDialog
+    ?.querySelector("[data-action='confirm-room-delete']")
+    ?.addEventListener("click", () => deleteRoom(deleteDialog));
+  deleteDialog
+    ?.querySelector("[data-action='cancel-room-delete']")
+    ?.addEventListener("click", closeRoomDeleteDialog);
 }
 
 function setupRoomDragging() {
@@ -466,11 +595,15 @@ if (typeof module !== "undefined" && module.exports) {
     compareSensors,
     deviceRoomRequest,
     longPressTriggered,
+    persistNewRoom,
+    persistRoomDeletion,
     persistRoomName,
     persistSensorRoom,
     restoreSensorPosition,
     roomRenameKeyTriggered,
     roomHumidityText,
+    roomDeleteCountdown,
+    roomDisplayName,
     roomIdFromValue,
     roomNameSortKey,
     roomTemperatureC,

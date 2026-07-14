@@ -8,7 +8,6 @@
 global.TemperatureUtils = require("../app/static/temperature_utils.js");
 
 const {
-  collectFcuRoomEditorDisplayNameChange,
   collectFcuTempSourceChanges,
   autoSetTempRangeForDevice,
   compactAgeFromSeconds,
@@ -16,6 +15,7 @@ const {
   createSingleFlight,
   dashboardAirQualityDeviceIsActive,
   deviceDisplayNameChanged,
+  deviceLabelWithIcon,
   deviceDisplayNamePatchBody,
   deviceRulesEnabledValue,
   deviceUpdateText,
@@ -563,15 +563,18 @@ check(
 
 // -- FCU temperature source popup behavior --
 check(
-  "room editor title includes room name",
+  "FCU source title includes unit name",
   fcuTempSourcesTitle("Area 51"),
-  "Area 51: Room Editor",
+  "Area 51: FCU Temperature Sources",
 );
 check(
-  "room editor title without room name",
+  "FCU source title without unit name",
   fcuTempSourcesTitle(""),
-  "Room Editor",
+  "FCU Temperature Sources",
 );
+check("FCU label has fan icon", deviceLabelWithIcon("Area 51", "FCU"), "Area 51 🌀");
+check("sensor label has sensor icon", deviceLabelWithIcon("Wave", "SENSOR"), "Wave 📡");
+check("ERV label has exchange icon", deviceLabelWithIcon("ERV 1", "ERV"), "ERV 1 ♻️");
 
 const unsortedSources = [
   { source_device_id: 1, is_stale: false },
@@ -1059,37 +1062,6 @@ check(
   "Weight must be a nonnegative number.",
 );
 
-const unchangedRoomName = collectFcuRoomEditorDisplayNameChange({
-  dataset: { currentDisplayName: "Area 51" },
-  querySelector: (selector) =>
-    selector === "[data-role='display-name']" ? { value: "Area 51" } : null,
-});
-check("unchanged room editor name is ignored", unchangedRoomName.changed, false);
-check("unchanged room editor name has no error", unchangedRoomName.error, "");
-
-const changedRoomName = collectFcuRoomEditorDisplayNameChange({
-  dataset: { currentDisplayName: "Area 51" },
-  querySelector: (selector) =>
-    selector === "[data-role='display-name']" ? { value: " East Lab " } : null,
-});
-check("changed room editor name is detected", changedRoomName.changed, true);
-check(
-  "changed room editor name is trimmed",
-  changedRoomName.displayName,
-  "East Lab",
-);
-
-const blankRoomName = collectFcuRoomEditorDisplayNameChange({
-  dataset: { currentDisplayName: "Area 51" },
-  querySelector: (selector) =>
-    selector === "[data-role='display-name']" ? { value: " " } : null,
-});
-check(
-  "blank room editor name is invalid",
-  blankRoomName.error,
-  "Room name is required.",
-);
-
 async function testFcuBatchSavePost() {
   const inputs = [
     {
@@ -1143,7 +1115,7 @@ async function testFcuBatchSavePost() {
       }
       if (
         selector ===
-        ".fcu-temp-source-weight, .fcu-room-display-name, .fcu-temp-sources-actions button"
+        ".fcu-temp-source-weight, .fcu-temp-sources-actions button"
       ) {
         return inputs.concat(buttons);
       }
@@ -1183,117 +1155,6 @@ async function testFcuBatchSavePost() {
       { fcu_device_id: 12, source_device_id: 22, multiplier: 0.25 },
     ]),
   );
-}
-
-async function testFcuRoomEditorNamePatch() {
-  const input = {
-    disabled: false,
-    value: "East Lab",
-    dataset: { initialDisplayName: "Area 51" },
-  };
-  const message = {
-    textContent: "",
-    classList: {
-      toggle: () => {},
-    },
-  };
-  const popup = {
-    dataset: {
-      updateUrl: "/api/v1/fcu_temp_source",
-      roomUpdateUrl: "/api/v1/rooms/3",
-      roomId: "3",
-      deviceId: "12",
-      deviceName: "Area 51",
-      currentDisplayName: "Area 51",
-    },
-    classList: {
-      hidden: false,
-      add: (name) => {
-        popup.classList.hidden = name === "hidden";
-      },
-    },
-    querySelector: (selector) => {
-      if (selector === "[data-role='message']") {
-        return message;
-      }
-      if (selector === "[data-role='display-name']") {
-        return input;
-      }
-      if (selector === "[data-role='title']") {
-        return { textContent: "" };
-      }
-      return null;
-    },
-    querySelectorAll: (selector) => {
-      if (selector === ".fcu-temp-source-weight") {
-        return [];
-      }
-      if (
-        selector ===
-        ".fcu-temp-source-weight, .fcu-room-display-name, .fcu-temp-sources-actions button"
-      ) {
-        return [input];
-      }
-      return [];
-    },
-  };
-  const label = {
-    dataset: { roomId: "3", deviceUpdate: "", deviceName: "Area 51" },
-    classList: { contains: (name) => name === "fcu-room-editor-trigger" },
-    textContent: "",
-    setAttribute(name, value) {
-      this[name] = value;
-    },
-  };
-  const requests = [];
-  const originalDocumentForSave = global.document;
-  const originalFetch = global.fetch;
-  const originalWindow = global.window;
-  const originalCustomEvent = global.CustomEvent;
-  global.document = {
-    getElementById: (id) => (id === "fcu-temp-sources-popup" ? popup : null),
-    querySelectorAll: () => [label],
-  };
-  global.fetch = async (url, options) => {
-    requests.push({ url, options });
-    return {
-      ok: true,
-      json: async () => ({
-        room_id: 3,
-        room_name: "East Lab",
-      }),
-    };
-  };
-  global.CustomEvent = class CustomEvent {
-    constructor(name, options) {
-      this.type = name;
-      this.detail = options.detail;
-    }
-  };
-  global.window = { dispatchEvent: () => {} };
-  try {
-    await saveFcuTempSourceMultipliers();
-  } finally {
-    global.document = originalDocumentForSave;
-    global.fetch = originalFetch;
-    global.window = originalWindow;
-    global.CustomEvent = originalCustomEvent;
-  }
-
-  const patchBody = JSON.parse(requests[0].options.body);
-  check("room editor name save sends one request", requests.length, 1);
-  check(
-    "room editor name save patches room URL",
-    requests[0].url,
-    "/api/v1/rooms/3",
-  );
-  check("room editor name save uses PATCH", requests[0].options.method, "PATCH");
-  check(
-    "room editor name save sends room name",
-    JSON.stringify(patchBody),
-    JSON.stringify({ room_name: "East Lab" }),
-  );
-  check("room editor name save updates label", label.textContent, "East Lab");
 }
 
 // -- FCU mode select option updates --
@@ -1439,7 +1300,6 @@ Promise.resolve()
   .then(testRoomEditorRefreshHandlesRejection)
   .then(testEnableRulesForDevicePost)
   .then(testFcuBatchSavePost)
-  .then(testFcuRoomEditorNamePatch)
   .then(testAutoSetTempSavePost)
   .catch((error) => {
     failed++;

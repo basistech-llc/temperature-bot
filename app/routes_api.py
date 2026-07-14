@@ -532,6 +532,19 @@ def update_room(conn, room_id: int):
     return jsonify(json_ready(room))
 
 
+@api_v1.delete("/rooms/<int:room_id>")
+@with_db_connection
+def delete_room(conn, room_id: int):
+    """Delete a room only when it has no assigned devices."""
+    try:
+        deleted = db.delete_empty_room(conn, room_id)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 409
+    if not deleted:
+        return jsonify({"error": "room not found"}), 404
+    return "", 204
+
+
 @api_v1.route("/update_device_room", methods=["POST"])
 @validate()
 @with_db_connection

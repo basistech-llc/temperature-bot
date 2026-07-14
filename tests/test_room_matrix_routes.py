@@ -85,6 +85,7 @@ def test_index_renders_room_sections_and_each_sensor_once(
     alpha_id = conn.execute(
         "INSERT INTO rooms (room_name) VALUES ('Alpha')"
     ).lastrowid
+    conn.execute("INSERT INTO rooms (room_name) VALUES ('Bravo')")
     zulu_id = conn.execute(
         "INSERT INTO rooms (room_name) VALUES ('Zulu')"
     ).lastrowid
@@ -117,11 +118,28 @@ def test_index_renders_room_sections_and_each_sensor_once(
     html = response.data.decode("utf-8")
     room_names = re.findall(
         r'<tr class="room-separator"\s+data-room-id="[^"]*"\s+'
-        r'data-room-name="([^"]+)">',
+        r'data-room-name="([^"]+)"[^>]*>',
         html,
     )
 
-    assert room_names == ["Alpha", "Unassigned", "Zulu"]
+    assert room_names == ["Alpha", "Bravo", "Unassigned", "Zulu"]
+    assert re.search(
+        r'data-room-name="Alpha"\s+data-has-fcu="false"\s+data-can-delete="false"',
+        html,
+    )
+    assert re.search(
+        r'data-room-name="Bravo"\s+data-has-fcu="false"\s+data-can-delete="true"',
+        html,
+    )
+    assert re.search(
+        r'data-room-name="Zulu"\s+data-has-fcu="false"\s+data-can-delete="false"',
+        html,
+    )
+    assert "Air Quality and Room Assignments" in html
+    assert 'id="new-room-button"' in html
+    assert 'id="room-create-dialog"' in html
+    assert 'id="room-delete-dialog"' in html
+    assert "Assigned Sensor 📡" in html
     assert html.count(f'x-data-device-id="{device_ids["Assigned Sensor"]}"') == 1
     assert html.count(f'x-data-device-id="{device_ids["Loose Sensor"]}"') == 1
     assert f'x-data-device-id="{device_ids["Internal Reading"]}"' not in html

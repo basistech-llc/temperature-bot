@@ -333,7 +333,8 @@ def test_fcu_matrix_has_raw_fcu_temp_and_room_temp_columns(
     assert response.status_code == 200
     html = unescape(response.data.decode("utf-8"))
 
-    assert "Room (Unit)" in html
+    assert "Room (Unit)" not in html
+    assert "Area 51 🌀" in html
     assert "FCU Temp" in html
     assert "Computed Room" in html
     assert "column-computed-room-temp" in html
@@ -357,10 +358,10 @@ def test_fcu_matrix_has_raw_fcu_temp_and_room_temp_columns(
 
 @patch("app.routes_web.hubitat.get_name_to_label", return_value={})
 @patch("app.routes_web.db.get_device_status")
-def test_fcu_matrix_room_unit_cell_opens_room_editor(
+def test_fcu_matrix_unit_cell_opens_temperature_source_editor(
     mock_get_status, _mock_labels, flask_test_client
 ):  # noqa: F811
-    """Room (Unit) cells must expose the editor/source-weight popup contract."""
+    """FCU unit cells expose temperature weights without editing the room name."""
     mock_get_status.return_value = [
         {
             "device_id": 12,
@@ -381,19 +382,19 @@ def test_fcu_matrix_room_unit_cell_opens_room_editor(
     html = unescape(response.data.decode("utf-8"))
 
     assert 'id="fcu-temp-sources-popup"' in html
-    assert 'class="device-name-context fcu-room-editor-trigger"' in html
+    assert 'class="device-name-context fcu-temp-sources-trigger"' in html
     assert 'role="button"' in html
     assert 'tabindex="0"' in html
     assert 'data-room-id="3"' in html
-    assert 'data-room-update-url="/api/v1/rooms/3"' in html
+    assert 'data-room-name="Area 51"' in html
     assert (
         'data-fcu-temp-sources-url="/api/v1/fcu_temp_sources?fcu_device_id=12"'
         in html
     )
     assert 'data-fcu-temp-source-update-url="/api/v1/fcu_temp_source"' in html
-    assert 'data-fcu-temp-sources-room-name="Area 51"' in html
-    assert 'id="fcu-room-display-name"' in html
-    assert "Room name" in html
+    assert 'data-room-update-url=' not in html
+    assert 'id="fcu-room-display-name"' not in html
+    assert '<strong data-role="room-name">Unassigned</strong>' in html
     assert "Readings older than 10 minutes are ignored" in html
     assert 'data-action="save-fcu-temp-sources"' in html
     assert 'data-action="revert-fcu-temp-sources"' in html
@@ -428,7 +429,8 @@ def test_index_device_names_expose_rename_popup_contract(
     assert response.status_code == 200
     html = unescape(response.data.decode("utf-8"))
 
-    assert 'class="device-name-context fcu-room-editor-trigger"' in html
+    assert 'class="device-name-context fcu-temp-sources-trigger"' in html
+    assert "Server Room 🌀" in html
     assert 'data-device-id="12"' in html
     assert 'data-device-name="Area 51"' in html
     assert 'data-display-name="Server Room"' in html

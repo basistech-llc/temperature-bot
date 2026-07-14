@@ -191,6 +191,11 @@ def _room_matrix_groups(
         if str(device.get("device_type") or "").upper() == DEVICE_TYPE_FCU
         and device.get("room_id") is not None
     }
+    assigned_room_ids = {
+        device.get("room_id")
+        for device in devices
+        if device.get("room_id") is not None
+    }
     groups = {
         room.room_id: RoomMatrixGroup(
             room_id=room.room_id,
@@ -201,6 +206,9 @@ def _room_matrix_groups(
             ),
             calculated_humidity=(fcu_by_room.get(room.room_id) or {}).get(
                 "calculated_humidity"
+            ),
+            can_delete=(
+                room.fcu_device_id is None and room.room_id not in assigned_room_ids
             ),
         )
         for room in rooms

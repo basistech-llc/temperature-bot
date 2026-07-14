@@ -5,10 +5,14 @@ const {
   compareSensors,
   deviceRoomRequest,
   longPressTriggered,
+  persistNewRoom,
+  persistRoomDeletion,
   persistRoomName,
   persistSensorRoom,
   restoreSensorPosition,
   roomHumidityText,
+  roomDeleteCountdown,
+  roomDisplayName,
   roomIdFromValue,
   roomNameSortKey,
   roomRenameKeyTriggered,
@@ -36,6 +40,16 @@ assert.strictEqual(longPressTriggered(800, 11), false);
 assert.strictEqual(roomRenameKeyTriggered("Enter"), true);
 assert.strictEqual(roomRenameKeyTriggered(" "), true);
 assert.strictEqual(roomRenameKeyTriggered("Escape"), false);
+assert.strictEqual(roomDisplayName("Broadway North", true), "Broadway North 🌀");
+assert.strictEqual(roomDisplayName("Conference", false), "Conference");
+assert.deepStrictEqual(roomDeleteCountdown(1000, 1000), {
+  enabled: false,
+  label: "OK (5)",
+});
+assert.deepStrictEqual(roomDeleteCountdown(1000, 6000), {
+  enabled: true,
+  label: "OK",
+});
 
 const dragCloneChildren = [
   { id: "temp-1", removeAttribute: (name) => { if (name === "id") delete dragCloneChildren[0].id; } },
@@ -88,6 +102,18 @@ async function testPersistenceTransitions() {
   assert.deepStrictEqual(JSON.parse(requests[1].options.body), {
     room_name: "Bravo",
   });
+
+  const created = await persistNewRoom("Delta", successfulRequest);
+  assert.strictEqual(created.room_name, "Bravo");
+  assert.strictEqual(requests[2].url, "/api/v1/rooms");
+  assert.strictEqual(requests[2].options.method, "POST");
+  assert.deepStrictEqual(JSON.parse(requests[2].options.body), {
+    room_name: "Delta",
+  });
+
+  await persistRoomDeletion(7, successfulRequest);
+  assert.strictEqual(requests[3].url, "/api/v1/rooms/7");
+  assert.strictEqual(requests[3].options.method, "DELETE");
 
   await assert.rejects(
     persistRoomName(7, "Alpha", async () => ({

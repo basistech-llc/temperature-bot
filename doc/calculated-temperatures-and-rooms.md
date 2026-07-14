@@ -175,6 +175,7 @@ Room endpoints:
 - `POST /api/v1/rooms`
 - `GET /api/v1/rooms/<room_id>`
 - `PATCH /api/v1/rooms/<room_id>`
+- `DELETE /api/v1/rooms/<room_id>`
 
 Room endpoints use separate Pydantic write contracts: `RoomCreate` requires
 `room_name`, while `RoomPatch` accepts only `room_name` and `map`. Both reject
@@ -192,6 +193,28 @@ set. Room payloads use `map` at the API boundary and `map_json` in SQLite:
   }
 }
 ```
+
+Room deletion is allowed only when the room has no FCU owner and no assigned
+device of any type. The endpoint returns `409 Conflict` when a room is occupied
+and `404 Not Found` when the room does not exist.
+
+## Main Matrix Naming And Room Administration
+
+The main page deliberately keeps physical-unit names separate from room names:
+
+- **Heating and Cooling** shows the FCU device name in its **Unit** column and
+  appends `🌀`.
+- **Energy Recovery Ventilation** appends `♻️` to the ERV device name and shows
+  its room, when present, in the adjacent **Room** column.
+- **Air Quality and Room Assignments** appends `📡` to sensor names. Its room
+  headings are the only main-page surface for creating, renaming, deleting, and
+  assigning rooms. A room owned by an FCU appends `🌀` to the room heading;
+  independent rooms have no room-heading icon.
+
+Right-clicking or long-pressing a room heading opens room management. Only
+empty, non-FCU-owned rooms expose deletion, and the confirmation button remains
+disabled for five seconds. The FCU temperature-source popup shows its room as
+read-only; it does not rename the room or FCU.
 
 Device-room assignment:
 

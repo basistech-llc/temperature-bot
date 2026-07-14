@@ -809,6 +809,27 @@ def update_room(conn, room: Room) -> Room | None:
     return get_room(conn, room.room_id)
 
 
+def delete_empty_room(conn, room_id: int) -> bool:
+    """Delete a room only when it owns no FCU and has no assigned devices."""
+    c = conn.cursor()
+    c.execute(
+        """
+        DELETE FROM rooms
+        WHERE room_id=?
+          AND fcu_device_id IS NULL
+          AND NOT EXISTS (SELECT 1 FROM devices WHERE devices.room_id=rooms.room_id)
+        """,
+        (room_id,),
+    )
+    if c.rowcount == 0:
+        c.execute("SELECT 1 FROM rooms WHERE room_id=?", (room_id,))
+        if c.fetchone() is None:
+            return False
+        raise ValueError("Only rooms without assigned devices can be deleted")
+    conn.commit()
+    return True
+
+
 def update_device_room(conn, device_id: int, room_id: int | None) -> int:
     c = conn.cursor()
     c.execute(
