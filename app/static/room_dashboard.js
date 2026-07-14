@@ -30,6 +30,9 @@ async function apiCall(endpoint, body, errorMessage) {
             body: JSON.stringify(body)
         });
         const result = await response.json();
+        if (!response.ok) {
+            throw new Error(result.error || `Request failed (${response.status})`);
+        }
         if (DEBUG) {
             console.log(`${endpoint} result:`, result);
         }
@@ -372,22 +375,35 @@ function updateSensorTemperatures() {
     });
 }
 
-/**
- * Refresh device status from API.
- */
-function refreshStatus() {
-    fetch('/api/v1/status')
-        .then(response => response.json())
-        .then(data => {
+/** Create a status refresher that permits only one request at a time. */
+function createStatusRefresher(request = fetch, update = updateDeviceStatus) {
+    let inFlight = false;
+    return async function refresh() {
+        if (inFlight) {
+            return false;
+        }
+        inFlight = true;
+        try {
+            const response = await request('/api/v1/status');
+            if (!response.ok) {
+                throw new Error(`Status request failed (${response.status})`);
+            }
+            const data = await response.json();
             if (DEBUG) {
                 console.log('Status data received:', data);
             }
-            updateDeviceStatus(data.devices);
-        })
-        .catch(error => {
+            update(data.devices);
+            return true;
+        } catch (error) {
             console.error('Failed to refresh status:', error);
-        });
+            return false;
+        } finally {
+            inFlight = false;
+        }
+    };
 }
+
+const refreshStatus = createStatusRefresher();
 
 /**
  * Initialize sensor temperatures from template data.
@@ -462,13 +478,24 @@ function setDimmerLevel(level) {
 /**
  * Fetch room control status and update UI.
  */
-function refreshRoomStatus() {
-    fetch(roomControlEndpoint('room_status'))
-        .then(response => response.json())
+function requestRoomStatus(endpoint, request = fetch) {
+    return request(endpoint).then(response => {
+        if (!response.ok) {
+            throw new Error(`Room status request failed: ${response.status}`);
+        }
+        return response.json();
+    });
+}
+
+function refreshRoomStatus(request = fetch, documentRef = document) {
+    if (!documentRef.querySelector('.room-controls-card')) {
+        return Promise.resolve(false);
+    }
+    return requestRoomStatus(roomControlEndpoint('room_status'), request)
         .then(data => {
             if (data.dimmer) {
-                const slider = document.getElementById('dimmer-slider');
-                const valueEl = document.getElementById('dimmer-value');
+                const slider = documentRef.getElementById('dimmer-slider');
+                const valueEl = documentRef.getElementById('dimmer-value');
                 if (slider && !slider.matches(':active')) {
                     slider.value = data.dimmer.level;
                 }
@@ -482,11 +509,13 @@ function refreshRoomStatus() {
             if (data.wall_outer) {
                 updateWallButton('outer', data.wall_outer.switch);
             }
+            return true;
         })
         .catch(error => {
             if (DEBUG) {
                 console.error('Failed to refresh room status:', error);
             }
+            return false;
         });
 }
 
@@ -733,5 +762,11 @@ if (typeof window !== 'undefined') {
 
 // Node.js export for testing.
 if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { computeFitScale, roomControlEndpoint };
+    module.exports = {
+        computeFitScale,
+        createStatusRefresher,
+        refreshRoomStatus,
+        requestRoomStatus,
+        roomControlEndpoint,
+    };
 }

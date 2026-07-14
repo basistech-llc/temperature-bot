@@ -60,12 +60,44 @@ const DEVICE_DISPLAY_NAME_KEY = "display_name";
 // Refresh logic
 var start = Date.now();
 var forceRefresh = false;
+const pendingFanRadioIds = new Map();
 
 // Store weather data globally so it can be re-rendered when unit changes
 let currentWeatherData = null;
 
 ////////////////////////////////////////////////////////////////
 // Shared helpers
+
+/**
+ * Run at most one instance of an asynchronous operation at a time.
+ * Calls made while the operation is active are skipped.
+ *
+ * @returns {Function} Single-flight async runner.
+ */
+function createSingleFlight() {
+  let inFlight = false;
+  return async (operation) => {
+    if (inFlight) {
+      return false;
+    }
+    inFlight = true;
+    try {
+      await operation();
+      return true;
+    } finally {
+      inFlight = false;
+    }
+  };
+}
+
+const runStatusRefresh = createSingleFlight();
+
+/** Clear a pending fan change only if this request still owns it. */
+function clearPendingFanChange(pendingChanges, deviceId, change) {
+  if (pendingChanges.get(deviceId) === change) {
+    pendingChanges.delete(deviceId);
+  }
+}
 
 /**
  * Decide which fan-speed radio button should be selected for a device.
@@ -78,9 +110,13 @@ let currentWeatherData = null;
  * Auto (-1) case — matching room_dashboard.js.
  *
  * @param {Object} dev - Device data object from /api/v1/status.
+ * @param {string|null} pendingRadioId - User selection awaiting confirmation.
  * @returns {string|null} The id of the radio to select, or null if undetermined.
  */
-function fanRadioIdForDevice(dev) {
+function fanRadioIdForDevice(dev, pendingRadioId = null) {
+  if (pendingRadioId) {
+    return pendingRadioId;
+  }
   const isOff = dev.drive === "Off" || dev.drive === 0 || !dev.drive;
   const currentSpeed = dev.fan_speed || dev.speed;
   const speedValue = currentSpeed != null ? parseInt(currentSpeed) : null;
@@ -1704,11 +1740,16 @@ async function setDrive(device_id, drive) {
       body: JSON.stringify({ device_id: device_id, drive: drive }),
     });
     const result = await response.json();
+    if (!response.ok) {
+      throw new Error(result.error || "Unable to set drive.");
+    }
     console.log("Set drive: result=", result);
     forceRefresh = true;
+    return true;
   } catch (e) {
     console.error("Failed to set drive:", e);
     alert("Error setting drive.");
+    return false;
   }
 }
 
@@ -1723,11 +1764,16 @@ async function setFanSpeed(device_id, fan_speed) {
       body: JSON.stringify({ device_id: device_id, fan_speed: fan_speed }),
     });
     const result = await response.json();
+    if (!response.ok) {
+      throw new Error(result.error || "Unable to set fan speed.");
+    }
     console.log("Set fan_speed: result=", result);
     forceRefresh = true;
+    return true;
   } catch (e) {
     console.error("Failed to set fan_speed:", e);
     alert("Error setting fan_speed.");
+    return false;
   }
 }
 
@@ -1797,22 +1843,27 @@ function setupMatrixListeners() {
     'input[type="radio"][x-data-device-id]',
   );
   radioButtons.forEach((radio) => {
-    radio.addEventListener("change", function () {
+    radio.addEventListener("change", async function () {
       const deviceId = parseInt(this.getAttribute("x-data-device-id"));
       const fan_speed = parseInt(this.getAttribute("x-data-fan_speed"));
+      const pendingChange = { radioId: this.id };
+      pendingFanRadioIds.set(deviceId, pendingChange);
 
-      // Off button (0): turn off drive
-      if (fan_speed === 0) {
-        setDrive(deviceId, 0);
-      }
-      // Speed buttons: turn on drive AND set speed
-      else {
-        Promise.all([
-          setDrive(deviceId, 1),
-          setFanSpeed(deviceId, fan_speed),
-        ]).catch((error) => {
-          console.error("Error setting drive and speed:", error);
-        });
+      try {
+        // Off button (0): turn off drive
+        if (fan_speed === 0) {
+          await setDrive(deviceId, 0);
+        }
+        // Speed buttons: turn on drive AND set speed
+        else {
+          await Promise.all([
+            setDrive(deviceId, 1),
+            setFanSpeed(deviceId, fan_speed),
+          ]);
+        }
+      } finally {
+        clearPendingFanChange(pendingFanRadioIds, deviceId, pendingChange);
+        forceRefresh = true;
       }
     });
   });
@@ -2684,8 +2735,14 @@ const refreshGridRows = () => {
 
   // If it's time to refresh, run the status api and update all of the temps, fan_speeds, and status columsn
   if (secondsUntilRefresh <= 0) {
-    fetch("/api/v1/status", { method: "GET" })
-      .then((response) => response.json())
+    runStatusRefresh(() =>
+      fetch("/api/v1/status", { method: "GET" })
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error(`Status request failed (${response.status})`);
+        }
+        return response.json();
+      })
       .then((data) => {
         if (DEBUG) {
           console.log("Status data received:", data);
@@ -2872,7 +2929,10 @@ const refreshGridRows = () => {
             updateModeControlForDevice(dev);
 
             // Update radio button selection based on drive and speed state.
-            const radioId = fanRadioIdForDevice(dev);
+            const radioId = fanRadioIdForDevice(
+              dev,
+              pendingFanRadioIds.get(dev.device_id)?.radioId,
+            );
             if (radioId) {
               const radio = document.getElementById(radioId);
               if (radio) {
@@ -2905,7 +2965,8 @@ const refreshGridRows = () => {
         console.error("Error refreshing leaderboard:", error);
         // Still update the refresh time on error to prevent rapid retries
         lastRefreshTime = now;
-      });
+      }),
+    );
   }
   setTimeout(refreshGridRows, 1000); // Schedule next check in 1 second
 };
@@ -3207,6 +3268,8 @@ if (typeof module !== "undefined" && module.exports) {
     collectFcuTempSourceChanges,
     autoSetTempRangeForDevice,
     compactAgeFromSeconds,
+    clearPendingFanChange,
+    createSingleFlight,
     dashboardAirQualityDeviceIsActive,
     deviceDisplayNameChanged,
     deviceDisplayNamePatchBody,

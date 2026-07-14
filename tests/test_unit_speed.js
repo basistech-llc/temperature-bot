@@ -12,6 +12,8 @@ const {
   collectFcuTempSourceChanges,
   autoSetTempRangeForDevice,
   compactAgeFromSeconds,
+  clearPendingFanChange,
+  createSingleFlight,
   dashboardAirQualityDeviceIsActive,
   deviceDisplayNameChanged,
   deviceDisplayNamePatchBody,
@@ -122,6 +124,52 @@ function fakeWidget() {
   };
 }
 
+async function testSingleFlightStatusRefresh() {
+  let releaseFirst;
+  let calls = 0;
+  const firstOperation = new Promise((resolve) => {
+    releaseFirst = resolve;
+  });
+  const runSingleFlight = createSingleFlight();
+
+  const firstRun = runSingleFlight(async () => {
+    calls++;
+    await firstOperation;
+  });
+  const overlappingRun = await runSingleFlight(async () => {
+    calls++;
+  });
+  check("overlapping status refresh is skipped", overlappingRun, false);
+  check("only one status refresh starts", calls, 1);
+
+  releaseFirst();
+  check("first status refresh completes", await firstRun, true);
+  check(
+    "status refresh can run after completion",
+    await runSingleFlight(async () => {
+      calls++;
+    }),
+    true,
+  );
+  check("second sequential status refresh starts", calls, 2);
+}
+
+function testPendingFanChangeOwnership() {
+  const pendingChanges = new Map();
+  const olderChange = { radioId: "radio-7-4" };
+  const newerChange = { radioId: "radio-7-0" };
+  pendingChanges.set(7, newerChange);
+
+  clearPendingFanChange(pendingChanges, 7, olderChange);
+  check(
+    "older request cannot clear newer pending fan selection",
+    pendingChanges.get(7),
+    newerChange,
+  );
+  clearPendingFanChange(pendingChanges, 7, newerChange);
+  check("owning request clears pending fan selection", pendingChanges.has(7), false);
+}
+
 // -- The bug: off unit holding Auto must show Off, not Auto --
 check(
   "off + held Auto (-1) -> Off",
@@ -136,6 +184,14 @@ check(
 check(
   "drive string 'Off' + held Auto -> Off",
   fanRadioIdForDevice({ device_id: 7, drive: "Off", fan_speed: -1 }),
+  "radio-7-0",
+);
+check(
+  "pending Off selection is not overwritten by stale High status",
+  fanRadioIdForDevice(
+    { device_id: 7, drive: 1, fan_speed: 4 },
+    "radio-7-0",
+  ),
   "radio-7-0",
 );
 
@@ -1378,6 +1434,8 @@ check(
 check("range set temp matching update clears state", pendingRangeWidget.dataset.updateState, undefined);
 
 Promise.resolve()
+  .then(testPendingFanChangeOwnership)
+  .then(testSingleFlightStatusRefresh)
   .then(testRoomEditorRefreshHandlesRejection)
   .then(testEnableRulesForDevicePost)
   .then(testFcuBatchSavePost)
