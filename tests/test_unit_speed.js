@@ -40,7 +40,7 @@ const {
   pendingSingleSetTempUpdateDecision,
   renderDisableCell,
   renderAutoSetTempRange,
-  refreshOpenFcuRoomEditor,
+  refreshOpenFcuTempSources,
   resizeSetRangeEndpoint,
   saveAutoSetTempWidget,
   saveFcuTempSourceMultipliers,
@@ -595,7 +595,7 @@ check(
   "1,2,3,4",
 );
 check(
-  "room editor shows only sources assigned to its room",
+  "FCU temperature sources show only sources assigned to its room",
   sortedFcuTempSources(
     [
       { source_device_id: 1, room_id: 2, is_stale: false },
@@ -609,7 +609,7 @@ check(
   "1",
 );
 check(
-  "blank room id does not filter room editor sources",
+  "blank room id does not filter FCU temperature sources",
   sortedFcuTempSources(
     [
       { source_device_id: 1, room_id: null, is_stale: false },
@@ -632,25 +632,29 @@ check(
 );
 const originalDocumentForRoomRefresh = global.document;
 let refreshedTrigger = null;
-const roomEditorTrigger = { dataset: { deviceId: "12" } };
+const tempSourcesTrigger = { dataset: { deviceId: "12" } };
 global.document = {
   getElementById: () => ({
     dataset: { deviceId: "12" },
     classList: { contains: () => false },
   }),
-  querySelector: () => roomEditorTrigger,
+  querySelector: () => tempSourcesTrigger,
 };
 check(
-  "open room editor refreshes after assignment change",
-  refreshOpenFcuRoomEditor((trigger) => {
+  "open FCU temperature sources refresh after assignment change",
+  refreshOpenFcuTempSources((trigger) => {
     refreshedTrigger = trigger;
   }),
   true,
 );
-check("room editor refresh uses its FCU trigger", refreshedTrigger, roomEditorTrigger);
+check(
+  "temperature-source refresh uses its FCU trigger",
+  refreshedTrigger,
+  tempSourcesTrigger,
+);
 global.document = originalDocumentForRoomRefresh;
 
-async function testRoomEditorRefreshHandlesRejection() {
+async function testFcuTempSourcesRefreshHandlesRejection() {
   const originalDocument = global.document;
   const originalConsoleError = console.error;
   let reported = null;
@@ -659,18 +663,22 @@ async function testRoomEditorRefreshHandlesRejection() {
       dataset: { deviceId: "12" },
       classList: { contains: () => false },
     }),
-    querySelector: () => roomEditorTrigger,
+    querySelector: () => tempSourcesTrigger,
   };
   console.error = (_message, error) => { reported = error; };
   try {
     check(
-      "open room editor accepts an async refresh",
-      refreshOpenFcuRoomEditor(() => Promise.reject(new Error("refresh failed"))),
+      "open FCU temperature sources accept an async refresh",
+      refreshOpenFcuTempSources(() => Promise.reject(new Error("refresh failed"))),
       true,
     );
     await Promise.resolve();
     await Promise.resolve();
-    check("room editor refresh reports rejection", reported.message, "refresh failed");
+    check(
+      "temperature-source refresh reports rejection",
+      reported.message,
+      "refresh failed",
+    );
   } finally {
     global.document = originalDocument;
     console.error = originalConsoleError;
@@ -1297,7 +1305,7 @@ check("range set temp matching update clears state", pendingRangeWidget.dataset.
 Promise.resolve()
   .then(testPendingFanChangeOwnership)
   .then(testSingleFlightStatusRefresh)
-  .then(testRoomEditorRefreshHandlesRejection)
+  .then(testFcuTempSourcesRefreshHandlesRejection)
   .then(testEnableRulesForDevicePost)
   .then(testFcuBatchSavePost)
   .then(testAutoSetTempSavePost)

@@ -757,6 +757,13 @@ def get_rooms(conn) -> list[Room]:
     return [_room_from_row(row) for row in c.fetchall()]
 
 
+def get_assigned_room_ids(conn) -> set[int]:
+    """Return room ids referenced by any device, including devices without logs."""
+    c = conn.cursor()
+    c.execute("SELECT DISTINCT room_id FROM devices WHERE room_id IS NOT NULL")
+    return {int(row["room_id"]) for row in c.fetchall()}
+
+
 def get_room(conn, room_id: int) -> Room | None:
     c = conn.cursor()
     c.execute("SELECT * FROM rooms WHERE room_id=?", (room_id,))
@@ -822,6 +829,7 @@ def delete_empty_room(conn, room_id: int) -> bool:
         (room_id,),
     )
     if c.rowcount == 0:
+        conn.rollback()
         c.execute("SELECT 1 FROM rooms WHERE room_id=?", (room_id,))
         if c.fetchone() is None:
             return False

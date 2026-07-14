@@ -80,6 +80,7 @@ def test_only_empty_rooms_can_be_deleted(
     rejected = flask_test_client.delete(f"/api/v1/rooms/{occupied.json['room_id']}")
     assert rejected.status_code == 409
     assert "without assigned devices" in rejected.json["error"]
+    assert not conn.in_transaction
     assert conn.execute(
         "SELECT room_id FROM devices WHERE device_id=?", (sensor_id,)
     ).fetchone()["room_id"] == occupied.json["room_id"]
@@ -88,6 +89,7 @@ def test_only_empty_rooms_can_be_deleted(
     assert deleted.status_code == 204
     assert flask_test_client.get(f"/api/v1/rooms/{empty.json['room_id']}").status_code == 404
     assert flask_test_client.delete("/api/v1/rooms/999999").status_code == 404
+    assert not conn.in_transaction
 
 
 def test_room_assignment_rejects_unknown_and_ineligible_devices(

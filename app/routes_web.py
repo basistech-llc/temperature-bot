@@ -182,7 +182,9 @@ def _index_table_update_summaries(
 
 
 def _room_matrix_groups(
-    devices: list[dict[str, Any]], rooms: list[Room]
+    devices: list[dict[str, Any]],
+    rooms: list[Room],
+    assigned_room_ids: set[int],
 ) -> list[RoomMatrixGroup]:
     """Group active sensor rows by canonical room, including empty rooms."""
     fcu_by_room = {
@@ -190,11 +192,6 @@ def _room_matrix_groups(
         for device in devices
         if str(device.get("device_type") or "").upper() == DEVICE_TYPE_FCU
         and device.get("room_id") is not None
-    }
-    assigned_room_ids = {
-        device.get("room_id")
-        for device in devices
-        if device.get("room_id") is not None
     }
     groups = {
         room.room_id: RoomMatrixGroup(
@@ -296,7 +293,11 @@ def _register_core_routes(app):
             devices=device_data,
             now=now,
             table_update_summaries=_index_table_update_summaries(device_data, now),
-            room_groups=_room_matrix_groups(device_data, db.get_rooms(conn)),
+            room_groups=_room_matrix_groups(
+                device_data,
+                db.get_rooms(conn),
+                db.get_assigned_room_ids(conn),
+            ),
             current_page="home",
         )
 

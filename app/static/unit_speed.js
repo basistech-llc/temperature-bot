@@ -1178,7 +1178,7 @@ async function loadFcuTempSourcesForCell(cell) {
   }
 }
 
-function refreshOpenFcuRoomEditor(loadSources = loadFcuTempSourcesForCell) {
+function refreshOpenFcuTempSources(loadSources = loadFcuTempSourcesForCell) {
   const popup = document.getElementById("fcu-temp-sources-popup");
   if (!popup || popup.classList.contains("hidden") || !popup.dataset.deviceId) {
     return false;
@@ -1188,7 +1188,7 @@ function refreshOpenFcuRoomEditor(loadSources = loadFcuTempSourcesForCell) {
   );
   if (!trigger) return false;
   Promise.resolve(loadSources(trigger)).catch((error) => {
-    console.error("Failed to refresh FCU room editor:", error);
+    console.error("Failed to refresh FCU temperature sources:", error);
   });
   return true;
 }
@@ -3172,7 +3172,7 @@ if (typeof window !== "undefined") {
   });
   window.addEventListener("roomassignmentchange", () => {
     forceRefresh = true;
-    refreshOpenFcuRoomEditor();
+    refreshOpenFcuTempSources();
   });
 }
 
@@ -3211,7 +3211,7 @@ if (typeof module !== "undefined" && module.exports) {
     pendingSingleSetTempUpdateDecision,
     renderDisableCell,
     renderAutoSetTempRange,
-    refreshOpenFcuRoomEditor,
+    refreshOpenFcuTempSources,
     resizeSetRangeEndpoint,
     saveAutoSetTempWidget,
     saveFcuTempSourceMultipliers,
