@@ -250,7 +250,7 @@ JavaScript logic tests. Tests run through Makefile targets and must not modify
 
 ### Phase 1: core rooms
 
-UI-first slice completed while `hvac-9re.3` remains in progress:
+The UI-first slice and its backend metric prerequisites are complete:
 
 - [x] Render every room, including empty rooms and Unassigned, in one
   alphabetically grouped sensor table.
@@ -262,12 +262,12 @@ UI-first slice completed while `hvac-9re.3` remains in progress:
 - [x] Display humidity as integer percent, Celsius with decimals, Fahrenheit
   as whole degrees, and missing calculated values as `--`.
 - [x] Add `make rooms-ui-demo` using a disposable database under `/tmp`.
-- [ ] Complete the backend room temperature and humidity calculations before
-  closing `hvac-9re.3` or the dependent UI beads.
+- [x] Complete the backend room temperature and humidity calculations with
+  room-filtered weights, equal-weight humidity, and explicit stale gaps.
 
 - [x] Implement and verify topology bootstrap and discovery (`hvac-9re.1`).
 - [x] Extract the shared room metric service (`hvac-9re.2`).
-- [ ] Apply room eligibility to current and historical temperature and to room
+- [x] Apply room eligibility to current and historical temperature and to room
   humidity (`hvac-9re.3`).
 - [ ] Harden typed room APIs (`hvac-9re.4`).
 - [ ] Render the grouped matrix (`hvac-9re.5`).

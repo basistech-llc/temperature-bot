@@ -256,7 +256,9 @@ class TimeSeries(BaseModel):
 
     device_id: int = Field(description="Local device id from the devices table.")
     name: str = Field(description="Display name for the chart series.")
-    data: list[tuple[int, float]] = Field(description="Ordered (unix time, value) samples.")
+    data: list[tuple[int, float | None]] = Field(
+        description="Ordered (unix time, value) samples; null preserves a data gap."
+    )
 
 
 class TemperatureSeriesResponse(BaseModel):

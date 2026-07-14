@@ -75,7 +75,13 @@ from .aq_metrics import (
     extract_metric_from_status,
 )
 from .device_types import DEVICE_TYPE_ERV, DEVICE_TYPE_FCU, DEVICE_TYPE_INTERNAL
-from .room_metrics import RoomMetricSnapshot
+from .room_metrics import (
+    RoomMetric,
+    RoomMetricSnapshot,
+    aggregate_room_metric,
+    room_device_is_eligible,
+    select_room_metric_sources,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -1667,12 +1673,14 @@ def _fcu_temp_source_weight_rows(conn, fcu_device_id: int):
 
 def _latest_temperature_source_rows(conn, fcu_device_id: int, now: int):
     weights = get_fcu_temp_source_weights(conn, fcu_device_id)
+    fcu_room_id = (get_device(conn, fcu_device_id) or {}).get("room_id")
     c = conn.cursor()
     c.execute(
         """
         SELECT
             d.device_id AS source_device_id,
             d.device_name,
+            d.device_type,
             d.room_id,
             r.room_name,
             l.logtime,
@@ -1702,6 +1710,11 @@ def _latest_temperature_source_rows(conn, fcu_device_id: int, now: int):
         )
         is_stale = age_seconds > TEMP_SOURCE_STALE_SECONDS
         multiplier = weights.get(row["source_device_id"], 0.0)
+        eligible = room_device_is_eligible(
+            device_type=row["device_type"],
+            device_room_id=row["room_id"],
+            room_id=fcu_room_id,
+        )
         rows.append(
             FcuTempSourceRow(
                 source_device_id=row["source_device_id"],
@@ -1713,7 +1726,7 @@ def _latest_temperature_source_rows(conn, fcu_device_id: int, now: int):
                 age_seconds=age_seconds,
                 is_stale=is_stale,
                 multiplier=multiplier,
-                included=multiplier > 0 and not is_stale,
+                included=multiplier > 0 and eligible and not is_stale,
             )
         )
     return rows
@@ -1732,56 +1745,64 @@ def get_fcu_temp_sources(conn, fcu_device_id: int) -> dict[str, Any]:
     )
 
 
-def _temperature_row_for_source(conn, source_device_id: int, at_time: int | None):
-    c = conn.cursor()
-    if at_time is None:
-        c.execute(
-            """
-            SELECT logtime, duration, temp10x
-            FROM devlog
-            WHERE device_id=? AND temp10x IS NOT NULL
-            ORDER BY logtime DESC
-            LIMIT 1
-            """,
-            (source_device_id,),
+def _fcu_room_ids(conn, fcu_device_ids: list[int]) -> dict[int, int | None]:
+    if not fcu_device_ids:
+        return {}
+    wanted_values = ",".join(["(?)"] * len(fcu_device_ids))
+    rows = conn.execute(
+        f"""
+        WITH wanted(device_id) AS (VALUES {wanted_values})
+        SELECT d.device_id, d.room_id
+        FROM devices d
+        JOIN wanted w ON d.device_id = w.device_id
+        """,
+        fcu_device_ids,
+    ).fetchall()
+    return {row["device_id"]: row["room_id"] for row in rows}
+
+
+def _calculate_fcu_room_metric_values(
+    conn,
+    fcu_device_ids: list[int],
+    metric: RoomMetric,
+    *,
+    at_time: int | None = None,
+) -> dict[int, float]:
+    selected_at = int(time.time()) if at_time is None else at_time
+    snapshots = fetch_latest_room_metric_snapshots(conn, at_time=selected_at)
+    room_ids = _fcu_room_ids(conn, fcu_device_ids)
+    weights_by_fcu = (
+        _fcu_temp_source_weights_for_fcus(conn, fcu_device_ids)
+        if metric == RoomMetric.TEMPERATURE
+        else {}
+    )
+    values = {}
+    for fcu_device_id in fcu_device_ids:
+        selection = select_room_metric_sources(
+            snapshots,
+            room_id=room_ids.get(fcu_device_id),
+            metric=metric,
+            at_time=selected_at,
         )
-    else:
-        c.execute(
-            """
-            SELECT logtime, duration, temp10x
-            FROM devlog
-            WHERE device_id=? AND temp10x IS NOT NULL AND logtime <= ?
-            ORDER BY logtime DESC
-            LIMIT 1
-            """,
-            (source_device_id, at_time),
+        aggregate = aggregate_room_metric(
+            selection,
+            weights_by_fcu.get(fcu_device_id) if weights_by_fcu else None,
         )
-    return c.fetchone()
+        if aggregate.value is not None:
+            values[fcu_device_id] = aggregate.value
+    return values
 
 
 def calculate_fcu_temperature10x(
     conn, fcu_device_id: int, at_time: int | None = None
 ) -> int | None:
-    weights = get_fcu_temp_source_weights(conn, fcu_device_id)
-
-    now = int(time.time()) if at_time is None else at_time
-    weighted_total = 0.0
-    weight_total = 0.0
-    for source_device_id, multiplier in weights.items():
-        if multiplier <= 0:
-            continue
-        temp_row = _temperature_row_for_source(conn, source_device_id, at_time)
-        if temp_row is None:
-            continue
-        last_valid = temp_row["logtime"] + temp_row["duration"]
-        if now - last_valid > TEMP_SOURCE_STALE_SECONDS:
-            continue
-        weighted_total += temp_row["temp10x"] * multiplier
-        weight_total += multiplier
-
-    if weight_total <= 0:
-        return None
-    return int(math.floor((weighted_total / weight_total) + 0.5))
+    value = _calculate_fcu_room_metric_values(
+        conn,
+        [fcu_device_id],
+        RoomMetric.TEMPERATURE,
+        at_time=at_time,
+    ).get(fcu_device_id)
+    return None if value is None else int(math.floor(value * 10 + 0.5))
 
 
 def _fcu_temp_source_weights_for_fcus(
@@ -1812,92 +1833,25 @@ def _fcu_temp_source_weights_for_fcus(
     return weights_by_fcu
 
 
-def _latest_temperature_rows_by_source(
-    conn, source_device_ids: list[int]
-) -> dict[int, sqlite3.Row]:
-    if not source_device_ids:
-        return {}
-
-    wanted_values = ",".join(["(?)"] * len(source_device_ids))
-    c = conn.cursor()
-    c.execute(
-        f"""
-        WITH wanted(device_id) AS (VALUES {wanted_values}),
-        latest AS (
-            SELECT d.device_id, MAX(d.logtime) AS logtime
-            FROM devlog d
-            JOIN wanted w ON d.device_id = w.device_id
-            WHERE d.temp10x IS NOT NULL
-            GROUP BY d.device_id
-        )
-        SELECT d.device_id, d.logtime, d.duration, d.temp10x
-        FROM devlog d
-        JOIN latest l
-            ON d.device_id = l.device_id
-            AND d.logtime = l.logtime
-        WHERE d.temp10x IS NOT NULL
-        """,
-        source_device_ids,
-    )
-    return {row["device_id"]: row for row in c.fetchall()}
-
-
 def calculate_fcu_temperatures10x(
     conn, fcu_device_ids: list[int]
 ) -> dict[int, int]:
-    weights_by_fcu = _fcu_temp_source_weights_for_fcus(conn, fcu_device_ids)
-    source_device_ids = sorted(
-        {
-            source_device_id
-            for weights in weights_by_fcu.values()
-            for source_device_id, multiplier in weights.items()
-            if multiplier > 0
-        }
+    values = _calculate_fcu_room_metric_values(
+        conn, fcu_device_ids, RoomMetric.TEMPERATURE
     )
-    source_rows = _latest_temperature_rows_by_source(conn, source_device_ids)
-    now = int(time.time())
-
-    calculated: dict[int, int] = {}
-    for fcu_device_id, weights in weights_by_fcu.items():
-        weighted_total = 0.0
-        weight_total = 0.0
-        for source_device_id, multiplier in weights.items():
-            if multiplier <= 0:
-                continue
-            temp_row = source_rows.get(source_device_id)
-            if temp_row is None:
-                continue
-            last_valid = temp_row["logtime"] + temp_row["duration"]
-            if now - last_valid > TEMP_SOURCE_STALE_SECONDS:
-                continue
-            weighted_total += temp_row["temp10x"] * multiplier
-            weight_total += multiplier
-        if weight_total > 0:
-            calculated[fcu_device_id] = int(
-                math.floor((weighted_total / weight_total) + 0.5)
-            )
-    return calculated
+    return {
+        fcu_device_id: int(math.floor(value * 10 + 0.5))
+        for fcu_device_id, value in values.items()
+    }
 
 
-def _fcu_self_source_multipliers(
-    conn,
-    fcu_device_ids: list[int],
+def calculate_fcu_humidities(
+    conn, fcu_device_ids: list[int]
 ) -> dict[int, float]:
-    if not fcu_device_ids:
-        return {}
-    wanted_values = ",".join(["(?)"] * len(fcu_device_ids))
-    c = conn.cursor()
-    c.execute(
-        f"""
-        WITH wanted(fcu_device_id) AS (VALUES {wanted_values})
-        SELECT s.fcu_device_id, s.multiplier
-        FROM fcu_temp_sources s
-        JOIN wanted w ON s.fcu_device_id = w.fcu_device_id
-        WHERE s.source_device_id = s.fcu_device_id
-        """,
-        fcu_device_ids,
+    """Return equal-weight humidity for each FCU's current room sources."""
+    return _calculate_fcu_room_metric_values(
+        conn, fcu_device_ids, RoomMetric.HUMIDITY
     )
-    return {row["fcu_device_id"]: float(row["multiplier"]) for row in c.fetchall()}
 
 
 def _temperature_rows_by_source_for_window(
@@ -1935,6 +1889,36 @@ def _temperature_rows_by_source_for_window(
     for row in c.fetchall():
         rows_by_source[row["device_id"]].append(row)
     return rows_by_source
+
+
+def _room_filtered_temperature_weights(
+    conn,
+    fcu_device_id: int,
+    weights: dict[int, float],
+) -> dict[int, float]:
+    if not weights:
+        return {}
+    room_id = _fcu_room_ids(conn, [fcu_device_id]).get(fcu_device_id)
+    wanted_values = ",".join(["(?)"] * len(weights))
+    rows = conn.execute(
+        f"""
+        WITH wanted(device_id) AS (VALUES {wanted_values})
+        SELECT d.device_id, d.device_type, d.room_id
+        FROM devices d
+        JOIN wanted w ON d.device_id = w.device_id
+        """,
+        list(weights),
+    ).fetchall()
+    return {
+        row["device_id"]: weights[row["device_id"]]
+        for row in rows
+        if weights[row["device_id"]] > 0
+        and room_device_is_eligible(
+            device_type=row["device_type"],
+            device_room_id=row["room_id"],
+            room_id=room_id,
+        )
+    }
 
 
 def _calculate_fcu_temperature10x_from_prefetched_rows(
@@ -2116,13 +2100,11 @@ def _get_calculated_temperature_series_for_fcus(
         if not logtime_rows:
             continue
 
-        weights = {
-            source_device_id: multiplier
-            for source_device_id, multiplier in get_fcu_temp_source_weights(
-                conn, fcu["device_id"]
-            ).items()
-            if multiplier > 0
-        }
+        weights = _room_filtered_temperature_weights(
+            conn,
+            fcu["device_id"],
+            get_fcu_temp_source_weights(conn, fcu["device_id"]),
+        )
         if not weights:
             continue
 
@@ -2140,8 +2122,7 @@ def _get_calculated_temperature_series_for_fcus(
             temp10x = _calculate_fcu_temperature10x_from_prefetched_rows(
                 weights, source_rows, row_indexes, logtime
             )
-            if temp10x is not None:
-                data.append((logtime, temp10x / 10))
+            data.append((logtime, None if temp10x is None else temp10x / 10))
         if data:
             series.append(
                 TimeSeries(
@@ -2291,7 +2272,7 @@ def get_device_metric_series(
         c.execute(cmd, args)
         rows = c.fetchall()
 
-        data: list[tuple[int, float]] = []
+        data: list[tuple[int, float | None]] = []
         for row in rows:
             try:
                 status = json.loads(row["status_json"])
@@ -2348,7 +2329,7 @@ def get_lighting_series(
         c.execute(cmd, args)
         rows = c.fetchall()
 
-        data: list[tuple[int, float]] = []
+        data: list[tuple[int, float | None]] = []
         for row in rows:
             status_json = row["status_json"]
             try:
@@ -2415,7 +2396,7 @@ def get_device_status(conn) -> List[Dict[str, Any]]:
 
     set_ranges = get_fcu_set_ranges(conn, fcu_device_ids)
     calculated_temps = calculate_fcu_temperatures10x(conn, fcu_device_ids)
-    fcu_self_multipliers = _fcu_self_source_multipliers(conn, fcu_device_ids)
+    calculated_humidities = calculate_fcu_humidities(conn, fcu_device_ids)
     for data in device_data:
         if data["device_id"] in fcu_device_ids:
             set_range = set_ranges.get(data["device_id"]) or default_fcu_set_range(
@@ -2426,19 +2407,11 @@ def get_device_status(conn) -> List[Dict[str, Any]]:
             data["set_range_high_c"] = set_range.set_range_high_c
             data["min_set_range_c"] = set_range.min_set_range_c
         calculated_temp10x = calculated_temps.get(data["device_id"])
-        if (
-            calculated_temp10x is None
-            and data["device_id"] in fcu_device_ids
-            and data.get("temp10x") is not None
-            and fcu_self_multipliers.get(
-                data["device_id"],
-                FCU_DEFAULT_TEMP_SOURCE_MULTIPLIER,
-            )
-            > 0
-        ):
-            calculated_temp10x = data["temp10x"]
         if calculated_temp10x is not None:
             data["calculated_temp10x"] = calculated_temp10x
+        calculated_humidity = calculated_humidities.get(data["device_id"])
+        if calculated_humidity is not None:
+            data["calculated_humidity"] = calculated_humidity
         if "logtime" in data:
             data["logtime"] = int(data["logtime"])
             if data.get("duration") is not None:

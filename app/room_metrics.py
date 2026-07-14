@@ -84,6 +84,16 @@ class RoomMetricSelection(BaseModel):
     exclusions: list[RoomMetricExclusion]
 
 
+class RoomMetricAggregate(BaseModel):
+    """One aggregate produced from selected room metric sources."""
+
+    model_config = ConfigDict(frozen=True)
+
+    metric: RoomMetric
+    value: float | None
+    source_device_ids: list[int]
+
+
 def reading_age_seconds(snapshot: RoomMetricSnapshot, at_time: float) -> int:
     """Return whole seconds since the reading's validity interval ended."""
     return int(max(0, at_time - (snapshot.logtime + snapshot.duration)))
@@ -104,6 +114,16 @@ def _metric_value(
     return value, "percent"
 
 
+def room_device_is_eligible(
+    *, device_type: str | None, device_room_id: int | None, room_id: int | None
+) -> bool:
+    """Return whether a physical device belongs to the requested room."""
+    return (
+        (device_type or "").upper() not in {DEVICE_TYPE_ERV, DEVICE_TYPE_INTERNAL}
+        and device_room_id == room_id
+    )
+
+
 def select_room_metric_sources(
     snapshots: Iterable[RoomMetricSnapshot],
     *,
@@ -115,14 +135,19 @@ def select_room_metric_sources(
     """Select current physical-device readings belonging to one room."""
     sources = []
     exclusions = []
-    excluded_types = {DEVICE_TYPE_ERV, DEVICE_TYPE_INTERNAL}
     for snapshot in snapshots:
-        device_type = (snapshot.device_type or "").upper()
         reason = None
         age_seconds = reading_age_seconds(snapshot, at_time)
-        if device_type in excluded_types:
+        if (snapshot.device_type or "").upper() in {
+            DEVICE_TYPE_ERV,
+            DEVICE_TYPE_INTERNAL,
+        }:
             reason = RoomMetricExclusionReason.DEVICE_TYPE
-        elif snapshot.room_id != room_id:
+        elif not room_device_is_eligible(
+            device_type=snapshot.device_type,
+            device_room_id=snapshot.room_id,
+            room_id=room_id,
+        ):
             reason = RoomMetricExclusionReason.ROOM
         elif age_seconds > stale_seconds:
             reason = RoomMetricExclusionReason.STALE
@@ -157,4 +182,30 @@ def select_room_metric_sources(
         stale_seconds=stale_seconds,
         sources=sources,
         exclusions=exclusions,
+    )
+
+
+def aggregate_room_metric(
+    selection: RoomMetricSelection,
+    weights: dict[int, float] | None = None,
+) -> RoomMetricAggregate:
+    """Average selected values equally or by positive device weights."""
+    weighted_values = []
+    source_device_ids = []
+    for source in selection.sources:
+        weight = 1.0 if weights is None else weights.get(source.device_id, 0.0)
+        if weight <= 0:
+            continue
+        weighted_values.append((source.value, weight))
+        source_device_ids.append(source.device_id)
+    weight_total = math.fsum(weight for _, weight in weighted_values)
+    value = (
+        math.fsum(value * weight for value, weight in weighted_values) / weight_total
+        if weight_total > 0
+        else None
+    )
+    return RoomMetricAggregate(
+        metric=selection.metric,
+        value=value,
+        source_device_ids=source_device_ids,
     )
