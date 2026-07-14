@@ -16,6 +16,7 @@ from typing import Any
 from flask import render_template, request, redirect, url_for
 
 from .constants import DASHBOARD_AIR_QUALITY_DEVICE_EXPIRATION_SECONDS
+from .device_types import DEVICE_TYPE_ERV, DEVICE_TYPE_FCU, DEVICE_TYPE_INTERNAL
 from .version import __version__
 from . import db
 from . import db_alerts
@@ -201,7 +202,9 @@ def _room_matrix_groups(
     }
     groups[None] = RoomMatrixGroup(room_name="Unassigned")
     for device in devices:
-        if not device.get("dashboard_air_quality_active"):
+        if not device.get("dashboard_air_quality_active") or device.get(
+            "device_type"
+        ) in {DEVICE_TYPE_ERV, DEVICE_TYPE_FCU, DEVICE_TYPE_INTERNAL}:
             continue
         room_id = device.get("room_id")
         groups.setdefault(
@@ -211,6 +214,13 @@ def _room_matrix_groups(
                 room_name=device.get("room_name") or "Unassigned",
             ),
         ).devices.append(DeviceStatus.model_validate(device))
+    for group in groups.values():
+        group.devices.sort(
+            key=lambda device: (
+                (device.display_name or device.device_name).casefold(),
+                device.device_id,
+            )
+        )
     return sorted(groups.values(), key=lambda group: group.room_name.casefold())
 
 
