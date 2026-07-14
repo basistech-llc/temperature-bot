@@ -568,6 +568,48 @@ def test_get_device_status_includes_ae200_device_id(test_database_conn):
     assert row["rules_enabled"] is True
 
 
+def test_fetch_last_status_uses_latest_reading_index(test_database_conn):
+    """Latest status is deterministic and uses the device-first composite index."""
+    cursor = test_database_conn.execute(
+        """
+        INSERT INTO devices (device_name, device_type, aqi_mon)
+        VALUES ('Indexed latest sensor', 'SENSOR', 1)
+        """
+    )
+    assert cursor.lastrowid is not None
+    device_id = int(cursor.lastrowid)
+    test_database_conn.executemany(
+        """
+        INSERT INTO devlog (device_id, logtime, duration, temp10x, status_json)
+        VALUES (?, ?, 1, ?, '{}')
+        """,
+        [
+            (device_id, 1000, 200),
+            (device_id, 1000, 210),
+            (device_id, 999, 190),
+        ],
+    )
+    test_database_conn.commit()
+
+    latest = next(
+        row for row in db.fetch_last_status(test_database_conn)
+        if row["device_id"] == device_id
+    )
+    air_rows = db.fetch_last_status(test_database_conn, flag=db.AIR_MON_DEVICES)
+    plan = test_database_conn.execute(
+        f"EXPLAIN QUERY PLAN {db.LATEST_DEVICE_STATUS_SQL}",
+        (float("inf"), 0),
+    ).fetchall()
+    details = "\n".join(row["detail"] for row in plan)
+
+    assert latest["temp10x"] == 210
+    assert any(row["device_id"] == device_id for row in air_rows)
+    assert all(row["aqi_mon"] == 1 for row in air_rows)
+    assert "idx_devlog_device_logtime_log_id" in details
+    assert "TEMP B-TREE" not in details
+    assert "SCAN devlog" not in details
+
+
 def test_fcu_discovery_creates_and_assigns_owned_room(test_database_conn):
     """Creating a typed FCU atomically creates its canonical room."""
     device_id = db.get_or_create_device_id(

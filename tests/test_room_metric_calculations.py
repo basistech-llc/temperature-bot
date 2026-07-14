@@ -103,7 +103,12 @@ def test_room_move_updates_temperature_and_equal_weight_humidity(
         device for device in status if device["device_id"] == fcu_id
     )
     assert fcu["calculated_humidity"] == 50.0
-    assert sum("ROW_NUMBER() OVER" in statement for statement in statements) == 1
+    metric_snapshot_statements = [
+        statement
+        for statement in statements
+        if "FROM devlog candidate" in statement and "d.aqi_mon" not in statement
+    ]
+    assert len(metric_snapshot_statements) == 1
 
 
 def test_calculated_temperature_series_preserves_stale_gap(test_database_conn):

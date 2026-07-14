@@ -17,7 +17,9 @@ const REFRESH_INTERVAL = 10; // seconds between refreshes
 const RUNNING_MINUTES = 10; // minutes to run before stopping
 const SHOW_REFRESH_COUNTDOWN = false;
 const DASHBOARD_AIR_QUALITY_DEVICE_EXPIRATION_SECONDS = 30 * 24 * 60 * 60;
-let lastRefreshTime = 0;
+// The HTML is server-rendered from the same status data. Wait one interval
+// before polling instead of repeating that database work immediately on load.
+let lastRefreshTime = Date.now();
 const AE200_MODE_LABELS = {
   COOL: "Cool",
   HEAT: "Heat",
@@ -2894,6 +2896,7 @@ const refreshGridRows = () => {
         console.error("Error refreshing leaderboard:", error);
         // Still update the refresh time on error to prevent rapid retries
         lastRefreshTime = now;
+        forceRefresh = false;
       }),
     );
   }

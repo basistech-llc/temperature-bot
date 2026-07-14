@@ -186,3 +186,43 @@ def test_shared_room_selection_handles_membership_freshness_and_payload_shapes(
     )
     assert humidity_exclusions[malformed_id] == RoomMetricExclusionReason.MISSING_METRIC
     assert humidity_exclusions[missing_id] == RoomMetricExclusionReason.MISSING_METRIC
+
+
+def test_latest_snapshot_uses_log_id_to_break_timestamp_ties(test_database_conn):
+    conn = test_database_conn
+    device_id = _device(conn, "Tied Sensor", "SENSOR", None)
+    _reading(
+        conn,
+        device_id,
+        ReadingSpec(logtime=1_000, temp10x=200, status={"humidity": 40}),
+    )
+    _reading(
+        conn,
+        device_id,
+        ReadingSpec(logtime=1_000, temp10x=210, status={"humidity": 41}),
+    )
+    _reading(
+        conn,
+        device_id,
+        ReadingSpec(logtime=1_001, temp10x=220, status={"humidity": 42}),
+    )
+    conn.commit()
+
+    snapshot = db.fetch_latest_room_metric_snapshots(conn, at_time=1_000)[0]
+
+    assert snapshot.device_id == device_id
+    assert snapshot.temp10x == 210
+    assert snapshot.status is not None
+    assert snapshot.status.humidity == 41
+
+
+def test_latest_snapshot_query_uses_bounded_composite_index(test_database_conn):
+    plan = test_database_conn.execute(
+        f"EXPLAIN QUERY PLAN {db.LATEST_ROOM_METRIC_SNAPSHOTS_SQL}",
+        (1_000,),
+    ).fetchall()
+    details = "\n".join(str(row[3]) for row in plan)
+
+    assert "idx_devlog_device_logtime_log_id" in details
+    assert "(device_id=? AND logtime<?)" in details
+    assert "CO-ROUTINE" not in details

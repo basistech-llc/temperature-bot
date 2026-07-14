@@ -375,14 +375,25 @@ function updateSensorTemperatures() {
     });
 }
 
-/** Create a status refresher that permits only one request at a time. */
-function createStatusRefresher(request = fetch, update = updateDeviceStatus) {
+/** Wrap an async operation so calls made while it is running are skipped. */
+function createSingleFlight(operation) {
     let inFlight = false;
-    return async function refresh() {
+    return async function runSingleFlight() {
         if (inFlight) {
             return false;
         }
         inFlight = true;
+        try {
+            return await operation();
+        } finally {
+            inFlight = false;
+        }
+    };
+}
+
+/** Create a status refresher that permits only one request at a time. */
+function createStatusRefresher(request = fetch, update = updateDeviceStatus) {
+    return createSingleFlight(async () => {
         try {
             const response = await request('/api/v1/status');
             if (!response.ok) {
@@ -397,10 +408,8 @@ function createStatusRefresher(request = fetch, update = updateDeviceStatus) {
         } catch (error) {
             console.error('Failed to refresh status:', error);
             return false;
-        } finally {
-            inFlight = false;
         }
-    };
+    });
 }
 
 const refreshStatus = createStatusRefresher();
@@ -487,15 +496,20 @@ function requestRoomStatus(endpoint, request = fetch) {
     });
 }
 
-function refreshRoomStatus(request = fetch, documentRef = document) {
-    if (!documentRef.querySelector('.room-controls-card')) {
-        return Promise.resolve(false);
-    }
-    return requestRoomStatus(roomControlEndpoint('room_status'), request)
-        .then(data => {
+function createRoomStatusRefresher(request = fetch, documentRef) {
+    const pageDocument = documentRef ?? document;
+    return createSingleFlight(async () => {
+        if (!pageDocument.querySelector('.room-controls-card')) {
+            return false;
+        }
+        try {
+            const data = await requestRoomStatus(
+                roomControlEndpoint('room_status'),
+                request,
+            );
             if (data.dimmer) {
-                const slider = documentRef.getElementById('dimmer-slider');
-                const valueEl = documentRef.getElementById('dimmer-value');
+                const slider = pageDocument.getElementById('dimmer-slider');
+                const valueEl = pageDocument.getElementById('dimmer-value');
                 if (slider && !slider.matches(':active')) {
                     slider.value = data.dimmer.level;
                 }
@@ -510,14 +524,18 @@ function refreshRoomStatus(request = fetch, documentRef = document) {
                 updateWallButton('outer', data.wall_outer.switch);
             }
             return true;
-        })
-        .catch(error => {
+        } catch (error) {
             if (DEBUG) {
                 console.error('Failed to refresh room status:', error);
             }
             return false;
-        });
+        }
+    });
 }
+
+const refreshRoomStatus = typeof document === 'undefined'
+    ? async () => false
+    : createRoomStatusRefresher();
 
 /**
  * Set up dimmer slider interaction.
@@ -764,6 +782,7 @@ if (typeof window !== 'undefined') {
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
         computeFitScale,
+        createRoomStatusRefresher,
         createStatusRefresher,
         refreshRoomStatus,
         requestRoomStatus,
