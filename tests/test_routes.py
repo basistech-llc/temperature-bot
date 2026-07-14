@@ -497,6 +497,16 @@ def test_weather_route(flask_test_client):  # noqa: F811
     assert b"Outdoor Air Quality" in response.data
 
 
+def test_room_map_route_uses_canonical_room_api_contract(flask_test_client):  # noqa: F811
+    response = flask_test_client.get("/map")
+    assert response.status_code == 200
+    html = response.data.decode("utf-8")
+    assert 'id="room-map-overlay"' in html
+    assert 'id="room-map-unmapped"' in html
+    assert '/static/map/basistech_floorplan.png' in html
+    assert '/static/room_map.js' in html
+
+
 def test_air_quality_route(flask_test_client):  # noqa: F811
     """Test the /air-quality route structure and key content."""
     response = flask_test_client.get("/air-quality")

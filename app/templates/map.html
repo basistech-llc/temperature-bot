@@ -1,0 +1,19 @@
+{% extends 'base.html' %}
+{% block title %}Room Map{% endblock %}
+{% block body %}
+<main class="room-map-page maxwidth">
+  <h1>Room Map</h1>
+  <p id="room-map-message" role="status" aria-live="polite">Loading room status…</p>
+  <div class="room-map-layout">
+    <div class="room-map-canvas" id="room-map-canvas">
+      <img src="/static/map/basistech_floorplan.png" alt="BasisTech floor plan" width="1650" height="1305">
+      <svg id="room-map-overlay" viewBox="0 0 1650 1305" role="img" aria-label="Current HVAC status by room"></svg>
+    </div>
+    <aside>
+      <h2>Rooms without map placement</h2>
+      <ul id="room-map-unmapped"></ul>
+    </aside>
+  </div>
+</main>
+<script src="/static/room_map.js"></script>
+{% endblock %}

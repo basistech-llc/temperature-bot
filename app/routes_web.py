@@ -627,6 +627,11 @@ def _register_room_routes(app):
             current_page="devices",
         )
 
+    @app.get("/map")
+    def room_map():
+        """Render the canonical room-backed HVAC floor-plan overlay."""
+        return render_template("map.html", current_page="map")
+
     @app.route("/kitchen")
     @with_db_connection
     def kitchen_dashboard(conn):

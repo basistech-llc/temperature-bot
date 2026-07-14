@@ -1765,3 +1765,52 @@ li.pure-menu-item > .rules-master-toggle {
 .device-editor-table th {
     vertical-align: middle;
 }
+.room-map-page {
+  padding: 1rem;
+}
+
+.room-map-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 4fr) minmax(14rem, 1fr);
+  gap: 1rem;
+}
+
+.room-map-canvas {
+  display: grid;
+  position: relative;
+}
+
+.room-map-canvas > * {
+  grid-area: 1 / 1;
+  width: 100%;
+  height: auto;
+}
+
+.room-map-canvas svg {
+  align-self: stretch;
+}
+
+.room-map-canvas polygon {
+  fill-opacity: 0.18;
+  stroke-width: 4;
+}
+
+.room-map-canvas text {
+  text-anchor: middle;
+  paint-order: stroke;
+  stroke: white;
+  stroke-width: 5px;
+  stroke-linejoin: round;
+  fill: #111;
+  font-weight: 700;
+}
+
+.room-map-metrics {
+  font-size: 18px;
+}
+
+@media (max-width: 800px) {
+  .room-map-layout {
+    grid-template-columns: 1fr;
+  }
+}
