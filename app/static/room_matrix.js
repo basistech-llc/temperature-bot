@@ -388,6 +388,7 @@ function closeRoomDeleteDialog() {
   const dialog = document.getElementById("room-delete-dialog");
   if (!dialog) return;
   clearInterval(dialog._countdownTimer);
+  dialog._countdownTimer = null;
   dialog.classList.add("hidden");
 }
 
@@ -395,6 +396,8 @@ function openRoomDeleteDialog(roomId, roomName) {
   const dialog = document.getElementById("room-delete-dialog");
   const button = dialog?.querySelector("[data-action='confirm-room-delete']");
   if (!dialog || !button) return;
+  clearInterval(dialog._countdownTimer);
+  dialog._countdownTimer = null;
   dialog.dataset.roomId = String(roomId);
   dialog.querySelector("[data-role='room-name']").textContent = roomName;
   dialog.querySelector("[data-role='message']").textContent = "";
@@ -404,7 +407,10 @@ function openRoomDeleteDialog(roomId, roomName) {
     const state = roomDeleteCountdown(startedAt);
     button.disabled = !state.enabled;
     button.textContent = state.label;
-    if (state.enabled) clearInterval(dialog._countdownTimer);
+    if (state.enabled) {
+      clearInterval(dialog._countdownTimer);
+      dialog._countdownTimer = null;
+    }
   };
   update();
   dialog._countdownTimer = setInterval(update, 250);
@@ -595,6 +601,7 @@ if (typeof module !== "undefined" && module.exports) {
     compareSensors,
     deviceRoomRequest,
     longPressTriggered,
+    openRoomDeleteDialog,
     persistNewRoom,
     persistRoomDeletion,
     persistRoomName,

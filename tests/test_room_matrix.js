@@ -5,6 +5,7 @@ const {
   compareSensors,
   deviceRoomRequest,
   longPressTriggered,
+  openRoomDeleteDialog,
   persistNewRoom,
   persistRoomDeletion,
   persistRoomName,
@@ -50,6 +51,40 @@ assert.deepStrictEqual(roomDeleteCountdown(1000, 6000), {
   enabled: true,
   label: "OK",
 });
+
+const originalDocument = global.document;
+const originalSetInterval = global.setInterval;
+const originalClearInterval = global.clearInterval;
+const clearedTimers = [];
+let nextTimer = 100;
+const deleteButton = {};
+const deleteRoomName = {};
+const deleteMessage = {};
+const deleteDialog = {
+  dataset: {},
+  classList: { remove() {} },
+  querySelector(selector) {
+    return {
+      "[data-action='confirm-room-delete']": deleteButton,
+      "[data-role='room-name']": deleteRoomName,
+      "[data-role='message']": deleteMessage,
+    }[selector];
+  },
+};
+global.document = { getElementById: () => deleteDialog };
+global.setInterval = () => ++nextTimer;
+global.clearInterval = (timer) => {
+  if (timer !== undefined && timer !== null) clearedTimers.push(timer);
+};
+openRoomDeleteDialog(7, "First room");
+const firstTimer = deleteDialog._countdownTimer;
+openRoomDeleteDialog(8, "Second room");
+assert.deepStrictEqual(clearedTimers, [firstTimer]);
+assert.strictEqual(deleteDialog.dataset.roomId, "8");
+assert.notStrictEqual(deleteDialog._countdownTimer, firstTimer);
+global.document = originalDocument;
+global.setInterval = originalSetInterval;
+global.clearInterval = originalClearInterval;
 
 const dragCloneChildren = [
   { id: "temp-1", removeAttribute: (name) => { if (name === "id") delete dragCloneChildren[0].id; } },
