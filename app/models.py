@@ -200,6 +200,14 @@ class RoomCreate(BaseModel):
     room_name: str = Field(min_length=1)
     map: RoomMap | None = None
 
+    @field_validator("room_name")
+    @classmethod
+    def reserve_unassigned(cls, value: str) -> str:
+        """Keep the virtual Unassigned group distinct from persisted rooms."""
+        if value.strip().casefold() == "unassigned":
+            raise ValueError("Unassigned is reserved for devices without a room")
+        return value
+
 
 class RoomPatch(BaseModel):
     """Client-settable fields for updating a room."""
@@ -208,6 +216,14 @@ class RoomPatch(BaseModel):
 
     room_name: str | None = Field(default=None, min_length=1)
     map: RoomMap | None = None
+
+    @field_validator("room_name")
+    @classmethod
+    def reserve_unassigned(cls, value: str | None) -> str | None:
+        """Keep the virtual Unassigned group distinct from persisted rooms."""
+        if value is not None and value.strip().casefold() == "unassigned":
+            raise ValueError("Unassigned is reserved for devices without a room")
+        return value
 
 
 class RoomListResponse(BaseModel):

@@ -918,11 +918,18 @@ function setFcuTempSourcesTitle(popup, roomName) {
 
 function sortedFcuTempSources(sources, roomId = undefined) {
   const sourceList = Array.isArray(sources) ? sources : [];
+  const normalizedRoomId =
+    typeof roomId === "number" && Number.isInteger(roomId)
+      ? roomId
+      : typeof roomId === "string" && roomId.trim() !== "" && Number.isInteger(Number(roomId))
+        ? Number(roomId)
+        : null;
   const activeSources =
-    roomId === undefined
+    normalizedRoomId === null
       ? sourceList
       : sourceList.filter(
-          (source) => Number(source.room_id) === Number(roomId),
+          (source) => source.room_id !== null && source.room_id !== undefined &&
+            Number(source.room_id) === normalizedRoomId,
         );
   return activeSources
     .filter((source) => !source.is_stale)
@@ -1171,7 +1178,9 @@ function refreshOpenFcuRoomEditor(loadSources = loadFcuTempSourcesForCell) {
     `.fcu-room-editor-trigger[data-device-id="${popup.dataset.deviceId}"]`,
   );
   if (!trigger) return false;
-  loadSources(trigger);
+  Promise.resolve(loadSources(trigger)).catch((error) => {
+    console.error("Failed to refresh FCU room editor:", error);
+  });
   return true;
 }
 

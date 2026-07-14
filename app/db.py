@@ -828,7 +828,9 @@ def update_device_room(conn, device_id: int, room_id: int | None) -> int:
     if device_type == DEVICE_TYPE_FCU:
         c.execute("SELECT room_id FROM rooms WHERE fcu_device_id=?", (device_id,))
         owned_room = c.fetchone()
-        owned_room_id = owned_room["room_id"] if owned_room is not None else None
+        if owned_room is None:
+            raise ValueError("An FCU must have an owned room")
+        owned_room_id = owned_room["room_id"]
         if room_id != owned_room_id:
             raise ValueError("An FCU must remain assigned to its owned room")
     c.execute("UPDATE devices SET room_id=? WHERE device_id=?", (room_id, device_id))
@@ -1830,10 +1832,14 @@ def _calculate_fcu_room_metric_values(
     metric: RoomMetric,
     *,
     at_time: int | None = None,
+    snapshots: list[RoomMetricSnapshot] | None = None,
+    room_ids: dict[int, int | None] | None = None,
 ) -> dict[int, float]:
     selected_at = int(time.time()) if at_time is None else at_time
-    snapshots = fetch_latest_room_metric_snapshots(conn, at_time=selected_at)
-    room_ids = _fcu_room_ids(conn, fcu_device_ids)
+    if snapshots is None:
+        snapshots = fetch_latest_room_metric_snapshots(conn, at_time=selected_at)
+    if room_ids is None:
+        room_ids = _fcu_room_ids(conn, fcu_device_ids)
     weights_by_fcu = (
         _fcu_temp_source_weights_for_fcus(conn, fcu_device_ids)
         if metric == RoomMetric.TEMPERATURE
@@ -2525,8 +2531,29 @@ def get_device_status(conn) -> List[Dict[str, Any]]:
             data["device_type"] = inferred_type
 
     set_ranges = get_fcu_set_ranges(conn, fcu_device_ids)
-    calculated_temps = calculate_fcu_temperatures10x(conn, fcu_device_ids)
-    calculated_humidities = calculate_fcu_humidities(conn, fcu_device_ids)
+    metric_at = int(time.time())
+    metric_snapshots = fetch_latest_room_metric_snapshots(conn, at_time=metric_at)
+    fcu_room_ids = _fcu_room_ids(conn, fcu_device_ids)
+    temperature_values = _calculate_fcu_room_metric_values(
+        conn,
+        fcu_device_ids,
+        RoomMetric.TEMPERATURE,
+        at_time=metric_at,
+        snapshots=metric_snapshots,
+        room_ids=fcu_room_ids,
+    )
+    calculated_temps = {
+        device_id: int(math.floor(value * 10 + 0.5))
+        for device_id, value in temperature_values.items()
+    }
+    calculated_humidities = _calculate_fcu_room_metric_values(
+        conn,
+        fcu_device_ids,
+        RoomMetric.HUMIDITY,
+        at_time=metric_at,
+        snapshots=metric_snapshots,
+        room_ids=fcu_room_ids,
+    )
     for data in device_data:
         if data["device_id"] in fcu_device_ids:
             set_range = set_ranges.get(data["device_id"]) or default_fcu_set_range(

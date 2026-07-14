@@ -162,6 +162,7 @@ function createRowDragImage(row) {
   const table = row.closest("table").cloneNode(false);
   const body = document.createElement("tbody");
   const clone = row.cloneNode(true);
+  stripElementIds(clone);
   [...clone.children].forEach((cell, index) => {
     cell.style.width = `${row.children[index].getBoundingClientRect().width}px`;
   });
@@ -172,6 +173,16 @@ function createRowDragImage(row) {
   table.appendChild(body);
   document.body.appendChild(table);
   return table;
+}
+
+function stripElementIds(root) {
+  root.removeAttribute?.("id");
+  root.querySelectorAll?.("[id]").forEach((element) => element.removeAttribute("id"));
+  return root;
+}
+
+function roomRenameKeyTriggered(key) {
+  return key === "Enter" || key === " ";
 }
 
 function updateDropPlaceholder(placeholder, targetRow) {
@@ -318,6 +329,11 @@ function setupRoomRename() {
       event.preventDefault();
       openRoomRenameDialog(button);
     });
+    button.addEventListener("keydown", (event) => {
+      if (!roomRenameKeyTriggered(event.key)) return;
+      event.preventDefault();
+      openRoomRenameDialog(button);
+    });
     let press = null;
     button.addEventListener("pointerdown", (event) => {
       if (event.pointerType !== "touch") return;
@@ -453,9 +469,11 @@ if (typeof module !== "undefined" && module.exports) {
     persistRoomName,
     persistSensorRoom,
     restoreSensorPosition,
+    roomRenameKeyTriggered,
     roomHumidityText,
     roomIdFromValue,
     roomNameSortKey,
     roomTemperatureC,
+    stripElementIds,
   };
 }
