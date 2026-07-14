@@ -3,6 +3,10 @@
 Approved on 2026-07-13 after review of the current implementation, every open
 GitHub issue, and the open local Beads queue.
 
+Implementation completed on 2026-07-13. Every checklist item and child of
+Beads epic `hvac-9re` is closed; residual non-room scope remains in the GitHub
+issues identified below.
+
 GitHub issue #144 is the canonical umbrella. The local implementation epic is
 Beads `hvac-9re`. The plan delivers the room model in a core phase, then moves
 every identified room-oriented GitHub issue onto that canonical topology. The
