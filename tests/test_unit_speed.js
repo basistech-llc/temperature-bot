@@ -535,6 +535,20 @@ check(
   "1,2,3,4",
 );
 check(
+  "room editor shows only sources assigned to its room",
+  sortedFcuTempSources(
+    [
+      { source_device_id: 1, room_id: 2, is_stale: false },
+      { source_device_id: 2, room_id: 3, is_stale: true },
+      { source_device_id: 3, is_stale: false },
+    ],
+    2,
+  )
+    .map((source) => source.source_device_id)
+    .join(","),
+  "1",
+);
+check(
   "nonnegative multiplier parses",
   parseFcuTempSourceMultiplier(" 1.5 "),
   1.5,
@@ -948,7 +962,7 @@ const blankRoomName = collectFcuRoomEditorDisplayNameChange({
 check(
   "blank room editor name is invalid",
   blankRoomName.error,
-  "Room (Unit) name is required.",
+  "Room name is required.",
 );
 
 async function testFcuBatchSavePost() {
@@ -1061,7 +1075,8 @@ async function testFcuRoomEditorNamePatch() {
   const popup = {
     dataset: {
       updateUrl: "/api/v1/fcu_temp_source",
-      deviceUpdateUrl: "/api/v1/devices/12",
+      roomUpdateUrl: "/api/v1/rooms/3",
+      roomId: "3",
       deviceId: "12",
       deviceName: "Area 51",
       currentDisplayName: "Area 51",
@@ -1098,7 +1113,7 @@ async function testFcuRoomEditorNamePatch() {
     },
   };
   const label = {
-    dataset: { deviceUpdate: "", deviceName: "Area 51" },
+    dataset: { roomId: "3", deviceUpdate: "", deviceName: "Area 51" },
     classList: { contains: (name) => name === "fcu-room-editor-trigger" },
     textContent: "",
     setAttribute(name, value) {
@@ -1108,6 +1123,8 @@ async function testFcuRoomEditorNamePatch() {
   const requests = [];
   const originalDocumentForSave = global.document;
   const originalFetch = global.fetch;
+  const originalWindow = global.window;
+  const originalCustomEvent = global.CustomEvent;
   global.document = {
     getElementById: (id) => (id === "fcu-temp-sources-popup" ? popup : null),
     querySelectorAll: () => [label],
@@ -1117,33 +1134,39 @@ async function testFcuRoomEditorNamePatch() {
     return {
       ok: true,
       json: async () => ({
-        device_id: 12,
-        device_name: "Area 51",
-        display_name: "East Lab",
-        device_type: "FCU",
-        rules_enabled: true,
+        room_id: 3,
+        room_name: "East Lab",
       }),
     };
   };
+  global.CustomEvent = class CustomEvent {
+    constructor(name, options) {
+      this.type = name;
+      this.detail = options.detail;
+    }
+  };
+  global.window = { dispatchEvent: () => {} };
   try {
     await saveFcuTempSourceMultipliers();
   } finally {
     global.document = originalDocumentForSave;
     global.fetch = originalFetch;
+    global.window = originalWindow;
+    global.CustomEvent = originalCustomEvent;
   }
 
   const patchBody = JSON.parse(requests[0].options.body);
   check("room editor name save sends one request", requests.length, 1);
   check(
-    "room editor name save patches device URL",
+    "room editor name save patches room URL",
     requests[0].url,
-    "/api/v1/devices/12",
+    "/api/v1/rooms/3",
   );
   check("room editor name save uses PATCH", requests[0].options.method, "PATCH");
   check(
-    "room editor name save sends display name",
+    "room editor name save sends room name",
     JSON.stringify(patchBody),
-    JSON.stringify({ display_name: "East Lab" }),
+    JSON.stringify({ room_name: "East Lab" }),
   );
   check("room editor name save updates label", label.textContent, "East Lab");
 }

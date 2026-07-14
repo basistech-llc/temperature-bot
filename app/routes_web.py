@@ -23,7 +23,13 @@ from . import rules_engine
 from . import hubitat
 from . import room_config
 from .display_names import display_device_name
-from .models import DeviceMetadataControl, TableUpdateSummary
+from .models import (
+    DeviceMetadataControl,
+    DeviceStatus,
+    Room,
+    RoomMatrixGroup,
+    TableUpdateSummary,
+)
 from .utils.request_utils import parse_device_ids
 from .utils.db_utils import with_db_connection
 from .util import github_style_duration
@@ -170,6 +176,44 @@ def _index_table_update_summaries(
     }
 
 
+def _room_matrix_groups(
+    devices: list[dict[str, Any]], rooms: list[Room]
+) -> list[RoomMatrixGroup]:
+    """Group active sensor rows by canonical room, including empty rooms."""
+    fcu_by_room = {
+        device.get("room_id"): device
+        for device in devices
+        if device.get("device_type") == "FCU" and device.get("room_id") is not None
+    }
+    groups = {
+        room.room_id: RoomMatrixGroup(
+            room_id=room.room_id,
+            room_name=room.room_name or "Unnamed room",
+            fcu_device_id=(fcu_by_room.get(room.room_id) or {}).get("device_id"),
+            calculated_temp10x=(fcu_by_room.get(room.room_id) or {}).get(
+                "calculated_temp10x"
+            ),
+            calculated_humidity=(fcu_by_room.get(room.room_id) or {}).get(
+                "calculated_humidity"
+            ),
+        )
+        for room in rooms
+    }
+    groups[None] = RoomMatrixGroup(room_name="Unassigned")
+    for device in devices:
+        if not device.get("dashboard_air_quality_active"):
+            continue
+        room_id = device.get("room_id")
+        groups.setdefault(
+            room_id,
+            RoomMatrixGroup(
+                room_id=room_id,
+                room_name=device.get("room_name") or "Unassigned",
+            ),
+        ).devices.append(DeviceStatus.model_validate(device))
+    return sorted(groups.values(), key=lambda group: group.room_name.casefold())
+
+
 def _dashboard_device_label(device: dict[str, Any]) -> str:
     """Return a dashboard label without doing live network enrichment."""
     raw_name = device.get("device_name", "")
@@ -229,6 +273,7 @@ def _register_core_routes(app):
             devices=device_data,
             now=now,
             table_update_summaries=_index_table_update_summaries(device_data, now),
+            room_groups=_room_matrix_groups(device_data, db.get_rooms(conn)),
             current_page="home",
         )
 

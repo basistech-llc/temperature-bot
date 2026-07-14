@@ -181,6 +181,9 @@ local-dev: $(REQ) ## Run the web backend locally with simulated hardware data
 	@echo Running with simulator
 	export AE200_SIMULATOR=1 HUBITAT_SIMULATOR=1 AIRTHINGS_SIMULATOR=1 && $(MAKE) _local-dev-web
 
+rooms-ui-demo: $(REQ) ## Run the room matrix against disposable synthetic data
+	$(PYTHON) -m bin.rooms_ui_demo --database /tmp/temperature-bot-rooms-ui-demo.db
+
 local-live-dev: $(REQ) ## Run the web backend locally against live AE-200 hardware
 	@echo updating database
 	AE200_SIMULATOR= HUBITAT_SIMULATOR= AIRTHINGS_SIMULATOR= $(MAKE) every-minute
@@ -196,7 +199,7 @@ live-dev-runner: $(REQ) ## Run the collection agent and rules runner against liv
 tags: ## Build an etags TAGS file for all Python sources
 	etags */*.py
 
-.PHONY: local-dev local-live-dev _local-dev-web live-dev-runner tags
+.PHONY: local-dev rooms-ui-demo local-live-dev _local-dev-web live-dev-runner tags
 ################################################################
 ## Analysis tools
 ## Static Analysis
@@ -251,6 +254,7 @@ test-js: $(REQ) ## Run the JavaScript unit tests
 	node tests/test_metric_chart_support.js
 	node tests/test_room_scale.js
 	node tests/test_hickory_life.js
+	node tests/test_room_matrix.js
 test: $(REQ) ## Run both Python and JavaScript test suites
 	@python_exit=0; js_exit=0; \
 	make pytest || python_exit=$$?; \

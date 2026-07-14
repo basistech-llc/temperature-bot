@@ -145,11 +145,13 @@
                           data-rules-enabled="{{ 'true' if device.rules_enabled|default(true) else 'false' }}"
                           data-device-update="{{ device.device_update_text|default('', true) }}"
                           data-device-update-url="/api/v1/devices/{{ device.device_id }}"
+                          data-room-id="{{ device.room_id or '' }}"
+                          {% if device.room_id %}data-room-update-url="/api/v1/rooms/{{ device.room_id }}"{% endif %}
                           data-fcu-temp-sources-url="/api/v1/fcu_temp_sources?fcu_device_id={{ device.device_id }}"
                           data-fcu-temp-source-update-url="/api/v1/fcu_temp_source"
                           data-fcu-temp-sources-room-name="{{ device.room_name or device.device_label }}"
-                          aria-label="Edit room settings for {{ device.device_label }}"
-                          title="Edit room settings for {{ device.device_label }}">{{ device.device_label }}</span><span class="rules-disabled-superscript hidden" id="rules-disabled-{{ device.device_id }}" title=""></span>
+                          aria-label="Edit room settings for {{ device.room_name or device.device_label }}"
+                          title="Edit room settings for {{ device.room_name or device.device_label }}">{{ device.room_name or device.device_label }}</span><span class="rules-disabled-superscript hidden" id="rules-disabled-{{ device.device_id }}" title=""></span>
                     <span id="device-{{ device.device_id }}-notes"></span>
                   </td>
                   <td class="cell-disable-for" id="disable-for-{{ device.device_id }}">
@@ -179,7 +181,7 @@
                   <td class="cell-temp cell-temp-link cell-room-temp temp-display temp-display-no-unit" id="room-temp-{{ device.device_id }}"
                       data-chart-url="/chart?mode=calculated&device_ids={{ device.device_id }}"
                       title="Calculated room temperature chart for {{ device.device_label }}; click to show graph.">--</td>
-                  <td class="cell-room-humidity">--</td>
+                  <td class="cell-room-humidity" id="room-humidity-{{ device.device_id }}">--</td>
                   <td class="cell-temp cell-temp-range" id="setrange-{{ device.device_id }}">
                     <div class="setrange-widget"
                          id="setrange-widget-{{ device.device_id }}"
@@ -307,7 +309,7 @@
 
         <!-- Section 3: Air Quality — devices without speed control that have temp -->
         <h2>Air Quality</h2>
-        <table class="pure-table data-table">
+        <table class="pure-table data-table room-matrix" id="room-matrix">
           <thead>
             <tr>
               <th class="column-unit">Unit</th>
@@ -323,10 +325,46 @@
             </tr>
           </thead>
           <tbody>
-            {% for device in devices %}
-            {% if device.dashboard_air_quality_active %}
-                <tr class="device-row" x-data-device-id="{{ device.device_id }}">
+            {% for group in room_groups %}
+              <tr class="room-separator"
+                  data-room-id="{{ group.room_id if group.room_id is not none else '' }}"
+                  data-room-name="{{ group.room_name }}">
+                <td colspan="10">
+                  <button type="button"
+                          class="room-name{% if group.room_id is none %} room-name-unassigned{% endif %}"
+                          data-room-id="{{ group.room_id if group.room_id is not none else '' }}"
+                          data-room-name="{{ group.room_name }}"
+                          {% if group.room_id is none %}disabled{% else %}aria-label="Rename {{ group.room_name }}" title="Right-click or long-press to rename"{% endif %}>{{ group.room_name }}</button>
+                  {% if group.room_id is not none %}
+                  <span class="room-summary"
+                        data-room-id="{{ group.room_id }}"
+                        data-fcu-device-id="{{ group.fcu_device_id or '' }}">
+                    <span class="room-summary-label">Temp</span>
+                    <span class="room-summary-temp temp-display"
+                          id="room-summary-temp-{{ group.room_id }}"
+                          {% if group.calculated_temp10x is not none %}data-temp-c="{{ group.calculated_temp10x / 10 }}"{% endif %}>{% if group.calculated_temp10x is not none %}{{ '%.1f'|format(group.calculated_temp10x / 10) }}°C{% else %}--{% endif %}</span>
+                    <span class="room-summary-separator">·</span>
+                    <span class="room-summary-label">Humidity</span>
+                    <span class="room-summary-humidity"
+                          id="room-summary-humidity-{{ group.room_id }}">{% if group.calculated_humidity is not none %}{{ group.calculated_humidity|round|int }}%{% else %}--{% endif %}</span>
+                  </span>
+                  {% endif %}
+                  <span class="room-drop-hint">Drop sensors here</span>
+                </td>
+              </tr>
+              {% for device in group.devices %}
+                <tr class="device-row room-sensor-row"
+                    data-device-id="{{ device.device_id }}"
+                    data-room-id="{{ group.room_id if group.room_id is not none else '' }}"
+                    x-data-device-id="{{ device.device_id }}">
                   <td class="cell-unit">
+                    <button type="button"
+                            class="room-drag-handle"
+                            aria-grabbed="false"
+                            aria-label="Move {{ device.device_label }}"
+                            title="Drag to move {{ device.device_label }} to another room">
+                      <span class="room-drag-grip" aria-hidden="true"></span>
+                    </button>
                     <span class="device-name-context"
                           data-device-id="{{ device.device_id }}"
                           data-device-name="{{ device.device_name }}"
@@ -359,7 +397,7 @@
                     <span class="notes editable-notes" id="notes-{{ device.device_id }}" data-device-id="{{ device.device_id }}" title="Click to edit"></span>
                   </td>
                 </tr>
-            {% endif %}
+              {% endfor %}
             {% endfor %}
           </tbody>
           <tfoot>
@@ -404,6 +442,21 @@
   </div>
 </form>
 
+<div id="room-rename-dialog" class="room-rename-dialog hidden" role="dialog" aria-modal="true" aria-labelledby="room-rename-title">
+  <form class="room-rename-card">
+    <h3 id="room-rename-title">Rename room</h3>
+    <label for="room-rename-name">Room name</label>
+    <input id="room-rename-name" type="text" maxlength="120" autocomplete="off" required>
+    <div class="room-rename-message" data-role="message" aria-live="polite"></div>
+    <div class="room-rename-actions">
+      <button type="submit" class="pure-button pure-button-primary">Rename</button>
+      <button type="button" class="pure-button" data-action="cancel-room-rename">Cancel</button>
+    </div>
+  </form>
+</div>
+
+<div id="room-matrix-message" class="room-matrix-message hidden" role="status" aria-live="polite"></div>
+
 <div id="fcu-temp-sources-popup" class="fcu-temp-sources-popup hidden" role="dialog" aria-modal="true" aria-labelledby="fcu-temp-sources-title">
   <div class="fcu-temp-sources-dialog">
     <div class="fcu-temp-sources-header">
@@ -415,7 +468,7 @@
       </div>
     </div>
     <div class="fcu-room-editor-row">
-      <label for="fcu-room-display-name">Room (Unit) name</label>
+      <label for="fcu-room-display-name">Room name</label>
       <input id="fcu-room-display-name" class="fcu-room-display-name" type="text" autocomplete="off" data-role="display-name">
     </div>
     <p class="fcu-temp-sources-note">Readings older than 10 minutes are ignored.</p>
@@ -437,5 +490,6 @@
 </div>
 
 <script src="/static/unit_speed.js"></script>
+<script src="/static/room_matrix.js"></script>
 
 {% endblock %}

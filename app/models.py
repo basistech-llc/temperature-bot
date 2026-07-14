@@ -546,6 +546,10 @@ class DeviceStatus(BaseModel):
         default=None,
         description="Weighted calculated room temperature in Celsius tenths.",
     )
+    calculated_humidity: float | None = Field(
+        default=None,
+        description="Equal-weight calculated room humidity percent.",
+    )
     temp_source_stale_seconds: int | None = Field(
         default=None,
         description="Age cutoff for excluding stale calculated-temperature sources.",
@@ -618,6 +622,17 @@ class DeviceStatus(BaseModel):
         default=None,
         description="System-wide minimum FCU set-range width in degrees Celsius.",
     )
+
+
+class RoomMatrixGroup(BaseModel):
+    """One room section in the main-page sensor matrix."""
+
+    room_id: int | None = None
+    room_name: str
+    fcu_device_id: int | None = None
+    calculated_temp10x: int | None = None
+    calculated_humidity: float | None = None
+    devices: list[DeviceStatus] = Field(default_factory=list)
 
 
 class TableUpdateSummary(BaseModel):

@@ -1015,6 +1015,198 @@ table.rules-table th  {
     padding: 0.1rem 0.25rem;
 }
 
+.room-matrix tbody .room-separator td {
+    height: 2.1rem;
+    padding: 0.15rem 0.7rem;
+    border-top: 0;
+    background: linear-gradient(to bottom, #f7f8fa 46%, #3f4d5a 46%, #3f4d5a 56%, #f7f8fa 56%);
+    text-align: left;
+}
+
+.room-name {
+    position: relative;
+    z-index: 1;
+    display: inline-block;
+    float: left;
+    width: auto;
+    max-width: min(24rem, 70vw);
+    transform: none;
+    padding: 0.15rem 0.7rem;
+    border: 1px solid #3f4d5a;
+    border-radius: 999px;
+    background: #fff;
+    color: #24313d;
+    font-weight: 700;
+    cursor: context-menu;
+}
+
+.room-name-unassigned {
+    color: #666;
+    cursor: default;
+}
+
+.room-summary {
+    position: relative;
+    z-index: 1;
+    display: inline-flex;
+    float: left;
+    gap: 0.3rem;
+    align-items: baseline;
+    margin: 0.18rem 0 0 0.55rem;
+    padding: 0.05rem 0.45rem;
+    border-radius: 999px;
+    background: #f7f8fa;
+    color: #24313d;
+    font-size: 0.82rem;
+    white-space: nowrap;
+}
+
+.room-summary-label {
+    color: #66727c;
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.room-summary-temp,
+.room-summary-humidity {
+    font-weight: 700;
+}
+
+.room-drop-hint {
+    float: right;
+    margin-top: 0.55rem;
+    padding: 0 0.25rem;
+    background: #f7f8fa;
+    color: #7a858f;
+    font-size: 0.76rem;
+    opacity: 0;
+}
+
+.room-separator.room-drop-target td,
+.room-drag-placeholder td {
+    background: #e6f3ff;
+}
+
+.room-separator.room-drop-target .room-drop-hint {
+    opacity: 1;
+}
+
+.room-drag-handle {
+    display: inline-grid;
+    float: left;
+    width: 1.55rem;
+    height: 1.65rem;
+    margin: -0.15rem 0.4rem -0.15rem -0.4rem;
+    padding: 0;
+    place-items: center;
+    border: 0;
+    background: transparent;
+    color: #6f7b85;
+    cursor: grab;
+    touch-action: none;
+    transform: none;
+}
+
+.room-drag-handle:hover,
+.room-drag-handle:focus-visible {
+    background: #e6ebef;
+    color: #24313d;
+    transform: none;
+}
+
+.room-drag-handle:active {
+    cursor: grabbing;
+}
+
+.room-drag-grip {
+    width: 0.85rem;
+    height: 0.75rem;
+    background: repeating-linear-gradient(
+        to bottom,
+        currentColor 0,
+        currentColor 2px,
+        transparent 2px,
+        transparent 5px
+    );
+}
+
+.room-sensor-row.room-dragging {
+    opacity: 0;
+}
+
+.room-sensor-row.room-dragging-lifted {
+    display: none;
+}
+
+.room-drag-placeholder td {
+    box-sizing: border-box;
+    padding: 0;
+    border: 2px dashed #4c8fbd;
+}
+
+.room-row-drag-image {
+    position: fixed;
+    z-index: 1600;
+    margin: 0;
+    pointer-events: none;
+    opacity: 0.92;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+}
+
+.room-rename-dialog {
+    position: fixed;
+    inset: 0;
+    z-index: 1400;
+    display: grid;
+    place-items: center;
+    padding: 1rem;
+    background: rgba(0, 0, 0, 0.32);
+}
+
+.room-rename-card {
+    display: grid;
+    gap: 0.65rem;
+    width: min(24rem, 100%);
+    padding: 1rem;
+    border-radius: 6px;
+    background: #fff;
+    box-shadow: 0 12px 36px rgba(0, 0, 0, 0.28);
+}
+
+.room-rename-card h3 {
+    margin: 0;
+}
+
+.room-rename-card input {
+    box-sizing: border-box;
+    width: 100%;
+    padding: 0.45rem;
+}
+
+.room-rename-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.45rem;
+}
+
+.room-rename-message,
+.room-matrix-message.error {
+    color: #b42318;
+}
+
+.room-matrix-message {
+    position: fixed;
+    right: 1rem;
+    bottom: 1rem;
+    z-index: 1500;
+    max-width: min(28rem, calc(100vw - 2rem));
+    padding: 0.7rem 0.9rem;
+    border-radius: 5px;
+    background: #fff;
+    box-shadow: 0 5px 24px rgba(0, 0, 0, 0.25);
+}
+
 /****************************************************************/
 
 /* optional: avoid a hard fixed width on the header */

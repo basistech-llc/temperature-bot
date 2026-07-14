@@ -916,11 +916,17 @@ function setFcuTempSourcesTitle(popup, roomName) {
   }
 }
 
-function sortedFcuTempSources(sources) {
+function sortedFcuTempSources(sources, roomId = undefined) {
   const sourceList = Array.isArray(sources) ? sources : [];
-  return sourceList
+  const activeSources =
+    roomId === undefined
+      ? sourceList
+      : sourceList.filter(
+          (source) => Number(source.room_id) === Number(roomId),
+        );
+  return activeSources
     .filter((source) => !source.is_stale)
-    .concat(sourceList.filter((source) => source.is_stale));
+    .concat(activeSources.filter((source) => source.is_stale));
 }
 
 function fcuTempSourceLabel(source) {
@@ -1031,7 +1037,7 @@ function collectFcuRoomEditorDisplayNameChange(popup) {
     return {
       changed: false,
       displayName: "",
-      error: "Room (Unit) name is required.",
+      error: "Room name is required.",
     };
   }
   return {
@@ -1057,12 +1063,12 @@ function renderFcuTempSources(popup, data) {
   }
   tbody.innerHTML = "";
 
-  const sources = sortedFcuTempSources(data.sources);
+  const sources = sortedFcuTempSources(data.sources, popup.dataset.roomId);
   if (sources.length === 0) {
     const row = document.createElement("tr");
     const cell = document.createElement("td");
     cell.colSpan = 4;
-    cell.textContent = "No temperature-reporting sources found.";
+    cell.textContent = "No temperature-reporting sources are assigned to this room.";
     row.appendChild(cell);
     tbody.appendChild(row);
     return;
@@ -1125,9 +1131,11 @@ async function loadFcuTempSourcesForCell(cell) {
   }
 
   const deviceId = parseInt(cell.dataset.deviceId, 10);
-  const displayName = cell.dataset.displayName || cell.textContent;
+  const displayName =
+    cell.dataset.fcuTempSourcesRoomName || cell.dataset.displayName || cell.textContent;
   popup.dataset.updateUrl = updateUrl;
-  popup.dataset.deviceUpdateUrl = cell.dataset.deviceUpdateUrl || "";
+  popup.dataset.roomUpdateUrl = cell.dataset.roomUpdateUrl || "";
+  popup.dataset.roomId = cell.dataset.roomId || "";
   popup.dataset.deviceId = Number.isInteger(deviceId) ? String(deviceId) : "";
   popup.dataset.deviceName = cell.dataset.deviceName || "";
   setFcuRoomEditorDisplayName(popup, displayName);
@@ -1183,26 +1191,16 @@ async function saveFcuTempSourceMultipliers() {
   setFcuTempSourcesControlsDisabled(popup, true);
   setFcuTempSourcesMessage(popup, "Saving...");
   try {
-    const deviceId = parseInt(popup.dataset.deviceId, 10);
-    const deviceName = popup.dataset.deviceName || "";
     if (displayNameChange.changed) {
-      if (!Number.isInteger(deviceId) || !deviceName) {
-        throw new Error("Unable to save without device metadata.");
+      if (!popup.dataset.roomUpdateUrl) {
+        throw new Error("This FCU does not have an editable room.");
       }
-      const data = await patchDeviceDisplayName(
-        deviceId,
+      const data = await patchRoomName(
+        popup.dataset.roomUpdateUrl,
         displayNameChange.displayName,
-        popup.dataset.deviceUpdateUrl,
       );
-      const savedDisplayName =
-        data.display_name || displayNameChange.displayName || deviceName;
-      applyDeviceDisplayName(
-        deviceId,
-        data.device_name || deviceName,
-        savedDisplayName,
-        data.device_type ?? undefined,
-        data.rules_enabled ?? undefined,
-      );
+      const savedDisplayName = data.room_name || displayNameChange.displayName;
+      applyRoomName(popup.dataset.roomId, savedDisplayName);
       setFcuRoomEditorDisplayName(popup, savedDisplayName);
       setFcuTempSourcesTitle(popup, savedDisplayName);
     }
@@ -1408,6 +1406,42 @@ async function patchDeviceDisplayName(deviceId, displayName, updateUrl = undefin
     throw new Error(`${response.status} ${data.error || response.statusText}`);
   }
   return data;
+}
+
+async function patchRoomName(updateUrl, roomName) {
+  let response;
+  try {
+    response = await fetch(updateUrl, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ room_name: roomName }),
+    });
+  } catch (error) {
+    throw new Error(`NETWORK ${error.message}`);
+  }
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(`${response.status} ${data.error || response.statusText}`);
+  }
+  return data;
+}
+
+function applyRoomName(roomId, roomName) {
+  document
+    .querySelectorAll(`[data-room-id="${roomId}"]`)
+    .forEach((element) => {
+      if (element.classList.contains("room-name")) element.textContent = roomName;
+      if (element.classList.contains("fcu-room-editor-trigger")) {
+        element.textContent = roomName;
+        element.dataset.fcuTempSourcesRoomName = roomName;
+        element.setAttribute("aria-label", `Edit room settings for ${roomName}`);
+        element.setAttribute("title", `Edit room settings for ${roomName}`);
+      }
+      element.dataset.roomName = roomName;
+    });
+  window.dispatchEvent(
+    new CustomEvent("roomnamechange", { detail: { roomId, roomName } }),
+  );
 }
 
 function applyDeviceDisplayName(
@@ -2655,6 +2689,30 @@ const refreshGridRows = () => {
               dev.calculated_temp10x,
               null,
             );
+            const roomHumidityCell = document.getElementById(
+              `room-humidity-${dev.device_id}`,
+            );
+            if (roomHumidityCell) {
+              const roomHumidity =
+                dev.calculated_humidity === null ||
+                dev.calculated_humidity === undefined
+                  ? NaN
+                  : Number(dev.calculated_humidity);
+              roomHumidityCell.textContent = Number.isFinite(roomHumidity)
+                ? String(Math.round(roomHumidity))
+                : "--";
+            }
+            if (dev.device_type === "FCU" && dev.room_id != null) {
+              window.dispatchEvent(
+                new CustomEvent("roommetricschange", {
+                  detail: {
+                    roomId: dev.room_id,
+                    calculatedTemp10x: dev.calculated_temp10x,
+                    calculatedHumidity: dev.calculated_humidity,
+                  },
+                }),
+              );
+            }
 
             // Update humidity where available
             const humidityCell = document.getElementById(
@@ -2693,11 +2751,11 @@ const refreshGridRows = () => {
                 !Number.isNaN(humidityValue) &&
                 Number.isFinite(humidityValue)
               ) {
-                const rounded = Math.round(humidityValue * 10) / 10;
+                const rounded = Math.round(humidityValue);
                 // Reuse the same staleness + tooltip logic as temperature.
                 updateStalenessAndTooltip(humidityCell, dev);
 
-                humidityCell.textContent = `${rounded.toFixed(1)}`;
+                humidityCell.textContent = String(rounded);
                 humidityCell.setAttribute("data-air-quality-value", rounded.toString());
                 refreshAirQualityClass(humidityCell);
               } else {
@@ -3114,6 +3172,9 @@ if (typeof window !== "undefined") {
     setupMatrixListeners();
     loadWeatherAndStartRefresh();
   });
+  window.addEventListener("roomassignmentchange", () => {
+    forceRefresh = true;
+  });
 }
 
 // Node.js export for testing
@@ -3145,6 +3206,7 @@ if (typeof module !== "undefined" && module.exports) {
     normalizeSetRange,
     oldestUpdateTimestampForTable,
     parseFcuTempSourceMultiplier,
+    patchRoomName,
     pendingRangeUpdateDecision,
     pendingSingleSetTempUpdateDecision,
     renderDisableCell,

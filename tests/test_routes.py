@@ -371,6 +371,7 @@ def test_fcu_matrix_room_unit_cell_opens_room_editor(
             "calculated_temp10x": 235,
             "temp_source_stale_seconds": 600,
             "room_name": "Area 51",
+            "room_id": 3,
             "status": {"Mode": "COOL"},
         }
     ]
@@ -383,7 +384,8 @@ def test_fcu_matrix_room_unit_cell_opens_room_editor(
     assert 'class="device-name-context fcu-room-editor-trigger"' in html
     assert 'role="button"' in html
     assert 'tabindex="0"' in html
-    assert 'data-device-update-url="/api/v1/devices/12"' in html
+    assert 'data-room-id="3"' in html
+    assert 'data-room-update-url="/api/v1/rooms/3"' in html
     assert (
         'data-fcu-temp-sources-url="/api/v1/fcu_temp_sources?fcu_device_id=12"'
         in html
@@ -391,7 +393,7 @@ def test_fcu_matrix_room_unit_cell_opens_room_editor(
     assert 'data-fcu-temp-source-update-url="/api/v1/fcu_temp_source"' in html
     assert 'data-fcu-temp-sources-room-name="Area 51"' in html
     assert 'id="fcu-room-display-name"' in html
-    assert "Room (Unit) name" in html
+    assert "Room name" in html
     assert "Readings older than 10 minutes are ignored" in html
     assert 'data-action="save-fcu-temp-sources"' in html
     assert 'data-action="revert-fcu-temp-sources"' in html

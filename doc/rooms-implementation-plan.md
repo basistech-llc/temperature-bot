@@ -250,6 +250,21 @@ JavaScript logic tests. Tests run through Makefile targets and must not modify
 
 ### Phase 1: core rooms
 
+UI-first slice completed while `hvac-9re.3` remains in progress:
+
+- [x] Render every room, including empty rooms and Unassigned, in one
+  alphabetically grouped sensor table.
+- [x] Add immediate-save mouse/touch drag and drop with optimistic rollback.
+- [x] Add duplicate-safe room rename UI through right-click, touch long-press,
+  and the FCU Room Editor.
+- [x] Limit Room Editor candidates to the FCU room while preserving inactive
+  stored weights.
+- [x] Display humidity as integer percent, Celsius with decimals, Fahrenheit
+  as whole degrees, and missing calculated values as `--`.
+- [x] Add `make rooms-ui-demo` using a disposable database under `/tmp`.
+- [ ] Complete the backend room temperature and humidity calculations before
+  closing `hvac-9re.3` or the dependent UI beads.
+
 - [x] Implement and verify topology bootstrap and discovery (`hvac-9re.1`).
 - [x] Extract the shared room metric service (`hvac-9re.2`).
 - [ ] Apply room eligibility to current and historical temperature and to room
