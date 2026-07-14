@@ -17,9 +17,7 @@ const REFRESH_INTERVAL = 10; // seconds between refreshes
 const RUNNING_MINUTES = 10; // minutes to run before stopping
 const SHOW_REFRESH_COUNTDOWN = false;
 const DASHBOARD_AIR_QUALITY_DEVICE_EXPIRATION_SECONDS = 30 * 24 * 60 * 60;
-// The HTML is server-rendered from the same status data. Wait one interval
-// before polling instead of repeating that database work immediately on load.
-let lastRefreshTime = Date.now();
+let lastRefreshTime = 0;
 const AE200_MODE_LABELS = {
   COOL: "Cool",
   HEAT: "Heat",
@@ -2643,10 +2641,11 @@ function setupNoteInputHandlers(input, noteElement, deviceId, originalText) {
 // Refresh the rows in the fan control and temperature panel grid.
 const refreshGridRows = () => {
   const now = Date.now();
-  const secondsSinceRefresh = Math.floor((now - lastRefreshTime) / 1000);
-  const secondsUntilRefresh = forceRefresh
-    ? 0
-    : REFRESH_INTERVAL - secondsSinceRefresh;
+  const secondsUntilRefresh = secondsUntilStatusRefresh(
+    now,
+    lastRefreshTime,
+    forceRefresh,
+  );
 
   // Check if total runtime exceeded
   if (now - start > RUNNING_MINUTES * 60 * 1000) {
@@ -2902,6 +2901,11 @@ const refreshGridRows = () => {
   }
   setTimeout(refreshGridRows, 1000); // Schedule next check in 1 second
 };
+
+function secondsUntilStatusRefresh(now, refreshedAt, forced) {
+  if (forced || refreshedAt === 0) return 0;
+  return REFRESH_INTERVAL - Math.floor((now - refreshedAt) / 1000);
+}
 
 /* This loads weather and starts the refresh cycle. */
 async function loadWeatherAndStartRefresh() {
@@ -3233,6 +3237,7 @@ if (typeof module !== "undefined" && module.exports) {
     resizeSetRangeEndpoint,
     saveAutoSetTempWidget,
     saveFcuTempSourceMultipliers,
+    secondsUntilStatusRefresh,
     setRangePartFromPointerTarget,
     setAutoSetTempUnavailable,
     updateSetRangeModeState,
