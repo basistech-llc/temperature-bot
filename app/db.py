@@ -118,6 +118,33 @@ LATEST_ROOM_METRIC_SNAPSHOTS_SQL = """
     ORDER BY d.device_name
 """
 
+LATEST_DEVICE_STATUS_SQL = """
+    SELECT
+        l.*,
+        d.device_name,
+        d.display_name,
+        d.device_type,
+        d.rules_enabled,
+        d.aqi_mon,
+        d.ae200_device_id,
+        d.notes,
+        d.disabled_until,
+        d.room_id,
+        r.room_name
+    FROM devices d
+    JOIN devlog l ON l.log_id = (
+        SELECT candidate.log_id
+        FROM devlog candidate
+        WHERE candidate.device_id = d.device_id
+          AND candidate.logtime <= ?
+        ORDER BY candidate.logtime DESC, candidate.log_id DESC
+        LIMIT 1
+    )
+    LEFT JOIN rooms r ON d.room_id = r.room_id
+    WHERE ? = 0 OR d.aqi_mon = 1
+    ORDER BY d.device_name
+"""
+
 
 def _chart_logtime(row: sqlite3.Row) -> int:
     """Return an integer timestamp for legacy rows that stored float times."""
@@ -999,25 +1026,17 @@ def fetch_latest_room_metric_snapshots(
     ]
 
 
-EVERY_DEVICE=1
-AIR_MON_DEVICES=2
+EVERY_DEVICE = 1
+AIR_MON_DEVICES = 2
+
+
 def fetch_last_status(conn, flag=EVERY_DEVICE):
-    """Fetches the last status for every device. Specify where to restrict which devices are returned"""
-    if flag==AIR_MON_DEVICES:
-        where = "b.aqi_mon = 1"
-    else:
-        where = "1=1"
-    cursor = conn.cursor()
-    cursor.execute(f"""
-        SELECT a.*,b.device_name,b.display_name,b.device_type,b.rules_enabled,
-               b.aqi_mon,b.ae200_device_id,b.notes,b.disabled_until,
-               b.room_id,r.room_name
-        FROM (SELECT * FROM devlog GROUP BY device_id HAVING logtime=max(logtime)) AS a
-        JOIN devices b ON a.device_id = b.device_id
-        LEFT JOIN rooms r ON b.room_id = r.room_id
-        WHERE {where}
-        ORDER by b.device_name""")
-    return cursor.fetchall()
+    """Fetch the latest status for each device, optionally limited to AQ monitors."""
+    air_monitors_only = int(flag == AIR_MON_DEVICES)
+    return conn.execute(
+        LATEST_DEVICE_STATUS_SQL,
+        (float("inf"), air_monitors_only),
+    ).fetchall()
 
 
 def fetch_last_status_fixed(conn, flag=EVERY_DEVICE):
