@@ -7,9 +7,9 @@ from pathlib import Path
 import pytest
 
 from app import db
-from app import main
 from app.constants import DB_PATH, TEST_DB_NAME
 from app.paths import ROOT_DIR, SCHEMA_FILE_PATH
+from bin import runner
 
 BASELINE_APP_TABLES = {"devices", "devlog", "changelog", "aqi", "alerts"}
 MIGRATED_APP_TABLES = BASELINE_APP_TABLES | {
@@ -246,7 +246,7 @@ def test_runtime_schema_validator_rejects_baseline_schema():
     assert "idx_changelog_device_id_logtime" in message
 
 
-def test_flask_startup_schema_check_stops_for_stale_database(
+def test_shared_startup_schema_check_stops_for_stale_database(
     tmp_path, monkeypatch, capsys
 ):
     stale_db = tmp_path / "stale.db"
@@ -259,7 +259,7 @@ def test_flask_startup_schema_check_stops_for_stale_database(
     monkeypatch.setenv(DB_PATH, str(stale_db))
 
     with pytest.raises(SystemExit) as excinfo:
-        main.validate_database_schema_on_startup()
+        db.validate_database_schema_on_startup()
 
     captured = capsys.readouterr()
     assert excinfo.value.code == 1
@@ -267,3 +267,85 @@ def test_flask_startup_schema_check_stops_for_stale_database(
     assert "Please upgrade the database" in captured.err
     assert "missing_table rooms" in captured.err
     assert "Traceback" not in captured.err
+
+
+def test_shared_startup_schema_check_requires_db_path(monkeypatch, capsys):
+    monkeypatch.delenv("PYTEST", raising=False)
+    monkeypatch.delenv(TEST_DB_NAME, raising=False)
+    monkeypatch.delenv(DB_PATH, raising=False)
+
+    with pytest.raises(SystemExit) as excinfo:
+        db.validate_database_schema_on_startup()
+
+    captured = capsys.readouterr()
+    assert excinfo.value.code == 1
+    assert captured.out == ""
+    assert (
+        f"Missing required environment variable {DB_PATH} "
+        "(path to SQLite database)." in captured.err
+    )
+    assert "Traceback" not in captured.err
+
+
+def test_runner_uses_shared_schema_check_before_opening_database(
+    tmp_path, monkeypatch, capsys
+):
+    stale_db = tmp_path / "stale.db"
+    with closing(sqlite3.connect(stale_db)) as conn:
+        with open(BASELINE_MIGRATION_PATH, "r", encoding="utf-8") as schema_file:
+            conn.executescript(schema_file.read())
+
+    monkeypatch.delenv("PYTEST", raising=False)
+    monkeypatch.delenv(TEST_DB_NAME, raising=False)
+    monkeypatch.setenv(DB_PATH, str(stale_db))
+    monkeypatch.setattr("sys.argv", ["runner"])
+
+    with pytest.raises(SystemExit) as excinfo:
+        runner.main()
+
+    captured = capsys.readouterr()
+    assert excinfo.value.code == 1
+    assert "Run `make migrate-db`" in captured.err
+    assert "Traceback" not in captured.err
+
+
+def test_get_db_connection_does_not_replay_schema_on_populated_database(
+    tmp_path, monkeypatch
+):
+    stale_db = tmp_path / "stale.db"
+    with closing(sqlite3.connect(stale_db)) as conn:
+        with open(BASELINE_MIGRATION_PATH, "r", encoding="utf-8") as schema_file:
+            conn.executescript(schema_file.read())
+
+    monkeypatch.setenv(TEST_DB_NAME, str(stale_db))
+    conn = db.get_db_connection()
+    try:
+        tables = {
+            row[0]
+            for row in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            ).fetchall()
+        }
+    finally:
+        conn.close()
+
+    assert "devices" in tables
+    assert "rooms" not in tables
+
+
+def test_get_db_connection_initializes_empty_database(tmp_path, monkeypatch):
+    empty_db = tmp_path / "empty.db"
+    monkeypatch.setenv(TEST_DB_NAME, str(empty_db))
+
+    conn = db.get_db_connection()
+    try:
+        tables = {
+            row[0]
+            for row in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            ).fetchall()
+        }
+    finally:
+        conn.close()
+
+    assert MIGRATED_APP_TABLES <= tables

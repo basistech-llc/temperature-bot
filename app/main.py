@@ -5,7 +5,6 @@ Refactored main.py - Flask application with modular structure
 import datetime
 import logging
 import os
-import sys
 from functools import lru_cache
 from os.path import abspath
 from pathlib import Path
@@ -78,22 +77,6 @@ def fix_boto_log_level():
             logging.getLogger(name).setLevel(logging.INFO)
 
 
-def should_validate_database_schema_on_startup() -> bool:
-    """Return whether this process should validate the runtime DB at startup."""
-    return "PYTEST" not in os.environ and db.TEST_DB_NAME not in os.environ
-
-
-def validate_database_schema_on_startup() -> None:
-    """Stop Flask startup when the configured database is not current."""
-    if not should_validate_database_schema_on_startup():
-        return
-    try:
-        db.validate_configured_database_schema()
-    except db.DatabaseSchemaMismatchError as e:
-        print(str(e), file=sys.stderr)
-        raise SystemExit(1) from None
-
-
 def create_app():
     """Create and configure the Flask application"""
 
@@ -110,7 +93,7 @@ def create_app():
     logging.basicConfig(format=LOGGING_CONFIG, level=log_level, force=True)
     app.logger.info("new Flask(__name__=%s) log_level=%s", __name__, log_level)
     fix_boto_log_level()
-    validate_database_schema_on_startup()
+    db.validate_database_schema_on_startup()
 
     @app.context_processor
     def simulator_context():
