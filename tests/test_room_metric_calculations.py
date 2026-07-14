@@ -36,9 +36,10 @@ def _fcu_status():
 
 
 def test_room_move_updates_temperature_and_equal_weight_humidity(
-    test_database_conn,
+    flask_test_client,
+    test_database_conn_with_test_data,
 ):
-    conn = test_database_conn
+    conn, _, _ = test_database_conn_with_test_data
     _clear(conn)
     now = int(time.time())
     room_id = db.create_room(conn, Room(room_name="Hickory")).room_id
@@ -78,14 +79,24 @@ def test_room_move_updates_temperature_and_equal_weight_humidity(
     assert db.calculate_fcu_temperature10x(conn, fcu_id) == 230
     assert db.calculate_fcu_humidities(conn, [fcu_id]) == {fcu_id: 50.0}
 
-    db.update_device_room(conn, weighted_id, other_room_id)
+    moved = flask_test_client.post(
+        "/api/v1/update_device_room",
+        json={"device_id": weighted_id, "room_id": other_room_id},
+    )
+    assert moved.status_code == 200
     assert db.calculate_fcu_temperature10x(conn, fcu_id) == 200
     assert db.calculate_fcu_humidities(conn, [fcu_id]) == {fcu_id: 60.0}
 
-    db.update_device_room(conn, weighted_id, room_id)
+    restored = flask_test_client.post(
+        "/api/v1/update_device_room",
+        json={"device_id": weighted_id, "room_id": room_id},
+    )
+    assert restored.status_code == 200
     assert db.calculate_fcu_temperature10x(conn, fcu_id) == 230
-    status = db.get_device_status(conn)
-    fcu = next(device for device in status if device["device_id"] == fcu_id)
+    status = flask_test_client.get("/api/v1/status")
+    fcu = next(
+        device for device in status.json["devices"] if device["device_id"] == fcu_id
+    )
     assert fcu["calculated_humidity"] == 50.0
 
 

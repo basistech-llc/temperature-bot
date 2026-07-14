@@ -759,7 +759,7 @@ def reconcile_fcu_rooms(conn) -> RoomTopologyReconciliation:
 
 def get_rooms(conn) -> list[Room]:
     c = conn.cursor()
-    c.execute("SELECT * FROM rooms ORDER BY room_name")
+    c.execute("SELECT * FROM rooms ORDER BY room_name COLLATE NOCASE, room_id")
     return [_room_from_row(row) for row in c.fetchall()]
 
 
@@ -817,13 +817,27 @@ def update_room(conn, room: Room) -> Room | None:
 
 def update_device_room(conn, device_id: int, room_id: int | None) -> int:
     c = conn.cursor()
+    c.execute(
+        "SELECT device_type, room_id FROM devices WHERE device_id=?",
+        (device_id,),
+    )
+    device = c.fetchone()
+    if device is None:
+        raise LookupError(f"Unknown device_id: {device_id}")
     if room_id is not None:
         c.execute("SELECT 1 FROM rooms WHERE room_id=?", (room_id,))
         if c.fetchone() is None:
-            raise ValueError(f"Unknown room_id: {room_id}")
+            raise LookupError(f"Unknown room_id: {room_id}")
+    device_type = normalize_device_type(device["device_type"])
+    if device_type in {DEVICE_TYPE_ERV, DEVICE_TYPE_INTERNAL}:
+        raise ValueError(f"{device_type} devices cannot be assigned to rooms")
+    if device_type == DEVICE_TYPE_FCU:
+        c.execute("SELECT room_id FROM rooms WHERE fcu_device_id=?", (device_id,))
+        owned_room = c.fetchone()
+        owned_room_id = owned_room["room_id"] if owned_room is not None else None
+        if room_id != owned_room_id:
+            raise ValueError("An FCU must remain assigned to its owned room")
     c.execute("UPDATE devices SET room_id=? WHERE device_id=?", (room_id, device_id))
-    if c.rowcount == 0:
-        raise ValueError(f"Unknown device_id: {device_id}")
     conn.commit()
     return device_id
 

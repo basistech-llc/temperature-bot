@@ -207,6 +207,12 @@ class RoomPatch(BaseModel):
     map: RoomMap | None = None
 
 
+class RoomListResponse(BaseModel):
+    """Alphabetized persisted room topology returned by the API."""
+
+    rooms: list[Room]
+
+
 class RoomTopologyReconciliation(BaseModel):
     """Summary of an idempotent FCU-room topology reconciliation."""
 
@@ -461,6 +467,8 @@ class FcuSetRange(BaseModel):
 
 class DeviceRoomControl(BaseModel):
     """Request body for assigning a device to a room."""
+
+    model_config = ConfigDict(extra="forbid")
 
     device_id: int = Field(description="Local device id from the devices table.")
     room_id: int | None = Field(description="Room id, or null to clear assignment.")

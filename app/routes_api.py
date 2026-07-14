@@ -37,12 +37,12 @@ from .models import (
     SetRangeControl,
     Room,
     RoomCreate,
+    RoomListResponse,
     RoomPatch,
     SetTempControl,
     SpeedControl,
     TemperatureSeriesResponse,
     json_ready,
-    json_ready_list,
 )
 
 logger = logging.getLogger(__name__)
@@ -427,7 +427,7 @@ def set_device_disabled_until(conn):
 def rooms(conn):
     """List or create rooms with map polygon metadata."""
     if request.method == "GET":
-        return jsonify({"rooms": json_ready_list(db.get_rooms(conn))})
+        return jsonify(json_ready(RoomListResponse(rooms=db.get_rooms(conn))))
 
     try:
         body = RoomCreate.model_validate(request.get_json(silent=True) or {})
@@ -484,8 +484,10 @@ def update_device_room(conn, body: DeviceRoomControl):
     """Assign a device to a room, or clear the assignment with room_id=null."""
     try:
         device_id = db.update_device_room(conn, body.device_id, body.room_id)
-    except ValueError as e:
+    except LookupError as e:
         return jsonify({"error": str(e)}), 404
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 409
     return jsonify(json_ready(CommandResponse(device_id=device_id)))
 
 

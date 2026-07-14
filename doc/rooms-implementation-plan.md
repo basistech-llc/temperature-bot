@@ -269,7 +269,7 @@ The UI-first slice and its backend metric prerequisites are complete:
 - [x] Extract the shared room metric service (`hvac-9re.2`).
 - [x] Apply room eligibility to current and historical temperature and to room
   humidity (`hvac-9re.3`).
-- [ ] Harden typed room APIs (`hvac-9re.4`).
+- [x] Harden typed room APIs (`hvac-9re.4`).
 - [ ] Render the grouped matrix (`hvac-9re.5`).
 - [ ] Add drag/drop and rename behavior (`hvac-9re.6`).
 - [ ] Refactor the Room Editor and value formatting (`hvac-9re.7`).
