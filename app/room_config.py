@@ -31,3 +31,8 @@ ROOM_CONFIGS: dict[str, RoomConfig] = {
 def get_room_config(room_key: str) -> RoomConfig:
     """Return room dashboard configuration, or an empty config for unknown rooms."""
     return ROOM_CONFIGS.get(room_key, EMPTY_ROOM_CONFIG)
+
+
+def find_room_config(room_key: str) -> RoomConfig | None:
+    """Return an explicitly configured room, preserving unknown-room identity."""
+    return ROOM_CONFIGS.get(room_key)

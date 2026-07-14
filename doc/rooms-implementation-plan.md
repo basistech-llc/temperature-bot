@@ -189,16 +189,16 @@ JavaScript logic tests. Tests run through Makefile targets and must not modify
 ### Direct canonical work
 
 - [#144, assign everything to a room](https://github.com/basistech-llc/temperature-bot/issues/144)
-  is the umbrella issue implemented by this plan.
+  is the umbrella issue implemented and closed by this plan.
 - [#153, verify that new Hubitat sensors are automatically added](https://github.com/basistech-llc/temperature-bot/issues/153)
   is covered by typed discovery, Unassigned placement, and automatic FCU room
-  creation.
+  creation, and is closed.
 - [#127, reduce route/data-layer coupling](https://github.com/basistech-llc/temperature-bot/issues/127)
   is partially advanced by the typed `room_metrics` service. The broader
   request parsing and integration refactor remains in the canonical issue and
   is not implied complete by the rooms release.
 - [#62, create an FCU graph with room and FCU state](https://github.com/basistech-llc/temperature-bot/issues/62)
-  is delivered after the core room-temperature semantics by `hvac-9re.10`.
+  is delivered and closed by `hvac-9re.10`.
 - [#117, do not draw through missing chart data](https://github.com/basistech-llc/temperature-bot/issues/117)
   requires calculated room-temperature history to preserve stale gaps rather
   than merely omitting samples and allowing the chart to connect across them;
@@ -208,20 +208,26 @@ JavaScript logic tests. Tests run through Makefile targets and must not modify
 ### Downstream room consumers
 
 - [#32, overlay map](https://github.com/basistech-llc/temperature-bot/issues/32)
-  is delivered by `hvac-9re.9` using canonical rooms and assignments.
+  is delivered and closed by `hvac-9re.9` using canonical rooms and assignments.
 - [#107, add presence table](https://github.com/basistech-llc/temperature-bot/issues/107)
-  is delivered by `hvac-9re.12`. Hubitat motion observations retain the
+  is partially delivered by `hvac-9re.12`. Hubitat motion observations retain the
   canonical room identity they had when recorded. Current UI and rule results
   share a 15-minute presence policy and explicitly distinguish stale readings
-  from rooms that have no observations.
+  from rooms that have no observations. The issue remains open for its webhook,
+  30-minute policy, and specific Bathroom rule.
 - [#152, Hickory dashboard design](https://github.com/basistech-llc/temperature-bot/issues/152)
   is advanced by `hvac-9re.11`, which migrates room dashboard data membership.
-  The GitHub issue should close only when its broader layout acceptance is also
-  satisfied.
+  It remains open for its requested friendly HVAC labels and explicit named-tile
+  layout.
 - [#158, generalize hardcoded Hickory APIs](https://github.com/basistech-llc/temperature-bot/issues/158)
-  is delivered by existing Bead `hvac-8tp` after canonical dashboards exist.
+  is delivered and closed by existing Bead `hvac-8tp`.
 - [#157, use per-device calls in Hickory room status](https://github.com/basistech-llc/temperature-bot/issues/157)
-  is delivered by existing Bead `hvac-1mz` and blocks generic control API work.
+  is delivered and closed by existing Bead `hvac-1mz`.
+
+Compatibility coverage preserves the site-wide Celsius/Fahrenheit behavior from
+#25 and the existing alert/status path from #51. Room rename uses the friendly
+name foundation delivered by closed #143 rather than introducing another naming
+field.
 
 ### Historical and presentation overlap
 
@@ -292,9 +298,9 @@ The UI-first slice and its backend metric prerequisites are complete:
 
 ### Phase 3: integration and issue reconciliation
 
-- [ ] Verify rename, reassignment, Unassigned, stale-data, and missing-data
+- [x] Verify rename, reassignment, Unassigned, stale-data, and missing-data
   behavior across every consumer (`hvac-9re.13`).
-- [ ] Update each canonical GitHub issue with evidence. Close only the issues
+- [x] Update each canonical GitHub issue with evidence. Close only the issues
   whose full acceptance criteria are satisfied; record residual work on broad
   issues such as #127 and #152.
 

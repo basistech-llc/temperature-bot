@@ -957,6 +957,13 @@ def test_generic_room_control_routes_resolve_config(flask_test_client):  # noqa:
         "/api/v1/room/unknown/tv", json={"direction": "up"}
     )
     assert unknown_tv.status_code == 404
+    assert flask_test_client.get(
+        "/api/v1/room/unknown/room_status"
+    ).status_code == 404
+    assert flask_test_client.post(
+        "/api/v1/room/unknown/wall_light",
+        json={"light": "inner", "state": "on"},
+    ).status_code == 404
 
 
 # -- Room config tests --

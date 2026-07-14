@@ -647,7 +647,9 @@ def update_note(conn, body: NoteControl):
 @api_v1.route("/room/<room_key>/room_status")
 def room_control_status(room_key: str):
     """Return current state of one configured room's control devices."""
-    config = room_config.get_room_config(room_key.casefold())
+    config = room_config.find_room_config(room_key.casefold())
+    if config is None:
+        return jsonify({"error": "Unknown room control configuration"}), 404
     result = RoomControlStatus()
 
     def read_device(device_id: str | None) -> HubitatControlDevice | None:
@@ -679,7 +681,9 @@ def room_control_status(room_key: str):
 @api_v1.route("/room/<room_key>/dimmer", methods=["POST"])
 def room_dimmer(room_key: str):
     """Set a configured room's light dimmer level (0-100)."""
-    config = room_config.get_room_config(room_key.casefold())
+    config = room_config.find_room_config(room_key.casefold())
+    if config is None:
+        return jsonify({"error": "Unknown room control configuration"}), 404
     device_id = config.dimmer_id
     if not device_id:
         return jsonify({"error": "No dimmer configured"}), 404
@@ -699,7 +703,9 @@ def room_dimmer(room_key: str):
 @api_v1.route("/room/<room_key>/wall_light", methods=["POST"])
 def room_wall_light(room_key: str):
     """Toggle a configured room's wall light on or off."""
-    config = room_config.get_room_config(room_key.casefold())
+    config = room_config.find_room_config(room_key.casefold())
+    if config is None:
+        return jsonify({"error": "Unknown room control configuration"}), 404
     payload = request.get_json(silent=True) or {}
     light = payload.get("light")
     state = payload.get("state")
@@ -724,7 +730,9 @@ def room_wall_light(room_key: str):
 @api_v1.route("/room/<room_key>/tv", methods=["POST"])
 def room_tv(room_key: str):
     """Control a configured room's TV lift (up/down)."""
-    config = room_config.get_room_config(room_key.casefold())
+    config = room_config.find_room_config(room_key.casefold())
+    if config is None:
+        return jsonify({"error": "Unknown room control configuration"}), 404
     if not config.tv_up_label or not config.tv_down_label:
         return jsonify({"error": "No TV configured"}), 404
     payload = request.get_json(silent=True) or {}

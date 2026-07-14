@@ -12,6 +12,8 @@ Temperature Bot now tracks SQL schema versions with Flyway.
 - `etc/flyway/sql/V9__fcu_owned_rooms.sql` gives every existing FCU one owned
   room, resets non-FCU devices to Unassigned, and adds uniqueness constraints
   for FCU ownership and assignment.
+- `etc/flyway/sql/V10__room_presence.sql` stores room-at-observation presence
+  events and indexes current and historical room queries.
 - Flyway creates and manages `flyway_schema_history`; do not add that table to a versioned migration or to `etc/schema.sql`.
 - Existing populated databases are baselined at V1 by `make migrate-db` and `make deploy`, then any later migrations are applied.
 - `etc/schema.sql` is generated from the Flyway migration history for tests and compatibility. Do not hand-edit it for schema changes.
@@ -77,3 +79,16 @@ flyway \
 
 Override `PROD_HOSTNAME`, `PROD_APP_DIR`, `PROD_DB`, or `PROD_BACKUP_DIR` only
 when intentionally targeting a different installation.
+
+The current deploy target does not stop the every-minute writer and uses a
+filesystem copy rather than SQLite's consistent backup API. Until GitHub issues
+tracking those deploy safeguards are resolved, a rooms migration must be
+performed in a maintenance window: stop the cron runner, verify no runner is
+active, create a consistent `sqlite3 ... .backup` snapshot, run the migration
+and smoke checks, and only then restart the runner.
+
+To roll back a room migration, stop all writers again, preserve the failed
+database for diagnosis, restore the complete pre-migration SQLite backup
+(including its Flyway history), deploy the matching pre-migration application
+revision, validate it, and then resume the runner. Do not attempt to reverse V9
+or V10 with ad hoc `ALTER TABLE` statements.
