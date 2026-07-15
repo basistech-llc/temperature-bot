@@ -85,11 +85,15 @@ Use this workflow only when the user explicitly asks for local Beads work:
 1. **Check ready work**: `bd ready` shows unblocked issues
 2. **Claim the local item atomically**: `bd update <id> --claim`
 3. **Work on it**: implement, test, document
-4. **Durable follow-up?** Create or update a GitHub issue, then record the
-   GitHub issue number in Beads if the user wants the local queue updated.
+4. **Durable follow-up?** Find or create one dedicated GitHub issue, include
+   the Beads id there, and set the Beads `external_ref` to `gh-N`. Use a
+   dedicated issue when this item can complete before a broader umbrella.
 5. **Local-only follow-up?** Create a linked Beads issue:
    - `bd create "Found bug" --description="Details about what was found" -p 1 --deps discovered-from:<parent-id>`
-6. **Complete local item**: `bd close <id> --reason "Done"`
+6. **Complete tracked item**: after acceptance criteria pass, record commit and
+   test evidence on the referenced GitHub issue, close that issue, then run
+   `bd close <id> --reason "Done"`. Do not close a Beads item while its
+   canonical GitHub issue still has unfinished scope; split the issue first.
 
 ## Quality
 
@@ -122,6 +126,10 @@ bd automatically syncs via Dolt:
 - Do NOT create markdown TODO lists
 - Do NOT let Beads become a second authoritative tracker.
 - Cross-link Beads ids to GitHub issues when migrating durable work.
+- Every durable Beads item has exactly one `external_ref` in `gh-N` form, and
+  its GitHub issue names the Beads id.
+- Completing a durable Beads item includes closing its dedicated GitHub issue
+  with evidence in the same session.
 
 ## Session Completion
 

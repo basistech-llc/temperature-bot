@@ -32,5 +32,13 @@ If a Beads id is mentioned in source notes or a user request:
 1. Read `.beads/issues.jsonl` when needed to understand the Beads item.
 2. Find or create the corresponding GitHub issue for durable project work.
 3. Include the Beads id in the GitHub issue body or a comment for provenance.
-4. Do not update Beads unless the user explicitly asks for local Beads
+4. Give the Beads item exactly one `external_ref` in `gh-N` form. Use a
+   dedicated issue when the Beads item can complete independently; mention
+   broader umbrella issues in prose rather than using them as its canonical
+   reference.
+5. When the Beads item meets its acceptance criteria, add the commit and test
+   evidence to its GitHub issue and close that issue in the same session. If
+   the GitHub issue still contains unfinished scope, split out a dedicated
+   issue before closing the Beads item.
+6. Do not update Beads unless the user explicitly asks for local Beads
    housekeeping.
