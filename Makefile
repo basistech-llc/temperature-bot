@@ -40,10 +40,11 @@ FETCH_REMOTE_CONFIG  ?= /home/air/temperature-bot/temperature-bot-config.yaml
 
 # Production deploy defaults. Override only when intentionally targeting a
 # different checked-out installation or database.
-PROD_HOSTNAME   ?= slg1
-PROD_APP_DIR    ?= /home/air/temperature-bot
-PROD_DB         ?= /var/db/temperature-bot.db
-PROD_BACKUP_DIR ?= /var/db/temperature-bot-backups
+DEPLOY_FLYWAY	  ?= Y
+DEPLOY_HOSTNAME   ?= slg1
+DEPLOY_APP_DIR    ?= /home/air/temperature-bot
+DEPLOY_DB         ?= /var/db/temperature-bot.db
+DEPLOY_BACKUP_DIR ?= /var/db/temperature-bot-backups
 
 REQ := .venv/pyvenv.cfg
 PYTHON := .venv/bin/python
@@ -355,25 +356,26 @@ cleanall: clean ## Clean aggressively, including the local DB
 ## Installs the latest source code into the live system and applies any pending
 ## database migrations. Run on the server (slg1.basistech.net).
 deploy: ## Deploy latest code and run DB migrations on the production server
-	@if [ "$$(hostname)" = "$(PROD_HOSTNAME)" ]; then \
-		cd $(PROD_APP_DIR) && \
+	if [ "$$(hostname)" = "$(DEPLOY_HOSTNAME)" ]; then \
+		cd $(DEPLOY_APP_DIR) && \
 		git pull && \
 		poetry install && \
-		flyway validate \
-		    -url="jdbc:sqlite:$(PROD_DB)" \
-		    -locations="filesystem:etc/flyway/sql" && \
-		/bin/mkdir -p $(PROD_BACKUP_DIR) && \
-		/bin/cp -f $(PROD_DB) $(PROD_BACKUP_DIR)/temperature-bot.$$(date -u +%Y%m%dT%H%M%SZ).db && \
-		flyway migrate \
-		    -url="jdbc:sqlite:$(PROD_DB)" \
-		    -locations="filesystem:etc/flyway/sql" \
-		    -baselineOnMigrate=true && \
-		flyway validate \
-		    -url="jdbc:sqlite:$(PROD_DB)" \
-		    -locations="filesystem:etc/flyway/sql" ; \
+		if [ "$(DEPLOY_FLYWAY)" = Y ]; then make deploy-flyway ; fi; \
 	else \
-		echo "Deploy skipped: not running on $(PROD_HOSTNAME) (current hostname: $$(hostname))"; \
+		echo "Deploy skipped: not running on $(DEPLOY_HOSTNAME) (current hostname: $$(hostname))"; \
 	fi
 
+
+deploy-flyway:
+	flyway validate -url="jdbc:sqlite:$(DEPLOY_DB)" -locations="filesystem:etc/flyway/sql"
+	/bin/mkdir -p $(DEPLOY_BACKUP_DIR)
+	/bin/cp -f $(DEPLOY_DB) $(DEPLOY_BACKUP_DIR)/temperature-bot.$$(date -u +%Y%m%dT%H%M%SZ).db
+	flyway migrate -url="jdbc:sqlite:$(DEPLOY_DB)" -locations="filesystem:etc/flyway/sql" -baselineOnMigrate=true
+	flyway validate -url="jdbc:sqlite:$(DEPLOY_DB)" -locations="filesystem:etc/flyway/sql"
+
+
+deploy-stage:
+	DEPLOY_APP_DIR=/home/air-stage/temperature-bot DEPLOY_FLYWAY=N make deploy
+	sudo systemctl restart air-stage_basistech_net
 
 .PHONY: install-either install-ubuntu install-macos clean cleanall deploy
