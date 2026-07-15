@@ -4,7 +4,8 @@ This module is the home for structured application data that crosses module
 boundaries:
 
 - Request models are populated by ``flask_pydantic`` route validation and are
-  passed into ``rules_engine`` command functions.
+  passed into ``rules_engine`` command functions. Control requests reject
+  unknown fields so client typos cannot silently change hardware commands.
 - Response models validate data assembled from SQLite rows or external
   services before routes/templates receive JSON-ready dictionaries.
 
@@ -347,7 +348,11 @@ class WeatherStation(BaseModel):
 
 
 class WeatherData(BaseModel):
-    """Weather payload returned by the app weather endpoint."""
+    """Application-assembled weather payload returned by the weather endpoint.
+
+    The weather service reduces upstream responses to this internal shape before
+    validation, so rejecting unexpected top-level fields catches contract drift.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
@@ -376,7 +381,13 @@ class AqiWeatherResponse(BaseModel):
     weather: WeatherData | Dict[str, Any]
 
 
-class SpeedControl(BaseModel):
+class ControlRequest(BaseModel):
+    """Strict base for request bodies that control devices or configuration."""
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class SpeedControl(ControlRequest):
     """Request body for changing an AE-200 fan speed.
 
     Used by ``POST /api/v1/set_fan_speed`` and by rules that command fan speed
@@ -393,7 +404,7 @@ class SpeedControl(BaseModel):
         return _rule_code(value, ae200.FAN_SPEED_NAMES, "fan_speed")
 
 
-class DriveControl(BaseModel):
+class DriveControl(ControlRequest):
     """Request body for changing an AE-200 drive state.
 
     Used by ``POST /api/v1/set_drive`` and by rules that command drive state
@@ -412,7 +423,7 @@ class DriveControl(BaseModel):
         return _rule_code(value, ae200.DRIVE_NAMES, "drive")
 
 
-class ModeControl(BaseModel):
+class ModeControl(ControlRequest):
     """Request body for changing an AE-200 operation mode."""
 
     device_id: int = Field(description="Local device id from the devices table.")
@@ -421,14 +432,14 @@ class ModeControl(BaseModel):
     )
 
 
-class NoteControl(BaseModel):
+class NoteControl(ControlRequest):
     """Request body for updating the operator note attached to a device."""
 
     device_id: int = Field(description="Local device id from the devices table.")
     notes: str | None = Field(description="Replacement note text, or null to clear it.")
 
 
-class DeviceMetadataControl(BaseModel):
+class DeviceMetadataControl(ControlRequest):
     """Editable metadata stored on the devices table."""
 
     device_id: int = Field(description="Local device id from the devices table.")
@@ -460,7 +471,7 @@ class DeviceMetadataControl(BaseModel):
         return _optional_upper(value)
 
 
-class SetTempControl(BaseModel):
+class SetTempControl(ControlRequest):
     """Request body for changing an AE-200 set temperature.
 
     ``set_temp_c`` is always Celsius. Browser code can display Fahrenheit, but
@@ -471,7 +482,7 @@ class SetTempControl(BaseModel):
     set_temp_c: float = Field(description="Requested set point in degrees Celsius.")
 
 
-class AutoSetTempControl(BaseModel):
+class AutoSetTempControl(ControlRequest):
     """Request body for changing AE-200 Auto Heat/Cool setpoints."""
 
     device_id: int = Field(description="Local device id from the devices table.")
@@ -485,7 +496,7 @@ class AutoSetTempControl(BaseModel):
         return self
 
 
-class SetRangeControl(BaseModel):
+class SetRangeControl(ControlRequest):
     """Request body for changing an FCU temperature set range."""
 
     device_id: int = Field(description="Local device id from the devices table.")
@@ -503,16 +514,14 @@ class FcuSetRange(BaseModel):
     updated_at: int | None = None
 
 
-class DeviceRoomControl(BaseModel):
+class DeviceRoomControl(ControlRequest):
     """Request body for assigning a device to a room."""
-
-    model_config = ConfigDict(extra="forbid")
 
     device_id: int = Field(description="Local device id from the devices table.")
     room_id: int | None = Field(description="Room id, or null to clear assignment.")
 
 
-class FcuTempSourceControl(BaseModel):
+class FcuTempSourceControl(ControlRequest):
     """Request body for one FCU temperature source multiplier."""
 
     fcu_device_id: int = Field(description="FCU device id from the devices table.")
