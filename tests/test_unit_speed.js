@@ -44,6 +44,7 @@ const {
   resizeSetRangeEndpoint,
   saveAutoSetTempWidget,
   saveFcuTempSourceMultipliers,
+  secondsUntilStatusRefresh,
   setAutoSetTempUnavailable,
   setRangePartFromPointerTarget,
   sortedFcuTempSources,
@@ -173,6 +174,22 @@ async function testSingleFlightStatusRefresh() {
   );
   check("retry runs after failed status refresh", failureCalls, 2);
 }
+
+check(
+  "initial status refresh is immediate",
+  secondsUntilStatusRefresh(20_000, 0, false),
+  0,
+);
+check(
+  "completed status refresh waits one interval",
+  secondsUntilStatusRefresh(20_000, 20_000, false),
+  10,
+);
+check(
+  "forced status refresh is immediate",
+  secondsUntilStatusRefresh(20_000, 20_000, true),
+  0,
+);
 
 function testPendingFanChangeOwnership() {
   const pendingChanges = new Map();

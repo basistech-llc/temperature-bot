@@ -5,11 +5,10 @@ You need an API key
 
 import logging
 import json
-import os
 from typing import Any
 
 import requests
-from app.util import get_config, get_secret
+from app.util import env_flag_enabled, get_config, get_secret
 from app.paths import TIMEOUT_SECONDS
 
 AIRNOW_URL = "https://www.airnowapi.org/aq/observation/zipCode/current/?format=application/json&zipCode={zipcode}&distance=15&API_KEY={API_KEY}"
@@ -17,7 +16,6 @@ GOOGLE_URL = "https://airquality.googleapis.com/v1/history:lookup?key={API_KEY}"
 
 logger = logging.getLogger(__name__)
 AQICN_SIMULATOR_ENV = "AQICN_SIMULATOR"
-TRUE_ENV_VALUES = {"1", "true", "yes", "on"}
 AQICN_SIMULATOR_DATA = {
     "aqi": 45,
     "iaqi": {
@@ -50,7 +48,7 @@ class AQIError(Exception):
 
 def aqicn_simulator_enabled() -> bool:
     """Return True when AQICN simulator mode is explicitly enabled."""
-    return os.getenv(AQICN_SIMULATOR_ENV, "").strip().lower() in TRUE_ENV_VALUES
+    return env_flag_enabled(AQICN_SIMULATOR_ENV)
 
 def aqi_decode(aqi):
     aqi = int(aqi)
