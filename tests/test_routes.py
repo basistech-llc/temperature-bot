@@ -479,6 +479,7 @@ def test_index_device_names_expose_rename_popup_contract(
     assert 'data-action="reset-device-name"' in html
     assert 'data-action="rename-device"' in html
     assert 'data-action="cancel-device-rename"' in html
+    assert 'class="device-rename-message" data-role="message" aria-live="polite"' in html
 
 
 def test_temperature_chart_page_has_raw_calculated_mode_switch(

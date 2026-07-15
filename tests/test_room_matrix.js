@@ -2,6 +2,7 @@
 
 const assert = require("assert");
 const {
+  cancelRoomRenameDialog,
   compareSensors,
   deviceRoomRequest,
   longPressTriggered,
@@ -11,6 +12,8 @@ const {
   persistRoomName,
   persistSensorRoom,
   restoreSensorPosition,
+  renameRoom,
+  roomRenameIsSaving,
   roomHumidityText,
   roomDeleteCountdown,
   roomDisplayName,
@@ -177,7 +180,123 @@ async function testPersistenceTransitions() {
   assert.strictEqual(row.dataset.roomId, "3");
 }
 
+function fakeClassList(initial = []) {
+  const classes = new Set(initial);
+  return {
+    add: (...names) => names.forEach((name) => classes.add(name)),
+    contains: (name) => classes.has(name),
+    remove: (...names) => names.forEach((name) => classes.delete(name)),
+  };
+}
+
+function fakeRenameDialog(roomName = "Bravo") {
+  const controls = [{ disabled: false }, { disabled: false }, { disabled: false }];
+  const message = { textContent: "" };
+  return {
+    attributes: {},
+    classList: fakeClassList(),
+    controls,
+    dataset: { roomId: "7", roomName: "Alpha" },
+    input: { focusCount: 0, value: roomName, focus() { this.focusCount++; } },
+    message,
+    querySelector: (selector) =>
+      selector === "[data-role='message']" ? message : null,
+    querySelectorAll: () => controls,
+    removeAttribute(name) { delete this.attributes[name]; },
+    setAttribute(name, value) { this.attributes[name] = String(value); },
+  };
+}
+
+async function testRoomRenameCompletion() {
+  const originalDocument = global.document;
+  const originalFetch = global.fetch;
+  const originalWindow = global.window;
+  const originalConsoleError = console.error;
+  let releaseRequest;
+  let requestCount = 0;
+  const dialog = fakeRenameDialog();
+  const errors = [];
+  let reloadCount = 0;
+  global.document = {
+    getElementById(id) {
+      if (id === "room-rename-dialog") return dialog;
+      if (id === "room-rename-name") return dialog.input;
+      return null;
+    },
+    querySelector() {
+      throw new Error("simulated rendering failure");
+    },
+  };
+  global.fetch = async () => {
+    requestCount++;
+    await new Promise((resolve) => { releaseRequest = resolve; });
+    return { ok: true, json: async () => ({ room_name: "Bravo" }) };
+  };
+  global.window = { location: { reload: () => { reloadCount++; } } };
+  console.error = (...args) => errors.push(args.join(" "));
+
+  try {
+    const first = renameRoom(dialog);
+    assert.strictEqual(roomRenameIsSaving(dialog), true);
+    assert.strictEqual(dialog.attributes["aria-busy"], "true");
+    assert.ok(dialog.controls.every((control) => control.disabled));
+    assert.strictEqual(dialog.message.textContent, "Saving…");
+    assert.strictEqual(cancelRoomRenameDialog(), false);
+    assert.strictEqual(await renameRoom(dialog), false);
+    assert.strictEqual(requestCount, 1);
+
+    releaseRequest();
+    assert.strictEqual(await first, true);
+    assert.strictEqual(dialog.classList.contains("hidden"), true);
+    assert.strictEqual(roomRenameIsSaving(dialog), false);
+    assert.ok(dialog.controls.every((control) => !control.disabled));
+    assert.ok(errors.some((message) => message.includes("rename was saved")));
+    assert.strictEqual(reloadCount, 1);
+
+    dialog.classList.remove("hidden");
+    assert.strictEqual(cancelRoomRenameDialog(), true);
+    assert.strictEqual(dialog.classList.contains("hidden"), true);
+  } finally {
+    global.document = originalDocument;
+    global.fetch = originalFetch;
+    global.window = originalWindow;
+    console.error = originalConsoleError;
+  }
+}
+
+async function testRoomRenameErrorRecovery() {
+  const originalDocument = global.document;
+  const originalFetch = global.fetch;
+  const dialog = fakeRenameDialog("Duplicate");
+  global.document = {
+    getElementById(id) {
+      if (id === "room-rename-dialog") return dialog;
+      if (id === "room-rename-name") return dialog.input;
+      return null;
+    },
+  };
+  global.fetch = async () => ({
+    ok: false,
+    json: async () => ({ error: "Room name already exists" }),
+  });
+
+  try {
+    assert.strictEqual(await renameRoom(dialog), false);
+    assert.strictEqual(dialog.classList.contains("hidden"), false);
+    assert.strictEqual(roomRenameIsSaving(dialog), false);
+    assert.ok(dialog.controls.every((control) => !control.disabled));
+    assert.strictEqual(dialog.input.value, "Duplicate");
+    assert.strictEqual(dialog.input.focusCount, 1);
+    assert.strictEqual(dialog.message.textContent, "Room name already exists");
+  } finally {
+    global.document = originalDocument;
+    global.fetch = originalFetch;
+  }
+}
+
 testPersistenceTransitions()
+  .then(testRoomRenameCompletion)
+  .then(testRoomRenameErrorRecovery)
   .then(() => console.log("room_matrix tests passed"))
   .catch((error) => {
     console.error(error);
