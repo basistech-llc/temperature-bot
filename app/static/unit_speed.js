@@ -1308,11 +1308,27 @@ function setDeviceRenameControlsDisabled(popup, disabled) {
   }
 }
 
+function deviceRenameIsSaving(popup) {
+  return popup?.dataset.saving === "true";
+}
+
+function setDeviceRenameSaving(popup, saving) {
+  if (saving) {
+    popup.dataset.saving = "true";
+    popup.setAttribute("aria-busy", "true");
+  } else {
+    delete popup.dataset.saving;
+    popup.removeAttribute("aria-busy");
+  }
+  setDeviceRenameControlsDisabled(popup, saving);
+}
+
 function closeDeviceRenamePopup() {
   const popup = document.getElementById("device-rename-popup");
   if (!popup) {
     return;
   }
+  setDeviceRenameSaving(popup, false);
   popup.classList.add("hidden");
   popup.removeAttribute("style");
   delete popup.dataset.deviceId;
@@ -1321,6 +1337,13 @@ function closeDeviceRenamePopup() {
   delete popup.dataset.rulesEnabled;
   delete popup.dataset.deviceUpdate;
   delete popup.dataset.currentDisplayName;
+}
+
+function cancelDeviceRenamePopup() {
+  const popup = document.getElementById("device-rename-popup");
+  if (!popup || deviceRenameIsSaving(popup)) return false;
+  closeDeviceRenamePopup();
+  return true;
 }
 
 function setDeviceReadonlyMetadata(popup, deviceType, rulesEnabled) {
@@ -1387,9 +1410,11 @@ function openDeviceRenamePopup(target, event) {
     lastUpdateInput.value = deviceUpdate || "--";
   }
   setDeviceReadonlyMetadata(popup, deviceType, rulesEnabled);
+  setDeviceRenameSaving(popup, false);
+  const message = popup.querySelector("[data-role='message']");
+  if (message) message.textContent = "";
 
   popup.classList.remove("hidden");
-  setDeviceRenameControlsDisabled(popup, false);
   positionDeviceRenamePopup(popup, event.clientX, event.clientY);
   displayNameInput.focus();
   displayNameInput.select();
@@ -1471,19 +1496,33 @@ function applyDeviceDisplayName(
 async function submitDeviceDisplayName(displayName) {
   const popup = document.getElementById("device-rename-popup");
   if (!popup) {
-    return;
+    return false;
   }
+  if (deviceRenameIsSaving(popup)) return false;
   const deviceId = parseInt(popup.dataset.deviceId, 10);
   const deviceName = popup.dataset.deviceName || "";
   if (!Number.isInteger(deviceId) || !deviceName) {
     closeDeviceRenamePopup();
-    return;
+    return false;
   }
 
-  setDeviceRenameControlsDisabled(popup, true);
+  const message = popup.querySelector("[data-role='message']");
+  setDeviceRenameSaving(popup, true);
+  if (message) message.textContent = "Saving…";
+  let data;
   try {
-    const data = await patchDeviceDisplayName(deviceId, displayName);
-    const savedDisplayName = data.display_name || displayName || deviceName;
+    data = await patchDeviceDisplayName(deviceId, displayName);
+  } catch (error) {
+    console.error("Failed to update device display name:", error);
+    if (message) message.textContent = error.message || "Unable to rename unit.";
+    setDeviceRenameSaving(popup, false);
+    document.getElementById("device-rename-display-name")?.focus();
+    return false;
+  }
+
+  const savedDisplayName = data.display_name || displayName || deviceName;
+  forceRefresh = true;
+  try {
     applyDeviceDisplayName(
       deviceId,
       deviceName,
@@ -1491,17 +1530,11 @@ async function submitDeviceDisplayName(displayName) {
       data.device_type ?? popup.dataset.deviceType,
       data.rules_enabled ?? popup.dataset.rulesEnabled,
     );
-    forceRefresh = true;
-    closeDeviceRenamePopup();
   } catch (error) {
-    console.error("Failed to update device display name:", error);
-    alert(`Error ${error.message}`);
-    closeDeviceRenamePopup();
-  } finally {
-    if (!popup.classList.contains("hidden")) {
-      setDeviceRenameControlsDisabled(popup, false);
-    }
+    console.error("Device rename was saved, but the page update failed:", error);
   }
+  closeDeviceRenamePopup();
+  return true;
 }
 
 function setupDeviceRenamePopupControls() {
@@ -1558,17 +1591,17 @@ function setupDeviceRenamePopupControls() {
 
   const cancelButton = popup.querySelector("[data-action='cancel-device-rename']");
   if (cancelButton) {
-    cancelButton.addEventListener("click", closeDeviceRenamePopup);
+    cancelButton.addEventListener("click", cancelDeviceRenamePopup);
   }
 
   document.addEventListener("click", (event) => {
     if (!popup.classList.contains("hidden") && !popup.contains(event.target)) {
-      closeDeviceRenamePopup();
+      cancelDeviceRenamePopup();
     }
   });
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape") {
-      closeDeviceRenamePopup();
+      cancelDeviceRenamePopup();
     }
   });
 }
@@ -3205,9 +3238,11 @@ if (typeof module !== "undefined" && module.exports) {
     autoSetTempRangeForDevice,
     compactAgeFromSeconds,
     clearPendingFanChange,
+    cancelDeviceRenamePopup,
     createSingleFlight,
     dashboardAirQualityDeviceIsActive,
     deviceDisplayNameChanged,
+    deviceRenameIsSaving,
     deviceLabelWithIcon,
     deviceDisplayNamePatchBody,
     deviceRulesEnabledValue,
@@ -3242,6 +3277,7 @@ if (typeof module !== "undefined" && module.exports) {
     setAutoSetTempUnavailable,
     updateSetRangeModeState,
     sortedFcuTempSources,
+    submitDeviceDisplayName,
     tableUpdateSummaryText,
     updateSetTempForDevice,
     updateTemperatureCell,

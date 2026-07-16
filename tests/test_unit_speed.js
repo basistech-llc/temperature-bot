@@ -12,9 +12,11 @@ const {
   autoSetTempRangeForDevice,
   compactAgeFromSeconds,
   clearPendingFanChange,
+  cancelDeviceRenamePopup,
   createSingleFlight,
   dashboardAirQualityDeviceIsActive,
   deviceDisplayNameChanged,
+  deviceRenameIsSaving,
   deviceLabelWithIcon,
   deviceDisplayNamePatchBody,
   deviceRulesEnabledValue,
@@ -48,6 +50,7 @@ const {
   setAutoSetTempUnavailable,
   setRangePartFromPointerTarget,
   sortedFcuTempSources,
+  submitDeviceDisplayName,
   tableUpdateSummaryText,
   updateSetTempForDevice,
   updateTemperatureCell,
@@ -1071,6 +1074,158 @@ check("rules-enabled false string parses", deviceRulesEnabledValue("false"), fal
 check("rules-enabled one parses", deviceRulesEnabledValue(1), true);
 check("rules-enabled zero parses", deviceRulesEnabledValue(0), false);
 
+function fakeDeviceRenamePopup(displayName = "East Lab") {
+  const message = { textContent: "" };
+  const renameButton = { disabled: false };
+  const inputs = {
+    "device-rename-device-name": { disabled: false, readOnly: true },
+    "device-rename-display-name": {
+      disabled: false,
+      focusCount: 0,
+      value: displayName,
+      focus() { this.focusCount++; },
+    },
+    "device-rename-device-type": { disabled: false, readOnly: true },
+    "device-rename-rules-enabled": { checked: true, disabled: true },
+    "device-rename-last-update": { disabled: false, readOnly: true },
+  };
+  const controls = [...Object.values(inputs), renameButton, { disabled: false }];
+  const popup = {
+    attributes: {},
+    classList: fakeClassList(),
+    controls,
+    dataset: {
+      currentDisplayName: "West Lab",
+      deviceId: "12",
+      deviceName: "FCU-12",
+      deviceType: "FCU",
+      rulesEnabled: "true",
+    },
+    inputs,
+    message,
+    querySelector(selector) {
+      if (selector === "[data-role='message']") return message;
+      if (selector === "[data-action='rename-device']") return renameButton;
+      return null;
+    },
+    querySelectorAll: () => controls,
+    removeAttribute(name) { delete this.attributes[name]; },
+    setAttribute(name, value) { this.attributes[name] = String(value); },
+  };
+  return popup;
+}
+
+function installDeviceRenameDocument(popup, renderFailure = false) {
+  return {
+    getElementById(id) {
+      if (id === "device-rename-popup") return popup;
+      return popup.inputs[id] || null;
+    },
+    querySelectorAll() {
+      if (renderFailure) throw new Error("simulated rendering failure");
+      return [];
+    },
+  };
+}
+
+async function testDeviceRenameCompletion() {
+  const originalDocument = global.document;
+  const originalFetch = global.fetch;
+  const originalConsoleError = console.error;
+  const popup = fakeDeviceRenamePopup();
+  const errors = [];
+  let releaseRequest;
+  let requestCount = 0;
+  global.document = installDeviceRenameDocument(popup, true);
+  global.fetch = async () => {
+    requestCount++;
+    await new Promise((resolve) => { releaseRequest = resolve; });
+    return {
+      ok: true,
+      json: async () => ({ display_name: "East Lab", device_type: "FCU" }),
+    };
+  };
+  console.error = (...args) => errors.push(args.join(" "));
+
+  try {
+    const first = submitDeviceDisplayName("East Lab");
+    check("device rename enters saving state", deviceRenameIsSaving(popup), true);
+    check("device rename marks dialog busy", popup.attributes["aria-busy"], "true");
+    check(
+      "device rename disables controls",
+      popup.controls.every((control) => control.disabled),
+      true,
+    );
+    check("device rename reports pending state", popup.message.textContent, "Saving…");
+    check("Escape cannot close pending device rename", cancelDeviceRenamePopup(), false);
+    check("duplicate device rename is ignored", await submitDeviceDisplayName("East Lab"), false);
+    check("device rename sends one request", requestCount, 1);
+
+    releaseRequest();
+    check("device rename succeeds", await first, true);
+    check("successful device rename closes popup", popup.classList.contains("hidden"), true);
+    check("successful device rename clears saving state", deviceRenameIsSaving(popup), false);
+    check(
+      "saved device rename distinguishes rendering failure",
+      errors.some((message) => message.includes("rename was saved")),
+      true,
+    );
+
+    popup.classList.remove("hidden");
+    check("Escape closes idle device rename", cancelDeviceRenamePopup(), true);
+    check("idle device rename is closed", popup.classList.contains("hidden"), true);
+  } finally {
+    global.document = originalDocument;
+    global.fetch = originalFetch;
+    console.error = originalConsoleError;
+  }
+}
+
+async function testDeviceRenameErrorRecovery() {
+  const originalDocument = global.document;
+  const originalFetch = global.fetch;
+  const originalConsoleError = console.error;
+  const popup = fakeDeviceRenamePopup("Duplicate");
+  global.document = installDeviceRenameDocument(popup);
+  global.fetch = async () => ({
+    ok: false,
+    status: 409,
+    statusText: "Conflict",
+    json: async () => ({ error: "Display name already exists" }),
+  });
+  console.error = () => {};
+
+  try {
+    check("failed device rename returns false", await submitDeviceDisplayName("Duplicate"), false);
+    check("failed device rename stays open", popup.classList.contains("hidden"), false);
+    check("failed device rename clears saving state", deviceRenameIsSaving(popup), false);
+    check(
+      "failed device rename restores editable input",
+      popup.inputs["device-rename-display-name"].disabled,
+      false,
+    );
+    check(
+      "failed device rename preserves entered name",
+      popup.inputs["device-rename-display-name"].value,
+      "Duplicate",
+    );
+    check(
+      "failed device rename restores focus",
+      popup.inputs["device-rename-display-name"].focusCount,
+      1,
+    );
+    check(
+      "failed device rename shows persistence error",
+      popup.message.textContent,
+      "409 Display name already exists",
+    );
+  } finally {
+    global.document = originalDocument;
+    global.fetch = originalFetch;
+    console.error = originalConsoleError;
+  }
+}
+
 const popupWithChangedSource = {
   querySelectorAll: () => [
     {
@@ -1361,6 +1516,8 @@ Promise.resolve()
   .then(testEnableRulesForDevicePost)
   .then(testFcuBatchSavePost)
   .then(testAutoSetTempSavePost)
+  .then(testDeviceRenameCompletion)
+  .then(testDeviceRenameErrorRecovery)
   .catch((error) => {
     failed++;
     console.error(error);
