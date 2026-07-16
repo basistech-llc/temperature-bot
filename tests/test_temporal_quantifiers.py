@@ -137,6 +137,30 @@ def test_temperature_api_with_start_and_end(
     assert "series" in data
 
 
+def test_temperature_api_reports_data_outside_window(
+    flask_test_client, test_database_conn_with_test_data
+):  # noqa: F811
+    conn, device_id, _ = test_database_conn_with_test_data
+    conn.execute("DELETE FROM devlog WHERE device_id=?", (device_id,))
+    conn.executemany(
+        """
+        INSERT INTO devlog (device_id, logtime, duration, temp10x)
+        VALUES (?, ?, 1, 200)
+        """,
+        [(device_id, 100), (device_id, 200), (device_id, 300)],
+    )
+    conn.commit()
+
+    response = flask_test_client.get(
+        f"/api/v1/temperature?device_ids={device_id}&start=150&end=250"
+    )
+
+    assert response.status_code == 200
+    assert response.json["has_earlier_data"] is True
+    assert response.json["has_later_data"] is True
+    assert response.json["series"][0]["data"] == [[200, 20.0]]
+
+
 def test_temperature_api_record_counts_for_temporal_ranges(
     flask_test_client, test_database_conn_with_test_data
 ):  # noqa: F811
@@ -220,12 +244,30 @@ def test_index_fcu_speeds_exclude_one(
     assert f'id="radio-{device_id}-0"' in html
     assert f'id="radio-{device_id}-auto"' in html
     assert '<th class="column-mode" rowspan="2">Mode</th>' in html
-    assert '<th class="column-temp column-temp-set" rowspan="2">FCU Set<br>Temp' in html
+    assert '<th class="column-computed-room" colspan="2">Computed Room</th>' in html
+    assert (
+        '<th class="column-temp column-computed-room-temp" rowspan="2">Temp<br><small '
+        'id="fcu-room-temp-unit-label">°C</small></th>'
+        in html
+    )
+    assert (
+        '<th class="column-room-humidity" rowspan="2">Humidity<br><small>%</small></th>'
+        in html
+    )
+    assert (
+        '<th class="column-temp column-temp-range" rowspan="3">Rule Set Range'
+        in html
+    )
+    assert '<th class="column-fcu-set" colspan="7">FCU Set</th>' in html
+    assert '<th class="column-temp column-temp-set" rowspan="2">Temp<br>' in html
+    assert '<th class="column-speed" colspan="5">Fan Speed</th>' in html
     assert 'class="mode-select"' in html
     assert f'id="mode-{device_id}"' in html
     assert f'id="autosettemp-widget-{device_id}"' in html
     assert 'aria-label="Auto heat and cool set temperatures"' in html
     assert 'role="group"' in html
+    assert "FCU Set Temp edits the AE-200 Heat/Cool range." in html
+    assert "Rule Set Range stays editable for local rules." in html
     assert '<option value="FAN"' in html
     assert '<option value="COOL" selected>Cool</option>' in html
     assert '<option value="DRY"' in html

@@ -26,6 +26,11 @@ from app import airthings
 from app import db
 from app import db_alerts
 from app import hubitat
+from app.device_types import (
+    DEVICE_TYPE_SENSOR,
+    HubitatDevice,
+    classify_hubitat_device,
+)
 from app import rules_engine
 
 
@@ -76,6 +81,7 @@ def process_device_alert_data(conn, dev, data):
 def update_from_hubitat(conn):
     try:
         devices = hubitat.get_all_devices()
+        typed_devices = [HubitatDevice.model_validate(item) for item in devices]
         temps = hubitat.extract_temperatures(devices)
     except requests.exceptions.RequestException as e:
         logger.error("update_from_hubitat: request failed: %s", e)
@@ -83,12 +89,28 @@ def update_from_hubitat(conn):
     except RuntimeError as e:
         logger.error("update_from_hubitat: %s", e)
         return
+    device_ids: dict[str, int] = {}
+    observed_at = int(time.time())
+    for device, raw_device in zip(typed_devices, devices):
+        device_type, _evidence = classify_hubitat_device(device)
+        device_id = db.get_or_create_device_id(
+            conn, device.name, device_type=device_type
+        )
+        device_ids[device.name] = device_id
+        motion = (raw_device.get("attributes") or {}).get("motion")
+        if motion in {"active", "inactive"}:
+            db.record_presence_observation(
+                conn,
+                device_id=device_id,
+                present=motion == "active",
+                observed_at=observed_at,
+            )
     updated_names = []
     for item in temps:
         statusdict = item.get("status") or {}
         db.insert_devlog_entry(
             conn,
-            device_name=item["name"],
+            device_id=device_ids[item["name"]],
             temp=item["temperature"],
             statusdict=statusdict,
         )
@@ -110,6 +132,7 @@ def update_from_airthings(conn):
         if conn is None:
             print("name=",name,"temp=",temp,'status',sensors)
             continue
+        db.get_or_create_device_id(conn, name, device_type=DEVICE_TYPE_SENSOR)
         db.insert_devlog_entry(conn, device_name=name, temp=temp, statusdict=sensors, logtime=logtime)
         updated_names.append(name)
     if conn is not None:
@@ -146,6 +169,12 @@ def combine_temp_measurements(conn, start_time, end_time, seconds):
     :param end_time: unix time_t of end of time period.
     :param divisions: number of divisions to create
     """
+    if seconds > db.MAX_DURATION:
+        raise ValueError(
+            f"combine_temp_measurements seconds={seconds} exceeds "
+            f"MAX_DURATION={db.MAX_DURATION}"
+        )
+
     logger.info("combine_temp_measurements(%s,%s,%s", start_time, end_time, seconds)
     conn.isolation_level = None
     c = conn.cursor()
@@ -367,6 +396,7 @@ def main():
         update_from_airthings(None)
         sys.exit(0)
 
+    db.validate_database_schema_on_startup()
     conn = db.get_db_connection()
     if args.report:
         report(conn)

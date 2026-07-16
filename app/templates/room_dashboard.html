@@ -316,16 +316,25 @@ body {
 }
 
 .tv-btn {
-  flex: 1;
+  flex: 1 1 0;
+  min-width: 0;
+  width: auto;
+  box-sizing: border-box;
   height: clamp(44px, 7vh, 54px);
+  padding: 0 0.35em;
   border: 3px solid transparent;
   border-radius: 10px;
-  font: bold 1.2em sans-serif;
+  font: bold clamp(0.72rem, 1.7vw, 1.2em) sans-serif;
+  line-height: 1;
   cursor: pointer;
   color: white;
   background: #5c6bc0;
   box-shadow: 0 2px 4px rgba(0,0,0,0.15);
   transition: all 0.15s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
 }
 
 .tv-btn:hover:not(:disabled) {
@@ -366,15 +375,22 @@ body {
 
 .wall-btn {
   width: 100%;
+  box-sizing: border-box;
   height: clamp(44px, 7vh, 54px);
+  padding: 0 0.35em;
   border: 3px solid transparent;
   border-radius: 10px;
-  font: bold 1.2em sans-serif;
+  font: bold clamp(0.72rem, 1.7vw, 1.2em) sans-serif;
+  line-height: 1;
   cursor: pointer;
   color: white;
   background: #bdbdbd;
   box-shadow: 0 2px 4px rgba(0,0,0,0.12);
   transition: all 0.15s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
 }
 
 .wall-btn.is-on {
@@ -469,7 +485,8 @@ body {
   .sensors-grid { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0.5em; }
   .sensor-tile { padding: 0.6em; min-height: 60px; }
   .sensor-temp { font-size: 1.3em; }
-  .tv-btn, .wall-btn { font-size: 1em; }
+  .room-control-buttons { gap: 0.35em; }
+  .tv-btn, .wall-btn { padding: 0 0.2em; }
   .room-controls-grid { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
 }
 
@@ -477,7 +494,7 @@ body {
 {% endblock %}
 
 {% block body %}
-<div id="room-scale-wrap"><div id="room-scale-content">
+<div id="room-scale-wrap" data-room-control-key="{{ room_control_key }}"><div id="room-scale-content">
 {% if notes %}
 <div class="notes-banner">{{ notes }}</div>
 {% endif %}
@@ -666,4 +683,7 @@ body {
 <!-- temperature_utils.js is already loaded by base.html; re-including it here
      redeclared USE_FAHRENHEIT (SyntaxError) and double-bound its listeners. -->
 <script src="/static/room_dashboard.js"></script>
+{% if location == 'Hickory' %}
+<script src="/static/hickory_life.js"></script>
+{% endif %}
 {% endblock %}

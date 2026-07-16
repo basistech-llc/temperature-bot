@@ -12,8 +12,8 @@ from flask_pydantic import validate
 from pydantic import TypeAdapter, ValidationError
 from websockets.exceptions import WebSocketException
 
-from .constants import __version__
 from . import constants
+from .version import __version__, git_sha
 from . import db
 from . import db_alerts
 from . import rules_engine
@@ -21,24 +21,36 @@ from . import hubitat
 from . import ae200
 from .display_names import display_device_name
 from . import room_config
+from . import presence
+from .device_types import HubitatControlDevice
 from .utils.request_utils import parse_device_ids
 from .utils.db_utils import with_db_connection
 
 from .models import (
+    AutoSetTempControl,
     CommandResponse,
     DeviceMetadataControl,
     DeviceRoomControl,
     FcuTempSourceBatchControl,
     DriveControl,
     FcuTempSourceControl,
+    FcuHistoryResponse,
     ModeControl,
     NoteControl,
     SetRangeControl,
     Room,
+    RoomCreate,
+    RoomListResponse,
+    RoomPatch,
+    PresenceHistoryResponse,
+    RoomPresenceResponse,
+    RoomControlStatus,
+    RoomDimmerState,
+    RoomSwitchState,
     SetTempControl,
     SpeedControl,
+    TemperatureSeriesResponse,
     json_ready,
-    json_ready_list,
 )
 
 logger = logging.getLogger(__name__)
@@ -49,7 +61,9 @@ FCU_TEMP_SOURCE_BATCH_ADAPTER = TypeAdapter(FcuTempSourceBatchControl)
 
 
 def _validation_error_response(error: ValidationError):
-    return jsonify({"error": "validation error", "details": error.errors()}), 400
+    return jsonify(
+        {"error": "validation error", "details": error.errors(include_context=False)}
+    ), 400
 
 
 def _rules_disabled_comment() -> str:
@@ -59,17 +73,17 @@ def _rules_disabled_comment() -> str:
 
 def _command_error_response(error: ValueError):
     logger.info("Command request rejected: %s", error)
-    return jsonify({"error": str(error)}), 400
+    return jsonify({"error": "Invalid command request"}), 400
 
 
 def _ae200_error_response(error):
     logger.warning("AE-200 request failed: %s", error)
-    return jsonify({"error": f"AE-200 request failed: {error}"}), 502
+    return jsonify({"error": "AE-200 request failed"}), 502
 
 
 @api_v1.route("/version")
 def get_version_json():
-    return jsonify({"version": __version__})
+    return jsonify({"version": __version__, "sha": git_sha()})
 
 
 @api_v1.route("/set_fan_speed", methods=["POST"])
@@ -161,6 +175,26 @@ def set_temp(conn, body: SetTempControl):
     return jsonify(json_ready(CommandResponse.model_validate({"status": "ok", **ret})))
 
 
+@api_v1.route("/set_auto_temp", methods=["POST"])
+@validate()
+@with_db_connection
+def set_auto_temp(conn, body: AutoSetTempControl):
+    """Set AE-200 Auto Heat/Cool setpoints for a unit."""
+    logger.debug("/set_auto_temp: body=[%s]", body)
+    try:
+        ret = rules_engine.set_body_auto_set_temp(
+            conn,
+            body,
+            request.remote_addr,
+            "web",
+        )
+    except ValueError as exc:
+        return _command_error_response(exc)
+    except (ET.ParseError, OSError, RuntimeError, WebSocketException) as exc:
+        return _ae200_error_response(exc)
+    return jsonify(json_ready(CommandResponse.model_validate({"status": "ok", **ret})))
+
+
 @api_v1.route("/set_range", methods=["POST"])
 @validate()
 @with_db_connection
@@ -245,10 +279,19 @@ def get_temperature(conn):
         return jsonify({"error": "Invalid device_ids format"}), 400
     if mode == "raw":
         series = db.get_temperature_series(conn, device_ids)
+        boundary_device_ids = device_ids
     elif mode == "calculated":
-        series = db.get_calculated_temperature_series(conn, device_ids)
+        series, boundary_device_ids = db.get_calculated_temperature_series_and_device_ids(
+            conn, device_ids
+        )
     else:
         return jsonify({"error": "mode must be 'raw' or 'calculated'"}), 400
+    has_earlier_data, has_later_data = db.temperature_data_availability(
+        conn,
+        boundary_device_ids,
+        request.args.get("start", type=int),
+        request.args.get("end", type=int),
+    )
     # Use centralized helper for series display names, preferring Hubitat label when available
     # and applying display-only transforms.
     name_to_label = hubitat.get_name_to_label()
@@ -260,7 +303,31 @@ def get_temperature(conn):
             hubitat_label=hub_label,
             source="hubitat",
         )
-    return jsonify({"series": series})
+    return jsonify(
+        json_ready(
+            TemperatureSeriesResponse.model_validate(
+                {
+                    "series": series,
+                    "has_earlier_data": has_earlier_data,
+                    "has_later_data": has_later_data,
+                }
+            )
+        )
+    )
+
+
+@api_v1.get("/fcu_history")
+@with_db_connection
+def get_fcu_history(conn):
+    """Return time-aligned calculated room, inlet, mode, and fan history."""
+    fcu_device_id = request.args.get("fcu_device_id", type=int)
+    if fcu_device_id is None:
+        return jsonify({"error": "fcu_device_id is required"}), 400
+    try:
+        history = db.get_fcu_history(conn, fcu_device_id)
+    except LookupError as error:
+        return jsonify({"error": str(error)}), 404
+    return jsonify(json_ready(FcuHistoryResponse.model_validate(history)))
 
 
 @api_v1.route("/air_quality")
@@ -384,11 +451,14 @@ def set_device_disabled_until(conn):
 def rooms(conn):
     """List or create rooms with map polygon metadata."""
     if request.method == "GET":
-        return jsonify({"rooms": json_ready_list(db.get_rooms(conn))})
+        return jsonify(json_ready(RoomListResponse(rooms=db.get_rooms(conn))))
 
     try:
-        body = Room.model_validate(request.get_json(silent=True) or {})
-        room = db.create_room(conn, body)
+        body = RoomCreate.model_validate(request.get_json(silent=True) or {})
+        room = db.create_room(
+            conn,
+            Room(room_name=body.room_name, map=body.map),
+        )
     except ValidationError as e:
         return _validation_error_response(e)
     except ValueError as e:
@@ -408,15 +478,49 @@ def room_detail(conn, room_id: int):
     return jsonify(json_ready(room))
 
 
+@api_v1.get("/presence")
+@with_db_connection
+def room_presence(conn):
+    """Return current presence for every canonical room."""
+    return jsonify(
+        json_ready(
+            RoomPresenceResponse(
+                stale_after_seconds=presence.PRESENCE_STALE_SECONDS,
+                rooms=presence.get_room_presence(conn),
+            )
+        )
+    )
+
+
+@api_v1.get("/presence/history")
+@with_db_connection
+def room_presence_history(conn):
+    """Return room-at-observation presence history."""
+    room_id = request.args.get("room_id", type=int)
+    since = request.args.get("since", type=int)
+    if room_id is not None and db.get_room(conn, room_id) is None:
+        return jsonify({"error": "room not found"}), 404
+    return jsonify(
+        json_ready(
+            PresenceHistoryResponse(
+                events=db.get_presence_events(conn, room_id=room_id, since=since)
+            )
+        )
+    )
+
+
 @api_v1.patch("/rooms/<int:room_id>")
 @with_db_connection
 def update_room(conn, room_id: int):
     """Update one room."""
     try:
-        body = Room.model_validate(
-            {**(request.get_json(silent=True) or {}), "room_id": room_id}
-        )
-        room = db.update_room(conn, body)
+        body = RoomPatch.model_validate(request.get_json(silent=True) or {})
+        update = Room(room_id=room_id)
+        if "room_name" in body.model_fields_set:
+            update.room_name = body.room_name
+        if "map" in body.model_fields_set:
+            update.map = body.map
+        room = db.update_room(conn, update)
     except ValidationError as e:
         return _validation_error_response(e)
     except ValueError as e:
@@ -428,6 +532,19 @@ def update_room(conn, room_id: int):
     return jsonify(json_ready(room))
 
 
+@api_v1.delete("/rooms/<int:room_id>")
+@with_db_connection
+def delete_room(conn, room_id: int):
+    """Delete a room only when it has no FCU owner or assigned devices."""
+    try:
+        deleted = db.delete_empty_room(conn, room_id)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 409
+    if not deleted:
+        return jsonify({"error": "room not found"}), 404
+    return "", 204
+
+
 @api_v1.route("/update_device_room", methods=["POST"])
 @validate()
 @with_db_connection
@@ -435,8 +552,10 @@ def update_device_room(conn, body: DeviceRoomControl):
     """Assign a device to a room, or clear the assignment with room_id=null."""
     try:
         device_id = db.update_device_room(conn, body.device_id, body.room_id)
-    except ValueError as e:
+    except LookupError as e:
         return jsonify({"error": str(e)}), 404
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 409
     return jsonify(json_ready(CommandResponse(device_id=device_id)))
 
 
@@ -539,41 +658,47 @@ def update_note(conn, body: NoteControl):
     return jsonify(json_ready(CommandResponse(device_id=device_id)))
 
 
-@api_v1.route("/hickory/room_status")
-def hickory_room_status():
-    """Return current state of Hickory room control devices."""
-    config = room_config.get_room_config("hickory")
-    result = {}
-    try:
-        all_devices = hubitat.get_all_devices()
-        by_id = {str(d.get("id")): d for d in all_devices}
+@api_v1.route("/hickory/room_status", defaults={"room_key": "hickory"})
+@api_v1.route("/room/<room_key>/room_status")
+def room_control_status(room_key: str):
+    """Return current state of one configured room's control devices."""
+    config = room_config.find_room_config(room_key.casefold())
+    if config is None:
+        return jsonify({"error": "Unknown room control configuration"}), 404
+    result = RoomControlStatus()
 
-        dimmer_id = config.dimmer_id
-        if dimmer_id and dimmer_id in by_id:
-            attrs = by_id[dimmer_id].get("attributes", {})
-            result["dimmer"] = {
-                "level": int(attrs.get("level", 0)),
-                "switch": attrs.get("switch", "off"),
-            }
-        for key, dev_id in {
-            "wall_inner_id": config.wall_inner_id,
-            "wall_outer_id": config.wall_outer_id,
-        }.items():
-            if dev_id and dev_id in by_id:
-                attrs = by_id[dev_id].get("attributes", {})
-                result[key.replace("_id", "")] = {
-                    "switch": attrs.get("switch", "off"),
-                }
-    except (RuntimeError, OSError) as e:
-        logger.warning("Room status fetch failed: %s", e)
-        return jsonify({"error": str(e)}), 500
-    return jsonify(result)
+    def read_device(device_id: str | None) -> HubitatControlDevice | None:
+        if device_id is None:
+            return None
+        try:
+            return HubitatControlDevice.model_validate(hubitat.get_device_info(device_id))
+        except (RuntimeError, OSError, ValueError) as e:
+            logger.warning("Room device %s status fetch failed: %s", device_id, e)
+            return None
+
+    if dimmer := read_device(config.dimmer_id):
+        result.dimmer = RoomDimmerState(
+            level=dimmer.attributes.level or 0,
+            switch=dimmer.attributes.switch or "off",
+        )
+    if wall_inner := read_device(config.wall_inner_id):
+        result.wall_inner = RoomSwitchState(
+            switch=wall_inner.attributes.switch or "off"
+        )
+    if wall_outer := read_device(config.wall_outer_id):
+        result.wall_outer = RoomSwitchState(
+            switch=wall_outer.attributes.switch or "off"
+        )
+    return jsonify(json_ready(result))
 
 
-@api_v1.route("/hickory/dimmer", methods=["POST"])
-def hickory_dimmer():
-    """Set the Hickory room light dimmer level (0-100)."""
-    config = room_config.get_room_config("hickory")
+@api_v1.route("/hickory/dimmer", methods=["POST"], defaults={"room_key": "hickory"})
+@api_v1.route("/room/<room_key>/dimmer", methods=["POST"])
+def room_dimmer(room_key: str):
+    """Set a configured room's light dimmer level (0-100)."""
+    config = room_config.find_room_config(room_key.casefold())
+    if config is None:
+        return jsonify({"error": "Unknown room control configuration"}), 404
     device_id = config.dimmer_id
     if not device_id:
         return jsonify({"error": "No dimmer configured"}), 404
@@ -589,10 +714,13 @@ def hickory_dimmer():
         return jsonify({"error": str(e)}), 500
 
 
-@api_v1.route("/hickory/wall_light", methods=["POST"])
-def hickory_wall_light():
-    """Toggle a Hickory wall light on or off."""
-    config = room_config.get_room_config("hickory")
+@api_v1.route("/hickory/wall_light", methods=["POST"], defaults={"room_key": "hickory"})
+@api_v1.route("/room/<room_key>/wall_light", methods=["POST"])
+def room_wall_light(room_key: str):
+    """Toggle a configured room's wall light on or off."""
+    config = room_config.find_room_config(room_key.casefold())
+    if config is None:
+        return jsonify({"error": "Unknown room control configuration"}), 404
     payload = request.get_json(silent=True) or {}
     light = payload.get("light")
     state = payload.get("state")
@@ -613,15 +741,25 @@ def hickory_wall_light():
         return jsonify({"error": str(e)}), 500
 
 
-@api_v1.route("/hickory/tv", methods=["POST"])
-def hickory_tv():
-    """Control the Hickory TV lift (up/down)."""
+@api_v1.route("/hickory/tv", methods=["POST"], defaults={"room_key": "hickory"})
+@api_v1.route("/room/<room_key>/tv", methods=["POST"])
+def room_tv(room_key: str):
+    """Control a configured room's TV lift (up/down)."""
+    config = room_config.find_room_config(room_key.casefold())
+    if config is None:
+        return jsonify({"error": "Unknown room control configuration"}), 404
+    if not config.tv_up_label or not config.tv_down_label:
+        return jsonify({"error": "No TV configured"}), 404
     payload = request.get_json(silent=True) or {}
     direction = payload.get("direction")
     if direction not in ("up", "down"):
         return jsonify({"error": "direction must be 'up' or 'down'"}), 400
     try:
-        hubitat.control_hickory_tv(direction)
+        hubitat.control_room_tv(
+            direction,
+            up_label=config.tv_up_label,
+            down_label=config.tv_down_label,
+        )
         return jsonify(json_ready(CommandResponse(direction=direction)))
     except (RuntimeError, OSError) as e:
         logger.warning("TV control failed: %s", e)

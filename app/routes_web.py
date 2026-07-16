@@ -15,15 +15,29 @@ from collections.abc import Callable
 from typing import Any
 from flask import render_template, request, redirect, url_for
 
-from .constants import __version__
 from .constants import DASHBOARD_AIR_QUALITY_DEVICE_EXPIRATION_SECONDS
+from .device_types import (
+    DEVICE_TYPE_ERV,
+    DEVICE_TYPE_FCU,
+    DEVICE_TYPE_INTERNAL,
+    DEVICE_TYPE_SENSOR,
+)
+from .version import __version__
 from . import db
 from . import db_alerts
 from . import rules_engine
 from . import hubitat
 from . import room_config
-from .display_names import display_device_name
-from .models import DeviceMetadataControl, TableUpdateSummary
+from .display_names import append_display_icon, display_device_name
+from .models import (
+    DeviceMetadataControl,
+    DeviceStatus,
+    Room,
+    RoomDashboardSensor,
+    RoomDashboardSensorAttributes,
+    RoomMatrixGroup,
+    TableUpdateSummary,
+)
 from .utils.request_utils import parse_device_ids
 from .utils.db_utils import with_db_connection
 from .util import github_style_duration
@@ -31,8 +45,16 @@ from .routes_web_airquality_utils import (
     annotate_staleness,
     format_unix_as_asc,
 )
+from .room_metrics import RoomMetric, select_room_metric_sources
+from .presence import PRESENCE_STALE_SECONDS, get_room_presence
 
 logger = logging.getLogger(__name__)
+
+DASHBOARD_DEVICE_ICONS = {
+    DEVICE_TYPE_ERV: "♻️",
+    DEVICE_TYPE_FCU: "🌀",
+    DEVICE_TYPE_SENSOR: "📡",
+}
 
 # Display metadata for per-metric chart pages. Keyed on the URL-safe metric
 # name (same keys as db.AQ_METRIC_STATUS_KEYS). Radon uses its default Bq/m³
@@ -170,6 +192,59 @@ def _index_table_update_summaries(
     }
 
 
+def _room_matrix_groups(
+    devices: list[dict[str, Any]],
+    rooms: list[Room],
+    assigned_room_ids: set[int],
+) -> list[RoomMatrixGroup]:
+    """Group active sensor rows by canonical room, including empty rooms."""
+    fcu_by_room = {
+        device.get("room_id"): device
+        for device in devices
+        if str(device.get("device_type") or "").upper() == DEVICE_TYPE_FCU
+        and device.get("room_id") is not None
+    }
+    groups = {
+        room.room_id: RoomMatrixGroup(
+            room_id=room.room_id,
+            room_name=room.room_name or "Unnamed room",
+            fcu_device_id=(fcu_by_room.get(room.room_id) or {}).get("device_id"),
+            calculated_temp10x=(fcu_by_room.get(room.room_id) or {}).get(
+                "calculated_temp10x"
+            ),
+            calculated_humidity=(fcu_by_room.get(room.room_id) or {}).get(
+                "calculated_humidity"
+            ),
+            can_delete=(
+                room.fcu_device_id is None and room.room_id not in assigned_room_ids
+            ),
+        )
+        for room in rooms
+    }
+    groups[None] = RoomMatrixGroup(room_name="Unassigned")
+    for device in devices:
+        if not device.get("dashboard_air_quality_active") or device.get(
+            "device_type"
+        ) in {DEVICE_TYPE_ERV, DEVICE_TYPE_FCU, DEVICE_TYPE_INTERNAL}:
+            continue
+        room_id = device.get("room_id")
+        groups.setdefault(
+            room_id,
+            RoomMatrixGroup(
+                room_id=room_id,
+                room_name=device.get("room_name") or "Unassigned",
+            ),
+        ).devices.append(DeviceStatus.model_validate(device))
+    for group in groups.values():
+        group.devices.sort(
+            key=lambda device: (
+                (device.display_name or device.device_name).casefold(),
+                device.device_id,
+            )
+        )
+    return sorted(groups.values(), key=lambda group: group.room_name.casefold())
+
+
 def _dashboard_device_label(device: dict[str, Any]) -> str:
     """Return a dashboard label without doing live network enrichment."""
     raw_name = device.get("device_name", "")
@@ -180,6 +255,16 @@ def _dashboard_device_label(device: dict[str, Any]) -> str:
         hubitat_label=stored_label,
         source="db",
     )
+
+
+def _dashboard_device_label_with_icon(device: dict[str, Any]) -> str:
+    """Return the server-rendered label with one device-category marker."""
+    label = str(device.get("device_label") or _dashboard_device_label(device))
+    device_type = str(device.get("device_type") or "").upper()
+    icon = DASHBOARD_DEVICE_ICONS.get(device_type, "")
+    if not icon and device.get("dashboard_air_quality_active"):
+        icon = DASHBOARD_DEVICE_ICONS[DEVICE_TYPE_SENSOR]
+    return append_display_icon(label, icon)
 
 
 def _dashboard_device_tooltip(device: dict[str, Any], now: int) -> str:
@@ -217,11 +302,12 @@ def _register_core_routes(app):
 
         for d in device_data:
             d["device_label"] = _dashboard_device_label(d)
-            d["device_update_text"] = _dashboard_device_update_text(d, now)
-            d["device_update_tooltip"] = _dashboard_device_tooltip(d, now)
             d["dashboard_air_quality_active"] = (
                 _dashboard_air_quality_device_is_active(d, now)
             )
+            d["device_label_with_icon"] = _dashboard_device_label_with_icon(d)
+            d["device_update_text"] = _dashboard_device_update_text(d, now)
+            d["device_update_tooltip"] = _dashboard_device_tooltip(d, now)
 
         return render_template(
             "index.html",
@@ -229,6 +315,11 @@ def _register_core_routes(app):
             devices=device_data,
             now=now,
             table_update_summaries=_index_table_update_summaries(device_data, now),
+            room_groups=_room_matrix_groups(
+                device_data,
+                db.get_rooms(conn),
+                db.get_assigned_room_ids(conn),
+            ),
             current_page="home",
         )
 
@@ -290,7 +381,7 @@ def _register_core_routes(app):
 
     @app.route("/logs_today")
     def logs_today():
-        """Today's Log page"""
+        """Activity Log page"""
         return render_template("logs_today.html", current_page="logs_today")
 
     @app.route("/device_log/<device_id>")
@@ -316,6 +407,15 @@ def _register_core_routes(app):
         return render_template(
             "temperature_chart.html",
             device_ids=device_ids,
+            current_page="temperature_chart",
+        )
+
+    @app.get("/fcu_chart")
+    def show_fcu_chart():
+        """Combined FCU inlet, calculated room, and operating-state chart."""
+        return render_template(
+            "fcu_history_chart.html",
+            fcu_device_id=request.args.get("fcu_device_id", type=int),
             current_page="temperature_chart",
         )
 
@@ -479,6 +579,48 @@ def _get_hubitat_sensors(sensor_names):
     return found
 
 
+def _canonical_room_sensors(conn, room_id: int) -> list[RoomDashboardSensor]:
+    """Build room sensor tiles from persisted assignment and shared freshness."""
+    snapshots = db.fetch_latest_room_metric_snapshots(conn)
+    at_time = time.time()
+    temperatures = select_room_metric_sources(
+        snapshots, room_id=room_id, metric=RoomMetric.TEMPERATURE, at_time=at_time
+    )
+    humidities = select_room_metric_sources(
+        snapshots, room_id=room_id, metric=RoomMetric.HUMIDITY, at_time=at_time
+    )
+    temperature_by_device = {
+        source.device_id: source.value for source in temperatures.sources
+    }
+    humidity_by_device = {
+        source.device_id: source.value for source in humidities.sources
+    }
+    return sorted(
+        [
+            RoomDashboardSensor(
+                id=snapshot.device_id,
+                name=snapshot.device_name,
+                display_name=snapshot.display_name or snapshot.device_name,
+                offline=snapshot.device_id not in temperature_by_device,
+                attributes=RoomDashboardSensorAttributes(
+                    temperature=temperature_by_device.get(snapshot.device_id),
+                    humidity=(
+                        round(humidity_by_device[snapshot.device_id])
+                        if snapshot.device_id in humidity_by_device
+                        else None
+                    ),
+                ),
+            )
+            for snapshot in snapshots
+            if snapshot.room_id == room_id
+            and snapshot.device_type
+            not in {DEVICE_TYPE_FCU, DEVICE_TYPE_ERV, DEVICE_TYPE_INTERNAL}
+            and snapshot.temp10x is not None
+        ],
+        key=lambda sensor: (sensor.display_name.casefold(), sensor.id),
+    )
+
+
 def _collect_device_notes(devices):
     """Collect notes from devices and format as banner text."""
     notes = [
@@ -489,10 +631,41 @@ def _collect_device_notes(devices):
     return " | ".join(notes) if notes else None
 
 
-def _render_room_dashboard_with_data(conn, location: str):
+def _room_control_key(conn, room: Room | None, fallback: str) -> str:
+    """Bind configured controls to the room's stable owning FCU identity."""
+    if room and room.fcu_device_id:
+        owner = db.get_device(conn, room.fcu_device_id)
+        owner_key = str((owner or {}).get("device_name") or "").casefold()
+        if room_config.find_room_config(owner_key) is not None:
+            return owner_key
+    return fallback.casefold()
+
+
+def _render_room_dashboard_with_data(conn, location: str, room_id: int | None = None):
     """Render room dashboard with device data filtered by configuration."""
     room_key = location.lower()
-    config = room_config.get_room_config(room_key)
+    rooms = db.get_rooms(conn)
+    room = db.get_room(conn, room_id) if room_id is not None else next(
+        (
+            candidate
+            for candidate in rooms
+            if (candidate.room_name or "").casefold() == room_key
+        ),
+        None,
+    )
+    if room is None and room_id is None:
+        room = next(
+            (
+                candidate
+                for candidate in rooms
+                if _room_control_key(conn, candidate, "") == room_key
+            ),
+            None,
+        )
+    if room_id is not None and room is None:
+        return "Unknown room", 404
+    control_key = _room_control_key(conn, room, room_key)
+    config = room_config.get_room_config(control_key)
 
     all_devices = db.get_device_status(conn)
 
@@ -501,19 +674,11 @@ def _render_room_dashboard_with_data(conn, location: str):
 
     fan_devices = _filter_speed_control_devices(all_devices, config.fans)
 
-    # Get Hubitat sensors
-    hubitat_sensors = _get_hubitat_sensors(config.sensors)
-
-    # Attach display names for sensors using the centralized helper. We prefer
-    # Hubitat labels when available and then apply generic display transforms.
-    for sensor in hubitat_sensors:
-        raw_name = sensor.get("name", "")
-        label = sensor.get("label") or None
-        sensor["display_name"] = display_device_name(
-            raw_name,
-            hubitat_label=label,
-            source="hubitat",
-        )
+    hubitat_sensors = (
+        _canonical_room_sensors(conn, room.room_id)
+        if room and room.room_id
+        else []
+    )
 
     # Collect notes
     notes = _collect_device_notes(erv_devices + fan_devices)
@@ -522,7 +687,7 @@ def _render_room_dashboard_with_data(conn, location: str):
 
     return render_template(
         "room_dashboard.html",
-        location=location,
+        location=room.room_name if room and room.room_name else location,
         hide_nav=True,
         embedded=embedded,
         erv_devices=erv_devices,
@@ -533,6 +698,7 @@ def _render_room_dashboard_with_data(conn, location: str):
         dimmer_id=config.dimmer_id,
         wall_inner_id=config.wall_inner_id,
         wall_outer_id=config.wall_outer_id,
+        room_control_key=control_key,
     )
 
 
@@ -557,16 +723,35 @@ def _register_room_routes(app):
                 body = DeviceMetadataControl(
                     device_id=int(raw_device_id),
                     display_name=request.form.get(f"display_name_{raw_device_id}"),
-                    device_type=request.form.get(f"device_type_{raw_device_id}"),
                     rules_enabled=f"rules_enabled_{raw_device_id}" in request.form,
                     notes=request.form.get(f"notes_{raw_device_id}"),
                 )
-                db.update_device_metadata(conn, body)
+                db.update_device_metadata(
+                    conn,
+                    body,
+                    fields={"display_name", "rules_enabled", "notes"},
+                )
             return redirect(url_for("edit_devices"))
         return render_template(
             "devices.html",
             devices=db.get_device_metadata(conn),
             current_page="devices",
+        )
+
+    @app.get("/map")
+    def room_map():
+        """Render the canonical room-backed HVAC floor-plan overlay."""
+        return render_template("map.html", current_page="map")
+
+    @app.get("/presence")
+    @with_db_connection
+    def presence_table(conn):
+        """Render room presence with explicit unknown and stale states."""
+        return render_template(
+            "presence.html",
+            current_page="presence",
+            rooms=get_room_presence(conn),
+            stale_minutes=PRESENCE_STALE_SECONDS // 60,
         )
 
     @app.route("/kitchen")
@@ -580,6 +765,17 @@ def _register_room_routes(app):
     def hickory_dashboard(conn):
         """Hickory HVAC control dashboard."""
         return _render_room_dashboard_with_data(conn, "Hickory")
+
+    @app.get("/room/<int:room_id>")
+    @with_db_connection
+    def canonical_room_dashboard(conn, room_id: int):
+        """Render a stable-id room dashboard whose name may change."""
+        room = db.get_room(conn, room_id)
+        if room is None:
+            return "Unknown room", 404
+        return _render_room_dashboard_with_data(
+            conn, room.room_name or "Room", room_id=room_id
+        )
 
     return app
 

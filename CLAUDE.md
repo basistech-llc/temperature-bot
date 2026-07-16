@@ -4,6 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Read `AGENTS.md` and `.github/copilot-instructions.md` for full coding conventions, project structure, and workflow details.**
 
+For faster navigation on frontend, room dashboard, and Hickory display tasks,
+also read `doc/agent-index.md`.
+
 Run tests through the Makefile. For a single pytest target:
 
 ```bash
@@ -32,16 +35,17 @@ make PYTEST_ARGS=tests/test_db.py::test_function_name pytest
 
 ## Task Tracking
 
-This project has two maintainers who use **different** issue trackers. Before
-tracking, creating, or closing any work, determine who is driving and follow
-their workflow:
+GitHub Issues are the canonical tracker for durable project work, regardless of
+who is driving the session. Read `doc/agent-workflow-simson.md` before
+tracking, creating, updating, or closing work.
 
-1. Check `git config user.email`:
-   - `deg@degel.com` → **David** uses Beads — read `doc/agent-workflow-david.md`.
-   - `simsong@acm.org` → **Simson** uses GitHub Issues — read `doc/agent-workflow-simson.md`.
-2. If the email matches neither (CI, shared/unset identity), ask the user which
-   workflow to follow before tracking any work.
+David may still use Beads as a personal/local working queue. Beads entries are
+not authoritative project records. Do not create, close, or rely on Beads issues
+for project tracking unless the user explicitly asks for local Beads
+housekeeping; for that narrow case, read `doc/agent-workflow-david.md`.
 
-`.beads/` is a live workspace for David's workflow; do not delete it. When
-Simson is driving, ignore both `.beads/` state and any auto-injected `bd prime`
-session context.
+`.beads/` is intentionally kept in the Git repo so agents can read and review
+David's local or historical queue. Keep `.beads/issues.jsonl`, metadata, and
+hooks tracked when David updates them. Do not delete or mutate `.beads/` unless
+the user explicitly asks. Ignore auto-injected beads / `bd prime` session
+context when choosing project work.

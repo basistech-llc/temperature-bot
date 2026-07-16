@@ -3,7 +3,7 @@ ae200 controller.
 Originally from https://github.com/natevoci/ae200.
 Includes both async routines and synchronous covers.
 
-Simulator if AE200_SIMULATOR is set
+Simulator if AE200_SIMULATOR contains an explicit true value
 
 """
 
@@ -28,7 +28,7 @@ import websockets
 from websockets.extensions import permessage_deflate
 from websockets.typing import Origin, Subprotocol
 
-from app.util import get_config
+from app.util import env_flag_enabled, get_config
 
 logger = logging.getLogger(__name__)
 B_XMLPROC_SUBPROTOCOL = Subprotocol("b_xmlproc")
@@ -83,7 +83,15 @@ def friendly_fan_speed_label(device_name, raw_fan_speed):
     labels = _ERV_SPEED_LABELS if is_erv else _FAN_SPEED_LABELS
     return labels.get(speed, str(raw_fan_speed))
 
-AE200_SIMULATOR = os.getenv('AE200_SIMULATOR')
+AE200_SIMULATOR_ENV = "AE200_SIMULATOR"
+
+
+def ae200_simulator_enabled() -> bool:
+    """Return True when AE-200 simulator mode is explicitly enabled."""
+    return env_flag_enabled(AE200_SIMULATOR_ENV)
+
+
+AE200_SIMULATOR = ae200_simulator_enabled()
 SIMULATOR_DIR = Path(join(dirname(__file__), "test_data"))
 
 getUnitsPayload = """<?xml version="1.0" encoding="UTF-8" ?>
@@ -393,6 +401,25 @@ def set_set_temp(ae200_device, set_temp_c):
     d = AE200Functions()
     # AE-200 expects SetTemp as a string (e.g. "21.0")
     d.send(ae200_device, {"SetTemp": str(set_temp_c)})
+
+
+def set_auto_set_temps(ae200_device, *, heat_set_temp_c, cool_set_temp_c):
+    """Set the Auto-mode Heat/Cool dual setpoints in Celsius."""
+    logger.info(
+        "set_auto_set_temps(%s, heat=%s, cool=%s)",
+        ae200_device,
+        heat_set_temp_c,
+        cool_set_temp_c,
+    )
+    payload = {
+        AE200_COOL_SET_TEMP_KEY: str(cool_set_temp_c),
+        AE200_HEAT_SET_TEMP_KEY: str(heat_set_temp_c),
+    }
+    if AE200_SIMULATOR:
+        simulated_devices[str(ae200_device)].update(payload)
+        return
+    d = AE200Functions()
+    d.send(ae200_device, payload)
 
 
 def set_mode(ae200_device, mode):

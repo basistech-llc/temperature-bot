@@ -9,6 +9,7 @@ from unittest.mock import patch
 
 from app import db
 from app import rules_engine
+from app.constants import RESERVED_DEVICE_NAMES
 
 
 def _add_rule_test_erv(conn):
@@ -92,8 +93,9 @@ def test_run_all_rules_dry_run_does_not_mutate_database(
     pseudo_count = conn.execute(
         """
         SELECT COUNT(*) FROM devices
-        WHERE device_name IN ('rules_master', 'rules_engine')
-        """
+        WHERE device_name IN (?, ?)
+        """,
+        tuple(RESERVED_DEVICE_NAMES),
     ).fetchone()[0]
     assert pseudo_count == 0
 
@@ -118,8 +120,9 @@ def test_run_all_rules_dry_run_does_not_mutate_database(
         conn.execute(
             """
             SELECT COUNT(*) FROM devices
-            WHERE device_name IN ('rules_master', 'rules_engine')
-            """
+            WHERE device_name IN (?, ?)
+            """,
+            tuple(RESERVED_DEVICE_NAMES),
         ).fetchone()[0]
         == 0
     )

@@ -4,7 +4,8 @@ This module is the home for structured application data that crosses module
 boundaries:
 
 - Request models are populated by ``flask_pydantic`` route validation and are
-  passed into ``rules_engine`` command functions.
+  passed into ``rules_engine`` command functions. Control requests reject
+  unknown fields so client typos cannot silently change hardware commands.
 - Response models validate data assembled from SQLite rows or external
   services before routes/templates receive JSON-ready dictionaries.
 
@@ -14,8 +15,9 @@ boundaries instead of ``typing.cast`` so the data is actually validated before i
 becomes a mapping.
 """
 
+from enum import StrEnum
 from typing import Annotated, Any, Dict, Iterable, Literal
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from . import ae200
 
@@ -105,6 +107,16 @@ def _rule_name(
     return value
 
 
+class ApplicationMetadata(BaseModel):
+    """Runtime metadata displayed in the site footer."""
+
+    app_version: str = Field(description="Application version string.")
+    deployment_date: str = Field(description="Local mtime of the app directory.")
+    deployment_year: int = Field(description="Year from the deployment date.")
+    git_branch_url: str = Field(description="GitHub URL for the deployed branch.")
+    git_commit: str = Field(description="Git commit for the deployed checkout.")
+
+
 def _optional_stripped(value):
     if value is None:
         return None
@@ -144,6 +156,8 @@ class RoomConfig(BaseModel):
     fans: list[str] = Field(default_factory=list, description="AE-200 fan names.")
     sensors: list[str] = Field(default_factory=list, description="Hubitat sensor names.")
     tv_control: bool = Field(default=False, description="Whether to render TV controls.")
+    tv_up_label: str | None = Field(default=None, description="Hubitat TV-up label.")
+    tv_down_label: str | None = Field(default=None, description="Hubitat TV-down label.")
     dimmer_id: str | None = Field(default=None, description="Hubitat dimmer device id.")
     wall_inner_id: str | None = Field(default=None, description="Inner wall light device id.")
     wall_outer_id: str | None = Field(default=None, description="Outer wall light device id.")
@@ -172,7 +186,60 @@ class Room(BaseModel):
 
     room_id: int | None = None
     room_name: str | None = Field(default=None, min_length=1)
+    fcu_device_id: int | None = Field(
+        default=None,
+        description="FCU that owns this room, when assigned.",
+    )
     map: RoomMap | None = None
+
+
+class RoomCreate(BaseModel):
+    """Client-settable fields for creating a room."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    room_name: str = Field(min_length=1)
+    map: RoomMap | None = None
+
+    @field_validator("room_name")
+    @classmethod
+    def reserve_unassigned(cls, value: str) -> str:
+        """Keep the virtual Unassigned group distinct from persisted rooms."""
+        if value.strip().casefold() == "unassigned":
+            raise ValueError("Unassigned is reserved for devices without a room")
+        return value
+
+
+class RoomPatch(BaseModel):
+    """Client-settable fields for updating a room."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    room_name: str | None = Field(default=None, min_length=1)
+    map: RoomMap | None = None
+
+    @field_validator("room_name")
+    @classmethod
+    def reserve_unassigned(cls, value: str | None) -> str | None:
+        """Keep the virtual Unassigned group distinct from persisted rooms."""
+        if value is not None and value.strip().casefold() == "unassigned":
+            raise ValueError("Unassigned is reserved for devices without a room")
+        return value
+
+
+class RoomListResponse(BaseModel):
+    """Alphabetized persisted room topology returned by the API."""
+
+    rooms: list[Room]
+
+
+class RoomTopologyReconciliation(BaseModel):
+    """Summary of an idempotent FCU-room topology reconciliation."""
+
+    fcu_count: int
+    rooms_created: int
+    rooms_claimed: int
+    assignments_changed: int
 
 
 class DatabaseColumn(BaseModel):
@@ -215,7 +282,36 @@ class TimeSeries(BaseModel):
 
     device_id: int = Field(description="Local device id from the devices table.")
     name: str = Field(description="Display name for the chart series.")
-    data: list[tuple[int, float]] = Field(description="Ordered (unix time, value) samples.")
+    data: list[tuple[int, float | None]] = Field(
+        description="Ordered (unix time, value) samples; null preserves a data gap."
+    )
+
+
+class TemperatureSeriesResponse(BaseModel):
+    """Temperature chart data and availability outside the requested window."""
+
+    series: list[TimeSeries] = Field(default_factory=list)
+    has_earlier_data: bool = False
+    has_later_data: bool = False
+
+
+class FcuStateSample(BaseModel):
+    """One recorded FCU operating-state sample on the history timeline."""
+
+    timestamp: int
+    mode: str | None = None
+    drive: str | None = None
+    fan_speed: str | None = None
+
+
+class FcuHistoryResponse(BaseModel):
+    """Combined calculated-room, inlet-temperature, and FCU-state history."""
+
+    fcu_device_id: int
+    room_id: int
+    room_name: str
+    temperature_series: list[TimeSeries] = Field(default_factory=list)
+    states: list[FcuStateSample] = Field(default_factory=list)
 
 
 class ChangelogRow(BaseModel):
@@ -252,7 +348,11 @@ class WeatherStation(BaseModel):
 
 
 class WeatherData(BaseModel):
-    """Weather payload returned by the app weather endpoint."""
+    """Application-assembled weather payload returned by the weather endpoint.
+
+    The weather service reduces upstream responses to this internal shape before
+    validation, so rejecting unexpected top-level fields catches contract drift.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
@@ -281,7 +381,13 @@ class AqiWeatherResponse(BaseModel):
     weather: WeatherData | Dict[str, Any]
 
 
-class SpeedControl(BaseModel):
+class ControlRequest(BaseModel):
+    """Strict base for request bodies that control devices or configuration."""
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class SpeedControl(ControlRequest):
     """Request body for changing an AE-200 fan speed.
 
     Used by ``POST /api/v1/set_fan_speed`` and by rules that command fan speed
@@ -298,7 +404,7 @@ class SpeedControl(BaseModel):
         return _rule_code(value, ae200.FAN_SPEED_NAMES, "fan_speed")
 
 
-class DriveControl(BaseModel):
+class DriveControl(ControlRequest):
     """Request body for changing an AE-200 drive state.
 
     Used by ``POST /api/v1/set_drive`` and by rules that command drive state
@@ -317,7 +423,7 @@ class DriveControl(BaseModel):
         return _rule_code(value, ae200.DRIVE_NAMES, "drive")
 
 
-class ModeControl(BaseModel):
+class ModeControl(ControlRequest):
     """Request body for changing an AE-200 operation mode."""
 
     device_id: int = Field(description="Local device id from the devices table.")
@@ -326,14 +432,14 @@ class ModeControl(BaseModel):
     )
 
 
-class NoteControl(BaseModel):
+class NoteControl(ControlRequest):
     """Request body for updating the operator note attached to a device."""
 
     device_id: int = Field(description="Local device id from the devices table.")
     notes: str | None = Field(description="Replacement note text, or null to clear it.")
 
 
-class DeviceMetadataControl(BaseModel):
+class DeviceMetadataControl(ControlRequest):
     """Editable metadata stored on the devices table."""
 
     device_id: int = Field(description="Local device id from the devices table.")
@@ -365,7 +471,7 @@ class DeviceMetadataControl(BaseModel):
         return _optional_upper(value)
 
 
-class SetTempControl(BaseModel):
+class SetTempControl(ControlRequest):
     """Request body for changing an AE-200 set temperature.
 
     ``set_temp_c`` is always Celsius. Browser code can display Fahrenheit, but
@@ -376,7 +482,21 @@ class SetTempControl(BaseModel):
     set_temp_c: float = Field(description="Requested set point in degrees Celsius.")
 
 
-class SetRangeControl(BaseModel):
+class AutoSetTempControl(ControlRequest):
+    """Request body for changing AE-200 Auto Heat/Cool setpoints."""
+
+    device_id: int = Field(description="Local device id from the devices table.")
+    heat_set_temp_c: float = Field(description="Requested Auto Heat set point in Celsius.")
+    cool_set_temp_c: float = Field(description="Requested Auto Cool set point in Celsius.")
+
+    @model_validator(mode="after")
+    def validate_range(self):
+        if self.heat_set_temp_c >= self.cool_set_temp_c:
+            raise ValueError("heat_set_temp_c must be lower than cool_set_temp_c")
+        return self
+
+
+class SetRangeControl(ControlRequest):
     """Request body for changing an FCU temperature set range."""
 
     device_id: int = Field(description="Local device id from the devices table.")
@@ -394,14 +514,14 @@ class FcuSetRange(BaseModel):
     updated_at: int | None = None
 
 
-class DeviceRoomControl(BaseModel):
+class DeviceRoomControl(ControlRequest):
     """Request body for assigning a device to a room."""
 
     device_id: int = Field(description="Local device id from the devices table.")
     room_id: int | None = Field(description="Room id, or null to clear assignment.")
 
 
-class FcuTempSourceControl(BaseModel):
+class FcuTempSourceControl(ControlRequest):
     """Request body for one FCU temperature source multiplier."""
 
     fcu_device_id: int = Field(description="FCU device id from the devices table.")
@@ -483,6 +603,10 @@ class DeviceStatus(BaseModel):
         default=None,
         description="Weighted calculated room temperature in Celsius tenths.",
     )
+    calculated_humidity: float | None = Field(
+        default=None,
+        description="Equal-weight calculated room humidity percent.",
+    )
     temp_source_stale_seconds: int | None = Field(
         default=None,
         description="Age cutoff for excluding stale calculated-temperature sources.",
@@ -555,6 +679,99 @@ class DeviceStatus(BaseModel):
         default=None,
         description="System-wide minimum FCU set-range width in degrees Celsius.",
     )
+
+
+class RoomMatrixGroup(BaseModel):
+    """One room section in the main-page sensor matrix."""
+
+    room_id: int | None = None
+    room_name: str
+    fcu_device_id: int | None = None
+    calculated_temp10x: int | None = None
+    calculated_humidity: float | None = None
+    can_delete: bool = False
+    devices: list[DeviceStatus] = Field(default_factory=list)
+
+
+class RoomDashboardSensorAttributes(BaseModel):
+    """Fresh canonical metrics rendered on a room sensor tile."""
+
+    temperature: float | None = None
+    humidity: int | None = None
+
+
+class RoomDashboardSensor(BaseModel):
+    """One assigned sensor rendered by a canonical room dashboard."""
+
+    id: int
+    name: str
+    display_name: str
+    offline: bool = False
+    attributes: RoomDashboardSensorAttributes
+
+
+class PresenceState(StrEnum):
+    """Room presence result, including absence of trustworthy observations."""
+
+    PRESENT = "present"
+    ABSENT = "absent"
+    STALE = "stale"
+    UNKNOWN = "unknown"
+
+
+class PresenceEvent(BaseModel):
+    """One stored observation attributed to the device's room at that time."""
+
+    presence_event_id: int
+    device_id: int
+    device_name: str
+    room_id: int | None = None
+    room_name: str | None = None
+    observed_at: int
+    present: bool
+
+
+class RoomPresence(BaseModel):
+    """Current presence result for one canonical room."""
+
+    room_id: int
+    room_name: str
+    state: PresenceState
+    observed_at: int | None = None
+    source_device_ids: list[int] = Field(default_factory=list)
+
+
+class RoomPresenceResponse(BaseModel):
+    """Current presence for all canonical rooms."""
+
+    stale_after_seconds: int
+    rooms: list[RoomPresence]
+
+
+class RoomSwitchState(BaseModel):
+    """Current state of one room switch."""
+
+    switch: Literal["on", "off"]
+
+
+class RoomDimmerState(RoomSwitchState):
+    """Current level and switch state of one room dimmer."""
+
+    level: int = Field(ge=0, le=100)
+
+
+class RoomControlStatus(BaseModel):
+    """Available actuator states for a room dashboard."""
+
+    dimmer: RoomDimmerState | None = None
+    wall_inner: RoomSwitchState | None = None
+    wall_outer: RoomSwitchState | None = None
+
+
+class PresenceHistoryResponse(BaseModel):
+    """Presence observations retained with their room-at-observation identity."""
+
+    events: list[PresenceEvent]
 
 
 class TableUpdateSummary(BaseModel):

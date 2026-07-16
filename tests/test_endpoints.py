@@ -14,12 +14,10 @@ from conftest import flask_test_client, skip_on_github  # noqa: F401  # pylint: 
 from helpers.data_factories import DeviceTestData
 from helpers.mock_helpers import MockHelper
 
-from app import ae200
-from app import db
-from app import rules_engine
-from app.constants import __version__
+from app import ae200, db, rules_engine
+from app.constants import RULES_MASTER_DEVICE_NAME
+from app.version import __version__, git_sha
 from app.models import DriveControl, SpeedControl
-
 logger = logging.getLogger(__name__)
 
 
@@ -30,7 +28,7 @@ def test_get_version(flask_test_client):  # noqa: F811
 
     response = flask_test_client.get("/api/v1/version")
     assert response.status_code == 200
-    assert response.json == {"version": __version__}
+    assert response.json == {"version": __version__, "sha": git_sha()}
 
 
 def test_status_endpoint(flask_test_client):  # noqa: F811
@@ -429,9 +427,8 @@ def test_set_fan_speed_endpoint_reports_ae200_failure(
     )
 
     assert response.status_code == 502
-    assert response.json == {
-        "error": "AE-200 request failed: timed out during opening handshake"
-    }
+    assert response.json == {"error": "AE-200 request failed"}
+    assert "opening handshake" not in response.get_data(as_text=True)
 
 
 def _link_device_to_unit(conn, name):
@@ -931,7 +928,8 @@ def test_debug_ae200_devices_endpoint_error(mock_get_devices, flask_test_client)
     response = flask_test_client.get("/api/v1/debug/ae200_devices")
     assert response.status_code == 502
     response_json = response.json
-    assert response_json == {"error": "AE-200 request failed: AE200 connection error"}
+    assert response_json == {"error": "AE-200 request failed"}
+    assert "connection error" not in response.get_data(as_text=True)
 
 
 def test_disable_rules_api_enable_and_disable(
@@ -979,7 +977,8 @@ def test_rules_master_api_default_and_toggle(
     # Verify underlying RULES_MASTER device row has a future disabled_until
     cursor = conn.cursor()
     cursor.execute(
-        "SELECT disabled_until FROM devices WHERE device_name = ?", ("rules_master",)
+        "SELECT disabled_until FROM devices WHERE device_name = ?",
+        (RULES_MASTER_DEVICE_NAME,),
     )
     row = cursor.fetchone()
     assert row is not None
@@ -993,7 +992,8 @@ def test_rules_master_api_default_and_toggle(
     assert db.get_rules_master_enabled(conn) is True
 
     cursor.execute(
-        "SELECT disabled_until FROM devices WHERE device_name = ?", ("rules_master",)
+        "SELECT disabled_until FROM devices WHERE device_name = ?",
+        (RULES_MASTER_DEVICE_NAME,),
     )
     row = cursor.fetchone()
     assert row is not None

@@ -30,6 +30,9 @@ async function apiCall(endpoint, body, errorMessage) {
             body: JSON.stringify(body)
         });
         const result = await response.json();
+        if (!response.ok) {
+            throw new Error(result.error || `Request failed (${response.status})`);
+        }
         if (DEBUG) {
             console.log(`${endpoint} result:`, result);
         }
@@ -372,22 +375,44 @@ function updateSensorTemperatures() {
     });
 }
 
-/**
- * Refresh device status from API.
- */
-function refreshStatus() {
-    fetch('/api/v1/status')
-        .then(response => response.json())
-        .then(data => {
+/** Wrap an async operation so calls made while it is running are skipped. */
+function createSingleFlight(operation) {
+    let inFlight = false;
+    return async function runSingleFlight() {
+        if (inFlight) {
+            return false;
+        }
+        inFlight = true;
+        try {
+            return await operation();
+        } finally {
+            inFlight = false;
+        }
+    };
+}
+
+/** Create a status refresher that permits only one request at a time. */
+function createStatusRefresher(request = fetch, update = updateDeviceStatus) {
+    return createSingleFlight(async () => {
+        try {
+            const response = await request('/api/v1/status');
+            if (!response.ok) {
+                throw new Error(`Status request failed (${response.status})`);
+            }
+            const data = await response.json();
             if (DEBUG) {
                 console.log('Status data received:', data);
             }
-            updateDeviceStatus(data.devices);
-        })
-        .catch(error => {
+            update(data.devices);
+            return true;
+        } catch (error) {
             console.error('Failed to refresh status:', error);
-        });
+            return false;
+        }
+    });
 }
+
+const refreshStatus = createStatusRefresher();
 
 /**
  * Initialize sensor temperatures from template data.
@@ -436,13 +461,24 @@ function debounce(fn, delay) {
     };
 }
 
+/** Build a configured-room control endpoint from the dashboard contract. */
+function roomControlEndpoint(action, roomKeyOverride = null) {
+    const wrapper = typeof document === 'undefined'
+        ? null
+        : document.getElementById('room-scale-wrap');
+    const roomKey = roomKeyOverride === null
+        ? (wrapper ? wrapper.dataset.roomControlKey : '')
+        : roomKeyOverride;
+    return `/api/v1/room/${encodeURIComponent(roomKey)}/${action}`;
+}
+
 /**
  * Set the dimmer level via API.
  * @param {number} level - 0-100
  */
 function setDimmerLevel(level) {
     apiCall(
-        '/api/v1/hickory/dimmer',
+        roomControlEndpoint('dimmer'),
         { level },
         'Error setting dimmer.'
     );
@@ -451,13 +487,29 @@ function setDimmerLevel(level) {
 /**
  * Fetch room control status and update UI.
  */
-function refreshRoomStatus() {
-    fetch('/api/v1/hickory/room_status')
-        .then(response => response.json())
-        .then(data => {
+function requestRoomStatus(endpoint, request = fetch) {
+    return request(endpoint).then(response => {
+        if (!response.ok) {
+            throw new Error(`Room status request failed: ${response.status}`);
+        }
+        return response.json();
+    });
+}
+
+function createRoomStatusRefresher(request = fetch, documentRef) {
+    const pageDocument = documentRef ?? document;
+    return createSingleFlight(async () => {
+        if (!pageDocument.querySelector('.room-controls-card')) {
+            return false;
+        }
+        try {
+            const data = await requestRoomStatus(
+                roomControlEndpoint('room_status'),
+                request,
+            );
             if (data.dimmer) {
-                const slider = document.getElementById('dimmer-slider');
-                const valueEl = document.getElementById('dimmer-value');
+                const slider = pageDocument.getElementById('dimmer-slider');
+                const valueEl = pageDocument.getElementById('dimmer-value');
                 if (slider && !slider.matches(':active')) {
                     slider.value = data.dimmer.level;
                 }
@@ -471,13 +523,19 @@ function refreshRoomStatus() {
             if (data.wall_outer) {
                 updateWallButton('outer', data.wall_outer.switch);
             }
-        })
-        .catch(error => {
+            return true;
+        } catch (error) {
             if (DEBUG) {
                 console.error('Failed to refresh room status:', error);
             }
-        });
+            return false;
+        }
+    });
 }
+
+const refreshRoomStatus = typeof document === 'undefined'
+    ? async () => false
+    : createRoomStatusRefresher();
 
 /**
  * Set up dimmer slider interaction.
@@ -526,7 +584,7 @@ function handleWallButton(button) {
 
     button.disabled = true;
     apiCall(
-        '/api/v1/hickory/wall_light',
+        roomControlEndpoint('wall_light'),
         { light, state: newState },
         'Error toggling wall light.'
     ).then(() => {
@@ -547,7 +605,7 @@ function handleTvButton(button) {
     buttons.forEach(b => { b.disabled = true; });
 
     apiCall(
-        '/api/v1/hickory/tv',
+        roomControlEndpoint('tv'),
         { direction },
         'Error controlling TV.'
     ).then(() => {
@@ -722,5 +780,12 @@ if (typeof window !== 'undefined') {
 
 // Node.js export for testing.
 if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { computeFitScale };
+    module.exports = {
+        computeFitScale,
+        createRoomStatusRefresher,
+        createStatusRefresher,
+        refreshRoomStatus,
+        requestRoomStatus,
+        roomControlEndpoint,
+    };
 }

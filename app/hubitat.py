@@ -3,18 +3,16 @@ Hubitat implementation
 """
 
 import json
-import os
 from pathlib import Path
 
 import requests
-from app.util import get_config,get_secret
+from app.util import env_flag_enabled, get_config, get_secret
 from app.paths import TIMEOUT_SECONDS
 
 OFFLINE = 'OFFLINE - '
 HUBITAT_SIMULATOR_ENV = "HUBITAT_SIMULATOR"
 SIMULATOR_DIR = Path(__file__).resolve().parent / "test_data"
 SIMULATOR_DEVICES_FILE = SIMULATOR_DIR / "hubitat_get_devices.json"
-TRUE_ENV_VALUES = frozenset({"1", "true", "yes", "on"})
 
 HUBITAT_GET_ALL_DEVICES_FULL_DETAILS = "http://{host}/apps/api/{appId}/devices/all?access_token={access_token}"
 HUBITAT_GET_DEVICE_INFO = "http://{host}/apps/api/{appId}/devices/{device_id}?access_token={access_token}"
@@ -33,7 +31,7 @@ HUBITAT_SEND_DEVICE_COMMAND="http://{host}/apps/api/{appId}/devices/{device_id}/
 
 def hubitat_simulator_enabled() -> bool:
     """Return True when Hubitat simulator mode is explicitly enabled."""
-    return os.getenv(HUBITAT_SIMULATOR_ENV, "").strip().lower() in TRUE_ENV_VALUES
+    return env_flag_enabled(HUBITAT_SIMULATOR_ENV)
 
 
 def _simulated_devices():
@@ -253,14 +251,19 @@ def _find_device_by_label(label):
     return target
 
 
-def control_hickory_tv(direction):
-    """Activate the TV Up or TV Down component switch.
+def control_room_tv(direction, *, up_label, down_label):
+    """Activate a configured room's TV up or down component switch.
 
     direction: 'up' or 'down'
     """
-    label = "TV Up" if direction == "up" else "TV Down"
+    label = up_label if direction == "up" else down_label
     target = _find_device_by_label(label)
     return send_device_command(target['id'], "on")
+
+
+def control_hickory_tv(direction):
+    """Backward-compatible Hickory TV helper."""
+    return control_room_tv(direction, up_label="TV Up", down_label="TV Down")
 
 if __name__=="__main__":
     """A little test program"""

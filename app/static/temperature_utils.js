@@ -57,7 +57,8 @@ function fahrenheitToCelsius(fahrenheit) {
 function formatTemperature(tempC, includeUnit = true) {
   const temp = USE_FAHRENHEIT ? celsiusToFahrenheit(tempC) : tempC;
   const unit = getTemperatureUnit();
-  return includeUnit ? `${temp.toFixed(1)}${unit}` : temp.toFixed(1);
+  const formatted = USE_FAHRENHEIT ? temp.toFixed(0) : temp.toFixed(1);
+  return includeUnit ? `${formatted}${unit}` : formatted;
 }
 
 /**

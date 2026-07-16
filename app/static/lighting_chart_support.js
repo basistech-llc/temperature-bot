@@ -121,6 +121,9 @@ function updateLightingChart() {
         let output = `${formatTime(ts)}<br>`;
         for (const p of params) {
           const val = p.value[1];
+          if (typeof val !== "number" || !Number.isFinite(val)) {
+            continue;
+          }
           output += `${p.marker} ${p.seriesName}: ${val.toFixed(1)} lx<br>`;
         }
         return output;
@@ -279,4 +282,3 @@ document.addEventListener("DOMContentLoaded", async function () {
 
   reloadLightingData();
 });
-

@@ -10,6 +10,17 @@ body {
   margin-bottom: 1em;
 }
 
+.footer {
+  color: #666;
+  font-size: 0.75rem;
+  margin-top: 2rem;
+  padding: 0.75rem 0;
+}
+
+.footer p {
+  margin: 0;
+}
+
 .top-banner {
   position: fixed;
   top: 0;
@@ -184,6 +195,18 @@ body {
     outline-offset: 1px;
 }
 
+.settemp-thermostat.settemp-disabled .settemp-display {
+    color: #94a3b8;
+}
+
+.settemp-thermostat .settemp-btn:disabled,
+.settemp-thermostat .settemp-btn:disabled:hover,
+.settemp-thermostat .settemp-btn:disabled:active {
+    color: #cbd5e1;
+    background: transparent;
+    cursor: not-allowed;
+}
+
 /* main grid */
 
 #main-grid {
@@ -246,6 +269,14 @@ button {
 .column-temp-range,
 .cell-temp-range {
     min-width: 210px;
+}
+
+.column-computed-room,
+.column-fcu-set,
+.column-room-humidity,
+.cell-room-humidity {
+    min-width: 3.5em;
+    text-align: center;
 }
 
 .column-mode,
@@ -333,6 +364,16 @@ button {
     text-align: center;
 }
 
+.data-table tbody tr.device-row td.cell-temp.cell-temp-link.cell-fcu-temp,
+.data-table tbody tr.device-row td.cell-temp.cell-temp-link.cell-room-temp {
+    text-align: center;
+}
+
+.data-table thead th.column-room-humidity,
+.data-table tbody td.cell-room-humidity:not(.cell-unit):not(.cell-notes):not(.cell-conditions):not(.cell-disable-for) {
+    text-align: center;
+}
+
 .data-table tbody td.cell-disable-for {
     text-align: center;
 }
@@ -342,23 +383,28 @@ button {
 }
 
 .data-table tbody td.cell-temp-set {
-    text-align: left;
+    text-align: center;
 }
 
 .setrange-widget {
-    width: 190px;
-    display: flex;
-    flex-direction: column;
-    gap: 0.05rem;
+    --setrange-label-width: 3.45em;
+    --setrange-column-gap: 0.45rem;
+    width: 210px;
+    display: grid;
+    grid-template-columns: var(--setrange-label-width) minmax(72px, 1fr) var(--setrange-label-width);
+    column-gap: var(--setrange-column-gap);
+    align-items: center;
+    margin: 0 auto;
     padding: 0;
 }
 
 .setrange-track {
+    grid-column: 2;
+    grid-row: 1;
     position: relative;
     width: 100%;
-    height: 16px;
+    height: 24px;
     touch-action: none;
-    cursor: pointer;
 }
 
 .setrange-track::before {
@@ -366,24 +412,21 @@ button {
     position: absolute;
     left: 0;
     right: 0;
-    top: 6px;
+    top: 50%;
     height: 4px;
     border-radius: 999px;
     background: #d7dde3;
+    transform: translateY(-50%);
 }
 
 .setrange-fill {
     position: absolute;
-    top: 6px;
+    top: 50%;
     height: 4px;
     border-radius: 999px;
     background: #2f855a;
-    cursor: grab;
-}
-
-.setrange-fill.selected {
-    outline: 2px solid #2f855a;
-    outline-offset: 4px;
+    pointer-events: none;
+    transform: translateY(-50%);
 }
 
 .setrange-handle {
@@ -400,26 +443,41 @@ button {
 }
 
 .setrange-handle.selected,
-.setrange-handle:focus-visible,
-.setrange-fill:focus-visible {
+.setrange-handle:focus-visible {
     outline: 2px solid #3b82f6;
     outline-offset: 2px;
 }
 
 .setrange-values {
-    display: flex;
-    justify-content: space-between;
+    grid-column: 1 / -1;
+    grid-row: 1;
+    display: grid;
+    grid-template-columns: var(--setrange-label-width) minmax(72px, 1fr) var(--setrange-label-width);
+    column-gap: var(--setrange-column-gap);
     align-items: center;
-    gap: 0.2rem;
     font-size: 0.78rem;
     font-weight: 600;
-    line-height: 0.95;
+    line-height: 1;
     color: #1a202c;
+    pointer-events: none;
 }
 
 .setrange-end-label {
-    min-width: 3.2em;
+    min-width: 0;
     text-align: center;
+    white-space: nowrap;
+}
+
+.setrange-end-label[data-role="low-label"] {
+    grid-column: 1;
+}
+
+.setrange-end-label[data-role="high-label"] {
+    grid-column: 3;
+}
+
+.setrange-separator {
+    display: none;
 }
 
 .autosettemp-widget {
@@ -427,6 +485,7 @@ button {
     display: flex;
     flex-direction: column;
     gap: 0.05rem;
+    margin: 0 auto;
     padding: 0;
 }
 
@@ -434,6 +493,7 @@ button {
     position: relative;
     width: 100%;
     height: 16px;
+    touch-action: none;
 }
 
 .autosettemp-track::before {
@@ -460,10 +520,18 @@ button {
     top: 50%;
     width: 14px;
     height: 14px;
+    padding: 0;
     border: 2px solid #1f2937;
     border-radius: 50%;
     background: #fff;
+    cursor: ew-resize;
     transform: translate(-50%, -50%);
+}
+
+.autosettemp-handle.selected,
+.autosettemp-handle:focus-visible {
+    outline: 2px solid #3b82f6;
+    outline-offset: 2px;
 }
 
 .autosettemp-values {
@@ -491,6 +559,18 @@ button {
 
 .autosettemp-end-label {
     text-align: center;
+}
+
+.settemp-thermostat .settemp-display[data-update-state="pending"],
+.autosettemp-widget[data-update-state="pending"] .autosettemp-end-label,
+.setrange-widget[data-update-state="pending"] .setrange-end-label {
+    color: #2563eb;
+}
+
+.settemp-thermostat .settemp-display[data-update-state="failed"],
+.autosettemp-widget[data-update-state="failed"] .autosettemp-end-label,
+.setrange-widget[data-update-state="failed"] .setrange-end-label {
+    color: #c62828;
 }
 
 /* All data tables match the widest table's width via grid on the form */
@@ -583,12 +663,35 @@ td.cell-notes {
 
 .rules-disabled-superscript {
     color: #c62828;
-    font-size: 0.7em;
+    display: inline-flex;
+    align-items: baseline;
+    gap: 2px;
+    font-size: 0.65em;
     vertical-align: super;
     margin-left: 4px;
     cursor: default;
     font-weight: 500;
     position: relative;
+    max-width: 100%;
+    white-space: nowrap;
+}
+
+.rules-disabled-clear {
+    appearance: none;
+    border: none;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+    font: inherit;
+    font-weight: 700;
+    line-height: 1;
+    margin: 0;
+    padding: 0;
+}
+
+.rules-disabled-clear:hover,
+.rules-disabled-clear:focus-visible {
+    text-decoration: underline;
 }
 
 .rules-disabled-superscript:hover::after {
@@ -747,7 +850,8 @@ table.rules-table th  {
     cursor: pointer;
 }
 .cell-temp-link:hover {
-    background-color: rgba(192, 57, 43, 0.08);
+    text-decoration: underline;
+    text-underline-offset: 0.12em;
 }
 .cell-illuminance-link:hover {
     background-color: rgba(154, 104, 0, 0.08);
@@ -758,6 +862,16 @@ table.rules-table th  {
 
 .device-name-context {
     cursor: context-menu;
+}
+
+.fcu-temp-sources-trigger {
+    cursor: pointer;
+}
+
+.fcu-temp-sources-trigger:hover,
+.fcu-temp-sources-trigger:focus {
+    text-decoration: underline;
+    text-underline-offset: 0.12em;
 }
 
 .device-rename-popup {
@@ -809,6 +923,11 @@ table.rules-table th  {
     justify-content: flex-end;
 }
 
+.device-rename-message {
+    min-height: 1.2rem;
+    color: #b42318;
+}
+
 .fcu-temp-sources-popup {
     position: fixed;
     inset: 0;
@@ -846,6 +965,26 @@ table.rules-table th  {
     white-space: nowrap;
 }
 
+.fcu-room-editor-row {
+    display: grid;
+    grid-template-columns: 9rem minmax(0, 1fr);
+    align-items: center;
+    gap: 0.5rem;
+    margin: 0.65rem 0 0.45rem;
+}
+
+.fcu-room-editor-row label {
+    font-size: 0.9rem;
+    font-weight: 600;
+}
+
+.fcu-room-editor-row input {
+    box-sizing: border-box;
+    min-width: 0;
+    width: 100%;
+    padding: 0.28rem 0.35rem;
+}
+
 .fcu-temp-sources-actions {
     display: flex;
     flex: 0 0 auto;
@@ -881,13 +1020,221 @@ table.rules-table th  {
     padding: 0.1rem 0.25rem;
 }
 
+.room-matrix tbody .room-separator td {
+    height: 2.1rem;
+    padding: 0.15rem 0.7rem;
+    border-top: 0;
+    background: linear-gradient(to bottom, #f7f8fa 46%, #3f4d5a 46%, #3f4d5a 56%, #f7f8fa 56%);
+    text-align: left;
+}
+
+.room-name {
+    position: relative;
+    z-index: 1;
+    display: inline-block;
+    float: left;
+    width: auto;
+    max-width: min(24rem, 70vw);
+    transform: none;
+    padding: 0.15rem 0.7rem;
+    border: 1px solid #3f4d5a;
+    border-radius: 999px;
+    background: #fff;
+    color: #24313d;
+    font-weight: 700;
+    cursor: context-menu;
+}
+
+.room-name-unassigned {
+    color: #666;
+    cursor: default;
+}
+
+.room-summary {
+    position: relative;
+    z-index: 1;
+    display: inline-flex;
+    float: left;
+    gap: 0.3rem;
+    align-items: baseline;
+    margin: 0.18rem 0 0 0.55rem;
+    padding: 0.05rem 0.45rem;
+    border-radius: 999px;
+    background: #f7f8fa;
+    color: #24313d;
+    font-size: 0.82rem;
+    white-space: nowrap;
+}
+
+.room-summary-label {
+    color: #66727c;
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.room-summary-temp,
+.room-summary-humidity {
+    font-weight: 700;
+}
+
+.room-drop-hint {
+    float: right;
+    margin-top: 0.55rem;
+    padding: 0 0.25rem;
+    background: #f7f8fa;
+    color: #7a858f;
+    font-size: 0.76rem;
+    opacity: 0;
+}
+
+.room-separator.room-drop-target td,
+.room-drag-placeholder td {
+    background: #e6f3ff;
+}
+
+.room-separator.room-drop-target .room-drop-hint {
+    opacity: 1;
+}
+
+.room-drag-handle {
+    display: inline-grid;
+    float: left;
+    width: 1.55rem;
+    height: 1.65rem;
+    margin: -0.15rem 0.4rem -0.15rem -0.4rem;
+    padding: 0;
+    place-items: center;
+    border: 0;
+    background: transparent;
+    color: #6f7b85;
+    cursor: grab;
+    touch-action: none;
+    transform: none;
+}
+
+.room-drag-handle:hover,
+.room-drag-handle:focus-visible {
+    background: #e6ebef;
+    color: #24313d;
+    transform: none;
+}
+
+.room-drag-handle:active {
+    cursor: grabbing;
+}
+
+.room-drag-grip {
+    width: 0.85rem;
+    height: 0.75rem;
+    background: repeating-linear-gradient(
+        to bottom,
+        currentColor 0,
+        currentColor 2px,
+        transparent 2px,
+        transparent 5px
+    );
+}
+
+.room-sensor-row.room-dragging {
+    opacity: 0;
+}
+
+.room-sensor-row.room-dragging-lifted {
+    display: none;
+}
+
+.room-drag-placeholder td {
+    box-sizing: border-box;
+    padding: 0;
+    border: 2px dashed #4c8fbd;
+}
+
+.room-row-drag-image {
+    position: fixed;
+    z-index: 1600;
+    margin: 0;
+    pointer-events: none;
+    opacity: 0.92;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+}
+
+.room-rename-dialog {
+    position: fixed;
+    inset: 0;
+    z-index: 1400;
+    display: grid;
+    place-items: center;
+    padding: 1rem;
+    background: rgba(0, 0, 0, 0.32);
+}
+
+.room-rename-card {
+    display: grid;
+    gap: 0.65rem;
+    width: min(24rem, 100%);
+    padding: 1rem;
+    border-radius: 6px;
+    background: #fff;
+    box-shadow: 0 12px 36px rgba(0, 0, 0, 0.28);
+}
+
+.room-rename-card h3 {
+    margin: 0;
+}
+
+.room-rename-card input {
+    box-sizing: border-box;
+    width: 100%;
+    padding: 0.45rem;
+}
+
+.room-rename-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.45rem;
+}
+
+.room-delete-choice {
+    margin-right: auto;
+    color: #b42318;
+}
+
+.room-matrix-actions {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 0.75rem;
+}
+
+.room-rename-message,
+.room-matrix-message.error {
+    color: #b42318;
+}
+
+.room-matrix-message {
+    position: fixed;
+    right: 1rem;
+    bottom: 1rem;
+    z-index: 1500;
+    max-width: min(28rem, calc(100vw - 2rem));
+    padding: 0.7rem 0.9rem;
+    border-radius: 5px;
+    background: #fff;
+    box-shadow: 0 5px 24px rgba(0, 0, 0, 0.25);
+}
+
 /****************************************************************/
 
 /* optional: avoid a hard fixed width on the header */
 .column-unit {
     white-space: normal;
-    min-width: 120px;
+    min-width: 150px;
     word-break: break-word;
+}
+
+.column-room,
+.cell-room {
+    min-width: 8rem;
 }
 
 /* Humidity column min width */
@@ -919,8 +1266,12 @@ td.cell-speed-auto {
 }
 
 .cell-unit {
-    white-space: nowrap;
+    white-space: normal;
     vertical-align: top;
+}
+
+.device-name-context {
+    white-space: nowrap;
 }
 
 .data-table th {
@@ -944,7 +1295,7 @@ td.cell-speed-auto {
 table.data-table tbody tr.device-row td.cell-temp-set {
     padding-left: 4px !important;
     padding-right: 4px !important;
-    text-align: left !important;
+    text-align: center !important;
 }
 
 .data-table .settemp-thermostat .settemp-btn,
@@ -968,6 +1319,14 @@ table.data-table tbody tr.device-row td.cell-temp-set {
     border-top: 1px solid #d6d6d6;
     padding-top: 4px;
     padding-bottom: 4px;
+    text-align: left;
+}
+
+.fcu-setrange-note {
+    color: #334155;
+    font-size: 0.85em;
+    line-height: 1.25;
+    padding: 4px 8px 6px;
     text-align: left;
 }
 
@@ -1079,6 +1438,34 @@ table.data-table tbody tr.device-row td.cell-temp-set {
 .temporal-buttons button.selected:hover {
     background: #0056b3;
     border-color: #0056b3;
+}
+
+.chart-navigation {
+  align-items: center;
+  display: flex;
+  width: 100%;
+}
+
+.chart-navigation #temp-chart {
+  flex: 1;
+  min-width: 0;
+}
+
+.chart-navigation-button {
+  flex: 0 0 auto;
+  font-size: 1.5rem;
+  margin: 0 0.5rem;
+  padding: 0.5rem;
+  width: auto;
+}
+
+.chart-navigation-button:disabled {
+  cursor: default;
+  opacity: 0.25;
+}
+
+.temperature-mode-explanation {
+  margin: 0.25rem 0 0.5rem;
 }
 #downloadCsv {
     width: auto;
@@ -1398,4 +1785,59 @@ li.pure-menu-item > .rules-master-toggle {
 .device-editor-table td,
 .device-editor-table th {
     vertical-align: middle;
+}
+.room-map-page {
+  padding: 1rem;
+}
+
+.room-map-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 4fr) minmax(14rem, 1fr);
+  gap: 1rem;
+}
+
+.room-map-canvas {
+  display: grid;
+  position: relative;
+}
+
+.room-map-canvas > * {
+  grid-area: 1 / 1;
+  width: 100%;
+  height: auto;
+}
+
+.room-map-canvas svg {
+  align-self: stretch;
+}
+
+.room-map-canvas polygon {
+  fill-opacity: 0.18;
+  stroke-width: 4;
+}
+
+.room-map-canvas text {
+  text-anchor: middle;
+  paint-order: stroke;
+  stroke: white;
+  stroke-width: 5px;
+  stroke-linejoin: round;
+  fill: #111;
+  font-weight: 700;
+}
+
+.room-map-metrics {
+  font-size: 18px;
+}
+
+.fcu-history-chart {
+  width: 100%;
+  height: 70vh;
+  min-height: 32rem;
+}
+
+@media (max-width: 800px) {
+  .room-map-layout {
+    grid-template-columns: 1fr;
+  }
 }

@@ -5,6 +5,8 @@ import os
 import sqlite3
 import time
 
+import pytest
+
 from app import ae200
 from app import db
 
@@ -46,6 +48,59 @@ def _seed_ae200_status(device_id, status):
         )
     finally:
         conn.close()
+
+
+def test_set_auto_temp_endpoint_updates_dual_setpoints(flask_test_client):  # noqa: F811
+    """Auto mode setpoint edits should write AE-200 Heat and Cool values."""
+    device_id = _link_device_to_unit("Broadway Auto SetTemp Test")
+    original_status = ae200.get_device_info(BROADWAY_SOUTH)
+    original_heat = original_status.get(ae200.AE200_HEAT_SET_TEMP_KEY)
+    original_cool = original_status.get(ae200.AE200_COOL_SET_TEMP_KEY)
+
+    try:
+        ae200.set_auto_set_temps(
+            BROADWAY_SOUTH,
+            heat_set_temp_c=19.0,
+            cool_set_temp_c=24.0,
+        )
+
+        response = flask_test_client.post(
+            "/api/v1/set_auto_temp",
+            json={
+                "device_id": device_id,
+                "heat_set_temp_c": 20.0,
+                "cool_set_temp_c": 25.0,
+            },
+        )
+        assert response.status_code == 200
+        assert response.json["status"] == "ok"
+        assert response.json["device_id"] == device_id
+        assert str(response.json["unit"]) == str(BROADWAY_SOUTH)
+        assert response.json["heat_set_temp_c"] == pytest.approx(20.0)
+        assert response.json["cool_set_temp_c"] == pytest.approx(25.0)
+
+        device_info = ae200.get_device_info(BROADWAY_SOUTH)
+        assert device_info[ae200.AE200_HEAT_SET_TEMP_KEY] == "20.0"
+        assert device_info[ae200.AE200_COOL_SET_TEMP_KEY] == "25.0"
+
+        conn = _connect_test_db()
+        try:
+            row = conn.execute(
+                "SELECT status_json FROM devlog WHERE device_id=? ORDER BY logtime DESC",
+                (device_id,),
+            ).fetchone()
+            status = json.loads(row["status_json"])
+            assert status[ae200.AE200_HEAT_SET_TEMP_KEY] == "20.0"
+            assert status[ae200.AE200_COOL_SET_TEMP_KEY] == "25.0"
+        finally:
+            conn.close()
+    finally:
+        if original_heat is not None and original_cool is not None:
+            ae200.set_auto_set_temps(
+                BROADWAY_SOUTH,
+                heat_set_temp_c=original_heat,
+                cool_set_temp_c=original_cool,
+            )
 
 
 def test_set_mode_endpoint_records_mode_and_disables_rules(flask_test_client):  # noqa: F811
@@ -182,7 +237,8 @@ def test_set_mode_endpoint_rejects_unmapped_simulator_unit(flask_test_client):  
     )
 
     assert response.status_code == 400
-    assert "AE-200 simulator has no unit" in response.json["error"]
+    assert response.json == {"error": "Invalid command request"}
+    assert "Missing Simulator Unit" not in response.get_data(as_text=True)
 
 
 def test_set_mode_endpoint_rejects_invalid_mode(flask_test_client):  # noqa: F811

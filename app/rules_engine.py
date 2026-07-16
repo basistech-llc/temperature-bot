@@ -15,12 +15,16 @@ import logging
 from pathlib import Path
 
 
+from .constants import RULES_ENGINE_DEVICE_NAME
+from .device_types import DEVICE_TYPE_INTERNAL
 from .paths import BIN_DIR
 from . import db
+from . import presence
 from . import ae200
 from . import slack
 
 from .models import (
+    AutoSetTempControl,
     SpeedControl,
     DriveControl,
     ModeControl,
@@ -31,14 +35,21 @@ from .models import (
 
 logger = logging.getLogger(__name__)
 
-RULES_DEVICE_NAME = "rules_engine"
+RULES_DEVICE_NAME = RULES_ENGINE_DEVICE_NAME
 RULES_PATH = Path(BIN_DIR) / "rules.py"
 
 RULES_DISABLED_MESSAGE = "Master rules switch is OFF; skipping all rules execution"
 RULES_TIME_SUSPENDED_MESSAGE = "all rules disabled (time-limited suspension)"
 
+
+def get_room_presence(conn, room_id: int, *, when: int | None = None):
+    """Return canonical room presence for rule implementations."""
+    return presence.get_presence_for_room(conn, room_id, at_time=when)
+
 def rules_id(conn):
-    return db.get_or_create_device_id(conn, RULES_DEVICE_NAME)
+    return db.get_or_create_device_id(
+        conn, RULES_DEVICE_NAME, device_type=DEVICE_TYPE_INTERNAL
+    )
 
 def get_time_dict(when=None):
     if when is None:
@@ -104,7 +115,7 @@ def disable_all_rules(conn, seconds: int):
 
 def get_rules():
     """Returns the rules as a text"""
-    return RULES_PATH.read_text()
+    return RULES_PATH.read_text(encoding="utf-8")
 
 def prune_rules(conn):
     """If the rule's disabling has expired, enable it."""
@@ -312,6 +323,53 @@ def set_body_set_temp(conn, body: SetTempControl, ipaddr, agent):
         "temp": temp,
         "device_id": body.device_id,
         "set_temp_c": body.set_temp_c,
+    }
+
+
+def set_body_auto_set_temp(conn, body: AutoSetTempControl, ipaddr, agent):
+    """Set the Auto-mode Heat and Cool setpoints for a unit."""
+
+    unit_id = db.get_ae200_unit(conn, body.device_id)
+    data = ae200.get_device_info(unit_id)
+    current_cool = data.get(ae200.AE200_COOL_SET_TEMP_KEY)
+    current_heat = data.get(ae200.AE200_HEAT_SET_TEMP_KEY)
+    current_value_str = f"Heat={current_heat or ''} Cool={current_cool or ''}"
+    new_value_str = f"Heat={body.heat_set_temp_c} Cool={body.cool_set_temp_c}"
+    logger.info(
+        "set_body_auto_set_temp body=[%s] ipaddr=%s agent=%s. current=%s",
+        body,
+        ipaddr,
+        agent,
+        current_value_str,
+    )
+
+    if current_value_str != new_value_str:
+        db.insert_changelog(
+            conn,
+            ipaddr=ipaddr,
+            device_id=body.device_id,
+            ae200_device_id=unit_id,
+            current_values=current_value_str,
+            new_value=new_value_str,
+            agent=agent,
+        )
+        ae200.set_auto_set_temps(
+            unit_id,
+            heat_set_temp_c=body.heat_set_temp_c,
+            cool_set_temp_c=body.cool_set_temp_c,
+        )
+        data = ae200.get_device_info(unit_id)
+
+    data[ae200.AE200_HEAT_SET_TEMP_KEY] = str(body.heat_set_temp_c)
+    data[ae200.AE200_COOL_SET_TEMP_KEY] = str(body.cool_set_temp_c)
+    temp = data.get("InletTemp", None)
+    db.insert_devlog_entry(conn, device_id=body.device_id, temp=temp, statusdict=data)
+    return {
+        "unit": unit_id,
+        "temp": temp,
+        "device_id": body.device_id,
+        "heat_set_temp_c": body.heat_set_temp_c,
+        "cool_set_temp_c": body.cool_set_temp_c,
     }
 
 
