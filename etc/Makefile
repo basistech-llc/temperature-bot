@@ -1,4 +1,7 @@
+SERVICE_UNITS ?= *.service
+
+.PHONY: install
 install:
-	sudo cp *.service /etc/systemd/system/
+	sudo cp -f $(SERVICE_UNITS) /etc/systemd/system/
 	sudo systemctl daemon-reload
-	sudo systemctl restart *.service
+	sudo systemctl restart $(SERVICE_UNITS)

@@ -38,13 +38,19 @@ FETCH_HOST           ?= air.basistech.net
 FETCH_REMOTE_DB_DIR  ?= /var/db/
 FETCH_REMOTE_CONFIG  ?= /home/air/temperature-bot/temperature-bot-config.yaml
 
-# Production deploy defaults. Override only when intentionally targeting a
-# different checked-out installation or database.
-DEPLOY_FLYWAY	  ?= Y
+# Deployment defaults. Override only when intentionally targeting a different
+# checked-out installation or database.
+DEPLOY_FLYWAY    ?= Y
 DEPLOY_HOSTNAME   ?= slg1
 DEPLOY_APP_DIR    ?= /home/air/temperature-bot
 DEPLOY_DB         ?= /var/db/temperature-bot.db
 DEPLOY_BACKUP_DIR ?= /var/db/temperature-bot-backups
+STAGE_APP_DIR     ?= /home/air-stage/temperature-bot
+STAGE_DB_DIR      ?= /home/air-stage/var/db
+STAGE_DB          ?= $(STAGE_DB_DIR)/temperature-bot.db
+STAGE_DB_TEMP     ?= $(STAGE_DB).new
+STAGE_BACKUP_DIR  ?= $(STAGE_DB_DIR)/backups
+STAGE_SERVICE     ?= air-stage_basistech_net.service
 
 REQ := .venv/pyvenv.cfg
 PYTHON := .venv/bin/python
@@ -358,15 +364,16 @@ cleanall: clean ## Clean aggressively, including the local DB
 deploy: ## Deploy latest code and run DB migrations on the production server
 	if [ "$$(hostname)" = "$(DEPLOY_HOSTNAME)" ]; then \
 		cd $(DEPLOY_APP_DIR) && \
-		git pull && \
+		git pull --ff-only && \
 		poetry install && \
-		if [ "$(DEPLOY_FLYWAY)" = Y ]; then make deploy-flyway ; fi; \
+		if [ "$(DEPLOY_FLYWAY)" = Y ]; then $(MAKE) deploy-flyway ; fi; \
 	else \
-		echo "Deploy skipped: not running on $(DEPLOY_HOSTNAME) (current hostname: $$(hostname))"; \
+		echo "Deploy refused: not running on $(DEPLOY_HOSTNAME) (current hostname: $$(hostname))"; \
+		exit 1; \
 	fi
 
 
-deploy-flyway:
+deploy-flyway: ## Back up, migrate, and validate the deployment database
 	flyway validate -url="jdbc:sqlite:$(DEPLOY_DB)" -locations="filesystem:etc/flyway/sql"
 	/bin/mkdir -p $(DEPLOY_BACKUP_DIR)
 	/bin/cp -f $(DEPLOY_DB) $(DEPLOY_BACKUP_DIR)/temperature-bot.$$(date -u +%Y%m%dT%H%M%SZ).db
@@ -374,8 +381,15 @@ deploy-flyway:
 	flyway validate -url="jdbc:sqlite:$(DEPLOY_DB)" -locations="filesystem:etc/flyway/sql"
 
 
-deploy-stage:
-	DEPLOY_APP_DIR=/home/air-stage/temperature-bot DEPLOY_FLYWAY=N make deploy
-	sudo systemctl restart air-stage_basistech_net
+deploy-stage: ## Refresh the staging database, deploy dev-stage, and restart staging
+	DEPLOY_APP_DIR=$(STAGE_APP_DIR) DEPLOY_FLYWAY=N $(MAKE) deploy
+	/bin/mkdir -p $(STAGE_DB_DIR) $(STAGE_BACKUP_DIR)
+	/bin/rm -f $(STAGE_DB_TEMP)
+	sqlite3 $(DEPLOY_DB) ".backup '$(STAGE_DB_TEMP)'"
+	$(MAKE) -C $(STAGE_APP_DIR) DEPLOY_DB=$(STAGE_DB_TEMP) DEPLOY_BACKUP_DIR=$(STAGE_BACKUP_DIR) deploy-flyway
+	@if sudo systemctl is-active --quiet $(STAGE_SERVICE); then sudo systemctl stop $(STAGE_SERVICE); fi
+	/bin/rm -f $(STAGE_DB)-wal $(STAGE_DB)-shm
+	/bin/mv -f $(STAGE_DB_TEMP) $(STAGE_DB)
+	sudo systemctl restart $(STAGE_SERVICE)
 
-.PHONY: install-either install-ubuntu install-macos clean cleanall deploy
+.PHONY: install-either install-ubuntu install-macos clean cleanall deploy deploy-flyway deploy-stage

@@ -77,8 +77,19 @@ flyway \
 5. Applies pending migrations with `-baselineOnMigrate=true`.
 6. Runs `flyway validate` again.
 
-Override `PROD_HOSTNAME`, `PROD_APP_DIR`, `PROD_DB`, or `PROD_BACKUP_DIR` only
+Override `DEPLOY_HOSTNAME`, `DEPLOY_APP_DIR`, `DEPLOY_DB`, or
+`DEPLOY_BACKUP_DIR` only
 when intentionally targeting a different installation.
+
+## Staging deploy
+
+`make deploy-stage` updates `/home/air-stage/temperature-bot` with a fast-forward
+pull, installs its dependencies, and creates a consistent SQLite backup of the
+production database at `/home/air-stage/var/db/temperature-bot.db.new`. Flyway
+migrates and validates that temporary database before the target briefly stops
+the staging service, atomically replaces its database, and restarts the service.
+The staging Gunicorn service listens on `127.0.0.1:8101` and never migrates or
+writes through the production database.
 
 The current deploy target does not stop the every-minute writer and uses a
 filesystem copy rather than SQLite's consistent backup API. Until GitHub issues
