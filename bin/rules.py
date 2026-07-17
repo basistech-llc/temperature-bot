@@ -11,6 +11,7 @@ from datetime import datetime
 from app.models import (
     AlertRuleDevice,
     AlertRuleResult,
+    AlertRuleState,
     Device,
     RuleResult,
     THURSDAY,
@@ -52,22 +53,45 @@ def run_alert_rules_for_device(
     del now
     if not device.name.startswith("Airthings "):
         return []
-    if device.reading_age_seconds > AIRTHINGS_READING_FRESH_SECONDS:
-        return []
-    if not AIRTHINGS_SENSOR_FIELDS.issubset(device.status.model_dump()):
-        return []
 
     display_name = device.name.removeprefix("Airthings ")
-    unchanged = _duration_label(device.unchanged_for_seconds)
+    state = AlertRuleState.INDETERMINATE
+    reason = device.input_error
+    if device.status is not None and not AIRTHINGS_SENSOR_FIELDS.issubset(
+        device.status.model_dump()
+    ):
+        reason = "one or more required measurements are missing"
+    elif (
+        device.reading_age_seconds is not None
+        and device.reading_age_seconds > AIRTHINGS_READING_FRESH_SECONDS
+    ):
+        reason = (
+            f"the latest reading is {_duration_label(device.reading_age_seconds)} old"
+        )
+    elif device.unchanged_for_seconds is not None:
+        state = (
+            AlertRuleState.ACTIVE
+            if device.unchanged_for_seconds >= AIRTHINGS_STUCK_SECONDS
+            else AlertRuleState.INACTIVE
+        )
+
+    unchanged = _duration_label(device.unchanged_for_seconds or 0)
+    if state == AlertRuleState.INDETERMINATE:
+        message = (
+            f":warning: Airthings {display_name} sensor-stuck alert remains active, "
+            f"but it cannot be evaluated: {reason or 'the input is indeterminate'}."
+        )
+    else:
+        message = (
+            f":warning: Airthings {display_name} is stuck: all reported "
+            f"measurements have been exactly unchanged for {unchanged}."
+        )
     return [
         AlertRuleResult(
             alert_type="SensorStuck",
-            active=device.unchanged_for_seconds >= AIRTHINGS_STUCK_SECONDS,
+            state=state,
             started_at=device.unchanged_since,
-            message=(
-                f":warning: Airthings {display_name} is stuck: all reported "
-                f"measurements have been exactly unchanged for {unchanged}."
-            ),
+            message=message,
             resolved_message=(
                 f":white_check_mark: Airthings {display_name} is unstuck: "
                 "reported measurements are changing again."

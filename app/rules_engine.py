@@ -36,9 +36,11 @@ from .models import (
     AlertEventNotification,
     AlertEventRecord,
     AlertEventType,
+    AlertRecord,
     AlertRuleDevice,
     AlertRuleEvaluation,
     AlertRuleResult,
+    AlertRuleState,
     RuleResult,
 )
 
@@ -607,76 +609,125 @@ def _deliver_due_alert_events(
         )
 
 
-def _apply_alert_rule_result(
+def _remind_active_alert(
     conn,
+    active_alert: AlertRecord,
     evaluation: AlertRuleEvaluation,
+    *,
     notifier: AlertNotifier,
 ) -> str | None:
-    device_id = evaluation.device_id
     result = evaluation.result
     now = evaluation.now
-    commit = evaluation.commit
-    active_alert = db_alerts.get_active_alert_record(
-        conn, device_id, result.alert_type
+    indeterminate = result.state == AlertRuleState.INDETERMINATE
+    qualifier = "indeterminate " if indeterminate else ""
+    summary = (
+        f"Device {evaluation.device_id} reminded {qualifier}{result.alert_type}"
     )
-    if result.active:
-        if active_alert is None:
-            if not commit:
-                return f"Device {device_id} would trigger {result.alert_type}"
-            active_alert = db_alerts.create_alert_record(
-                conn,
-                device_id=device_id,
-                alert_type=result.alert_type,
-                start_time=result.started_at or now,
-            )
-            _deliver_alert_event(
-                conn,
-                AlertEventNotification(
-                    alert_id=active_alert.alert_id,
-                    event_time=now,
-                    event_type=AlertEventType.TRIGGERED,
-                    message=result.message,
-                ),
-                notifier=notifier,
-            )
-            return f"Device {device_id} triggered {result.alert_type}"
-
-        latest_event = db_alerts.get_latest_alert_event(conn, active_alert.alert_id)
-        reminder_due = latest_event is None or now >= next_alert_notification_at(
-            active_alert.start_time,
-            latest_event.event_time if latest_event else active_alert.start_time,
-        )
-        summary = None
-        if reminder_due and commit:
-            _deliver_alert_event(
-                conn,
-                AlertEventNotification(
-                    alert_id=active_alert.alert_id,
-                    event_time=now,
-                    event_type=AlertEventType.REMINDER,
-                    message=result.message,
-                ),
-                notifier=notifier,
-            )
-            summary = f"Device {device_id} reminded {result.alert_type}"
-        return summary
-
-    if active_alert is None:
+    latest_event = db_alerts.get_latest_alert_event(conn, active_alert.alert_id)
+    reminder_due = latest_event is None or now >= next_alert_notification_at(
+        active_alert.start_time,
+        latest_event.event_time if latest_event else active_alert.start_time,
+    )
+    if not reminder_due:
         return None
-    if not commit:
-        return f"Device {device_id} would resolve {result.alert_type}"
-    db_alerts.resolve_alert_record(conn, active_alert.alert_id, end_time=now)
+    if not evaluation.commit:
+        return summary.replace(" reminded ", " would remind ") if indeterminate else None
     _deliver_alert_event(
         conn,
         AlertEventNotification(
             alert_id=active_alert.alert_id,
             event_time=now,
+            event_type=AlertEventType.REMINDER,
+            message=result.message,
+        ),
+        notifier=notifier,
+    )
+    return summary
+
+
+def _apply_active_alert_result(
+    conn,
+    active_alert: AlertRecord | None,
+    evaluation: AlertRuleEvaluation,
+    notifier: AlertNotifier,
+) -> str | None:
+    device_id = evaluation.device_id
+    result = evaluation.result
+    if active_alert is None:
+        if not evaluation.commit:
+            return f"Device {device_id} would trigger {result.alert_type}"
+        active_alert = db_alerts.create_alert_record(
+            conn,
+            device_id=device_id,
+            alert_type=result.alert_type,
+            start_time=result.started_at or evaluation.now,
+        )
+        _deliver_alert_event(
+            conn,
+            AlertEventNotification(
+                alert_id=active_alert.alert_id,
+                event_time=evaluation.now,
+                event_type=AlertEventType.TRIGGERED,
+                message=result.message,
+            ),
+            notifier=notifier,
+        )
+        return f"Device {device_id} triggered {result.alert_type}"
+    return _remind_active_alert(
+        conn,
+        active_alert,
+        evaluation,
+        notifier=notifier,
+    )
+
+
+def _apply_inactive_alert_result(
+    conn,
+    active_alert: AlertRecord | None,
+    evaluation: AlertRuleEvaluation,
+    notifier: AlertNotifier,
+) -> str | None:
+    if active_alert is None:
+        return None
+    device_id = evaluation.device_id
+    result = evaluation.result
+    if not evaluation.commit:
+        return f"Device {device_id} would resolve {result.alert_type}"
+    db_alerts.resolve_alert_record(conn, active_alert.alert_id, end_time=evaluation.now)
+    _deliver_alert_event(
+        conn,
+        AlertEventNotification(
+            alert_id=active_alert.alert_id,
+            event_time=evaluation.now,
             event_type=AlertEventType.RESOLVED,
             message=result.resolved_message,
         ),
         notifier=notifier,
     )
     return f"Device {device_id} resolved {result.alert_type}"
+
+
+def _apply_alert_rule_result(
+    conn,
+    evaluation: AlertRuleEvaluation,
+    notifier: AlertNotifier,
+) -> str | None:
+    result = evaluation.result
+    active_alert = db_alerts.get_active_alert_record(
+        conn, evaluation.device_id, result.alert_type
+    )
+    if result.state == AlertRuleState.ACTIVE:
+        return _apply_active_alert_result(conn, active_alert, evaluation, notifier)
+    if result.state == AlertRuleState.INACTIVE:
+        return _apply_inactive_alert_result(conn, active_alert, evaluation, notifier)
+    if active_alert is None:
+        return None
+    return _remind_active_alert(
+        conn,
+        active_alert,
+        evaluation,
+        notifier=notifier,
+    )
 
 
 def run_alert_rules(

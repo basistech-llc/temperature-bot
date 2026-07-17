@@ -209,24 +209,33 @@ class AlertDeliveryStatus(StrEnum):
     FAILED = "failed"
 
 
+class AlertRuleState(StrEnum):
+    """Three-state result of evaluating one alert condition."""
+
+    ACTIVE = "active"
+    INACTIVE = "inactive"
+    INDETERMINATE = "indeterminate"
+
+
 class AlertRuleDevice(BaseModel):
     """Latest device observation and exact-value run supplied to alert rules."""
 
     device_id: int
     name: str
     device_type: str | None = None
-    status: StatusPayload
-    unchanged_since: int
-    observed_through: int
-    unchanged_for_seconds: int
-    reading_age_seconds: int
+    status: StatusPayload | None = None
+    unchanged_since: int | None = None
+    observed_through: int | None = None
+    unchanged_for_seconds: int | None = None
+    reading_age_seconds: int | None = None
+    input_error: str | None = None
 
 
 class AlertRuleResult(BaseModel):
-    """Active or recovered condition returned by ``run_alert_rules_for_device``."""
+    """Condition state returned by ``run_alert_rules_for_device``."""
 
     alert_type: str = Field(min_length=1)
-    active: bool
+    state: AlertRuleState
     started_at: int | None = None
     message: str = Field(min_length=1)
     resolved_message: str = Field(min_length=1)

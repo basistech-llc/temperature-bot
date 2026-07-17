@@ -12,6 +12,13 @@ collector validates the complete response before writing any device rows.
 - `run_rules_for_device()` returns HVAC actions.
 - `run_alert_rules_for_device()` returns typed alert conditions.
 
+Alert conditions have three states: `active`, `inactive`, and `indeterminate`.
+Stale, missing, malformed, or incomplete sensor input is indeterminate rather
+than recovered. An indeterminate result does not open a new alert. If the alert
+was already active, it remains active and receives cadence-based reminders that
+the current input cannot establish recovery. Fresh changed input is required to
+close it.
+
 The first alert rule detects a stuck Airthings monitor when all eight reported
 measurements remain exactly unchanged for `AIRTHINGS_STUCK_SECONDS` (10 minutes
 by default). The database layer compares normalized JSON values and follows a

@@ -52,14 +52,30 @@ def get_alert_rule_devices(conn, *, now: int) -> list[AlertRuleDevice]:
         )
         latest = rows.fetchone()
         if latest is None:
+            contexts.append(
+                AlertRuleDevice(
+                    device_id=device["device_id"],
+                    name=device["device_name"],
+                    device_type=device["device_type"],
+                    input_error="no status reading is available",
+                )
+            )
             continue
         try:
             latest_status = StatusPayload.model_validate_json(latest["status_json"])
             latest_canonical = _canonical_status_json(latest["status_json"])
         except (TypeError, ValueError, json.JSONDecodeError):
             logger.warning(
-                "Ignoring invalid status payload for alert device %s",
+                "Alert device %s has an invalid latest status payload",
                 device["device_id"],
+            )
+            contexts.append(
+                AlertRuleDevice(
+                    device_id=device["device_id"],
+                    name=device["device_name"],
+                    device_type=device["device_type"],
+                    input_error="the latest status payload is invalid",
+                )
             )
             continue
 

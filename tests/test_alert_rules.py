@@ -137,6 +137,88 @@ def test_stuck_alert_lifecycle_and_cadence_ignore_hvac_master_switch(
     ]
 
 
+def test_stale_input_keeps_active_alert_and_sends_indeterminate_reminder(
+    test_database_conn,
+):
+    conn = test_database_conn
+    device_id = _add_airthings_device(conn)
+    _add_status(conn, device_id, 1000, 601, AIRTHINGS_STATUS)
+    delivered: list[str] = []
+
+    rules_engine.run_alert_rules(
+        conn,
+        when=1600,
+        commit=True,
+        notifier=lambda message: delivered.append(message) or "triggered-ts",
+    )
+    result = rules_engine.run_alert_rules(
+        conn,
+        when=1900,
+        commit=True,
+        notifier=lambda message: delivered.append(message) or "reminder-ts",
+    )
+
+    assert result == f"Device {device_id} reminded indeterminate SensorStuck"
+    assert len(delivered) == 2
+    assert "cannot be evaluated" in delivered[-1]
+    assert "latest reading is 5 minutes old" in delivered[-1]
+    alert = db_alerts.get_active_alert_record(conn, device_id, "SensorStuck")
+    assert alert is not None
+
+    changed = {**AIRTHINGS_STATUS, "co2": {"unit": "ppm", "value": 499.0}}
+    _add_status(conn, device_id, 1901, 1, changed)
+    result = rules_engine.run_alert_rules(
+        conn,
+        when=1901,
+        commit=True,
+        notifier=lambda message: delivered.append(message) or "resolved-ts",
+    )
+    assert result == f"Device {device_id} resolved SensorStuck"
+    assert "is unstuck" in delivered[-1]
+    assert db_alerts.get_active_alert_record(conn, device_id, "SensorStuck") is None
+
+
+def test_missing_input_does_not_orphan_existing_active_alert(test_database_conn):
+    conn = test_database_conn
+    device_id = _add_airthings_device(conn)
+    _add_status(conn, device_id, 1000, 601, AIRTHINGS_STATUS)
+    rules_engine.run_alert_rules(
+        conn, when=1600, commit=True, notifier=lambda _message: "triggered-ts"
+    )
+    conn.execute("DELETE FROM devlog WHERE device_id=?", (device_id,))
+    conn.commit()
+    delivered: list[str] = []
+
+    result = rules_engine.run_alert_rules(
+        conn,
+        when=1900,
+        commit=True,
+        notifier=lambda message: delivered.append(message) or "reminder-ts",
+    )
+
+    assert result == f"Device {device_id} reminded indeterminate SensorStuck"
+    assert len(delivered) == 1
+    assert "no status reading is available" in delivered[0]
+    assert db_alerts.get_active_alert_record(conn, device_id, "SensorStuck") is not None
+
+
+def test_indeterminate_input_does_not_open_new_alert(test_database_conn):
+    conn = test_database_conn
+    device_id = _add_airthings_device(conn)
+    delivered: list[str] = []
+
+    result = rules_engine.run_alert_rules(
+        conn,
+        when=1900,
+        commit=True,
+        notifier=lambda message: delivered.append(message) or "unexpected",
+    )
+
+    assert result == ""
+    assert not delivered
+    assert db_alerts.get_active_alert_record(conn, device_id, "SensorStuck") is None
+
+
 def test_alert_notification_cadence_boundaries():
     start = 1_000
 
@@ -344,6 +426,8 @@ def test_delivery_stops_after_retry_limit(test_database_conn):
     assert stored.slack_attempt_count == rules_engine.ALERT_DELIVERY_MAX_ATTEMPTS
     assert stored.slack_next_attempt_time is None
     assert stored.slack_terminal is True
+    db_alerts.resolve_alert_record(conn, alert.alert_id, end_time=1601)
+    conn.commit()
 
     delivered: list[str] = []
     rules_engine.run_alert_rules(
