@@ -14,6 +14,14 @@ Temperature Bot now tracks SQL schema versions with Flyway.
   for FCU ownership and assignment.
 - `etc/flyway/sql/V10__room_presence.sql` stores room-at-observation presence
   events and indexes current and historical room queries.
+- `etc/flyway/sql/V11__devlog_latest_device_reading_index.sql` indexes each
+  device's newest logged reading.
+- `etc/flyway/sql/V12__alert_events.sql` adds the durable record of alert
+  notifications and Slack delivery outcomes. Slack's message `ts` is an opaque
+  decimal identifier stored as `TEXT` so no precision is lost.
+- `etc/flyway/sql/V13__alert_delivery_outbox.sql` adds attempt counts, Unix
+  timestamps for last and next attempts, and explicit terminal state so failed
+  Slack notifications can be retried safely across runner processes.
 - Flyway creates and manages `flyway_schema_history`; do not add that table to a versioned migration or to `etc/schema.sql`.
 - Existing populated databases are baselined at V1 by `make migrate-db` and `make deploy`, then any later migrations are applied.
 - `etc/schema.sql` is generated from the Flyway migration history for tests and compatibility. Do not hand-edit it for schema changes.

@@ -14,6 +14,7 @@ import time
 import logging
 from pathlib import Path
 from collections.abc import Callable
+import requests
 
 
 from .constants import RULES_ENGINE_DEVICE_NAME
@@ -32,8 +33,8 @@ from .models import (
     ModeControl,
     SetTempControl,
     Device,
-    AlertDeliveryStatus,
     AlertEventNotification,
+    AlertEventRecord,
     AlertEventType,
     AlertRuleDevice,
     AlertRuleEvaluation,
@@ -54,6 +55,10 @@ ALERT_REPEAT_FIRST_DAY_SECONDS = 60 * 60
 ALERT_REPEAT_LATER_SECONDS = 4 * 60 * 60
 ALERT_FIRST_HOUR_SECONDS = 60 * 60
 ALERT_FIRST_DAY_SECONDS = 24 * 60 * 60
+ALERT_DELIVERY_RETRY_INITIAL_SECONDS = 60
+ALERT_DELIVERY_RETRY_MAX_SECONDS = 60 * 60
+ALERT_DELIVERY_MAX_ATTEMPTS = 24
+ALERT_DELIVERY_OUTBOX_BATCH_SIZE = 100
 
 AlertNotifier = Callable[[str], str | None]
 AlertRuleFunction = Callable[[AlertRuleDevice, datetime.datetime], object]
@@ -512,25 +517,94 @@ def _deliver_alert_event(
     )
     conn.commit()
     logger.warning("Alert %s: %s", notification.event_type.value, notification.message)
+    _attempt_alert_event_delivery(
+        conn,
+        event,
+        attempted_at=notification.event_time,
+        notifier=notifier,
+    )
+
+
+def _alert_delivery_retry_seconds(
+    attempt_number: int, error: Exception | None = None
+) -> int:
+    """Return capped exponential backoff, extended by Slack Retry-After."""
+    exponent = min(max(0, attempt_number - 1), 16)
+    delay: int = min(
+        ALERT_DELIVERY_RETRY_INITIAL_SECONDS * (2**exponent),
+        ALERT_DELIVERY_RETRY_MAX_SECONDS,
+    )
+    if isinstance(error, requests.exceptions.HTTPError) and error.response is not None:
+        retry_after = error.response.headers.get("Retry-After")
+        try:
+            if retry_after:
+                retry_after_seconds = int(str(retry_after))
+                delay = max(delay, retry_after_seconds)
+        except (TypeError, ValueError):
+            logger.warning("Ignoring invalid Slack Retry-After value %r", retry_after)
+    return delay
+
+
+def _attempt_alert_event_delivery(
+    conn,
+    event: AlertEventRecord,
+    *,
+    attempted_at: int,
+    notifier: AlertNotifier,
+) -> bool:
+    """Claim and attempt one outbox event, recording a durable outcome."""
+    attempt_number = event.slack_attempt_count + 1
+    provisional_retry_at = attempted_at + _alert_delivery_retry_seconds(attempt_number)
+    if not db_alerts.claim_alert_event_delivery(
+        conn,
+        event.alert_event_id,
+        attempted_at=attempted_at,
+        retry_at=provisional_retry_at,
+    ):
+        return False
     try:
-        message_ts = notifier(notification.message)
+        message_ts = notifier(event.message)
         if not message_ts:
             raise RuntimeError("Slack did not return a message timestamp")
     except Exception as error:  # pylint: disable=broad-except
         logger.exception("Failed to deliver alert event %s to Slack", event.alert_event_id)
-        db_alerts.update_alert_event_delivery(
+        terminal = attempt_number >= ALERT_DELIVERY_MAX_ATTEMPTS
+        retry_at = None
+        if not terminal:
+            retry_at = attempted_at + _alert_delivery_retry_seconds(
+                attempt_number, error
+            )
+        db_alerts.mark_alert_event_failed(
             conn,
             event.alert_event_id,
-            status=AlertDeliveryStatus.FAILED,
             error=str(error),
+            retry_at=retry_at,
+            terminal=terminal,
         )
-        return
-    db_alerts.update_alert_event_delivery(
+        return False
+    db_alerts.mark_alert_event_sent(
         conn,
         event.alert_event_id,
-        status=AlertDeliveryStatus.SENT,
         message_ts=message_ts,
     )
+    return True
+
+
+def _deliver_due_alert_events(
+    conn, *, now: int, notifier: AlertNotifier
+) -> None:
+    """Drain one bounded batch of due pending and failed outbox events."""
+    for event in db_alerts.get_due_alert_events(
+        conn,
+        now=now,
+        limit=ALERT_DELIVERY_OUTBOX_BATCH_SIZE,
+    ):
+        _attempt_alert_event_delivery(
+            conn,
+            event,
+            attempted_at=now,
+            notifier=notifier,
+        )
 
 
 def _apply_alert_rule_result(
@@ -615,6 +689,9 @@ def run_alert_rules(
     """Evaluate monitoring-only rules regardless of the HVAC master switch."""
     now = _rule_datetime(when)
     now_ts = int(now.timestamp())
+    deliver = notifier or slack.post
+    if commit:
+        _deliver_due_alert_events(conn, now=now_ts, notifier=deliver)
     virtual_module = types.ModuleType("ephemeral_alert_rule_namespace")
     virtual_module.__file__ = str(RULES_PATH)
     virtual_module.__dict__["__builtins__"] = __builtins__
@@ -629,7 +706,6 @@ def run_alert_rules(
         logger.warning("No run_alert_rules_for_device function in %s", RULES_PATH)
         return "No alert rules"
 
-    deliver = notifier or slack.post
     results: list[str] = []
     for device in db_alerts.get_alert_rule_devices(conn, now=now_ts):
         try:

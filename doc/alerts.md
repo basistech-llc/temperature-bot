@@ -26,6 +26,16 @@ An active condition creates one row in `alerts`. Each notification creates an
 sent or failed and saves Slack's message timestamp. Recovery closes the active
 alert, logs a `resolved` event, and sends a recovery message.
 
+`alert_events` is also the durable Slack outbox. At the start of every committed
+alert-rule cycle, pending and retryable failed events are attempted in bounded
+batches. Each attempt is claimed in the database before network I/O so
+overlapping runners do not normally send the same event. Failures use
+exponential backoff from 1 minute to 1 hour, honor a longer Slack `Retry-After`,
+and become terminal after 24 attempts. Recovery events remain retryable after
+their active alert is closed. As with any at-least-once outbox, Slack may receive
+a duplicate if it accepts a message and the process dies before recording the
+successful response.
+
 While a condition remains active, reminders are logged and sent:
 
 - every 5 minutes through the first hour;

@@ -272,6 +272,10 @@ class AlertEventRecord(BaseModel):
     slack_status: AlertDeliveryStatus
     slack_message_ts: str | None = None
     slack_error: str | None = None
+    slack_attempt_count: int = Field(default=0, ge=0)
+    slack_last_attempt_time: int | None = None
+    slack_next_attempt_time: int | None = None
+    slack_terminal: bool = False
 
 
 class RoomConfig(BaseModel):

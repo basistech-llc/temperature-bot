@@ -100,9 +100,17 @@ CREATE TABLE IF NOT EXISTS alert_events (
     event_type TEXT NOT NULL CHECK (event_type IN ('triggered', 'reminder', 'resolved')),
     message TEXT NOT NULL,
     slack_status TEXT NOT NULL CHECK (slack_status IN ('pending', 'sent', 'failed')),
+    -- Slack calls this value a timestamp ("ts"), but it is an opaque message
+    -- identifier returned as a decimal string. Store it as TEXT to preserve the
+    -- value exactly for later Slack API calls; REAL could lose precision.
     slack_message_ts TEXT,
-    slack_error TEXT,
+    slack_error TEXT, slack_attempt_count INTEGER NOT NULL DEFAULT 0
+        CHECK (slack_attempt_count >= 0), slack_last_attempt_time INTEGER, slack_next_attempt_time INTEGER, slack_terminal INTEGER NOT NULL DEFAULT 0
+        CHECK (slack_terminal IN (0, 1)),
     FOREIGN KEY (alert_id) REFERENCES alerts (alert_id)
 );
 CREATE INDEX IF NOT EXISTS idx_alert_events_alert_time
     ON alert_events (alert_id, event_time DESC, alert_event_id DESC);
+CREATE INDEX IF NOT EXISTS idx_alert_events_slack_outbox
+    ON alert_events (slack_terminal, slack_next_attempt_time, alert_event_id)
+    WHERE slack_status IN ('pending', 'failed');

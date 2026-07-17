@@ -212,6 +212,61 @@ def test_fcu_owned_rooms_migration_bootstraps_existing_devices():
             )
 
 
+def test_alert_outbox_migration_backfills_existing_delivery_state():
+    with closing(sqlite3.connect(":memory:")) as conn:
+        for version in range(1, 13):
+            migration = next(MIGRATION_DIR.glob(f"V{version}__*.sql"))
+            conn.executescript(migration.read_text(encoding="utf-8"))
+        device_id = conn.execute(
+            "INSERT INTO devices (device_name) VALUES ('Airthings Dungeon')"
+        ).lastrowid
+        alert_id = conn.execute(
+            """
+            INSERT INTO alerts
+                (device_id, alert_type, alert_value, start_time, end_time)
+            VALUES (?, 'SensorStuck', 'ON', 1000, NULL)
+            """,
+            (device_id,),
+        ).lastrowid
+        conn.executemany(
+            """
+            INSERT INTO alert_events
+                (alert_id, event_time, event_type, message, slack_status)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (
+                (alert_id, 1600, "triggered", "pending", "pending"),
+                (alert_id, 1700, "reminder", "failed", "failed"),
+                (alert_id, 1800, "resolved", "sent", "sent"),
+            ),
+        )
+
+        conn.executescript(
+            (MIGRATION_DIR / "V13__alert_delivery_outbox.sql").read_text(
+                encoding="utf-8"
+            )
+        )
+
+        events = conn.execute(
+            """
+            SELECT slack_status, slack_attempt_count, slack_last_attempt_time,
+                   slack_next_attempt_time, slack_terminal
+            FROM alert_events
+            ORDER BY alert_event_id
+            """
+        ).fetchall()
+        assert events == [
+            ("pending", 0, None, 1600, 0),
+            ("failed", 0, None, 1700, 0),
+            ("sent", 0, None, None, 1),
+        ]
+        indexes = {
+            row[1]
+            for row in conn.execute("PRAGMA index_list(alert_events)").fetchall()
+        }
+        assert "idx_alert_events_slack_outbox" in indexes
+
+
 def test_runtime_schema_validator_accepts_current_schema_with_flyway_history():
     with closing(sqlite3.connect(":memory:")) as conn:
         with open(SCHEMA_FILE_PATH, "r", encoding="utf-8") as schema_file:

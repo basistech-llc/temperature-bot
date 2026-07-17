@@ -145,7 +145,9 @@ def get_latest_alert_event(conn, alert_id: int) -> AlertEventRecord | None:
     row = conn.execute(
         """
         SELECT alert_event_id, alert_id, event_time, event_type, message,
-               slack_status, slack_message_ts, slack_error
+               slack_status, slack_message_ts, slack_error,
+               slack_attempt_count, slack_last_attempt_time,
+               slack_next_attempt_time, slack_terminal
         FROM alert_events
         WHERE alert_id=?
         ORDER BY event_time DESC, alert_event_id DESC
@@ -154,6 +156,28 @@ def get_latest_alert_event(conn, alert_id: int) -> AlertEventRecord | None:
         (alert_id,),
     ).fetchone()
     return AlertEventRecord.model_validate(dict(row)) if row else None
+
+
+def get_due_alert_events(
+    conn, *, now: int, limit: int
+) -> list[AlertEventRecord]:
+    """Return retryable outbox events whose next attempt is due."""
+    rows = conn.execute(
+        """
+        SELECT alert_event_id, alert_id, event_time, event_type, message,
+               slack_status, slack_message_ts, slack_error,
+               slack_attempt_count, slack_last_attempt_time,
+               slack_next_attempt_time, slack_terminal
+        FROM alert_events
+        WHERE slack_status IN ('pending', 'failed')
+          AND slack_terminal=0
+          AND slack_next_attempt_time<=?
+        ORDER BY slack_next_attempt_time, alert_event_id
+        LIMIT ?
+        """,
+        (now, limit),
+    ).fetchall()
+    return [AlertEventRecord.model_validate(dict(row)) for row in rows]
 
 
 def create_alert_event(
@@ -168,8 +192,9 @@ def create_alert_event(
     cursor = conn.execute(
         """
         INSERT INTO alert_events
-            (alert_id, event_time, event_type, message, slack_status)
-        VALUES (?, ?, ?, ?, ?)
+            (alert_id, event_time, event_type, message, slack_status,
+             slack_next_attempt_time)
+        VALUES (?, ?, ?, ?, ?, ?)
         """,
         (
             alert_id,
@@ -177,6 +202,7 @@ def create_alert_event(
             event_type.value,
             message,
             AlertDeliveryStatus.PENDING.value,
+            event_time,
         ),
     )
     return AlertEventRecord(
@@ -186,25 +212,77 @@ def create_alert_event(
         event_type=event_type,
         message=message,
         slack_status=AlertDeliveryStatus.PENDING,
+        slack_next_attempt_time=event_time,
     )
 
 
-def update_alert_event_delivery(
+def claim_alert_event_delivery(
     conn,
     alert_event_id: int,
     *,
-    status: AlertDeliveryStatus,
-    message_ts: str | None = None,
-    error: str | None = None,
+    attempted_at: int,
+    retry_at: int,
+) -> bool:
+    """Atomically claim a due event and persist its attempt before I/O."""
+    cursor = conn.execute(
+        """
+        UPDATE alert_events
+        SET slack_attempt_count=slack_attempt_count+1,
+            slack_last_attempt_time=?, slack_next_attempt_time=?,
+            slack_error=NULL
+        WHERE alert_event_id=?
+          AND slack_status IN ('pending', 'failed')
+          AND slack_terminal=0
+          AND slack_next_attempt_time<=?
+        """,
+        (attempted_at, retry_at, alert_event_id, attempted_at),
+    )
+    conn.commit()
+    return int(cursor.rowcount) == 1
+
+
+def mark_alert_event_sent(
+    conn,
+    alert_event_id: int,
+    *,
+    message_ts: str,
 ) -> None:
-    """Record the outcome of one Slack delivery attempt."""
+    """Record successful Slack delivery as terminal."""
     conn.execute(
         """
         UPDATE alert_events
-        SET slack_status=?, slack_message_ts=?, slack_error=?
+        SET slack_status=?, slack_message_ts=?, slack_error=NULL,
+            slack_next_attempt_time=NULL, slack_terminal=1
         WHERE alert_event_id=?
         """,
-        (status.value, message_ts, error, alert_event_id),
+        (AlertDeliveryStatus.SENT.value, message_ts, alert_event_id),
+    )
+    conn.commit()
+
+
+def mark_alert_event_failed(
+    conn,
+    alert_event_id: int,
+    *,
+    error: str,
+    retry_at: int | None,
+    terminal: bool,
+) -> None:
+    """Record a failed attempt and its next retry or terminal state."""
+    conn.execute(
+        """
+        UPDATE alert_events
+        SET slack_status=?, slack_error=?, slack_next_attempt_time=?,
+            slack_terminal=?
+        WHERE alert_event_id=?
+        """,
+        (
+            AlertDeliveryStatus.FAILED.value,
+            error,
+            retry_at,
+            int(terminal),
+            alert_event_id,
+        ),
     )
     conn.commit()
 
