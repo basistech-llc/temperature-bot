@@ -93,7 +93,7 @@ Poor: &gt;2000.">VOC<br><small>ppb</small></th>
             <tr>
               <td class="cell-unit">{{ row.display_name or row.device_name }}</td>
               <td class="aqi-cell{{ stale_cls }}" title="{{ stale_title }}">
-                <a class="aqi-summary-link" href="/chart_aqi" title="View one-week AQI history">
+                <a class="aqi-summary-link" href="/chart_aqi">
                   <span>AQI</span>
                   <span class="aqi-number">{{ fmt_aqi(row.status.aqi.value) }}</span>
                   <span class="aqi-pill-table" data-aqi-color="{{ row.status.aqi.color }}">{{ row.status.aqi.name }}</span>

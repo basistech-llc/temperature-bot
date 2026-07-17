@@ -567,6 +567,7 @@ def test_air_quality_route(flask_test_client):  # noqa: F811
     assert b"Indoor Air Quality" in html
     assert b"Outdoor Air Quality" in html
     assert b'class="aqi-summary-link" href="/chart_aqi"' in html
+    assert b'href="/chart_aqi" title="View one-week AQI history"' not in html
     assert b'class="aqi-number">45<' in html
 
     # Column headings
