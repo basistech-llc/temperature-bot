@@ -17,7 +17,13 @@ becomes a mapping.
 
 from enum import StrEnum
 from typing import Annotated, Any, Dict, Iterable, Literal
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    field_validator,
+    model_validator,
+)
 
 from . import ae200
 
@@ -144,6 +150,47 @@ class StatusPayload(BaseModel):
     """
 
     model_config = ConfigDict(extra="allow")
+
+
+class AirthingsSensorReading(BaseModel):
+    """One sensor value returned by the Airthings consumer API."""
+
+    model_config = ConfigDict(extra="ignore", populate_by_name=True)
+
+    sensor_type: str = Field(alias="sensorType", min_length=1)
+    value: float
+    unit: str = Field(min_length=1)
+
+
+class AirthingsDeviceReading(BaseModel):
+    """Validated Airthings device payload ready for database persistence."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    name: str = Field(min_length=1)
+    sensors: list[AirthingsSensorReading] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_sensor_types(self):
+        sensor_types = [sensor.sensor_type for sensor in self.sensors]
+        if len(sensor_types) != len(set(sensor_types)):
+            raise ValueError("sensorType values must be unique per device")
+        if "temp" not in sensor_types:
+            raise ValueError("temp sensor is required")
+        return self
+
+    def status_payload(self) -> dict[str, dict[str, float | str]]:
+        """Return the vendor-keyed status structure stored in ``devlog``."""
+        return {
+            sensor.sensor_type: sensor.model_dump(include={"value", "unit"})
+            for sensor in self.sensors
+        }
+
+    def temperature(self) -> float:
+        """Return the required temperature sensor value."""
+        return next(
+            sensor.value for sensor in self.sensors if sensor.sensor_type == "temp"
+        )
 
 
 class AlertEventType(StrEnum):

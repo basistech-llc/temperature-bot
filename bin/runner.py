@@ -14,6 +14,7 @@ import time
 from os.path import dirname, abspath
 import tabulate
 import requests
+from pydantic import TypeAdapter
 
 # runner is first to run so it needs to add . to the path
 sys.path.append(dirname(dirname(abspath(__file__))))
@@ -31,6 +32,7 @@ from app.device_types import (
     HubitatDevice,
     classify_hubitat_device,
 )
+from app.models import AirthingsDeviceReading
 from app import rules_engine
 
 
@@ -38,6 +40,7 @@ import lib.ctools.lock as clock
 import lib.ctools.clogging as clogging
 
 logger = logging.getLogger(__name__)
+AIRTHINGS_READING_BATCH = TypeAdapter(list[AirthingsDeviceReading])
 
 
 def update_from_ae200(conn):
@@ -121,19 +124,43 @@ def update_from_hubitat(conn):
         ", ".join(updated_names),
     )
 
-def update_from_airthings(conn):
+def update_from_airthings(conn) -> bool:
+    """Collect and persist one complete Airthings response.
+
+    Collection and payload failures are integration failures: log them and let
+    the runner continue to monitoring rules. Database failures remain fatal.
+    """
+    try:
+        readings = AIRTHINGS_READING_BATCH.validate_python(
+            airthings.read_airthings_now()
+        )
+    except (
+        requests.exceptions.RequestException,
+        LookupError,
+        RuntimeError,
+        TypeError,
+        ValueError,
+    ) as error:
+        logger.error("update_from_airthings: collection failed: %s", error)
+        return False
+
     logtime = time.time()
-    data = airthings.read_airthings_now()
     updated_names = []
-    for dev in data:
-        sensors = {sensor['sensorType']:{'value':sensor['value'],'unit':sensor['unit']} for sensor in dev['sensors']}
-        name = "Airthings "+dev['name']
-        temp = sensors['temp']['value']
+    for reading in readings:
+        sensors = reading.status_payload()
+        name = f"Airthings {reading.name}"
+        temp = reading.temperature()
         if conn is None:
-            print("name=",name,"temp=",temp,'status',sensors)
+            print("name=", name, "temp=", temp, "status", sensors)
             continue
         db.get_or_create_device_id(conn, name, device_type=DEVICE_TYPE_SENSOR)
-        db.insert_devlog_entry(conn, device_name=name, temp=temp, statusdict=sensors, logtime=logtime)
+        db.insert_devlog_entry(
+            conn,
+            device_name=name,
+            temp=temp,
+            statusdict=sensors,
+            logtime=logtime,
+        )
         updated_names.append(name)
     if conn is not None:
         logger.info(
@@ -141,6 +168,7 @@ def update_from_airthings(conn):
             len(updated_names),
             ", ".join(updated_names),
         )
+    return True
 
 
 def update_aqi(conn):

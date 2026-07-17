@@ -10,9 +10,11 @@ import sqlite3
 import datetime
 import importlib.util
 import json
+import logging
 from pathlib import Path
 
 import pytest
+import requests
 from conftest import db_path
 
 from app.constants import TEST_DB_NAME
@@ -83,6 +85,67 @@ def test_runner_default_lock_uses_runner_file(monkeypatch, temp_db):
     runner.main()
 
     assert captured["lockfile"] == str(Path(runner.__file__).resolve())
+
+
+@pytest.mark.parametrize("failure", ["timeout", "malformed"])
+def test_runner_alerts_continue_when_airthings_poll_fails(
+    failure, monkeypatch, temp_db, caplog
+):
+    """Airthings failures must not suppress alert reminders or recoveries."""
+    alert_calls = []
+
+    if failure == "timeout":
+
+        def fail_airthings_request():
+            raise requests.exceptions.Timeout("Airthings timed out")
+
+        monkeypatch.setattr(
+            runner.airthings, "read_airthings_now", fail_airthings_request
+        )
+    else:
+        monkeypatch.setattr(
+            runner.airthings,
+            "read_airthings_now",
+            lambda: [
+                {
+                    "name": "Valid First Device",
+                    "sensors": [
+                        {"sensorType": "temp", "value": 21, "unit": "c"}
+                    ],
+                },
+                {
+                    "name": "Lab",
+                    "sensors": [
+                        {"sensorType": "humidity", "value": 45, "unit": "pct"}
+                    ],
+                }
+            ],
+        )
+
+    monkeypatch.setenv(TEST_DB_NAME, temp_db)
+    monkeypatch.setattr(sys, "argv", ["runner"])
+    monkeypatch.setattr(runner.clock, "lock_script", lambda _path: 1)
+    monkeypatch.setattr(runner, "update_from_ae200", lambda _conn: None)
+    monkeypatch.setattr(runner, "update_from_hubitat", lambda _conn: None)
+    monkeypatch.setattr(runner.db, "get_rules_master_enabled", lambda _conn: False)
+
+    def record_alert_run(conn, *, commit):
+        alert_calls.append((conn, commit))
+        return ""
+
+    monkeypatch.setattr(runner.rules_engine, "run_alert_rules", record_alert_run)
+
+    with caplog.at_level(logging.ERROR, logger="bin.runner"):
+        runner.main()
+
+    assert len(alert_calls) == 1
+    assert alert_calls[0][1] is True
+    assert "update_from_airthings: collection failed:" in caplog.text
+    with sqlite3.connect(temp_db) as conn:
+        airthings_device_count = conn.execute(
+            "SELECT COUNT(*) FROM devices WHERE device_name LIKE 'Airthings %'"
+        ).fetchone()[0]
+    assert airthings_device_count == 0
 
 
 def test_makefile_local_targets_control_sensor_simulators():

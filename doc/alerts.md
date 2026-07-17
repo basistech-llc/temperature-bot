@@ -3,6 +3,9 @@
 Alert rules monitor equipment and sensors without changing them. They run once
 per normal runner cycle even when the master HVAC Rules switch is off. HVAC
 action rules remain subject to the master and per-device rule switches.
+An Airthings request or payload-validation failure is logged but does not stop
+that cycle's alert evaluation, reminders, or recovery notifications. The
+collector validates the complete response before writing any device rows.
 
 `bin/rules.py` contains the two rule entry points:
 
