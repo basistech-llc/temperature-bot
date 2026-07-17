@@ -146,6 +146,87 @@ class StatusPayload(BaseModel):
     model_config = ConfigDict(extra="allow")
 
 
+class AlertEventType(StrEnum):
+    """Lifecycle events emitted for a persistent alert."""
+
+    TRIGGERED = "triggered"
+    REMINDER = "reminder"
+    RESOLVED = "resolved"
+
+
+class AlertDeliveryStatus(StrEnum):
+    """Slack delivery state for one alert event."""
+
+    PENDING = "pending"
+    SENT = "sent"
+    FAILED = "failed"
+
+
+class AlertRuleDevice(BaseModel):
+    """Latest device observation and exact-value run supplied to alert rules."""
+
+    device_id: int
+    name: str
+    device_type: str | None = None
+    status: StatusPayload
+    unchanged_since: int
+    observed_through: int
+    unchanged_for_seconds: int
+    reading_age_seconds: int
+
+
+class AlertRuleResult(BaseModel):
+    """Active or recovered condition returned by ``run_alert_rules_for_device``."""
+
+    alert_type: str = Field(min_length=1)
+    active: bool
+    started_at: int | None = None
+    message: str = Field(min_length=1)
+    resolved_message: str = Field(min_length=1)
+
+
+class AlertRuleEvaluation(BaseModel):
+    """One alert-rule result plus execution state."""
+
+    device_id: int
+    result: AlertRuleResult
+    now: int
+    commit: bool
+
+
+class AlertEventNotification(BaseModel):
+    """Event content passed from alert state handling to delivery."""
+
+    alert_id: int
+    event_time: int
+    event_type: AlertEventType
+    message: str
+
+
+class AlertRecord(BaseModel):
+    """Persistent active-alert state."""
+
+    alert_id: int
+    device_id: int
+    alert_type: str
+    alert_value: str
+    start_time: int
+    end_time: int | None = None
+
+
+class AlertEventRecord(BaseModel):
+    """One logged alert notification or recovery event."""
+
+    alert_event_id: int
+    alert_id: int
+    event_time: int
+    event_type: AlertEventType
+    message: str
+    slack_status: AlertDeliveryStatus
+    slack_message_ts: str | None = None
+    slack_error: str | None = None
+
+
 class RoomConfig(BaseModel):
     """Static dashboard configuration for one room."""
 

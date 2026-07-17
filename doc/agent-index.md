@@ -66,6 +66,18 @@ dashboard frontend work.
   - SQLite-backed grouping/rendering contracts and substantive client state
     transitions.
 
+## Alert Rules
+
+- `doc/alerts.md`
+  - Monitoring/action rule separation, Airthings stuck detection, reminder
+    cadence, persistence, and Slack delivery.
+- `bin/rules.py`
+  - Defines both `run_rules_for_device()` and
+    `run_alert_rules_for_device()`.
+- `app/rules_engine.py` and `app/db_alerts.py`
+  - Evaluate alert conditions independently of the HVAC master switch and
+    persist notification events before delivery.
+
 ## Hickory Life Easter Egg
 
 Recommended implementation shape:

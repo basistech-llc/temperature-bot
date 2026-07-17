@@ -13,12 +13,14 @@ import types
 import time
 import logging
 from pathlib import Path
+from collections.abc import Callable
 
 
 from .constants import RULES_ENGINE_DEVICE_NAME
 from .device_types import DEVICE_TYPE_INTERNAL
 from .paths import BIN_DIR
 from . import db
+from . import db_alerts
 from . import presence
 from . import ae200
 from . import slack
@@ -30,6 +32,12 @@ from .models import (
     ModeControl,
     SetTempControl,
     Device,
+    AlertDeliveryStatus,
+    AlertEventNotification,
+    AlertEventType,
+    AlertRuleDevice,
+    AlertRuleEvaluation,
+    AlertRuleResult,
     RuleResult,
 )
 
@@ -38,8 +46,17 @@ logger = logging.getLogger(__name__)
 RULES_DEVICE_NAME = RULES_ENGINE_DEVICE_NAME
 RULES_PATH = Path(BIN_DIR) / "rules.py"
 
-RULES_DISABLED_MESSAGE = "Master rules switch is OFF; skipping all rules execution"
+RULES_DISABLED_MESSAGE = "Master rules switch is OFF; skipping HVAC rule execution"
 RULES_TIME_SUSPENDED_MESSAGE = "all rules disabled (time-limited suspension)"
+
+ALERT_REPEAT_FIRST_HOUR_SECONDS = 5 * 60
+ALERT_REPEAT_FIRST_DAY_SECONDS = 60 * 60
+ALERT_REPEAT_LATER_SECONDS = 4 * 60 * 60
+ALERT_FIRST_HOUR_SECONDS = 60 * 60
+ALERT_FIRST_DAY_SECONDS = 24 * 60 * 60
+
+AlertNotifier = Callable[[str], str | None]
+AlertRuleFunction = Callable[[AlertRuleDevice, datetime.datetime], object]
 
 
 def get_room_presence(conn, room_id: int, *, when: int | None = None):
@@ -440,6 +457,203 @@ def _commit_rule_result(conn, dev: Device, result: RuleResult):
         )
 
 
+def next_alert_notification_at(start_time: int, last_event_time: int) -> int:
+    """Return the next reminder boundary for the requested escalating cadence."""
+    first_hour_end = start_time + ALERT_FIRST_HOUR_SECONDS
+    first_day_end = start_time + ALERT_FIRST_DAY_SECONDS
+    if last_event_time < first_hour_end:
+        return min(
+            last_event_time + ALERT_REPEAT_FIRST_HOUR_SECONDS,
+            first_hour_end,
+        )
+    if last_event_time < first_day_end:
+        return min(
+            last_event_time + ALERT_REPEAT_FIRST_DAY_SECONDS,
+            first_day_end,
+        )
+    return last_event_time + ALERT_REPEAT_LATER_SECONDS
+
+
+def _require_alert_rule_results(results) -> list[AlertRuleResult]:
+    if results is None:
+        return []
+    if not isinstance(results, (list, tuple)):
+        raise TypeError(
+            "run_alert_rules_for_device returned "
+            f"{type(results).__name__}, expected a list"
+        )
+    return [
+        result
+        if isinstance(result, AlertRuleResult)
+        else AlertRuleResult.model_validate(result)
+        for result in results
+    ]
+
+
+def _invoke_alert_rule(
+    rule_function: AlertRuleFunction,
+    device: AlertRuleDevice,
+    now: datetime.datetime,
+) -> object:
+    return rule_function(device, now)
+
+
+def _deliver_alert_event(
+    conn,
+    notification: AlertEventNotification,
+    notifier: AlertNotifier,
+) -> None:
+    event = db_alerts.create_alert_event(
+        conn,
+        alert_id=notification.alert_id,
+        event_time=notification.event_time,
+        event_type=notification.event_type,
+        message=notification.message,
+    )
+    conn.commit()
+    logger.warning("Alert %s: %s", notification.event_type.value, notification.message)
+    try:
+        message_ts = notifier(notification.message)
+        if not message_ts:
+            raise RuntimeError("Slack did not return a message timestamp")
+    except Exception as error:  # pylint: disable=broad-except
+        logger.exception("Failed to deliver alert event %s to Slack", event.alert_event_id)
+        db_alerts.update_alert_event_delivery(
+            conn,
+            event.alert_event_id,
+            status=AlertDeliveryStatus.FAILED,
+            error=str(error),
+        )
+        return
+    db_alerts.update_alert_event_delivery(
+        conn,
+        event.alert_event_id,
+        status=AlertDeliveryStatus.SENT,
+        message_ts=message_ts,
+    )
+
+
+def _apply_alert_rule_result(
+    conn,
+    evaluation: AlertRuleEvaluation,
+    notifier: AlertNotifier,
+) -> str | None:
+    device_id = evaluation.device_id
+    result = evaluation.result
+    now = evaluation.now
+    commit = evaluation.commit
+    active_alert = db_alerts.get_active_alert_record(
+        conn, device_id, result.alert_type
+    )
+    if result.active:
+        if active_alert is None:
+            if not commit:
+                return f"Device {device_id} would trigger {result.alert_type}"
+            active_alert = db_alerts.create_alert_record(
+                conn,
+                device_id=device_id,
+                alert_type=result.alert_type,
+                start_time=result.started_at or now,
+            )
+            _deliver_alert_event(
+                conn,
+                AlertEventNotification(
+                    alert_id=active_alert.alert_id,
+                    event_time=now,
+                    event_type=AlertEventType.TRIGGERED,
+                    message=result.message,
+                ),
+                notifier=notifier,
+            )
+            return f"Device {device_id} triggered {result.alert_type}"
+
+        latest_event = db_alerts.get_latest_alert_event(conn, active_alert.alert_id)
+        reminder_due = latest_event is None or now >= next_alert_notification_at(
+            active_alert.start_time,
+            latest_event.event_time if latest_event else active_alert.start_time,
+        )
+        summary = None
+        if reminder_due and commit:
+            _deliver_alert_event(
+                conn,
+                AlertEventNotification(
+                    alert_id=active_alert.alert_id,
+                    event_time=now,
+                    event_type=AlertEventType.REMINDER,
+                    message=result.message,
+                ),
+                notifier=notifier,
+            )
+            summary = f"Device {device_id} reminded {result.alert_type}"
+        return summary
+
+    if active_alert is None:
+        return None
+    if not commit:
+        return f"Device {device_id} would resolve {result.alert_type}"
+    db_alerts.resolve_alert_record(conn, active_alert.alert_id, end_time=now)
+    _deliver_alert_event(
+        conn,
+        AlertEventNotification(
+            alert_id=active_alert.alert_id,
+            event_time=now,
+            event_type=AlertEventType.RESOLVED,
+            message=result.resolved_message,
+        ),
+        notifier=notifier,
+    )
+    return f"Device {device_id} resolved {result.alert_type}"
+
+
+def run_alert_rules(
+    conn,
+    when=None,
+    *,
+    commit: bool = False,
+    notifier: AlertNotifier | None = None,
+) -> str:
+    """Evaluate monitoring-only rules regardless of the HVAC master switch."""
+    now = _rule_datetime(when)
+    now_ts = int(now.timestamp())
+    virtual_module = types.ModuleType("ephemeral_alert_rule_namespace")
+    virtual_module.__file__ = str(RULES_PATH)
+    virtual_module.__dict__["__builtins__"] = __builtins__
+    try:
+        exec(get_rules(), virtual_module.__dict__)  # pylint: disable=exec-used
+    except Exception:  # pylint: disable=broad-except
+        logger.exception("Failed to compile alert rules from %s", RULES_PATH)
+        return "Cannot compile alert rules"
+
+    rule_function = getattr(virtual_module, "run_alert_rules_for_device", None)
+    if not isinstance(rule_function, types.FunctionType):
+        logger.warning("No run_alert_rules_for_device function in %s", RULES_PATH)
+        return "No alert rules"
+
+    deliver = notifier or slack.post
+    results: list[str] = []
+    for device in db_alerts.get_alert_rule_devices(conn, now=now_ts):
+        try:
+            alert_results = _require_alert_rule_results(
+                _invoke_alert_rule(rule_function, device, now)
+            )
+            for alert_result in alert_results:
+                summary = _apply_alert_rule_result(
+                    conn,
+                    AlertRuleEvaluation(
+                        device_id=device.device_id,
+                        result=alert_result,
+                        now=now_ts,
+                        commit=commit,
+                    ),
+                    notifier=deliver,
+                )
+                if summary:
+                    results.append(summary)
+        except Exception:  # pylint: disable=broad-except
+            logger.exception("Failed alert-rule evaluation for device %s", device.device_id)
+    return "\n".join(results)
+
+
 def rules_results(conn, when=None, aqi=50):
     """Reports what would happen if the rules were run at `when` with a specific AQI"""
     logger.debug("when=%s", when)
@@ -454,14 +668,15 @@ def rules_results(conn, when=None, aqi=50):
         results.append(f"Device {device_id} speed set to {value}")
 
     rule_namespace = {**db.devices_to_device_id(conn), **get_time_dict(when)}
-    rule_namespace.update({
-        "AQI": aqi,
-        "set_drive": set_drive_verbose,
-        "set_fan_speed": set_fan_speed_verbose,
-        "get_temp": temps["get_temp"],
-        "get_fcu_temp": temps["get_fcu_temp"],
-        "slack_post":slack.post
-    })
+    rule_namespace.update(
+        {
+            "AQI": aqi,
+            "set_drive": set_drive_verbose,
+            "set_fan_speed": set_fan_speed_verbose,
+            "get_temp": temps["get_temp"],
+            "get_fcu_temp": temps["get_fcu_temp"],
+        }
+    )
 
     exec(get_rules(), rule_namespace, rule_namespace)  # pylint: disable=exec-used
 

@@ -93,3 +93,16 @@ CREATE INDEX IF NOT EXISTS idx_presence_events_device_observed_at
 ON presence_events(device_id, observed_at);
 CREATE INDEX IF NOT EXISTS idx_devlog_device_logtime_log_id
 ON devlog (device_id, logtime DESC, log_id DESC);
+CREATE TABLE IF NOT EXISTS alert_events (
+    alert_event_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    alert_id INTEGER NOT NULL,
+    event_time INTEGER NOT NULL,
+    event_type TEXT NOT NULL CHECK (event_type IN ('triggered', 'reminder', 'resolved')),
+    message TEXT NOT NULL,
+    slack_status TEXT NOT NULL CHECK (slack_status IN ('pending', 'sent', 'failed')),
+    slack_message_ts TEXT,
+    slack_error TEXT,
+    FOREIGN KEY (alert_id) REFERENCES alerts (alert_id)
+);
+CREATE INDEX IF NOT EXISTS idx_alert_events_alert_time
+    ON alert_events (alert_id, event_time DESC, alert_event_id DESC);

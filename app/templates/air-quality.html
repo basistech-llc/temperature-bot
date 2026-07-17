@@ -6,6 +6,9 @@
 {% macro fmt(value) -%}
   {{ "{:,.1f}".format(value) }}
 {%- endmacro %}
+{% macro fmt_aqi(value) -%}
+  {{ "{:,.0f}".format(value) }}
+{%- endmacro %}
 <div class="pure-g">
   <div class="pure-u-1">
     <div id="main-grid">
@@ -79,7 +82,7 @@ Poor: &gt;2000.">VOC<br><small>ppb</small></th>
         <thead>
           <tr>
             <th class="column-unit" scope="col" title="Outdoor sensor source">Unit</th>
-            <th scope="col" title="Outdoor Air Quality Index">AQI</th>
+            <th scope="col" title="Outdoor Air Quality Index"><a class="aqi-summary-link" href="/chart_aqi">AQI</a></th>
           </tr>
         </thead>
         <tbody>
@@ -90,9 +93,11 @@ Poor: &gt;2000.">VOC<br><small>ppb</small></th>
             <tr>
               <td class="cell-unit">{{ row.display_name or row.device_name }}</td>
               <td class="aqi-cell{{ stale_cls }}" title="{{ stale_title }}">
-                <span class="aqi-pill-table" data-aqi-color="{{ row.status.aqi.color }}">
-                  {{ row.status.aqi.name }}: {{ fmt(row.status.aqi.value) }}
-                </span>
+                <a class="aqi-summary-link" href="/chart_aqi" title="View one-week AQI history">
+                  <span>AQI</span>
+                  <span class="aqi-number">{{ fmt_aqi(row.status.aqi.value) }}</span>
+                  <span class="aqi-pill-table" data-aqi-color="{{ row.status.aqi.color }}">{{ row.status.aqi.name }}</span>
+                </a>
               </td>
             </tr>
             {% endif %}
