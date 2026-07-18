@@ -6,8 +6,10 @@ Uses the same schema and connection conventions as app.db.
 import json
 import logging
 import time
+from functools import lru_cache
 
 from . import ae200
+from .device_types import DEVICE_SUBTYPE_AIRTHINGS, DEVICE_TYPE_SENSOR
 from .models import (
     AlertDeliveryStatus,
     AlertEventRecord,
@@ -20,24 +22,40 @@ from .models import (
 logger = logging.getLogger(__name__)
 
 
+def _normalize_json_numbers(value: object) -> object:
+    """Make integral JSON floats compare equal to their integer representation."""
+    if isinstance(value, dict):
+        return {key: _normalize_json_numbers(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_normalize_json_numbers(item) for item in value]
+    if isinstance(value, float) and value.is_integer():
+        return int(value)
+    return value
+
+
+@lru_cache(maxsize=1024)
 def _canonical_status_json(status_json: str) -> str:
-    """Normalize a vendor payload so key order does not look like a value change."""
-    return json.dumps(json.loads(status_json), sort_keys=True, separators=(",", ":"))
+    """Cache normalized JSON so key order and numeric notation do not differ."""
+    normalized = _normalize_json_numbers(json.loads(status_json))
+    return json.dumps(normalized, sort_keys=True, separators=(",", ":"))
 
 
 def get_alert_rule_devices(conn, *, now: int) -> list[AlertRuleDevice]:
-    """Return air-monitor observations with their contiguous exact-value run.
+    """Return discovered Airthings observations with their exact-value run.
 
     ``devlog`` splits identical payloads at ``MAX_DURATION``. Walking backward
     across adjacent, equivalent rows preserves the real unchanged start time.
+    The Airthings collector persists the source as ``device_subtype``;
+    ``aqi_mon`` controls UI display and must not limit safety monitoring.
     """
     devices = conn.execute(
         """
-        SELECT device_id, device_name, device_type
+        SELECT device_id, device_name, device_type, device_subtype
         FROM devices
-        WHERE aqi_mon=1
+        WHERE device_type=? AND device_subtype=?
         ORDER BY device_name
-        """
+        """,
+        (DEVICE_TYPE_SENSOR, DEVICE_SUBTYPE_AIRTHINGS),
     ).fetchall()
     contexts: list[AlertRuleDevice] = []
     for device in devices:
@@ -57,6 +75,7 @@ def get_alert_rule_devices(conn, *, now: int) -> list[AlertRuleDevice]:
                     device_id=device["device_id"],
                     name=device["device_name"],
                     device_type=device["device_type"],
+                    device_subtype=device["device_subtype"],
                     input_error="no status reading is available",
                 )
             )
@@ -74,6 +93,7 @@ def get_alert_rule_devices(conn, *, now: int) -> list[AlertRuleDevice]:
                     device_id=device["device_id"],
                     name=device["device_name"],
                     device_type=device["device_type"],
+                    device_subtype=device["device_subtype"],
                     input_error="the latest status payload is invalid",
                 )
             )
@@ -101,6 +121,7 @@ def get_alert_rule_devices(conn, *, now: int) -> list[AlertRuleDevice]:
                 device_id=device["device_id"],
                 name=device["device_name"],
                 device_type=device["device_type"],
+                device_subtype=device["device_subtype"],
                 status=latest_status,
                 unchanged_since=unchanged_since,
                 observed_through=observed_through,

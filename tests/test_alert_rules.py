@@ -5,6 +5,7 @@ import json
 import requests
 
 from app import db, db_alerts, rules_engine
+from app.device_types import DEVICE_SUBTYPE_AIRTHINGS
 from app.models import AlertEventType
 
 
@@ -20,13 +21,15 @@ AIRTHINGS_STATUS = {
 }
 
 
-def _add_airthings_device(conn, name: str = "Airthings Dungeon") -> int:
+def _add_airthings_device(
+    conn, name: str = "Airthings Dungeon", *, aqi_mon: int = 1
+) -> int:
     cursor = conn.execute(
         """
-        INSERT INTO devices (device_name, device_type, aqi_mon)
-        VALUES (?, 'SENSOR', 1)
+        INSERT INTO devices (device_name, device_type, device_subtype, aqi_mon)
+        VALUES (?, 'SENSOR', ?, ?)
         """,
-        (name,),
+        (name, DEVICE_SUBTYPE_AIRTHINGS, aqi_mon),
     )
     conn.commit()
     return int(cursor.lastrowid)
@@ -43,12 +46,25 @@ def _add_status(conn, device_id: int, logtime: int, duration: int, status) -> No
     conn.commit()
 
 
-def test_exact_value_run_crosses_rle_rows_and_ignores_key_order(test_database_conn):
+def test_exact_value_run_ignores_key_order_and_integer_float_notation(
+    test_database_conn,
+):
     conn = test_database_conn
     device_id = _add_airthings_device(conn)
     prior = {**AIRTHINGS_STATUS, "co2": {"unit": "ppm", "value": 497.0}}
+    historical = {
+        sensor: {
+            **reading,
+            "value": (
+                int(reading["value"])
+                if reading["value"].is_integer()
+                else reading["value"]
+            ),
+        }
+        for sensor, reading in AIRTHINGS_STATUS.items()
+    }
     _add_status(conn, device_id, 900, 100, prior)
-    _add_status(conn, device_id, 1000, 1200, AIRTHINGS_STATUS)
+    _add_status(conn, device_id, 1000, 1200, historical)
     _add_status(
         conn,
         device_id,
@@ -64,6 +80,26 @@ def test_exact_value_run_crosses_rle_rows_and_ignores_key_order(test_database_co
     assert devices[0].observed_through == 2800
     assert devices[0].unchanged_for_seconds == 1800
     assert devices[0].reading_age_seconds == 0
+
+
+def test_discovered_airthings_is_monitored_without_dashboard_flag(
+    test_database_conn,
+):
+    conn = test_database_conn
+    device_id = _add_airthings_device(conn, name="Dungeon", aqi_mon=0)
+    _add_status(conn, device_id, 1000, 601, AIRTHINGS_STATUS)
+    delivered: list[str] = []
+
+    result = rules_engine.run_alert_rules(
+        conn,
+        when=1600,
+        commit=True,
+        notifier=lambda message: delivered.append(message) or "message-ts",
+    )
+
+    assert result == f"Device {device_id} triggered SensorStuck"
+    assert len(delivered) == 1
+    assert db_alerts.get_active_alert_record(conn, device_id, "SensorStuck") is not None
 
 
 def test_stuck_alert_lifecycle_and_cadence_ignore_hvac_master_switch(

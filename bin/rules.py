@@ -8,6 +8,7 @@ This file is loaded by the rules engine and defines action and alert rules.
 
 from datetime import datetime
 
+from app.device_types import DEVICE_SUBTYPE_AIRTHINGS
 from app.models import (
     AlertRuleDevice,
     AlertRuleResult,
@@ -51,7 +52,7 @@ def run_alert_rules_for_device(
 ) -> list[AlertRuleResult]:
     """Return monitoring conditions; this function never changes equipment."""
     del now
-    if not device.name.startswith("Airthings "):
+    if device.device_subtype != DEVICE_SUBTYPE_AIRTHINGS:
         return []
 
     display_name = device.name.removeprefix("Airthings ")

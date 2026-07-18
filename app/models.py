@@ -223,6 +223,7 @@ class AlertRuleDevice(BaseModel):
     device_id: int
     name: str
     device_type: str | None = None
+    device_subtype: str | None = None
     status: StatusPayload | None = None
     unchanged_since: int | None = None
     observed_through: int | None = None
@@ -735,6 +736,10 @@ class DeviceStatus(BaseModel):
     device_type: str | None = Field(
         default=None,
         description="Configured or inferred device type.",
+    )
+    device_subtype: str | None = Field(
+        default=None,
+        description="Integration-assigned device subtype, such as AIRTHINGS.",
     )
     log_id: int | None = Field(default=None, description="Latest devlog row id.")
     logtime: int | None = Field(default=None, description="Unix timestamp for the row.")

@@ -104,7 +104,13 @@ def test_schema_file_contains_rooms_fcu_temp_source_and_set_range_columns():
         }
 
     assert {"room_id", "room_name", "map_json", "fcu_device_id"} <= room_columns
-    assert {"room_id", "display_name", "device_type", "rules_enabled"} <= device_columns
+    assert {
+        "room_id",
+        "display_name",
+        "device_type",
+        "device_subtype",
+        "rules_enabled",
+    } <= device_columns
     assert {
         "fcu_device_id",
         "source_device_id",
@@ -265,6 +271,30 @@ def test_alert_outbox_migration_backfills_existing_delivery_state():
             for row in conn.execute("PRAGMA index_list(alert_events)").fetchall()
         }
         assert "idx_alert_events_slack_outbox" in indexes
+
+
+def test_device_subtype_migration_adds_nullable_discovery_metadata():
+    """V14 adds subtype storage without guessing identity from an existing name."""
+    with closing(sqlite3.connect(":memory:")) as conn:
+        for version in range(1, 14):
+            migration = next(MIGRATION_DIR.glob(f"V{version}__*.sql"))
+            conn.executescript(migration.read_text(encoding="utf-8"))
+        device_id = conn.execute(
+            "INSERT INTO devices (device_name) VALUES ('Airthings Legacy')"
+        ).lastrowid
+
+        conn.executescript(
+            (MIGRATION_DIR / "V14__device_subtype.sql").read_text(encoding="utf-8")
+        )
+
+        columns = {
+            row[1] for row in conn.execute("PRAGMA table_info(devices)").fetchall()
+        }
+        subtype = conn.execute(
+            "SELECT device_subtype FROM devices WHERE device_id=?", (device_id,)
+        ).fetchone()[0]
+        assert "device_subtype" in columns
+        assert subtype is None
 
 
 def test_runtime_schema_validator_accepts_current_schema_with_flyway_history():

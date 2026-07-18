@@ -28,6 +28,7 @@ from app import db
 from app import db_alerts
 from app import hubitat
 from app.device_types import (
+    DEVICE_SUBTYPE_AIRTHINGS,
     DEVICE_TYPE_SENSOR,
     HubitatDevice,
     classify_hubitat_device,
@@ -153,7 +154,12 @@ def update_from_airthings(conn) -> bool:
         if conn is None:
             print("name=", name, "temp=", temp, "status", sensors)
             continue
-        db.get_or_create_device_id(conn, name, device_type=DEVICE_TYPE_SENSOR)
+        db.get_or_create_device_id(
+            conn,
+            name,
+            device_type=DEVICE_TYPE_SENSOR,
+            device_subtype=DEVICE_SUBTYPE_AIRTHINGS,
+        )
         db.insert_devlog_entry(
             conn,
             device_name=name,

@@ -124,6 +124,7 @@ LATEST_DEVICE_STATUS_SQL = """
         d.device_name,
         d.display_name,
         d.device_type,
+        d.device_subtype,
         d.rules_enabled,
         d.aqi_mon,
         d.ae200_device_id,
@@ -501,11 +502,17 @@ def setup_database(conn, schema_file):
 
 
 def get_or_create_device_id(
-    conn, device_name, use_cache=True, *, device_type: str | None = None
+    conn,
+    device_name,
+    use_cache=True,
+    *,
+    device_type: str | None = None,
+    device_subtype: str | None = None,
 ):
     """
     Retrieves the ID for a given device name. If the device name does not exist
     in the devices table, it inserts it and returns the newly generated ID.
+    Discovery-provided type and subtype values fill only unset metadata.
     Don't use the cache when testing
     """
     cursor = conn.cursor()
@@ -513,7 +520,12 @@ def get_or_create_device_id(
     if "PYTEST" in os.environ:
         use_cache = False
 
-    if use_cache and (device_name in DEVICE_MAP) and device_type is None:
+    if (
+        use_cache
+        and (device_name in DEVICE_MAP)
+        and device_type is None
+        and device_subtype is None
+    ):
         logger.debug(
             "get_or_create_device_id DEVICE_MAP[%s]=%s",
             device_name,
@@ -527,6 +539,7 @@ def get_or_create_device_id(
             "INSERT OR IGNORE INTO devices (device_name) VALUES (?);", (device_name,)
         )
         normalized_type = normalize_device_type(device_type)
+        normalized_subtype = normalize_device_subtype(device_subtype)
         if normalized_type:
             cursor.execute(
                 """
@@ -534,6 +547,14 @@ def get_or_create_device_id(
                 WHERE device_name=? AND device_type IS NULL
                 """,
                 (normalized_type, device_name),
+            )
+        if normalized_subtype:
+            cursor.execute(
+                """
+                UPDATE devices SET device_subtype=?
+                WHERE device_name=? AND device_subtype IS NULL
+                """,
+                (normalized_subtype, device_name),
             )
         cursor.execute("SELECT * FROM devices WHERE device_name = ?;", (device_name,))
         result = cursor.fetchone()
@@ -593,6 +614,11 @@ def normalize_device_type(device_type: object) -> str | None:
     return normalized or None
 
 
+def normalize_device_subtype(device_subtype: object) -> str | None:
+    """Normalize integration-assigned subtype metadata."""
+    return normalize_device_type(device_subtype)
+
+
 def infer_device_type(devdict: dict[str, Any]) -> str | None:
     configured = normalize_device_type(devdict.get("device_type"))
     if configured:
@@ -611,7 +637,7 @@ def get_device_metadata(conn) -> list[dict[str, Any]]:
     c.execute(
         """
         SELECT d.device_id, d.device_name, d.display_name, d.device_type,
-               d.rules_enabled, d.ae200_device_id, d.disabled_until,
+               d.device_subtype, d.rules_enabled, d.ae200_device_id, d.disabled_until,
                d.notes, d.aqi_mon, d.room_id, r.room_name
         FROM devices d
         LEFT JOIN rooms r ON d.room_id = r.room_id

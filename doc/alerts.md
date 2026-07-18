@@ -26,6 +26,11 @@ continuous run across `devlog`'s 20-minute run-length-encoding boundaries. It
 only evaluates recently observed readings, so a stopped runner or missing API
 response is not misreported as repeated fresh data.
 
+Every device returned by the Airthings API is evaluated. The collector persists
+`device_type=SENSOR` and fills an unset `device_subtype=AIRTHINGS`; an existing
+subtype is never overwritten. The `aqi_mon` metadata flag only controls indoor-
+air-quality display and does not opt a sensor out of alerts.
+
 ## Lifecycle and delivery
 
 An active condition creates one row in `alerts`. Each notification creates an

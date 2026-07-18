@@ -18,6 +18,7 @@ import requests
 from conftest import db_path
 
 from app.constants import TEST_DB_NAME
+from app.device_types import DEVICE_SUBTYPE_AIRTHINGS, DEVICE_TYPE_SENSOR
 from app.models import Device, RuleResult
 from bin import runner
 
@@ -200,7 +201,8 @@ def test_update_from_airthings_persists_sensor_status(monkeypatch, test_database
 
     row = test_database_conn.execute(
         """
-        SELECT d.device_name, l.temp10x, l.status_json
+        SELECT d.device_name, d.device_type, d.device_subtype,
+               l.temp10x, l.status_json
         FROM devices d
         JOIN devlog l ON d.device_id = l.device_id
         WHERE d.device_name = ?
@@ -210,11 +212,45 @@ def test_update_from_airthings_persists_sensor_status(monkeypatch, test_database
         ("Airthings Lab",),
     ).fetchone()
     assert row is not None
+    assert row["device_type"] == DEVICE_TYPE_SENSOR
+    assert row["device_subtype"] == DEVICE_SUBTYPE_AIRTHINGS
     assert row["temp10x"] == 214
     status = json.loads(row["status_json"])
     assert status["humidity"]["value"] == 45.0
     assert status["co2"]["value"] == 744.0
     assert status["pm25"]["value"] == 3.2
+
+
+def test_update_from_airthings_preserves_existing_device_subtype(
+    monkeypatch, test_database_conn
+):
+    """Airthings discovery fills NULL metadata without replacing prior identity."""
+    test_database_conn.execute(
+        """
+        INSERT INTO devices (device_name, device_type, device_subtype)
+        VALUES ('Airthings Lab', 'SENSOR', 'MANUAL')
+        """
+    )
+    test_database_conn.commit()
+    monkeypatch.setattr(
+        runner.airthings,
+        "read_airthings_now",
+        lambda: [
+            {
+                "name": "Lab",
+                "sensors": [
+                    {"sensorType": "temp", "value": 21.4, "unit": "c"},
+                ],
+            }
+        ],
+    )
+
+    runner.update_from_airthings(test_database_conn)
+
+    subtype = test_database_conn.execute(
+        "SELECT device_subtype FROM devices WHERE device_name='Airthings Lab'"
+    ).fetchone()[0]
+    assert subtype == "MANUAL"
 
 
 def test_runner_database_access(bin_dir, temp_db):
