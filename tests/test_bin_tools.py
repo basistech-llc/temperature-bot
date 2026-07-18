@@ -131,8 +131,8 @@ def test_runner_alerts_continue_when_airthings_poll_fails(
     monkeypatch.setattr(runner, "update_from_hubitat", lambda _conn: None)
     monkeypatch.setattr(runner.db, "get_rules_master_enabled", lambda _conn: False)
 
-    def record_alert_run(conn, *, commit):
-        alert_calls.append((conn, commit))
+    def record_alert_run(conn, *, commit, compiled_rules):
+        alert_calls.append((conn, commit, compiled_rules))
         return ""
 
     monkeypatch.setattr(runner.rules_engine, "run_alert_rules", record_alert_run)
@@ -142,6 +142,7 @@ def test_runner_alerts_continue_when_airthings_poll_fails(
 
     assert len(alert_calls) == 1
     assert alert_calls[0][1] is True
+    assert isinstance(alert_calls[0][2], runner.rules_engine.CompiledRules)
     assert "update_from_airthings: collection failed:" in caplog.text
     with sqlite3.connect(temp_db) as conn:
         airthings_device_count = conn.execute(
