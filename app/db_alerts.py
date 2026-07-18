@@ -40,14 +40,20 @@ def _canonical_status_json(status_json: str) -> str:
     return json.dumps(normalized, sort_keys=True, separators=(",", ":"))
 
 
-def get_alert_rule_devices(conn, *, now: int) -> list[AlertRuleDevice]:
-    """Return discovered Airthings observations with their exact-value run.
+def get_alert_rule_devices(
+    conn, *, now: int, history_seconds: int
+) -> list[AlertRuleDevice]:
+    """Return discovered Airthings observations with a bounded exact-value run.
 
     ``devlog`` splits identical payloads at ``MAX_DURATION``. Walking backward
-    across adjacent, equivalent rows preserves the real unchanged start time.
+    across adjacent, equivalent rows preserves the unchanged start time needed
+    by the rule without rescanning an indefinitely long stuck run each minute.
     The Airthings collector persists the source as ``device_subtype``;
     ``aqi_mon`` controls UI display and must not limit safety monitoring.
     """
+    if history_seconds <= 0:
+        raise ValueError("history_seconds must be positive")
+    history_start = now - history_seconds
     devices = conn.execute(
         """
         SELECT device_id, device_name, device_type, device_subtype
@@ -59,16 +65,16 @@ def get_alert_rule_devices(conn, *, now: int) -> list[AlertRuleDevice]:
     ).fetchall()
     contexts: list[AlertRuleDevice] = []
     for device in devices:
-        rows = conn.execute(
+        latest = conn.execute(
             """
             SELECT logtime, duration, status_json
             FROM devlog
             WHERE device_id=? AND logtime<=? AND status_json IS NOT NULL
             ORDER BY logtime DESC, log_id DESC
+            LIMIT 1
             """,
             (device["device_id"], now),
-        )
-        latest = rows.fetchone()
+        ).fetchone()
         if latest is None:
             contexts.append(
                 AlertRuleDevice(
@@ -80,6 +86,19 @@ def get_alert_rule_devices(conn, *, now: int) -> list[AlertRuleDevice]:
                 )
             )
             continue
+
+        rows = conn.execute(
+            """
+            SELECT logtime, duration, status_json
+            FROM devlog
+            WHERE device_id=?
+              AND logtime<=?
+              AND logtime + MAX(COALESCE(duration, 1), 1) - 1 >= ?
+              AND status_json IS NOT NULL
+            ORDER BY logtime DESC, log_id DESC
+            """,
+            (device["device_id"], now, history_start),
+        )
         try:
             latest_status = StatusPayload.model_validate_json(latest["status_json"])
             latest_canonical = _canonical_status_json(latest["status_json"])

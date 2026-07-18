@@ -22,9 +22,11 @@ close it.
 The first alert rule detects a stuck Airthings monitor when all eight reported
 measurements remain exactly unchanged for `AIRTHINGS_STUCK_SECONDS` (10 minutes
 by default). The database layer compares normalized JSON values and follows a
-continuous run across `devlog`'s 20-minute run-length-encoding boundaries. It
-only evaluates recently observed readings, so a stopped runner or missing API
-response is not misreported as repeated fresh data.
+continuous run across `devlog`'s 20-minute run-length-encoding boundaries. The
+scan is bounded by `ALERT_RULE_HISTORY_SECONDS`, which defaults to the stuck
+threshold, so a long-running alert does not rescan its entire history each
+minute. The latest reading is fetched separately so stale input is still
+reported as indeterminate rather than missing.
 
 Every device returned by the Airthings API is evaluated. The collector persists
 `device_type=SENSOR` and fills an unset `device_subtype=AIRTHINGS`; an existing

@@ -73,13 +73,43 @@ def test_exact_value_run_ignores_key_order_and_integer_float_notation(
         dict(reversed(list(AIRTHINGS_STATUS.items()))),
     )
 
-    devices = db_alerts.get_alert_rule_devices(conn, now=2800)
+    devices = db_alerts.get_alert_rule_devices(
+        conn, now=2800, history_seconds=1800
+    )
 
     assert len(devices) == 1
     assert devices[0].unchanged_since == 1000
     assert devices[0].observed_through == 2800
     assert devices[0].unchanged_for_seconds == 1800
     assert devices[0].reading_age_seconds == 0
+
+
+def test_exact_value_run_scan_is_bounded_by_requested_history(test_database_conn):
+    conn = test_database_conn
+    device_id = _add_airthings_device(conn)
+    _add_status(conn, device_id, 1000, 1200, AIRTHINGS_STATUS)
+    _add_status(conn, device_id, 2200, 601, AIRTHINGS_STATUS)
+
+    devices = db_alerts.get_alert_rule_devices(
+        conn, now=2800, history_seconds=600
+    )
+
+    assert devices[0].unchanged_since == 2200
+    assert devices[0].unchanged_for_seconds == 600
+
+
+def test_bounded_history_still_reports_stale_latest_reading(test_database_conn):
+    conn = test_database_conn
+    device_id = _add_airthings_device(conn)
+    _add_status(conn, device_id, 1000, 1, AIRTHINGS_STATUS)
+
+    devices = db_alerts.get_alert_rule_devices(
+        conn, now=2800, history_seconds=600
+    )
+
+    assert devices[0].status is not None
+    assert devices[0].input_error is None
+    assert devices[0].reading_age_seconds == 1800
 
 
 def test_discovered_airthings_is_monitored_without_dashboard_flag(

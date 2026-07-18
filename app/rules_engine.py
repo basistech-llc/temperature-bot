@@ -61,6 +61,7 @@ ALERT_DELIVERY_RETRY_INITIAL_SECONDS = 60
 ALERT_DELIVERY_RETRY_MAX_SECONDS = 60 * 60
 ALERT_DELIVERY_MAX_ATTEMPTS = 24
 ALERT_DELIVERY_OUTBOX_BATCH_SIZE = 100
+DEFAULT_ALERT_RULE_HISTORY_SECONDS = 10 * 60
 
 AlertNotifier = Callable[[str], str | None]
 AlertRuleFunction = Callable[[AlertRuleDevice, datetime.datetime], object]
@@ -757,8 +758,19 @@ def run_alert_rules(
         logger.warning("No run_alert_rules_for_device function in %s", RULES_PATH)
         return "No alert rules"
 
+    history_seconds = getattr(
+        virtual_module,
+        "ALERT_RULE_HISTORY_SECONDS",
+        DEFAULT_ALERT_RULE_HISTORY_SECONDS,
+    )
+    if not isinstance(history_seconds, int) or history_seconds <= 0:
+        logger.error("ALERT_RULE_HISTORY_SECONDS must be a positive integer")
+        return "Invalid alert-rule history"
+
     results: list[str] = []
-    for device in db_alerts.get_alert_rule_devices(conn, now=now_ts):
+    for device in db_alerts.get_alert_rule_devices(
+        conn, now=now_ts, history_seconds=history_seconds
+    ):
         try:
             alert_results = _require_alert_rule_results(
                 _invoke_alert_rule(rule_function, device, now)
