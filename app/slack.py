@@ -1,14 +1,10 @@
 """Slack notification delivery."""
 
-import logging
-
 import requests
 from pydantic import BaseModel
 
 from app.paths import TIMEOUT_SECONDS
 from app.util import get_secret
-
-logger = logging.getLogger(__name__)
 
 SLACK_POST_URL = "https://slack.com/api/chat.postMessage"
 SLACK_UPDATE_URL = "https://slack.com/api/chat.update"

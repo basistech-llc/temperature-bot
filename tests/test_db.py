@@ -667,6 +667,36 @@ def test_cached_discovery_fills_metadata_without_reselecting(
     db.DEVICE_MAP.clear()
 
 
+def test_cached_discovery_preserves_caller_transaction(
+    test_database_conn, monkeypatch
+):
+    monkeypatch.delenv("PYTEST", raising=False)
+    db.DEVICE_MAP.clear()
+    device_id = db.get_or_create_device_id(test_database_conn, "Cached Sensor")
+    test_database_conn.execute(
+        "UPDATE devices SET display_name='Uncommitted' WHERE device_id=?",
+        (device_id,),
+    )
+
+    repeated_id = db.get_or_create_device_id(
+        test_database_conn,
+        "Cached Sensor",
+        device_type="SENSOR",
+        device_subtype="AIRTHINGS",
+    )
+
+    assert repeated_id == device_id
+    assert test_database_conn.in_transaction is True
+    test_database_conn.rollback()
+    row = test_database_conn.execute(
+        "SELECT display_name, device_type, device_subtype "
+        "FROM devices WHERE device_id=?",
+        (device_id,),
+    ).fetchone()
+    assert tuple(row) == (None, None, None)
+    db.DEVICE_MAP.clear()
+
+
 def test_cached_rejected_fcu_promotion_rolls_back(test_database_conn, monkeypatch):
     monkeypatch.delenv("PYTEST", raising=False)
     db.DEVICE_MAP.clear()

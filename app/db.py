@@ -503,7 +503,6 @@ def setup_database(conn, schema_file):
 
 
 def _cached_discovered_device_id(
-    conn,
     cursor,
     device_name: str,
     device_type: str | None,
@@ -513,6 +512,7 @@ def _cached_discovered_device_id(
     device_id = DEVICE_MAP.get(device_name)
     if device_id is None:
         return None
+    cursor.execute("SAVEPOINT cached_discovery_metadata")
     try:
         if device_type:
             cursor.execute(
@@ -528,10 +528,10 @@ def _cached_discovered_device_id(
             )
         if device_type == DEVICE_TYPE_FCU:
             _ensure_fcu_room(cursor, device_id)
-        if device_type or device_subtype:
-            conn.commit()
+        cursor.execute("RELEASE SAVEPOINT cached_discovery_metadata")
     except (sqlite3.Error, ValueError):
-        conn.rollback()
+        cursor.execute("ROLLBACK TO SAVEPOINT cached_discovery_metadata")
+        cursor.execute("RELEASE SAVEPOINT cached_discovery_metadata")
         raise
     return device_id
 
@@ -559,7 +559,7 @@ def get_or_create_device_id(
 
     device_id = (
         _cached_discovered_device_id(
-            conn, cursor, device_name, normalized_type, normalized_subtype
+            cursor, device_name, normalized_type, normalized_subtype
         )
         if use_cache
         else None
