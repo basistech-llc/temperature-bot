@@ -14,6 +14,7 @@ import time
 from collections.abc import Callable
 from typing import Any
 from flask import render_template, request, redirect, url_for
+from markupsafe import escape
 
 from .constants import DASHBOARD_AIR_QUALITY_DEVICE_EXPIRATION_SECONDS
 from .device_types import (
@@ -307,11 +308,16 @@ def _rules_forecast_table(conn, hour_now: datetime.datetime) -> list[str]:
                 aqi=aqi,
                 compiled_rules=compiled_rules,
             )
-            formatted_results = results.replace("\n", "<br>")
+            formatted_results = _format_rules_result(results)
             rows.append(f"<td class='rule-result'>{formatted_results}</td>")
         rows.append("</tr>")
     rows.append("</table>")
     return rows
+
+
+def _format_rules_result(result: str) -> str:
+    """Escape dynamic rule output while preserving visible line breaks."""
+    return str(escape(result)).replace("\n", "<br>")
 
 
 def _register_core_routes(app):

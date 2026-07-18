@@ -15,6 +15,7 @@ from app.routes_web import (
     _dashboard_device_label_with_icon,
     _dashboard_device_tooltip,
     _filter_speed_control_devices,
+    _format_rules_result,
     _get_hubitat_sensors,
     _rules_forecast_table,
     _table_update_summary,
@@ -65,6 +66,12 @@ def test_rules_forecast_table_is_complete_html(test_database_conn):
     assert rows[0] == "<table class='rules-table'>"
     assert rows[-1] == "</table>"
     assert rows.count("</table>") == 1
+
+
+def test_rules_forecast_escapes_dynamic_output():
+    assert _format_rules_result("<script>alert('x')</script>\nnext") == (
+        "&lt;script&gt;alert(&#39;x&#39;)&lt;/script&gt;<br>next"
+    )
 
 
 def test_footer_metadata_on_all_pages(flask_test_client):  # noqa: F811
