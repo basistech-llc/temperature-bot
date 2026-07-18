@@ -667,6 +667,23 @@ def test_cached_discovery_fills_metadata_without_reselecting(
     db.DEVICE_MAP.clear()
 
 
+def test_cached_lookup_without_metadata_executes_no_sql(
+    test_database_conn, monkeypatch
+):
+    monkeypatch.delenv("PYTEST", raising=False)
+    db.DEVICE_MAP.clear()
+    device_id = db.get_or_create_device_id(test_database_conn, "Cached Sensor")
+    statements: list[str] = []
+    test_database_conn.set_trace_callback(statements.append)
+
+    repeated_id = db.get_or_create_device_id(test_database_conn, "Cached Sensor")
+    test_database_conn.set_trace_callback(None)
+
+    assert repeated_id == device_id
+    assert not statements
+    db.DEVICE_MAP.clear()
+
+
 def test_cached_discovery_preserves_caller_transaction(
     test_database_conn, monkeypatch
 ):

@@ -512,6 +512,8 @@ def _cached_discovered_device_id(
     device_id = DEVICE_MAP.get(device_name)
     if device_id is None:
         return None
+    if not device_type and not device_subtype:
+        return device_id
     cursor.execute("SAVEPOINT cached_discovery_metadata")
     try:
         if device_type:
