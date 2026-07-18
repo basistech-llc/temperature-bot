@@ -473,7 +473,7 @@ def _record_action_rule_failure(conn, devdict, error: Exception, *, commit: bool
     device_id = devdict["device_id"]
     error_name = type(error).__name__
     message = f"Device {device_id} action-rule failure: {error_name}: {error}"
-    logger.exception(message)
+    logger.exception("Device %s action-rule failure: %s: %s", device_id, error_name, error)
     if commit:
         try:
             db.insert_action_rule_failure(
