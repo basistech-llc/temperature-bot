@@ -640,6 +640,33 @@ def test_fcu_discovery_creates_and_assigns_owned_room(test_database_conn):
     assert test_database_conn.execute("SELECT COUNT(*) FROM rooms").fetchone()[0] == 1
 
 
+def test_cached_discovery_fills_metadata_without_reselecting(
+    test_database_conn, monkeypatch
+):
+    monkeypatch.delenv("PYTEST", raising=False)
+    db.DEVICE_MAP.clear()
+    device_id = db.get_or_create_device_id(test_database_conn, "Cached Sensor")
+    statements: list[str] = []
+    test_database_conn.set_trace_callback(statements.append)
+
+    repeated_id = db.get_or_create_device_id(
+        test_database_conn,
+        "Cached Sensor",
+        device_type="SENSOR",
+        device_subtype="AIRTHINGS",
+    )
+    test_database_conn.set_trace_callback(None)
+
+    assert repeated_id == device_id
+    assert not any("INSERT" in statement or "SELECT" in statement for statement in statements)
+    row = test_database_conn.execute(
+        "SELECT device_type, device_subtype FROM devices WHERE device_id=?",
+        (device_id,),
+    ).fetchone()
+    assert tuple(row) == ("SENSOR", "AIRTHINGS")
+    db.DEVICE_MAP.clear()
+
+
 def test_fcu_discovery_rolls_back_rejected_type_change(test_database_conn):
     """A rejected FCU promotion must not leave a transaction open."""
     device_id = db.get_or_create_device_id(

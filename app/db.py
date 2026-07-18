@@ -517,30 +517,42 @@ def get_or_create_device_id(
     Don't use the cache when testing
     """
     cursor = conn.cursor()
+    normalized_type = normalize_device_type(device_type)
+    normalized_subtype = normalize_device_subtype(device_subtype)
 
     if "PYTEST" in os.environ:
         use_cache = False
 
-    if (
-        use_cache
-        and (device_name in DEVICE_MAP)
-        and device_type is None
-        and device_subtype is None
-    ):
+    if use_cache and device_name in DEVICE_MAP:
+        device_id = DEVICE_MAP[device_name]
+        if normalized_type:
+            cursor.execute(
+                "UPDATE devices SET device_type=? "
+                "WHERE device_id=? AND device_type IS NULL",
+                (normalized_type, device_id),
+            )
+        if normalized_subtype:
+            cursor.execute(
+                "UPDATE devices SET device_subtype=? "
+                "WHERE device_id=? AND device_subtype IS NULL",
+                (normalized_subtype, device_id),
+            )
+        if normalized_type == DEVICE_TYPE_FCU:
+            _ensure_fcu_room(cursor, device_id)
+        if normalized_type or normalized_subtype:
+            conn.commit()
         logger.debug(
             "get_or_create_device_id DEVICE_MAP[%s]=%s",
             device_name,
-            DEVICE_MAP[device_name],
+            device_id,
         )
-        return DEVICE_MAP[device_name]
+        return device_id
 
     try:
         logger.debug("INSERT OR IGNORE device_name=%s", device_name)
         cursor.execute(
             "INSERT OR IGNORE INTO devices (device_name) VALUES (?);", (device_name,)
         )
-        normalized_type = normalize_device_type(device_type)
-        normalized_subtype = normalize_device_subtype(device_subtype)
         if normalized_type:
             cursor.execute(
                 """
