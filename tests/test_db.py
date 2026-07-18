@@ -667,6 +667,22 @@ def test_cached_discovery_fills_metadata_without_reselecting(
     db.DEVICE_MAP.clear()
 
 
+def test_cached_rejected_fcu_promotion_rolls_back(test_database_conn, monkeypatch):
+    monkeypatch.delenv("PYTEST", raising=False)
+    db.DEVICE_MAP.clear()
+    device_id = db.get_or_create_device_id(
+        test_database_conn, "Cached Sensor", device_type="SENSOR"
+    )
+
+    with pytest.raises(ValueError, match=f"Device {device_id} is not an FCU"):
+        db.get_or_create_device_id(
+            test_database_conn, "Cached Sensor", device_type="FCU"
+        )
+
+    assert test_database_conn.in_transaction is False
+    db.DEVICE_MAP.clear()
+
+
 def test_fcu_discovery_rolls_back_rejected_type_change(test_database_conn):
     """A rejected FCU promotion must not leave a transaction open."""
     device_id = db.get_or_create_device_id(

@@ -502,6 +502,40 @@ def setup_database(conn, schema_file):
 ## Device management
 
 
+def _cached_discovered_device_id(
+    conn,
+    cursor,
+    device_name: str,
+    device_type: str | None,
+    device_subtype: str | None,
+) -> int | None:
+    """Fill nullable discovery metadata and return a cached device id."""
+    device_id = DEVICE_MAP.get(device_name)
+    if device_id is None:
+        return None
+    try:
+        if device_type:
+            cursor.execute(
+                "UPDATE devices SET device_type=? "
+                "WHERE device_id=? AND device_type IS NULL",
+                (device_type, device_id),
+            )
+        if device_subtype:
+            cursor.execute(
+                "UPDATE devices SET device_subtype=? "
+                "WHERE device_id=? AND device_subtype IS NULL",
+                (device_subtype, device_id),
+            )
+        if device_type == DEVICE_TYPE_FCU:
+            _ensure_fcu_room(cursor, device_id)
+        if device_type or device_subtype:
+            conn.commit()
+    except (sqlite3.Error, ValueError):
+        conn.rollback()
+        raise
+    return device_id
+
+
 def get_or_create_device_id(
     conn,
     device_name,
@@ -523,24 +557,14 @@ def get_or_create_device_id(
     if "PYTEST" in os.environ:
         use_cache = False
 
-    if use_cache and device_name in DEVICE_MAP:
-        device_id = DEVICE_MAP[device_name]
-        if normalized_type:
-            cursor.execute(
-                "UPDATE devices SET device_type=? "
-                "WHERE device_id=? AND device_type IS NULL",
-                (normalized_type, device_id),
-            )
-        if normalized_subtype:
-            cursor.execute(
-                "UPDATE devices SET device_subtype=? "
-                "WHERE device_id=? AND device_subtype IS NULL",
-                (normalized_subtype, device_id),
-            )
-        if normalized_type == DEVICE_TYPE_FCU:
-            _ensure_fcu_room(cursor, device_id)
-        if normalized_type or normalized_subtype:
-            conn.commit()
+    device_id = (
+        _cached_discovered_device_id(
+            conn, cursor, device_name, normalized_type, normalized_subtype
+        )
+        if use_cache
+        else None
+    )
+    if device_id is not None:
         logger.debug(
             "get_or_create_device_id DEVICE_MAP[%s]=%s",
             device_name,
