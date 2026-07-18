@@ -22,6 +22,8 @@ Temperature Bot now tracks SQL schema versions with Flyway.
 - `etc/flyway/sql/V13__alert_delivery_outbox.sql` adds attempt counts, Unix
   timestamps for last and next attempts, and explicit terminal state so failed
   Slack notifications can be retried safely across runner processes.
+- `etc/flyway/sql/V14__device_subtype.sql` adds nullable device discovery
+  metadata used to identify Airthings sensors without relying on display names.
 - Flyway creates and manages `flyway_schema_history`; do not add that table to a versioned migration or to `etc/schema.sql`.
 - Existing populated databases are baselined at V1 by `make migrate-db` and `make deploy`, then any later migrations are applied.
 - `etc/schema.sql` is generated from the Flyway migration history for tests and compatibility. Do not hand-edit it for schema changes.
