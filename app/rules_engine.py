@@ -469,6 +469,25 @@ def _commit_rule_result(conn, dev: Device, result: RuleResult):
         )
 
 
+def _record_action_rule_failure(conn, devdict, error: Exception, *, commit: bool):
+    device_id = devdict["device_id"]
+    error_name = type(error).__name__
+    message = f"Device {device_id} action-rule failure: {error_name}: {error}"
+    logger.exception(message)
+    if commit:
+        try:
+            db.insert_action_rule_failure(
+                conn,
+                device_id=device_id,
+                ae200_device_id=devdict.get("ae200_device_id"),
+                error_type=error_name,
+                error_message=str(error),
+            )
+        except Exception:  # pylint: disable=broad-except
+            logger.exception("Could not audit action-rule failure for device %s", device_id)
+    return message
+
+
 def next_alert_notification_at(start_time: int, last_event_time: int) -> int:
     """Return the next reminder boundary for the requested escalating cadence."""
     first_hour_end = start_time + ALERT_FIRST_HOUR_SECONDS
@@ -959,12 +978,17 @@ def run_all_rules(conn, when=None, commit=False):
             device_type=devdict.get("device_type"),
             rules_enabled=devdict.get("rules_enabled", True),
         )
-        res = run_rules_for_device(dev, now, aqi)
-        if res is not None:
-            res = _require_rule_result(res)
-            if commit:
-                _commit_rule_result(conn, dev, res)
-            _append_rule_result(rules_res, dev.device_id, res)
+        try:
+            res = run_rules_for_device(dev, now, aqi)
+            if res is not None:
+                res = _require_rule_result(res)
+                if commit:
+                    _commit_rule_result(conn, dev, res)
+                _append_rule_result(rules_res, dev.device_id, res)
+        except Exception as error:  # pylint: disable=broad-except
+            rules_res.append(
+                _record_action_rule_failure(conn, devdict, error, commit=commit)
+            )
 
     if commit:
         _clear_expired_device_rule_suspensions(conn)

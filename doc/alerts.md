@@ -11,6 +11,9 @@ Action rules require an outdoor AQI observation no more than two hours old.
 Missing, future-dated, or stale AQI stops the entire action-rule pass before any
 equipment command is evaluated; the runner logs the reason. Explicit AQI values
 supplied to the dry-run report remain available for scenario testing.
+After compilation, an evaluation, contract, or command failure is isolated to
+the affected device so later devices still run. Committed passes also write the
+exception type and message to `changelog` for auditability.
 
 `bin/rules.py` contains the two rule entry points:
 

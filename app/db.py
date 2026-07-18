@@ -1329,6 +1329,26 @@ def insert_changelog(
         conn.commit()
 
 
+def insert_action_rule_failure(
+    conn,
+    *,
+    device_id: int,
+    ae200_device_id: int | None,
+    error_type: str,
+    error_message: str,
+):
+    """Persist one action-rule exception in the existing change audit log."""
+    insert_changelog(
+        conn,
+        ipaddr="",
+        device_id=device_id,
+        ae200_device_id=ae200_device_id,
+        new_value=error_type,
+        agent="rules runner",
+        comment=f"action-rule failure: {error_message}",
+    )
+
+
 def update_devlog_map(conn, device_name: str, ae200_device_id: int):
     logger.debug("device_name=%s ae200_device_id=%s", device_name, ae200_device_id)
     c = conn.cursor()

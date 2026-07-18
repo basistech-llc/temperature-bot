@@ -12,8 +12,10 @@ from app import rules_engine
 from app.constants import RESERVED_DEVICE_NAMES
 
 
-def _add_rule_test_erv(conn, *, observed_at: int | None = None):
-    device_id = db.get_or_create_device_id(conn, "ERV Kitchen", use_cache=False)
+def _add_rule_test_erv(
+    conn, *, name: str = "ERV Kitchen", observed_at: int | None = None
+):
+    device_id = db.get_or_create_device_id(conn, name, use_cache=False)
     now = observed_at if observed_at is not None else int(time.time())
     conn.execute("INSERT INTO aqi (logtime, aqi) VALUES (?, ?)", (now, 45))
     conn.execute(
@@ -240,3 +242,64 @@ def test_run_all_rules_skips_devices_when_rules_disabled(
     result = rules_engine.run_all_rules(conn)
     assert f"Device {device_id} rules are disabled" in result
     assert f"Device {device_id} drive set to ON" not in result
+
+
+def test_run_all_rules_isolates_device_failures(test_database_conn, monkeypatch):
+    """A broken device rule must not prevent later devices from being evaluated."""
+    conn = test_database_conn
+    broken_id = _add_rule_test_erv(conn, name="ERV Broken")
+    healthy_id = _add_rule_test_erv(conn, name="ERV Healthy")
+    monkeypatch.setattr(
+        rules_engine,
+        "get_rules",
+        lambda: (
+            "from app.models import RuleResult\n"
+            "def run_rules_for_device(device, now, aqi):\n"
+            "    if device.name == 'ERV Broken':\n"
+            "        raise RuntimeError('bad device rule')\n"
+            "    return RuleResult(drive='on')\n"
+        ),
+    )
+
+    result = rules_engine.run_all_rules(conn, commit=False)
+
+    assert (
+        f"Device {broken_id} action-rule failure: RuntimeError: bad device rule"
+        in result
+    )
+    assert f"Device {healthy_id} drive set to ON" in result
+
+
+def test_run_all_rules_audits_committed_device_failure(
+    test_database_conn, monkeypatch
+):
+    """Committed action passes retain a durable record of per-device failures."""
+    conn = test_database_conn
+    device_id = _add_rule_test_erv(conn, name="ERV Broken")
+    monkeypatch.setattr(
+        rules_engine,
+        "get_rules",
+        lambda: (
+            "def run_rules_for_device(device, now, aqi):\n"
+            "    raise ValueError('invalid device state')\n"
+        ),
+    )
+
+    result = rules_engine.run_all_rules(conn, commit=True)
+    row = conn.execute(
+        """
+        SELECT new_value, agent, comment
+        FROM changelog
+        WHERE device_id=?
+        ORDER BY changelog_id DESC
+        LIMIT 1
+        """,
+        (device_id,),
+    ).fetchone()
+
+    assert f"Device {device_id} action-rule failure: ValueError" in result
+    assert dict(row) == {
+        "new_value": "ValueError",
+        "agent": "rules runner",
+        "comment": "action-rule failure: invalid device state",
+    }
