@@ -16,6 +16,7 @@ from app.routes_web import (
     _dashboard_device_tooltip,
     _filter_speed_control_devices,
     _get_hubitat_sensors,
+    _rules_forecast_table,
     _table_update_summary,
 )
 from app import room_config
@@ -55,6 +56,15 @@ def test_about_route(flask_test_client):  # noqa: F811
     response = flask_test_client.get("/about")
     assert response.status_code == 200
     assert b"About" in response.data
+
+
+def test_rules_forecast_table_is_complete_html(test_database_conn):
+    """The forecast fragment must contain one balanced table element."""
+    rows = _rules_forecast_table(test_database_conn, datetime.datetime(2026, 7, 17))
+
+    assert rows[0] == "<table class='rules-table'>"
+    assert rows[-1] == "</table>"
+    assert rows.count("</table>") == 1
 
 
 def test_footer_metadata_on_all_pages(flask_test_client):  # noqa: F811

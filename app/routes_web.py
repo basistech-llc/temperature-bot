@@ -310,6 +310,7 @@ def _rules_forecast_table(conn, hour_now: datetime.datetime) -> list[str]:
             formatted_results = results.replace("\n", "<br>")
             rows.append(f"<td class='rule-result'>{formatted_results}</td>")
         rows.append("</tr>")
+    rows.append("</table>")
     return rows
 
 
