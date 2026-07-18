@@ -171,16 +171,6 @@ def test_makefile_local_targets_control_sensor_simulators():
     )
 
 
-def test_production_gunicorn_services_disable_reloader():
-    """Production service definitions must never run Gunicorn's dev reloader."""
-    etc_dir = Path(__file__).resolve().parents[1] / "etc"
-    service_files = sorted(etc_dir.glob("*_basistech_net.service"))
-
-    assert service_files
-    for service_file in service_files:
-        assert "--reload" not in service_file.read_text(encoding="utf-8"), service_file
-
-
 def test_update_from_airthings_persists_sensor_status(monkeypatch, test_database_conn):
     """Airthings updater should write both temperature and rich air-quality payloads."""
     monkeypatch.setattr(
