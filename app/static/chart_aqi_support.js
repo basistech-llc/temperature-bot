@@ -5,6 +5,68 @@ let aqiData = [];
 let currentStart = null;
 let currentEnd = null;
 const AQI_ENDPOINT = "/api/v1/air_quality";
+const AIR_QUALITY_AXES = [
+  { seriesName: "PM2.5", name: "PM2.5 (µg/m³)", position: "left" },
+  { seriesName: "PM10", name: "PM10 (µg/m³)", position: "left" },
+  { seriesName: "O₃", name: "O₃ (ppb)", position: "left" },
+  { seriesName: "NO₂", name: "NO₂ (ppb)", position: "right" },
+  { seriesName: "CO", name: "CO (ppm)", position: "right" },
+  {
+    seriesName: "AQI",
+    name: "AQI",
+    position: "right",
+    color: "#E65100",
+  },
+];
+
+function airQualityAxisLayout(selected = {}) {
+  const isSelected = (seriesName) => selected[seriesName] !== false;
+  const gridSeries = isSelected("AQI")
+    ? "AQI"
+    : AIR_QUALITY_AXES.find((axis) => isSelected(axis.seriesName))
+        ?.seriesName;
+  const sideCounts = { left: 0, right: 0 };
+
+  const yAxes = AIR_QUALITY_AXES.map((definition) => {
+    const show = isSelected(definition.seriesName);
+    const offset = show ? sideCounts[definition.position]++ * 75 : 0;
+    const color = definition.color;
+    return {
+      type: "value",
+      name: definition.name,
+      show,
+      position: definition.position,
+      offset,
+      axisLine: { show: true, ...(color ? { lineStyle: { color } } : {}) },
+      axisTick: { show: true },
+      axisLabel: {
+        formatter: (value) => `${value}`,
+        ...(color ? { color } : {}),
+      },
+      ...(color
+        ? { nameTextStyle: { color, fontWeight: "bold" } }
+        : {}),
+      splitLine: {
+        show: show && definition.seriesName === gridSeries,
+        lineStyle: { color: "#d9dde3", type: "solid" },
+      },
+    };
+  });
+
+  return {
+    yAxes,
+    grid: {
+      top: 120,
+      left: 80 + Math.max(0, sideCounts.left - 1) * 75,
+      right: 80 + Math.max(0, sideCounts.right - 1) * 75,
+      bottom: 120,
+    },
+  };
+}
+
+function selectedLegendState(currentOption, selectedOverride = null) {
+  return selectedOverride || currentOption?.legend?.[0]?.selected || {};
+}
 
 function formatTime(ts) {
   const date = new Date(ts);
@@ -110,8 +172,13 @@ function unitFor(name) {
   }
 }
 
-function updateAQChart() {
+function updateAQChart(selectedOverride = null) {
   if (!aqiChart) return;
+
+  const selected = selectedLegendState(
+    aqiChart.getOption(),
+    selectedOverride,
+  );
 
   const toMs = (arr) => (arr || []).map(([ts, v]) => [ts * 1000, v]);
 
@@ -139,55 +206,7 @@ function updateAQChart() {
       : { lineStyle: { width: 1.5 } }),
   }));
 
-  const yAxes = [
-    {
-      type: "value",
-      name: "PM2.5 (µg/m³)",
-      axisLabel: { formatter: (v) => `${v}` },
-      position: "left",
-      offset: 0,
-    },
-    {
-      type: "value",
-      name: "PM10 (µg/m³)",
-      axisLabel: { formatter: (v) => `${v}` },
-      position: "left",
-      offset: 75,
-    },
-    {
-      type: "value",
-      name: "O₃ (ppb)",
-      axisLabel: { formatter: (v) => `${v}` },
-      position: "left",
-      offset: 150,
-    },
-    {
-      type: "value",
-      name: "NO₂ (ppb)",
-      axisLabel: { formatter: (v) => `${v}` },
-      position: "right",
-      offset: 0,
-    },
-    {
-      type: "value",
-      name: "CO (ppm)",
-      axisLabel: { formatter: (v) => `${v}` },
-      position: "right",
-      offset: 75,
-    },
-    {
-      type: "value",
-      name: "AQI",
-      axisLabel: { formatter: (v) => `${v}`, color: "#E65100" },
-      nameTextStyle: { color: "#E65100", fontWeight: "bold" },
-      position: "right",
-      offset: 150,
-    },
-  ];
-
-  yAxes.forEach((ax, i) => {
-    ax.splitLine = { show: i === 0 };
-  });
+  const { yAxes, grid } = airQualityAxisLayout(selected);
 
   const option = {
     title: { text: "Air Quality (multi-axis)", top: 0 },
@@ -214,8 +233,8 @@ function updateAQChart() {
         }, `${time}<br>`);
       },
     },
-    legend: { top: 40 },
-    grid: { top: 120, left: 80, right: 80, bottom: 120 },
+    legend: { top: 40, selected },
+    grid,
     xAxis: {
       type: "time",
       axisLabel: {
@@ -230,7 +249,10 @@ function updateAQChart() {
     axisPointer: { link: [{ xAxisIndex: "all" }], snap: true },
   };
 
-  aqiChart.setOption(option, { notMerge: false });
+  // Axis visibility and offsets depend on the selected legend entries. Replace
+  // the option so ECharts does not retain axis properties from the prior
+  // selection.
+  aqiChart.setOption(option, { notMerge: true });
 }
 
 function setupEventListeners() {
@@ -260,11 +282,20 @@ function setupEventListeners() {
   document.getElementById("endDate").addEventListener("change", pickersChanged);
 }
 
-document.addEventListener("DOMContentLoaded", function () {
-  setTimePrevDays(7);
-  setTemporalButtonSelection("weekBtn");
+if (typeof document !== "undefined") {
+  document.addEventListener("DOMContentLoaded", function () {
+    setTimePrevDays(7);
+    setTemporalButtonSelection("weekBtn");
 
-  aqiChart = echarts.init(document.getElementById("aqi-chart"));
-  setupEventListeners();
-  loadAirQualityData();
-});
+    aqiChart = echarts.init(document.getElementById("aqi-chart"));
+    aqiChart.on("legendselectchanged", (event) => {
+      updateAQChart(event.selected);
+    });
+    setupEventListeners();
+    loadAirQualityData();
+  });
+}
+
+if (typeof module !== "undefined" && module.exports) {
+  module.exports = { airQualityAxisLayout, selectedLegendState };
+}

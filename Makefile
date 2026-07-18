@@ -259,6 +259,7 @@ test-js: $(REQ) ## Run the JavaScript unit tests
 	node tests/test_air_quality_thresholds.js
 	node tests/test_unit_speed.js
 	node tests/test_metric_chart_support.js
+	node tests/test_chart_aqi_support.js
 	node tests/test_room_scale.js
 	node tests/test_hickory_life.js
 	node tests/test_room_matrix.js
