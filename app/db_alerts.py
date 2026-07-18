@@ -14,6 +14,7 @@ from .models import (
     AlertDeliveryStatus,
     AlertEventRecord,
     AlertEventType,
+    AlertEventWindow,
     AlertRecord,
     AlertRuleDevice,
     StatusPayload,
@@ -212,6 +213,22 @@ def get_latest_alert_event(conn, alert_id: int) -> AlertEventRecord | None:
         (alert_id,),
     ).fetchone()
     return AlertEventRecord.model_validate(dict(row)) if row else None
+
+
+def get_alert_event_window(conn, alert_id: int) -> AlertEventWindow | None:
+    """Return notification cadence anchors for an alert, if it has events."""
+    row = conn.execute(
+        """
+        SELECT MIN(event_time) AS first_event_time,
+               MAX(event_time) AS last_event_time
+        FROM alert_events
+        WHERE alert_id=?
+        """,
+        (alert_id,),
+    ).fetchone()
+    if row is None or row["first_event_time"] is None:
+        return None
+    return AlertEventWindow.model_validate(dict(row))
 
 
 def get_due_alert_events(

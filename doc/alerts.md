@@ -69,6 +69,10 @@ While a condition remains active, reminders are logged and sent:
 - every hour through the first 24 hours;
 - every 4 hours thereafter.
 
+These boundaries start at the initial persisted notification, not at a
+historical sensor condition's `start_time`, so a newly detected old condition
+still receives the first-hour cadence.
+
 The Slack client reads `secrets.slack.token` and `secrets.slack.channel` from
 `temperature-bot-config.yaml`; `SLACK_TOKEN` and `SLACK_CHANNEL` environment
 variables override those values.

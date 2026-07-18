@@ -6,7 +6,12 @@ import requests
 
 from app import db, db_alerts, rules_engine
 from app.device_types import DEVICE_SUBTYPE_AIRTHINGS
-from app.models import AlertEventType
+from app.models import (
+    AlertEventType,
+    AlertRuleEvaluation,
+    AlertRuleResult,
+    AlertRuleState,
+)
 
 
 AIRTHINGS_STATUS = {
@@ -303,6 +308,40 @@ def test_alert_notification_cadence_boundaries():
     assert rules_engine.next_alert_notification_at(start, start + 24 * 60 * 60) == (
         start + 28 * 60 * 60
     )
+
+
+def test_alert_cadence_starts_with_initial_notification(test_database_conn):
+    """Historical condition onset must not skip the first-hour reminder cadence."""
+    conn = test_database_conn
+    device_id = _add_airthings_device(conn)
+    delivered: list[str] = []
+    result = AlertRuleResult(
+        alert_type="HistoricalCondition",
+        state=AlertRuleState.ACTIVE,
+        started_at=1_000,
+        message="Historical condition remains active",
+        resolved_message="Historical condition resolved",
+    )
+
+    def evaluate(now: int) -> str | None:
+        return rules_engine.apply_alert_evaluation(
+            conn,
+            AlertRuleEvaluation(
+                device_id=device_id,
+                result=result,
+                now=now,
+                commit=True,
+            ),
+            notifier=lambda message: delivered.append(message) or f"ts-{len(delivered)}",
+        )
+
+    assert evaluate(100_000) == f"Device {device_id} triggered HistoricalCondition"
+    alert = db_alerts.get_active_alert_record(conn, device_id, "HistoricalCondition")
+    assert alert is not None
+    assert alert.start_time == 1_000
+    assert evaluate(100_299) is None
+    assert evaluate(100_300) == f"Device {device_id} reminded HistoricalCondition"
+    assert len(delivered) == 2
 
 
 def test_alert_is_logged_when_slack_delivery_fails(test_database_conn):

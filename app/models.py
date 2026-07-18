@@ -260,6 +260,13 @@ class AlertEventNotification(BaseModel):
     message: str
 
 
+class AlertEventWindow(BaseModel):
+    """Oldest and newest persisted notifications for one alert."""
+
+    first_event_time: int
+    last_event_time: int
+
+
 class AlertRecord(BaseModel):
     """Persistent active-alert state."""
 

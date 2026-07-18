@@ -488,10 +488,10 @@ def _record_action_rule_failure(conn, devdict, error: Exception, *, commit: bool
     return message
 
 
-def next_alert_notification_at(start_time: int, last_event_time: int) -> int:
+def next_alert_notification_at(first_notification_time: int, last_event_time: int) -> int:
     """Return the next reminder boundary for the requested escalating cadence."""
-    first_hour_end = start_time + ALERT_FIRST_HOUR_SECONDS
-    first_day_end = start_time + ALERT_FIRST_DAY_SECONDS
+    first_hour_end = first_notification_time + ALERT_FIRST_HOUR_SECONDS
+    first_day_end = first_notification_time + ALERT_FIRST_DAY_SECONDS
     if last_event_time < first_hour_end:
         return min(
             last_event_time + ALERT_REPEAT_FIRST_HOUR_SECONDS,
@@ -647,10 +647,9 @@ def _remind_active_alert(
     summary = (
         f"Device {evaluation.device_id} reminded {qualifier}{result.alert_type}"
     )
-    latest_event = db_alerts.get_latest_alert_event(conn, active_alert.alert_id)
-    reminder_due = latest_event is None or now >= next_alert_notification_at(
-        active_alert.start_time,
-        latest_event.event_time if latest_event else active_alert.start_time,
+    event_window = db_alerts.get_alert_event_window(conn, active_alert.alert_id)
+    reminder_due = event_window is None or now >= next_alert_notification_at(
+        event_window.first_event_time, event_window.last_event_time
     )
     if not reminder_due:
         return None
