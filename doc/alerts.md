@@ -33,6 +33,11 @@ Every device returned by the Airthings API is evaluated. The collector persists
 subtype is never overwritten. The `aqi_mon` metadata flag only controls indoor-
 air-quality display and does not opt a sensor out of alerts.
 
+AE-200 `ErrorSign`, `FilterSign`, and `CheckWater` observations enter the same
+lifecycle and delivery pipeline. `ON` triggers or reminds, `OFF` resolves, and
+a missing or unknown value is indeterminate so it cannot falsely recover an
+active equipment alert.
+
 ## Lifecycle and delivery
 
 An active condition creates one row in `alerts`. Each notification creates an

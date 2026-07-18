@@ -25,7 +25,6 @@ from app import airquality
 from app import ae200
 from app import airthings
 from app import db
-from app import db_alerts
 from app import hubitat
 from app.device_types import (
     DEVICE_SUBTYPE_AIRTHINGS,
@@ -33,7 +32,12 @@ from app.device_types import (
     HubitatDevice,
     classify_hubitat_device,
 )
-from app.models import AirthingsDeviceReading
+from app.models import (
+    AirthingsDeviceReading,
+    AlertRuleEvaluation,
+    AlertRuleResult,
+    AlertRuleState,
+)
 from app import rules_engine
 
 
@@ -60,7 +64,9 @@ def update_from_ae200(conn):
             process_device_alert_data(conn, dev, data)
 
 
-def process_device_alert_data(conn, dev, data):
+def process_device_alert_data(
+    conn, dev, data, *, observed_at: int | None = None, notifier=None
+):
     """Process device data for both temperature logging and alert collection."""
     # [TODO] Need to add synthetic alert data to simulator
     data["id"] = dev["id"]
@@ -69,15 +75,38 @@ def process_device_alert_data(conn, dev, data):
         conn, device_name=dev["name"], ae200_device_id=dev["id"]
     )
 
-    # Extract alert fields
-    for alert_type in ["ErrorSign", "FilterSign", "CheckWater"]:
-        if alert_type in data:
-            db_alerts.insert_or_update_alert(
-                conn,
+    alert_time = observed_at if observed_at is not None else int(time.time())
+    for alert_type in ae200.ALERT_FIELDS:
+        value = data.get(alert_type)
+        if value == "ON":
+            state = AlertRuleState.ACTIVE
+        elif value == "OFF":
+            state = AlertRuleState.INACTIVE
+        else:
+            state = AlertRuleState.INDETERMINATE
+        label = ae200.ALERT_LABELS[alert_type]
+        rules_engine.apply_alert_evaluation(
+            conn,
+            AlertRuleEvaluation(
                 device_id=device_id,
-                alert_type=alert_type,
-                alert_value=data[alert_type],
-            )
+                now=alert_time,
+                commit=True,
+                result=AlertRuleResult(
+                    alert_type=alert_type,
+                    state=state,
+                    started_at=alert_time,
+                    message=(
+                        f":warning: AE-200 {dev['name']} reports {label}."
+                        if state == AlertRuleState.ACTIVE
+                        else f":warning: AE-200 {dev['name']} {label} cannot be evaluated."
+                    ),
+                    resolved_message=(
+                        f":white_check_mark: AE-200 {dev['name']} cleared {label}."
+                    ),
+                ),
+            ),
+            notifier=notifier,
+        )
 
     db.insert_devlog_entry(conn, device_id=device_id, temp=temp, statusdict=data)
 

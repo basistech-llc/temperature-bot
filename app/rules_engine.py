@@ -731,6 +731,16 @@ def _apply_alert_rule_result(
     )
 
 
+def apply_alert_evaluation(
+    conn,
+    evaluation: AlertRuleEvaluation,
+    *,
+    notifier: AlertNotifier | None = None,
+) -> str | None:
+    """Apply one typed alert observation through the shared lifecycle."""
+    return _apply_alert_rule_result(conn, evaluation, notifier or slack.post)
+
+
 def run_alert_rules(
     conn,
     when=None,
@@ -776,7 +786,7 @@ def run_alert_rules(
                 _invoke_alert_rule(rule_function, device, now)
             )
             for alert_result in alert_results:
-                summary = _apply_alert_rule_result(
+                summary = apply_alert_evaluation(
                     conn,
                     AlertRuleEvaluation(
                         device_id=device.device_id,

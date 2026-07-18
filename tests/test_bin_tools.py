@@ -18,6 +18,7 @@ import requests
 from conftest import db_path
 
 from app.constants import TEST_DB_NAME
+from app import ae200, db_alerts
 from app.device_types import DEVICE_SUBTYPE_AIRTHINGS, DEVICE_TYPE_SENSOR
 from app.models import Device, RuleResult
 from bin import runner
@@ -251,6 +252,54 @@ def test_update_from_airthings_preserves_existing_device_subtype(
         "SELECT device_subtype FROM devices WHERE device_name='Airthings Lab'"
     ).fetchone()[0]
     assert subtype == "MANUAL"
+
+
+def test_ae200_alerts_use_generalized_lifecycle_and_delivery(test_database_conn):
+    conn = test_database_conn
+    device = {"id": "1", "name": "Conference FCU"}
+    active = {
+        "InletTemp": "23.0",
+        ae200.ERROR_SIGN: "ON",
+        ae200.FILTER_SIGN: "OFF",
+        ae200.CHECK_WATER: "OFF",
+    }
+    delivered: list[str] = []
+
+    runner.process_device_alert_data(
+        conn,
+        device,
+        active,
+        observed_at=1000,
+        notifier=lambda message: delivered.append(message) or "trigger-ts",
+    )
+    device_id = conn.execute(
+        "SELECT device_id FROM devices WHERE device_name=?", (device["name"],)
+    ).fetchone()[0]
+    alert = db_alerts.get_active_alert_record(conn, device_id, ae200.ERROR_SIGN)
+    assert alert is not None
+    assert delivered == [":warning: AE-200 Conference FCU reports error condition."]
+
+    runner.process_device_alert_data(
+        conn,
+        device,
+        {**active, ae200.ERROR_SIGN: "OFF"},
+        observed_at=1001,
+        notifier=lambda message: delivered.append(message) or "resolved-ts",
+    )
+
+    assert db_alerts.get_active_alert_record(conn, device_id, ae200.ERROR_SIGN) is None
+    events = conn.execute(
+        "SELECT event_type, slack_status FROM alert_events WHERE alert_id=? "
+        "ORDER BY alert_event_id",
+        (alert.alert_id,),
+    ).fetchall()
+    assert [tuple(event) for event in events] == [
+        ("triggered", "sent"),
+        ("resolved", "sent"),
+    ]
+    assert delivered[-1] == (
+        ":white_check_mark: AE-200 Conference FCU cleared error condition."
+    )
 
 
 def test_runner_database_access(bin_dir, temp_db):
