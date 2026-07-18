@@ -3,8 +3,7 @@ Run the rules engine.
 
 The RULES_ENGINE is a special device which, if disabled, disables all rules.
 Each individual rule can also be disabled.
-Rules are executed with exec(get_rules()) in rules_results.
-We loop for every device
+Rules are compiled once and the typed entry points loop over every device.
 
 """
 
@@ -41,6 +40,7 @@ from .models import (
     AlertRuleEvaluation,
     AlertRuleResult,
     AlertRuleState,
+    CompiledRules,
     RuleResult,
 )
 
@@ -145,6 +145,34 @@ def disable_all_rules(conn, seconds: int):
 def get_rules():
     """Returns the rules as a text"""
     return RULES_PATH.read_text(encoding="utf-8")
+
+
+def compile_rules() -> CompiledRules:
+    """Execute ``rules.py`` once and return its typed entry points."""
+    virtual_module = types.ModuleType("ephemeral_rule_namespace")
+    virtual_module.__file__ = str(RULES_PATH)
+    virtual_module.__dict__["__builtins__"] = __builtins__
+    try:
+        exec(get_rules(), virtual_module.__dict__)  # pylint: disable=exec-used
+    except Exception:  # pylint: disable=broad-except
+        logger.exception("Failed to compile rules from %s", RULES_PATH)
+        return CompiledRules(compile_error=True)
+
+    action_rule = getattr(virtual_module, "run_rules_for_device", None)
+    alert_rule = getattr(virtual_module, "run_alert_rules_for_device", None)
+    history_seconds = getattr(
+        virtual_module,
+        "ALERT_RULE_HISTORY_SECONDS",
+        DEFAULT_ALERT_RULE_HISTORY_SECONDS,
+    )
+    if not isinstance(history_seconds, int) or history_seconds <= 0:
+        logger.error("ALERT_RULE_HISTORY_SECONDS must be a positive integer")
+        history_seconds = None
+    return CompiledRules(
+        action_rule=action_rule if isinstance(action_rule, types.FunctionType) else None,
+        alert_rule=alert_rule if isinstance(alert_rule, types.FunctionType) else None,
+        alert_history_seconds=history_seconds,
+    )
 
 def prune_rules(conn):
     """If the rule's disabling has expired, enable it."""
@@ -402,28 +430,21 @@ def set_body_auto_set_temp(conn, body: AutoSetTempControl, ipaddr, agent):
     }
 
 
-def _temperature_context(conn):
-    """Returns the temperature for all devices"""
-    status = db.get_device_status(conn)
-    effective_by_id = {}
-    raw_by_id = {}
-    for device in status:
-        raw = device.get("temp10x")
-        calculated = device.get("calculated_temp10x")
-        if raw is not None:
-            raw_by_id[device["device_id"]] = raw / 10
-        if calculated is not None:
-            effective_by_id[device["device_id"]] = calculated / 10
-        elif raw is not None:
-            effective_by_id[device["device_id"]] = raw / 10
-
-    def get_temp(device_id):
-        return effective_by_id.get(device_id)
-
-    def get_fcu_temp(device_id):
-        return raw_by_id.get(device_id)
-
-    return {"get_temp": get_temp, "get_fcu_temp": get_fcu_temp}
+def _rule_device(devdict) -> Device:
+    """Build the typed device context shared by action-rule entry points."""
+    raw = devdict.get("temp10x")
+    effective = devdict.get("calculated_temp10x")
+    if effective is None:
+        effective = raw
+    return Device(
+        erv=db.is_erv_device(devdict),
+        name=devdict["device_name"],
+        device_id=devdict["device_id"],
+        device_type=devdict.get("device_type"),
+        rules_enabled=devdict.get("rules_enabled", True),
+        temperature_c=effective / 10 if effective is not None else None,
+        fcu_temperature_c=raw / 10 if raw is not None else None,
+    )
 
 
 def _rule_datetime(when=None):
@@ -760,6 +781,7 @@ def run_alert_rules(
     *,
     commit: bool = False,
     notifier: AlertNotifier | None = None,
+    compiled_rules: CompiledRules | None = None,
 ) -> str:
     """Evaluate monitoring-only rules regardless of the HVAC master switch."""
     now = _rule_datetime(when)
@@ -767,27 +789,17 @@ def run_alert_rules(
     deliver = notifier or slack.post
     if commit:
         _deliver_due_alert_events(conn, now=now_ts, notifier=deliver)
-    virtual_module = types.ModuleType("ephemeral_alert_rule_namespace")
-    virtual_module.__file__ = str(RULES_PATH)
-    virtual_module.__dict__["__builtins__"] = __builtins__
-    try:
-        exec(get_rules(), virtual_module.__dict__)  # pylint: disable=exec-used
-    except Exception:  # pylint: disable=broad-except
-        logger.exception("Failed to compile alert rules from %s", RULES_PATH)
+    program = compiled_rules if compiled_rules is not None else compile_rules()
+    if program.compile_error:
         return "Cannot compile alert rules"
 
-    rule_function = getattr(virtual_module, "run_alert_rules_for_device", None)
-    if not isinstance(rule_function, types.FunctionType):
+    rule_function = program.alert_rule
+    if rule_function is None:
         logger.warning("No run_alert_rules_for_device function in %s", RULES_PATH)
         return "No alert rules"
 
-    history_seconds = getattr(
-        virtual_module,
-        "ALERT_RULE_HISTORY_SECONDS",
-        DEFAULT_ALERT_RULE_HISTORY_SECONDS,
-    )
-    if not isinstance(history_seconds, int) or history_seconds <= 0:
-        logger.error("ALERT_RULE_HISTORY_SECONDS must be a positive integer")
+    history_seconds = program.alert_history_seconds
+    if history_seconds is None:
         return "Invalid alert-rule history"
 
     results: list[str] = []
@@ -816,45 +828,23 @@ def run_alert_rules(
     return "\n".join(results)
 
 
-def rules_results(conn, when=None, aqi=50):
+def rules_results(
+    conn, when=None, aqi=50, *, compiled_rules: CompiledRules | None = None
+):
     """Reports what would happen if the rules were run at `when` with a specific AQI"""
     logger.debug("when=%s", when)
 
-    results = []
-    temps = _temperature_context(conn)
-
-    def set_drive_verbose(device_id, value):
-        results.append(f"Device {device_id} drive set to {value}")
-
-    def set_fan_speed_verbose(device_id, value):
-        results.append(f"Device {device_id} speed set to {value}")
-
-    rule_namespace = {**db.devices_to_device_id(conn), **get_time_dict(when)}
-    rule_namespace.update(
-        {
-            "AQI": aqi,
-            "set_drive": set_drive_verbose,
-            "set_fan_speed": set_fan_speed_verbose,
-            "get_temp": temps["get_temp"],
-            "get_fcu_temp": temps["get_fcu_temp"],
-        }
-    )
-
-    exec(get_rules(), rule_namespace, rule_namespace)  # pylint: disable=exec-used
-
-    run_rules_for_device = rule_namespace.get("run_rules_for_device")
+    results: list[str] = []
+    program = compiled_rules if compiled_rules is not None else compile_rules()
+    if program.compile_error:
+        return "Cannot compile rules"
+    run_rules_for_device = program.action_rule
     if run_rules_for_device is not None:
         now = _rule_datetime(when)
         for devdict in db.get_device_status(conn):
             if not devdict.get("rules_enabled", True):
                 continue
-            dev = Device(
-                erv=db.is_erv_device(devdict),
-                name=devdict["device_name"],
-                device_id=devdict["device_id"],
-                device_type=devdict.get("device_type"),
-                rules_enabled=devdict.get("rules_enabled", True),
-            )
+            dev = _rule_device(devdict)
             res = run_rules_for_device(dev, now, aqi)
             if res is None:
                 continue
@@ -899,7 +889,9 @@ def _fresh_action_rule_aqi(conn, now: datetime.datetime) -> tuple[int | None, st
     return observation.value, None
 
 
-def run_all_rules(conn, when=None, commit=False):
+def run_all_rules(
+    conn, when=None, commit=False, *, compiled_rules: CompiledRules | None = None
+):
     """Run the rules and return a text description of what changed.
 
     Does not execute commands if all rules are disabled or if rules for the
@@ -924,25 +916,13 @@ def run_all_rules(conn, when=None, commit=False):
     # Get controllable devices from status rows so derived flags are available.
     rule_devices = db.get_device_status(conn)
 
-    # Compile the rules_runner
-    virtual_module = types.ModuleType("ephemeral_rule_namespace")
-    virtual_module.__file__ = str(RULES_PATH)
-    virtual_module.__dict__["__builtins__"] = __builtins__
-
-    try:
-        # Execute the compiled code exclusively within the virtual module's dictionary
-        exec(get_rules(), virtual_module.__dict__)  # pylint: disable=exec-used
-
-        # Extract and invoke the target function
-        if not hasattr(virtual_module, "run_rules_for_device"):
-            logger.error(
-                "Target function 'run_rules_for_device' not found in %s", RULES_PATH
-            )
-            return "Cannot run rules"
-        run_rules_for_device = getattr(virtual_module, "run_rules_for_device")
-    except Exception:  # pylint: disable=broad-except
-        logger.exception("Failed to compile rules from %s", RULES_PATH)
+    program = compiled_rules if compiled_rules is not None else compile_rules()
+    if program.compile_error:
         return "Cannot compile rules"
+    run_rules_for_device = program.action_rule
+    if run_rules_for_device is None:
+        logger.error("Target function 'run_rules_for_device' not found in %s", RULES_PATH)
+        return "Cannot run rules"
 
     # Now run the rules for every device
     assert aqi is not None
@@ -961,13 +941,7 @@ def run_all_rules(conn, when=None, commit=False):
                 f"(currently {now.timestamp()})"
             )
             continue
-        dev = Device(
-            erv=db.is_erv_device(devdict),
-            name=devdict["device_name"],
-            device_id=devdict["device_id"],
-            device_type=devdict.get("device_type"),
-            rules_enabled=devdict.get("rules_enabled", True),
-        )
+        dev = _rule_device(devdict)
         try:
             res = run_rules_for_device(dev, now, aqi)
             if res is not None:
@@ -985,6 +959,10 @@ def run_all_rules(conn, when=None, commit=False):
     return "\n".join(rules_res)
 
 
-def run_rules(conn, when=None, commit=False):
+def run_rules(
+    conn, when=None, commit=False, *, compiled_rules: CompiledRules | None = None
+):
     """Backward-compatible entrypoint used by the runner."""
-    return run_all_rules(conn, when=when, commit=commit)
+    return run_all_rules(
+        conn, when=when, commit=commit, compiled_rules=compiled_rules
+    )

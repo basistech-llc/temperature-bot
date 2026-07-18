@@ -20,6 +20,10 @@ exception type and message to `changelog` for auditability.
 - `run_rules_for_device()` returns HVAC actions.
 - `run_alert_rules_for_device()` returns typed alert conditions.
 
+The runner compiles this file once per cycle and shares the resulting typed
+entry points between monitoring and action rules. The Rules forecast page also
+compiles once per request rather than once per scenario cell.
+
 Alert conditions have three states: `active`, `inactive`, and `indeterminate`.
 Stale, missing, malformed, or incomplete sensor input is indeterminate rather
 than recovered. An indeterminate result does not open a new alert. If the alert

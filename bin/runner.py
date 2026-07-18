@@ -481,13 +481,16 @@ def main():
         update_from_ae200(conn)
         update_from_hubitat(conn)
         update_from_airthings(conn)
-        alert_results = rules_engine.run_alert_rules(conn, commit=True)
+        compiled_rules = rules_engine.compile_rules()
+        alert_results = rules_engine.run_alert_rules(
+            conn, commit=True, compiled_rules=compiled_rules
+        )
         if alert_results:
             logger.info("Alert rules:\n%s", alert_results)
         if not db.get_rules_master_enabled(conn):
             logger.info("Master rules switch is OFF; skipping HVAC rule execution")
         else:
-            run_rules(conn, commit=1)
+            run_rules(conn, commit=1, compiled_rules=compiled_rules)
 
 
 if __name__ == "__main__":

@@ -194,6 +194,41 @@ def test_rules_results_runs_device_rule_contract(test_database_conn, monkeypatch
     )
 
 
+def test_compiled_rules_are_shared_across_entry_points(
+    test_database_conn, monkeypatch
+):
+    """Alert, action, and forecast passes reuse one execution of rules.py."""
+    conn = test_database_conn
+    device_id = _add_rule_test_erv(conn)
+    compile_count = 0
+
+    def rules_source():
+        nonlocal compile_count
+        compile_count += 1
+        return (
+            "from app.models import RuleResult\n"
+            "def run_alert_rules_for_device(device, now):\n"
+            "    return []\n"
+            "def run_rules_for_device(device, now, aqi):\n"
+            "    return RuleResult(drive='on') if device.erv else None\n"
+        )
+
+    monkeypatch.setattr(rules_engine, "get_rules", rules_source)
+    compiled = rules_engine.compile_rules()
+
+    assert rules_engine.run_alert_rules(conn, compiled_rules=compiled) == ""
+    assert f"Device {device_id} drive set to ON" in rules_engine.run_all_rules(
+        conn, compiled_rules=compiled
+    )
+    assert rules_engine.rules_results(conn, compiled_rules=compiled) == (
+        f"Device {device_id} drive set to ON"
+    )
+    assert rules_engine.rules_results(conn, aqi=75, compiled_rules=compiled) == (
+        f"Device {device_id} drive set to ON"
+    )
+    assert compile_count == 1
+
+
 def test_run_all_rules_uses_supplied_when(test_database_conn, monkeypatch):
     """run_all_rules should pass the requested evaluation time into rules."""
     conn = test_database_conn

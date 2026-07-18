@@ -16,6 +16,7 @@ becomes a mapping.
 """
 
 from enum import StrEnum
+from collections.abc import Callable
 from typing import Annotated, Any, Dict, Iterable, Literal
 from pydantic import (
     BaseModel,
@@ -48,6 +49,12 @@ class Device(BaseModel):
     name: str = Field(description="the name of the device")
     device_type: str | None = Field(default=None, description="Configured device type.")
     rules_enabled: bool = Field(default=True, description="Whether rules may act.")
+    temperature_c: float | None = Field(
+        default=None, description="Effective calculated-or-raw temperature."
+    )
+    fcu_temperature_c: float | None = Field(
+        default=None, description="Raw device inlet temperature."
+    )
 
 class RuleResult(BaseModel):
     """Results passed back to Rules Engine"""
@@ -67,6 +74,17 @@ class RuleResult(BaseModel):
     def normalize_drive(cls, value):
         """Allow rules to use ON/OFF names or legacy drive codes."""
         return _rule_name(value, ae200.DRIVES, ae200.DRIVE_NAMES, "drive")
+
+
+class CompiledRules(BaseModel):
+    """One execution of ``rules.py`` shared by all rule entry points."""
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    action_rule: Callable[..., object] | None = None
+    alert_rule: Callable[..., object] | None = None
+    alert_history_seconds: int | None = None
+    compile_error: bool = False
 
 
 def _rule_code(value, names_to_codes: dict[str, int], field_name: str):
