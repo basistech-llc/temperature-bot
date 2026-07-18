@@ -85,6 +85,50 @@ def test_tcp_reject_probe_treats_loopback_refusal_as_reachable():
     assert sample.total_ms >= sample.connect_ms
 
 
+def test_tcp_reject_probe_flags_unexpected_listener():
+    """An open port is reachable but violates the closed-port probe contract."""
+    listener = socket.socket()
+    listener.bind(("127.0.0.1", 0))
+    listener.listen()
+    try:
+        sample = performance_monitoring.probe_tcp_reject(
+            "localhost",
+            listener.getsockname()[1],
+            resolved_ip="127.0.0.1",
+        )
+    finally:
+        listener.close()
+
+    assert sample.success is True
+    assert sample.outcome == "connected"
+
+
+def test_collect_network_samples_loopback_end_to_end():
+    """One collection performs real DNS, ICMP, and TCP-reject probes."""
+    listener = socket.socket()
+    listener.bind(("127.0.0.1", 0))
+    closed_port = listener.getsockname()[1]
+    listener.close()
+
+    samples = performance_monitoring.collect_network_samples(
+        "localhost", reject_port=closed_port, ping_count=1
+    )
+
+    assert [sample.sample_type for sample in samples] == [
+        performance_monitoring.SAMPLE_TYPE_DNS,
+        performance_monitoring.SAMPLE_TYPE_ICMP,
+        performance_monitoring.SAMPLE_TYPE_TCP_REJECT,
+    ]
+    assert [sample.outcome for sample in samples] == [
+        "resolved",
+        "reply",
+        "refused",
+    ]
+    assert all(sample.success for sample in samples)
+    assert samples[0].resolved_ip == "127.0.0.1"
+    assert samples[1].icmp_median_ms is not None
+
+
 def test_dns_address_selection_prefers_ipv4_for_portable_ping():
     """An IPv4 result wins even when DNS returns IPv6 first."""
     addresses = [
