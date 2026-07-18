@@ -1,4 +1,4 @@
-### /etc/systemd/system/basistech_air.service ###
+### /etc/systemd/system/slg1_basistech_net.service ###
 [Unit]
 Description=Gunicorn instance to serve the Flask application
 After=network.target

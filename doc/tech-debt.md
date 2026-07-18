@@ -187,9 +187,8 @@ plan.
 
 Current state:
 
-- The checked-in Gunicorn service units now omit `--reload`, matching the
-  manually corrected live production process. A repository test prevents the
-  reloader from being reintroduced into those units.
+- The checked-in Gunicorn service units omit `--reload`, matching the manually
+  corrected live production process.
 - `etc/air_basistech_net.service` still runs as `User=simsong` and `Group=simsong`
   while using `/home/air/temperature-bot`.
 - `etc/slg1_basistech_net.service` uses `/home/simsong/temperature-bot`.
