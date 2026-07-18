@@ -372,6 +372,49 @@ def test_alert_cadence_starts_with_initial_notification(test_database_conn):
     assert len(delivered) == 2
 
 
+def test_due_alert_reminder_is_visible_without_mutating_dry_run(test_database_conn):
+    conn = test_database_conn
+    device_id = _add_airthings_device(conn)
+    alert = db_alerts.create_alert_record(
+        conn,
+        device_id=device_id,
+        alert_type="SensorStuck",
+        start_time=1000,
+    )
+    db_alerts.create_alert_event(
+        conn,
+        alert_id=alert.alert_id,
+        event_time=1000,
+        event_type=AlertEventType.TRIGGERED,
+        message="Sensor is stuck",
+    )
+    conn.commit()
+    evaluation = AlertRuleEvaluation(
+        device_id=device_id,
+        result=AlertRuleResult(
+            alert_type="SensorStuck",
+            state=AlertRuleState.ACTIVE,
+            message="Sensor remains stuck",
+            resolved_message="Sensor recovered",
+        ),
+        now=1300,
+        commit=False,
+    )
+    delivered: list[str] = []
+
+    summary = rules_engine.apply_alert_evaluation(
+        conn,
+        evaluation,
+        notifier=lambda message: delivered.append(message) or "unexpected",
+    )
+
+    assert summary == f"Device {device_id} would remind SensorStuck"
+    assert not delivered
+    assert conn.execute(
+        "SELECT COUNT(*) FROM alert_events WHERE alert_id=?", (alert.alert_id,)
+    ).fetchone()[0] == 1
+
+
 def test_alert_is_logged_when_slack_delivery_fails(test_database_conn):
     conn = test_database_conn
     device_id = _add_airthings_device(conn, "Airthings Area 51")

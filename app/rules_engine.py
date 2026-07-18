@@ -652,7 +652,7 @@ def _remind_active_alert(
     if not reminder_due:
         return None
     if not evaluation.commit:
-        return summary.replace(" reminded ", " would remind ") if indeterminate else None
+        return summary.replace(" reminded ", " would remind ")
     _deliver_alert_event(
         conn,
         AlertEventNotification(
