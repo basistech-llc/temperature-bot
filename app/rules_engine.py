@@ -62,6 +62,10 @@ ALERT_DELIVERY_RETRY_MAX_SECONDS = 60 * 60
 ALERT_DELIVERY_MAX_ATTEMPTS = 24
 ALERT_DELIVERY_OUTBOX_BATCH_SIZE = 100
 DEFAULT_ALERT_RULE_HISTORY_SECONDS = 10 * 60
+ACTION_RULE_AQI_MAX_AGE_SECONDS = 2 * 60 * 60
+AQI_MISSING_MESSAGE = "Cannot run HVAC rules: no outdoor AQI observation is available"
+AQI_STALE_MESSAGE = "Cannot run HVAC rules: outdoor AQI observation is stale"
+AQI_FUTURE_MESSAGE = "Cannot run HVAC rules: outdoor AQI observation is in the future"
 
 AlertNotifier = Callable[[str], str | None]
 AlertRuleFunction = Callable[[AlertRuleDevice, datetime.datetime], object]
@@ -870,6 +874,22 @@ def _clear_expired_device_rule_suspensions(conn):
             )
 
 
+def _fresh_action_rule_aqi(conn, now: datetime.datetime) -> tuple[int | None, str | None]:
+    """Return a fresh AQI value or the reason action rules must stop."""
+    observation = db.get_last_aqi(conn)
+    if observation is None:
+        logger.warning(AQI_MISSING_MESSAGE)
+        return None, AQI_MISSING_MESSAGE
+    age = int(now.timestamp()) - observation.observed_at
+    if age < 0:
+        logger.warning("%s: observed_at=%s", AQI_FUTURE_MESSAGE, observation.observed_at)
+        return None, AQI_FUTURE_MESSAGE
+    if age > ACTION_RULE_AQI_MAX_AGE_SECONDS:
+        logger.warning("%s: age=%ss", AQI_STALE_MESSAGE, age)
+        return None, AQI_STALE_MESSAGE
+    return observation.value, None
+
+
 def run_all_rules(conn, when=None, commit=False):
     """Run the rules and return a text description of what changed.
 
@@ -886,6 +906,11 @@ def run_all_rules(conn, when=None, commit=False):
     if all_rules_disabled_until(conn) >= time.time():
         logger.info(RULES_TIME_SUSPENDED_MESSAGE)
         return RULES_TIME_SUSPENDED_MESSAGE
+
+    now = _rule_datetime(when)
+    aqi, aqi_error = _fresh_action_rule_aqi(conn, now)
+    if aqi_error:
+        return aqi_error
 
     # Get controllable devices from status rows so derived flags are available.
     rule_devices = db.get_device_status(conn)
@@ -911,8 +936,7 @@ def run_all_rules(conn, when=None, commit=False):
         return "Cannot compile rules"
 
     # Now run the rules for every device
-    now = _rule_datetime(when)
-    aqi = db.get_last_aqi(conn)
+    assert aqi is not None
     rules_res = []
     rules_res.append(f"Rules starting at {now}. commit={commit}")
 

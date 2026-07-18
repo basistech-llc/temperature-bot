@@ -516,6 +516,13 @@ class AqiSummary(BaseModel):
     color: str = Field(description="Display hex color for the AQI category.")
 
 
+class AqiRuleObservation(BaseModel):
+    """Outdoor AQI value and source timestamp used by HVAC action rules."""
+
+    value: int
+    observed_at: int
+
+
 class AqiWeatherResponse(BaseModel):
     """Combined outdoor AQI and weather payload."""
 

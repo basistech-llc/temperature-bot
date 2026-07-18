@@ -44,6 +44,7 @@ from .constants import (
 )
 from .models import (
     AqiSummary,
+    AqiRuleObservation,
     AqiWeatherResponse,
     ChangelogResponse,
     ChangelogRow,
@@ -1558,16 +1559,17 @@ def temporal_quantification(cmd, args):
 
 ################################################################
 ## AQI
-def get_last_aqi(conn):
+def get_last_aqi(conn) -> AqiRuleObservation | None:
+    """Return the latest timestamped AQI observation without inventing a value."""
     c = conn.cursor()
-    c.execute("select aqi from aqi order by logtime DESC limit 1")
+    c.execute("SELECT aqi, logtime FROM aqi ORDER BY logtime DESC LIMIT 1")
     row = c.fetchone()
     if row is None:
-        logger.warning("No AQI data available; defaulting to 50")
-        return 50
-    aqi = row[0]
-    logger.debug("last_aqi=%s", aqi)
-    return aqi
+        logger.warning("No AQI data available")
+        return None
+    observation = AqiRuleObservation(value=row["aqi"], observed_at=row["logtime"])
+    logger.debug("last_aqi=%s observed_at=%s", observation.value, observation.observed_at)
+    return observation
 
 
 def get_aqi_series(conn):

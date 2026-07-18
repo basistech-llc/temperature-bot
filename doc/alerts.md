@@ -7,6 +7,11 @@ An Airthings request or payload-validation failure is logged but does not stop
 that cycle's alert evaluation, reminders, or recovery notifications. The
 collector validates the complete response before writing any device rows.
 
+Action rules require an outdoor AQI observation no more than two hours old.
+Missing, future-dated, or stale AQI stops the entire action-rule pass before any
+equipment command is evaluated; the runner logs the reason. Explicit AQI values
+supplied to the dry-run report remain available for scenario testing.
+
 `bin/rules.py` contains the two rule entry points:
 
 - `run_rules_for_device()` returns HVAC actions.

@@ -12,9 +12,9 @@ from app import rules_engine
 from app.constants import RESERVED_DEVICE_NAMES
 
 
-def _add_rule_test_erv(conn):
+def _add_rule_test_erv(conn, *, observed_at: int | None = None):
     device_id = db.get_or_create_device_id(conn, "ERV Kitchen", use_cache=False)
-    now = int(time.time())
+    now = observed_at if observed_at is not None else int(time.time())
     conn.execute("INSERT INTO aqi (logtime, aqi) VALUES (?, ?)", (now, 45))
     conn.execute(
         """
@@ -58,9 +58,27 @@ def test_run_rules_respects_master_switch(test_database_conn_with_test_data):
         mock_get_rules.assert_called_once()
 
 
-def test_get_last_aqi_defaults_to_50_when_empty(test_database_conn):
-    """Rules should have a conservative AQI value before the first AQI poll."""
-    assert db.get_last_aqi(test_database_conn) == 50
+def test_get_last_aqi_preserves_value_and_timestamp(test_database_conn):
+    assert db.get_last_aqi(test_database_conn) is None
+    test_database_conn.execute("INSERT INTO aqi (logtime, aqi) VALUES (1000, 62)")
+    observation = db.get_last_aqi(test_database_conn)
+    assert observation is not None
+    assert observation.value == 62
+    assert observation.observed_at == 1000
+
+
+def test_run_all_rules_rejects_missing_stale_and_future_aqi(test_database_conn):
+    conn = test_database_conn
+    now = 10_000
+    assert rules_engine.run_all_rules(conn, when=now) == rules_engine.AQI_MISSING_MESSAGE
+
+    conn.execute("INSERT INTO aqi (logtime, aqi) VALUES (?, 62)", (now - 7201,))
+    conn.commit()
+    assert rules_engine.run_all_rules(conn, when=now) == rules_engine.AQI_STALE_MESSAGE
+
+    conn.execute("INSERT INTO aqi (logtime, aqi) VALUES (?, 62)", (now + 1,))
+    conn.commit()
+    assert rules_engine.run_all_rules(conn, when=now) == rules_engine.AQI_FUTURE_MESSAGE
 
 
 def test_run_all_rules_respects_global_time_suspension(test_database_conn):
@@ -133,6 +151,9 @@ def test_run_all_rules_compile_failure_logs_traceback(
 ):
     """Broken rules.py compilation should preserve traceback details in logs."""
     conn = test_database_conn
+    now = int(time.time())
+    conn.execute("INSERT INTO aqi (logtime, aqi) VALUES (?, 45)", (now,))
+    conn.commit()
     monkeypatch.setattr(
         rules_engine,
         "get_rules",
@@ -174,7 +195,8 @@ def test_rules_results_runs_device_rule_contract(test_database_conn, monkeypatch
 def test_run_all_rules_uses_supplied_when(test_database_conn, monkeypatch):
     """run_all_rules should pass the requested evaluation time into rules."""
     conn = test_database_conn
-    device_id = _add_rule_test_erv(conn)
+    when = datetime.datetime(2026, 6, 23, 22, 0).timestamp()
+    device_id = _add_rule_test_erv(conn, observed_at=int(when))
 
     monkeypatch.setattr(
         rules_engine,
@@ -188,7 +210,6 @@ def test_run_all_rules_uses_supplied_when(test_database_conn, monkeypatch):
         ),
     )
 
-    when = datetime.datetime(2026, 6, 23, 22, 0).timestamp()
     assert f"Device {device_id} drive set to ON" in rules_engine.run_all_rules(
         conn, when=when
     )
