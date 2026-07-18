@@ -40,10 +40,11 @@ threshold, so a long-running alert does not rescan its entire history each
 minute. The latest reading is fetched separately so stale input is still
 reported as indeterminate rather than missing.
 
-Every device returned by the Airthings API is evaluated. The collector persists
-`device_type=SENSOR` and fills an unset `device_subtype=AIRTHINGS`; an existing
-subtype is never overwritten. The `aqi_mon` metadata flag only controls indoor-
-air-quality display and does not opt a sensor out of alerts.
+Every device that discovery classifies as Airthings is evaluated. The collector
+persists `device_type=SENSOR` and fills an unset `device_subtype=AIRTHINGS`; an
+existing subtype is never overwritten, so an explicitly classified device keeps
+that classification. The `aqi_mon` metadata flag only controls indoor-air-quality
+display and does not opt an Airthings sensor out of alerts.
 
 AE-200 `ErrorSign`, `FilterSign`, and `CheckWater` observations enter the same
 lifecycle and delivery pipeline. `ON` triggers or reminds, `OFF` resolves, and
