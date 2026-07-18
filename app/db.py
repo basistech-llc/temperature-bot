@@ -1601,7 +1601,7 @@ def get_last_aqi(conn) -> AqiRuleObservation | None:
     c.execute("SELECT aqi, logtime FROM aqi ORDER BY logtime DESC LIMIT 1")
     row = c.fetchone()
     if row is None:
-        logger.warning("No AQI data available")
+        logger.debug("No AQI data available")
         return None
     observation = AqiRuleObservation(value=row["aqi"], observed_at=row["logtime"])
     logger.debug("last_aqi=%s observed_at=%s", observation.value, observation.observed_at)

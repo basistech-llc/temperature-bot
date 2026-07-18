@@ -670,6 +670,11 @@ td.cell-notes {
     text-underline-offset: 0.12em;
 }
 
+.aqi-summary-link:focus-visible {
+    outline: 2px solid #3b82f6;
+    outline-offset: 2px;
+}
+
 /* Utility: hide element; JS toggles by adding/removing this class */
 .hidden {
     display: none !important;
