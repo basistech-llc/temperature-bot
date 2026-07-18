@@ -294,7 +294,64 @@ def test_device_subtype_migration_adds_nullable_discovery_metadata():
             "SELECT device_subtype FROM devices WHERE device_id=?", (device_id,)
         ).fetchone()[0]
         assert "device_subtype" in columns
-        assert subtype is None
+    assert subtype is None
+
+
+def test_unique_active_alert_migration_reconciles_existing_duplicates():
+    """V15 closes older duplicates before enforcing one active lifecycle."""
+    with closing(sqlite3.connect(":memory:")) as conn:
+        for version in range(1, 15):
+            migration = next(MIGRATION_DIR.glob(f"V{version}__*.sql"))
+            conn.executescript(migration.read_text(encoding="utf-8"))
+        device_id = conn.execute(
+            "INSERT INTO devices (device_name) VALUES ('Airthings Legacy')"
+        ).lastrowid
+        conn.executemany(
+            """
+            INSERT INTO alerts
+                (device_id, alert_type, alert_value, start_time, end_time)
+            VALUES (?, ?, 'ON', ?, ?)
+            """,
+            (
+                (device_id, "SensorStuck", 1000, None),
+                (device_id, "SensorStuck", 900, None),
+                (device_id, "SensorStuck", 1200, None),
+                (device_id, "FilterSign", 1100, None),
+                (device_id, "SensorStuck", 800, 850),
+            ),
+        )
+
+        conn.executescript(
+            (MIGRATION_DIR / "V15__unique_active_alert.sql").read_text(
+                encoding="utf-8"
+            )
+        )
+
+        sensor_rows = conn.execute(
+            """
+            SELECT start_time, end_time
+            FROM alerts
+            WHERE device_id=? AND alert_type='SensorStuck'
+            ORDER BY alert_id
+            """,
+            (device_id,),
+        ).fetchall()
+        assert sensor_rows == [(1000, 1200), (900, 1200), (1200, None), (800, 850)]
+        active_index = next(
+            row
+            for row in conn.execute("PRAGMA index_list(alerts)")
+            if row[1] == "idx_alerts_active"
+        )
+        assert active_index[2] == 1
+        with pytest.raises(sqlite3.IntegrityError):
+            conn.execute(
+                """
+                INSERT INTO alerts
+                    (device_id, alert_type, alert_value, start_time, end_time)
+                VALUES (?, 'SensorStuck', 'ON', 1300, NULL)
+                """,
+                (device_id,),
+            )
 
 
 def test_runtime_schema_validator_accepts_current_schema_with_flyway_history():

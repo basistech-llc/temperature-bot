@@ -310,6 +310,34 @@ def test_alert_notification_cadence_boundaries():
     )
 
 
+def test_active_alert_creation_returns_existing_unique_lifecycle(test_database_conn):
+    conn = test_database_conn
+    device_id = _add_airthings_device(conn)
+    original = db_alerts.create_alert_record(
+        conn,
+        device_id=device_id,
+        alert_type="SensorStuck",
+        start_time=1000,
+    )
+
+    creation = db_alerts.get_or_create_active_alert_record(
+        conn,
+        device_id=device_id,
+        alert_type="SensorStuck",
+        start_time=2000,
+    )
+
+    assert creation.created is False
+    assert creation.alert == original
+    assert conn.execute(
+        """
+        SELECT COUNT(*) FROM alerts
+        WHERE device_id=? AND alert_type='SensorStuck' AND end_time IS NULL
+        """,
+        (device_id,),
+    ).fetchone()[0] == 1
+
+
 def test_alert_cadence_starts_with_initial_notification(test_database_conn):
     """Historical condition onset must not skip the first-hour reminder cadence."""
     conn = test_database_conn

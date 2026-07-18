@@ -48,7 +48,9 @@ active equipment alert.
 
 ## Lifecycle and delivery
 
-An active condition creates one row in `alerts`. Each notification creates an
+An active condition creates one row in `alerts`. A partial unique index enforces
+one active row per device and alert type, including across overlapping runners.
+Each notification creates an
 `alert_events` row before Slack delivery, then records whether delivery was
 sent or failed and saves Slack's message timestamp. Recovery closes the active
 alert, logs a `resolved` event, and sends a recovery message.

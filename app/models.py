@@ -278,6 +278,13 @@ class AlertRecord(BaseModel):
     end_time: int | None = None
 
 
+class ActiveAlertCreation(BaseModel):
+    """Result of atomically creating or finding one active alert."""
+
+    alert: AlertRecord
+    created: bool
+
+
 class AlertEventRecord(BaseModel):
     """One logged alert notification or recovery event."""
 

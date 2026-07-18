@@ -5,12 +5,14 @@ Uses the same schema and connection conventions as app.db.
 
 import json
 import logging
+import sqlite3
 import time
 from functools import lru_cache
 
 from . import ae200
 from .device_types import DEVICE_SUBTYPE_AIRTHINGS, DEVICE_TYPE_SENSOR
 from .models import (
+    ActiveAlertCreation,
     AlertDeliveryStatus,
     AlertEventRecord,
     AlertEventType,
@@ -187,6 +189,25 @@ def create_alert_record(
         alert_value="ON",
         start_time=start_time,
     )
+
+
+def get_or_create_active_alert_record(
+    conn, *, device_id: int, alert_type: str, start_time: int
+) -> ActiveAlertCreation:
+    """Atomically create an active alert or return a concurrent survivor."""
+    try:
+        alert = create_alert_record(
+            conn,
+            device_id=device_id,
+            alert_type=alert_type,
+            start_time=start_time,
+        )
+        return ActiveAlertCreation(alert=alert, created=True)
+    except sqlite3.IntegrityError:
+        existing = get_active_alert_record(conn, device_id, alert_type)
+        if existing is None:
+            raise
+        return ActiveAlertCreation(alert=existing, created=False)
 
 
 def resolve_alert_record(conn, alert_id: int, *, end_time: int) -> None:

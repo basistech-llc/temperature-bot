@@ -616,9 +616,7 @@ def _attempt_alert_event_delivery(
     return True
 
 
-def _deliver_due_alert_events(
-    conn, *, now: int, notifier: AlertNotifier
-) -> None:
+def _deliver_due_alert_events(conn, *, now: int, notifier: AlertNotifier) -> None:
     """Drain one bounded batch of due pending and failed outbox events."""
     for event in db_alerts.get_due_alert_events(
         conn,
@@ -679,12 +677,15 @@ def _apply_active_alert_result(
     if active_alert is None:
         if not evaluation.commit:
             return f"Device {device_id} would trigger {result.alert_type}"
-        active_alert = db_alerts.create_alert_record(
+        creation = db_alerts.get_or_create_active_alert_record(
             conn,
             device_id=device_id,
             alert_type=result.alert_type,
             start_time=result.started_at or evaluation.now,
         )
+        active_alert = creation.alert
+        if not creation.created:
+            return _remind_active_alert(conn, active_alert, evaluation, notifier=notifier)
         _deliver_alert_event(
             conn,
             AlertEventNotification(
@@ -696,12 +697,7 @@ def _apply_active_alert_result(
             notifier=notifier,
         )
         return f"Device {device_id} triggered {result.alert_type}"
-    return _remind_active_alert(
-        conn,
-        active_alert,
-        evaluation,
-        notifier=notifier,
-    )
+    return _remind_active_alert(conn, active_alert, evaluation, notifier=notifier)
 
 
 def _apply_inactive_alert_result(
@@ -745,12 +741,7 @@ def _apply_alert_rule_result(
         return _apply_inactive_alert_result(conn, active_alert, evaluation, notifier)
     if active_alert is None:
         return None
-    return _remind_active_alert(
-        conn,
-        active_alert,
-        evaluation,
-        notifier=notifier,
-    )
+    return _remind_active_alert(conn, active_alert, evaluation, notifier=notifier)
 
 
 def apply_alert_evaluation(
