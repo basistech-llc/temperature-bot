@@ -1728,6 +1728,23 @@ li.pure-menu-item > .rules-master-toggle {
     margin-top: 16px;
 }
 
+#performance-chart {
+    height: 620px;
+    width: 100%;
+    margin-top: 16px;
+}
+
+.performance-monitoring-page {
+    padding: 0 1em;
+}
+
+.performance-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75em;
+    margin-top: 0.75em;
+}
+
 /* About page */
 .about-content {
     max-width: 800px;

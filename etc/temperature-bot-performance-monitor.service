@@ -1,0 +1,16 @@
+### /etc/systemd/system/temperature-bot-performance-monitor.service ###
+[Unit]
+Description=Record AE-200 network performance probes
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=simsong
+Group=simsong
+WorkingDirectory=/home/air/temperature-bot
+Environment="PATH=/home/air/temperature-bot/.venv/bin:/usr/bin:/bin"
+Environment="DB_PATH=/var/db/temperature-bot.db"
+Environment="TEMPERATURE_BOT_INSTANCE=production"
+Environment="PERFORMANCE_CLIENT_ID=network-probe"
+ExecStart=/home/air/temperature-bot/.venv/bin/python -m bin.performance_monitor --once
