@@ -35,7 +35,11 @@ The row also records the operation, AE-200 device id when applicable, response
 size, success or failure, normalized error type, instance/client identity, and
 an optional experiment id. Recording happens after releasing the AE-200 file
 lock. A monitoring write failure is logged but never replaces the application
-request's return value or exception.
+request's return value or exception. Inline request instrumentation uses a
+zero-wait SQLite transaction: if another writer holds the database, the sample
+is dropped and a warning is logged instead of delaying AE-200 work. Scheduled
+network probes may use SQLite's normal bounded wait because they are not on a
+control-request path.
 
 Simulator operations are not recorded as AE-200 performance samples because
 they do not exercise the controller or network.
@@ -50,6 +54,11 @@ an AE-200 XML command:
    loss.
 3. One TCP connection attempt to a configurable port expected to have no
    listener.
+
+When DNS supplies both address families, the probe prefers IPv4. This keeps the
+resolved literal compatible with the `ping` executable on both Linux and
+macOS; an IPv6-only target is retained, but may require platform-specific
+`ping6` support in a future extension.
 
 The TCP probe intentionally measures a reject path. `ECONNREFUSED` means the
 target was reached and promptly returned a TCP RST, so the sample is successful

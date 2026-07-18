@@ -318,7 +318,7 @@ class AE200Functions:
 
     async def getDevicesAsync(self, sample=None):
         if AE200_SIMULATOR:
-            raise RuntimeError("AE200_SIMULATOR not compatiable with AE200Functions")
+            raise RuntimeError("AE200_SIMULATOR not compatible with AE200Functions")
         unitsResultStr = await self._exchange(
             getUnitsPayload, sample, receive=True
         )
@@ -349,7 +349,7 @@ class AE200Functions:
         :param clean: if True (default), then remove keys with empty values.
         """
         if AE200_SIMULATOR:
-            raise RuntimeError("AE200_SIMULATOR not compatiable with AE200Functions")
+            raise RuntimeError("AE200_SIMULATOR not compatible with AE200Functions")
         getMnetDetailsPayload = getMnetDetails([deviceId])
         mnetDetailsResultStr = await self._exchange(
             getMnetDetailsPayload, sample, receive=True
@@ -380,7 +380,7 @@ class AE200Functions:
     async def sendAsync(self, deviceId, attributes, sample=None):
         assert "PYTEST" not in os.environ
         if AE200_SIMULATOR:
-            raise RuntimeError("AE200_SIMULATOR not compatiable with AE200Functions")
+            raise RuntimeError("AE200_SIMULATOR not compatible with AE200Functions")
         attrs = " ".join([f'{key}="{attributes[key]}"' for key in attributes])
         payload = setRequestPayload.format(deviceId=deviceId, attrs=attrs)
         await self._exchange(payload, sample, receive=False)

@@ -44,6 +44,7 @@ DEFAULT_QUERY_LIMIT = 50_000
 MAX_QUERY_LIMIT = 100_000
 MAX_ERROR_MESSAGE_LENGTH = 500
 AE200_WEBSOCKET_PORT = 80
+BEST_EFFORT_SQLITE_TIMEOUT_SECONDS = 0
 
 PING_TIME_RE = re.compile(r"\btime[=<]([0-9]+(?:\.[0-9]+)?)\s*ms\b")
 PACKET_LOSS_RE = re.compile(r"([0-9]+(?:\.[0-9]+)?)%\s+packet loss")
@@ -170,12 +171,17 @@ def insert_sample(conn: sqlite3.Connection, sample: PerformanceSample) -> int:
     return cursor.lastrowid
 
 
-def record_sample(sample: PerformanceSample, db_path: str | None = None) -> int:
+def record_sample(
+    sample: PerformanceSample,
+    db_path: str | None = None,
+    *,
+    timeout_seconds: float = 2,
+) -> int:
     """Persist one sample in a short independent transaction."""
     path = db_path or configured_database_path()
     if not path:
         raise RuntimeError(f"{DB_PATH} is not configured")
-    with sqlite3.connect(path, timeout=2) as conn:
+    with sqlite3.connect(path, timeout=timeout_seconds) as conn:
         sample_id = insert_sample(conn, sample)
         conn.commit()
         return sample_id
@@ -184,7 +190,9 @@ def record_sample(sample: PerformanceSample, db_path: str | None = None) -> int:
 def record_sample_best_effort(sample: PerformanceSample) -> None:
     """Record instrumentation without affecting the instrumented operation."""
     try:
-        record_sample(sample)
+        record_sample(
+            sample, timeout_seconds=BEST_EFFORT_SQLITE_TIMEOUT_SECONDS
+        )
     except (OSError, RuntimeError, sqlite3.Error) as error:
         logger.warning(
             "Could not record %s performance sample: %s",
@@ -266,14 +274,24 @@ def parse_ping_output(output: str) -> PingSummary:
     )
 
 
+def preferred_stream_address(addresses: list[tuple]) -> str:
+    """Prefer IPv4 so the resolved literal works with macOS `ping`."""
+    if not addresses:
+        raise OSError("DNS returned no addresses")
+    for address in addresses:
+        if address[0] == socket.AF_INET:
+            return str(address[4][0])
+    return str(addresses[0][4][0])
+
+
 def resolve_target(host: str) -> tuple[str, float]:
-    """Resolve a target and return the first stream-capable address and time."""
+    """Resolve a target, preferring IPv4, and return its lookup time."""
     started_ns = time.perf_counter_ns()
     addresses = socket.getaddrinfo(host, None, type=socket.SOCK_STREAM)
     dns_ms = elapsed_ms(started_ns)
     if not addresses:
         raise OSError(f"DNS returned no addresses for {host}")
-    return str(addresses[0][4][0]), dns_ms
+    return preferred_stream_address(addresses), dns_ms
 
 
 def run_ping(host: str, count: int = 3, timeout_seconds: float = 10) -> tuple[PingSummary, float]:

@@ -1,7 +1,9 @@
 """Substantive SQLite, timing, parser, and loopback probe tests."""
 
 import asyncio
+import logging
 import socket
+import time
 
 import pytest
 import websockets
@@ -81,6 +83,37 @@ def test_tcp_reject_probe_treats_loopback_refusal_as_reachable():
     assert sample.outcome == "refused"
     assert sample.connect_ms is not None
     assert sample.total_ms >= sample.connect_ms
+
+
+def test_dns_address_selection_prefers_ipv4_for_portable_ping():
+    """An IPv4 result wins even when DNS returns IPv6 first."""
+    addresses = [
+        (socket.AF_INET6, socket.SOCK_STREAM, 6, "", ("2001:db8::10", 0, 0, 0)),
+        (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("192.0.2.10", 0)),
+    ]
+
+    assert performance_monitoring.preferred_stream_address(addresses) == "192.0.2.10"
+
+
+def test_best_effort_record_does_not_wait_for_sqlite_writer(
+    test_database_conn, caplog
+):
+    """Inline telemetry abandons a locked database without delaying AE-200 work."""
+    test_database_conn.execute("BEGIN EXCLUSIVE")
+    started = time.perf_counter()
+    with caplog.at_level(logging.WARNING):
+        performance_monitoring.record_sample_best_effort(_sample(9_000))
+    elapsed = time.perf_counter() - started
+    test_database_conn.rollback()
+
+    assert elapsed < 0.5
+    assert "database is locked" in caplog.text
+    assert (
+        test_database_conn.execute(
+            "SELECT count(*) FROM performance_samples WHERE observed_at_ms = 9000"
+        ).fetchone()[0]
+        == 0
+    )
 
 
 def test_performance_samples_persist_filter_and_expire(test_database_conn):
