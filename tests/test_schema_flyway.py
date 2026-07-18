@@ -246,6 +246,7 @@ def test_alert_outbox_migration_backfills_existing_delivery_state():
                 (alert_id, 1800, "resolved", "sent", "sent"),
             ),
         )
+        conn.execute("DROP INDEX idx_alerts_active")
 
         conn.executescript(
             (MIGRATION_DIR / "V13__alert_delivery_outbox.sql").read_text(

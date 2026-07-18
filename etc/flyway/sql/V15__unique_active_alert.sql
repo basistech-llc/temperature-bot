@@ -26,7 +26,7 @@ WHERE older.end_time IS NULL
         AND newer.alert_id > older.alert_id
   );
 
-DROP INDEX idx_alerts_active;
+DROP INDEX IF EXISTS idx_alerts_active;
 
 CREATE UNIQUE INDEX idx_alerts_active
     ON alerts (device_id, alert_type)
