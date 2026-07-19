@@ -302,8 +302,7 @@ def test_weather_endpoint(
     assert response.status_code == 200
     response_json = response.json
     logging.info(" /weather: %s", response_json)
-    assert "aqi" in response_json
-    assert "weather" in response_json
+    assert {"aqi", "aqi_observed_at", "weather"} <= response_json.keys()
 
 
 @patch("app.weather.get_weather_data")

@@ -30,6 +30,10 @@ Temperature Bot now tracks SQL schema versions with Flyway.
   machine-readable action. It also identifies the duplicate, comment-free Unix
   timestamps written by the former web control flow as rules suspensions while
   leaving genuinely ambiguous historical values classified as `legacy`.
+- `etc/flyway/sql/V17__ae200_command_log.sql` stores the latest and historical
+  AE-200 write requests, parsed controller acknowledgements, and failures. Unix
+  times are integer milliseconds; request and response JSON use SQLite `TEXT`
+  storage with `json_valid()` constraints.
 - `etc/flyway/sql/R__performance_samples.sql` adds integration and network
   timing samples. It is repeatable so it can be deployed before or after the
   independent branch that owns V12-V15; see `doc/performance-monitoring.md`.

@@ -266,6 +266,8 @@ test-js: $(REQ) ## Run the JavaScript unit tests
 	node tests/test_room_map.js
 	node tests/test_fcu_history_chart.js
 	node tests/test_performance_monitoring.js
+	node tests/test_outdoor_aqi.js
+	node tests/test_ae200_page.js
 	node tests/test_logs_today.js
 test: $(REQ) ## Run both Python and JavaScript test suites
 	@python_exit=0; js_exit=0; \

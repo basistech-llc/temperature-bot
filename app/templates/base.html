@@ -60,13 +60,14 @@
       <li class="pure-menu-item{% if current_page == 'weather' %} pure-menu-selected{% endif %}">
         <a href="/weather" class="pure-menu-link">Weather</a>
       </li>
-      <li class="pure-menu-item{% if current_page in ['temperature_chart', 'lighting_chart', 'chart_aqi', 'performance-monitoring', 'alerts', 'rules', 'logs_today', 'devices', 'all_devices'] %} pure-menu-selected{% endif %}">
+      <li class="pure-menu-item{% if current_page in ['temperature_chart', 'lighting_chart', 'chart_aqi', 'performance-monitoring', 'ae200', 'alerts', 'rules', 'logs_today', 'devices', 'all_devices'] %} pure-menu-selected{% endif %}">
         <a href="#" id="deep-dive-menu-link" class="pure-menu-link">Deep Dive ▾</a>
         <div id="deep-dive-popup" class="github-popup">
           <a href="/chart"{% if current_page == 'temperature_chart' %} class="pure-menu-selected"{% endif %}>Temperature Chart</a>
           <a href="/lighting_chart"{% if current_page == 'lighting_chart' %} class="pure-menu-selected"{% endif %}>Lighting Chart</a>
           <a href="/chart_aqi"{% if current_page == 'chart_aqi' %} class="pure-menu-selected"{% endif %}>Air Quality Chart</a>
           <a href="/performance-monitoring"{% if current_page == 'performance-monitoring' %} class="pure-menu-selected"{% endif %}>Performance Monitoring</a>
+          <a href="/ae200"{% if current_page == 'ae200' %} class="pure-menu-selected"{% endif %}>AE-200</a>
           <a href="/alerts"{% if current_page == 'alerts' %} class="pure-menu-selected"{% endif %}>Alerts</a>
           <a href="/presence"{% if current_page == 'presence' %} class="pure-menu-selected"{% endif %}>Presence</a>
           <a href="/rules"{% if current_page == 'rules' %} class="pure-menu-selected"{% endif %}>Rules</a>

@@ -18,6 +18,7 @@ from . import db
 from . import routes_api
 from . import routes_web
 from .performance_routes import performance_routes
+from .ae200_routes import ae200_routes
 from .models import ApplicationMetadata, json_ready
 from .version import __version__, git_branch, git_sha
 
@@ -106,6 +107,7 @@ def create_app():
     # Register blueprints
     app.register_blueprint(routes_api.api_v1, url_prefix="/api/v1")
     app.register_blueprint(performance_routes)
+    app.register_blueprint(ae200_routes)
 
     # Register web routes
     routes_web.create_web_routes(app)

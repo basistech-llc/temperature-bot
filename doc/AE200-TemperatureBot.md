@@ -185,6 +185,31 @@ state in `devlog.status_json`. A future autonomous-change audit should compare
 successive collected control fields and add explicit observed-change records;
 it must not present an observation as a TemperatureBot command.
 
+Reverse engineering in the
+[`kenkeiter/ae200py`](https://github.com/kenkeiter/ae200py/blob/main/doc/protocol.md)
+project documents the WebSocket message types used by firmware 7.98. A successful `setRequest` produces a
+`setResponse`; TemperatureBot now parses and audits that acknowledgement. A
+persistent web client also receives unsolicited `notifyRequest` messages when
+state changes, including changes made by schedules or other controllers. The
+current TemperatureBot client opens one short-lived WebSocket per request, so it
+cannot yet attribute those notifications or distinguish a schedule action from
+a wall controller action. Implementing that audit correctly requires one
+long-running authenticated listener with reconnect, duplicate suppression, and
+explicit `observed` provenance. The reverse-engineered protocol still lists
+schedule definition read/write as unknown, so notification support would expose
+autonomous changes but not the weekly schedule program.
+
+A second read-only production snapshot on July 19, 2026 found `Schedule=ON` on
+all 12 units, while `ScheduleAvail` was mixed. `Hold=ON` appeared on Broadway
+South and both ERVs. This confirms that the fields describe meaningful current
+per-unit state, but it does not reveal event times or prove which subsystem made
+a particular state change.
+
+The Deep Dive **AE-200** page shows the current per-unit status fields, including
+the schedule flags, one day of existing request-performance samples, and the 50
+most recent commands with their controller-level response. Its status polling is
+read-only and occurs once per minute while the page is open.
+
 ## Guideline for Future Changes
 
 Do not add a mode to the FCU dropdown merely because the AE-200 can report it.

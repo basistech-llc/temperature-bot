@@ -50,11 +50,11 @@ PING_TIME_RE = re.compile(r"\btime[=<]([0-9]+(?:\.[0-9]+)?)\s*ms\b")
 PACKET_LOSS_RE = re.compile(r"([0-9]+(?:\.[0-9]+)?)%\s+packet loss")
 
 
-def _default_instance_id() -> str:
+def default_instance_id() -> str:
     return os.getenv(PERFORMANCE_INSTANCE_ENV) or socket.gethostname()
 
 
-def _default_client_id() -> str:
+def default_client_id() -> str:
     configured = os.getenv(PERFORMANCE_CLIENT_ENV)
     if configured:
         return configured
@@ -74,8 +74,8 @@ class PerformanceSample(BaseModel):  # pylint: disable=too-many-instance-attribu
     """One application or network performance observation."""
 
     observed_at_ms: int = Field(default_factory=lambda: time.time_ns() // 1_000_000)
-    instance_id: str = Field(default_factory=_default_instance_id)
-    client_id: str = Field(default_factory=_default_client_id)
+    instance_id: str = Field(default_factory=default_instance_id)
+    client_id: str = Field(default_factory=default_client_id)
     sample_type: str
     operation: str
     target_host: str

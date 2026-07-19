@@ -309,6 +309,40 @@ def test_fcu_high_uses_one_atomic_control_request(
 
 @pytest.mark.skipif(SKIP_BROWSER_TEST, reason="SKIP_BROWSER_TEST is set")
 @skip_on_github
+def test_ae200_diagnostics_first_render_has_live_rows_and_chart(
+    test_database_conn_with_test_data,
+):  # noqa: F811  # pylint: disable=unused-argument
+    """The diagnostics JS must render controller rows without browser errors."""
+    ae200.set_fcu_state(10, drive=1, fan_speed=4)
+    server = make_server("127.0.0.1", 0, app, threaded=True)
+    server_thread = threading.Thread(target=server.serve_forever, daemon=True)
+    server_thread.start()
+    base_url = f"http://127.0.0.1:{server.server_port}"
+    try:
+        wait_for_server(f"{base_url}/health", timeout=20)
+        with sync_playwright() as playwright, playwright.chromium.launch(
+            headless=True
+        ) as browser:
+            page = browser.new_page()
+            errors = []
+            page.on("pageerror", lambda error: errors.append(str(error)))
+            page.goto(f"{base_url}/ae200", wait_until="networkidle")
+            expect(page.locator("#ae200-status-table tbody tr")).to_have_count(
+                len(ae200.get_devices())
+            )
+            expect(page.locator("#ae200-command-table tbody tr").first).to_contain_text(
+                "Drive=ON"
+            )
+            assert page.locator("#ae200-performance-chart canvas").count() == 1
+            assert not errors
+    finally:
+        server.shutdown()
+        server.server_close()
+        server_thread.join(timeout=2)
+
+
+@pytest.mark.skipif(SKIP_BROWSER_TEST, reason="SKIP_BROWSER_TEST is set")
+@skip_on_github
 def test_air_quality_temperature_click_fetches_selected_device(
     test_database_conn_with_test_data,
 ):  # noqa: F811

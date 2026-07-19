@@ -16,6 +16,8 @@ surface quickly.
   JSON APIs, and static JavaScript belong.
 - `doc/performance-monitoring.md`: AE-200 request timing, independent network
   probes, storage, charting, deployment, and staging-load experiments.
+- `app/templates/ae200.html`, `app/ae200_routes.py`: Deep Dive AE-200 live
+  status, request-performance chart, and durable command audit.
 - `doc/rooms-implementation-review.md`: room dashboard debt, open room issues,
   and Hickory/Kitchen dashboard generalization notes.
 - `doc/rooms-implementation-plan.md`: approved FCU-owned room model, grouped

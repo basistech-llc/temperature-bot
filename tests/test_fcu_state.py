@@ -1,6 +1,7 @@
 """Verified, atomic FCU command tests."""
 
 import os
+import json
 import sqlite3
 import time
 
@@ -58,3 +59,17 @@ def test_set_fcu_state_is_atomic_verified_and_logged_once(flask_test_client):  #
     assert rows[1][1] == ""
     assert int(rows[1][2]) >= int(time.time()) + 179 * 60
     assert rows[1][3] == "Rules disabled for 180 minutes"
+
+    with sqlite3.connect(os.environ[TEST_DB_NAME]) as conn:
+        command = conn.execute(
+            """
+            SELECT request_json, outcome, response_summary
+            FROM ae200_command_log
+            WHERE ae200_device_id=?
+            ORDER BY command_id DESC LIMIT 1
+            """,
+            (str(AE200_UNIT),),
+        ).fetchone()
+    assert json.loads(command[0]) == {"Drive": "ON", "FanSpeed": "HIGH"}
+    assert command[1] == "simulated"
+    assert command[2] == "simulated: Drive=ON FanSpeed=HIGH"

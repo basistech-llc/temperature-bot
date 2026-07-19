@@ -2845,9 +2845,16 @@ def get_db_aqi(conn) -> Dict[str, Any]:
 def get_aqi_and_weather_data(conn) -> Dict[str, Any]:
     """Get combined weather and AQI data"""
     aqi_data = get_db_aqi(conn)
+    row = conn.execute("SELECT logtime FROM aqi ORDER BY logtime DESC LIMIT 1").fetchone()
     weather_data = weather.get_weather_data()
     return json_ready(
-        AqiWeatherResponse.model_validate({"aqi": aqi_data, "weather": weather_data})
+        AqiWeatherResponse.model_validate(
+            {
+                "aqi": aqi_data,
+                "aqi_observed_at": row[0] if row else None,
+                "weather": weather_data,
+            }
+        )
     )
 
 def get_all_device_aqi(conn) -> List[Dict[str, Any]]:

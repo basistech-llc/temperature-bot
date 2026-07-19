@@ -26,8 +26,8 @@ milliseconds:
 - `lock_wait_ms`: wait for the in-process semaphore and cross-process file
   lock;
 - `connect_ms`: WebSocket TCP connection and HTTP upgrade;
-- `response_ms`: XML send/receive time, or XML send time for a command with no
-  response body;
+- `response_ms`: XML send/receive time, including the AE-200 `setResponse` for
+  control commands;
 - `close_ms`: WebSocket close time;
 - `total_ms`: the complete synchronous operation, including local queueing.
 
@@ -43,6 +43,11 @@ control-request path.
 
 Simulator operations are not recorded as AE-200 performance samples because
 they do not exercise the controller or network.
+
+Every control write also creates a best-effort durable row in
+`ae200_command_log`. This is distinct from performance timing: it records the
+requested fields and a parsed high-level `setResponse`, or a bounded error. The
+AE-200 diagnostics page displays the most recent 50 rows.
 
 ### Independent network probe
 

@@ -19,6 +19,7 @@ MIGRATED_APP_TABLES = BASELINE_APP_TABLES | {
     "fcu_temp_sources",
     "fcu_set_ranges",
     "performance_samples",
+    "ae200_command_log",
 }
 BASELINE_MIGRATION_PATH = (
     Path(ROOT_DIR) / "etc" / "flyway" / "sql" / "V1__baseline_schema.sql"
@@ -26,6 +27,7 @@ BASELINE_MIGRATION_PATH = (
 MIGRATION_DIR = Path(ROOT_DIR) / "etc" / "flyway" / "sql"
 PERFORMANCE_MIGRATION_PATH = MIGRATION_DIR / "R__performance_samples.sql"
 CHANGELOG_ACTION_MIGRATION_PATH = MIGRATION_DIR / "V16__changelog_action.sql"
+AE200_COMMAND_MIGRATION_PATH = MIGRATION_DIR / "V17__ae200_command_log.sql"
 
 
 def run_command(command):
@@ -127,7 +129,7 @@ def test_deploy_flyway_accepts_pending_migrations_and_backs_up_first(tmp_path):
             WHERE version IS NOT NULL AND success=1
             """
         ).fetchone()[0]
-        assert latest_migrated_version == 16
+        assert latest_migrated_version == 17
         assert (
             migrated.execute(
                 "SELECT COUNT(*) FROM sqlite_master WHERE name='performance_samples'"
@@ -199,6 +201,35 @@ def test_performance_repeatable_migration_is_idempotent_and_indexed():
         "outcome",
     } <= columns
     assert "idx_performance_samples_instance_type_time" in indexes
+
+
+def test_ae200_command_migration_enforces_json_and_creates_time_index():
+    """V17 stores typed command audit fields and rejects malformed JSON."""
+    with closing(sqlite3.connect(":memory:")) as conn:
+        conn.executescript(AE200_COMMAND_MIGRATION_PATH.read_text(encoding="utf-8"))
+        conn.execute(
+            """
+            INSERT INTO ae200_command_log (
+                requested_at_ms, completed_at_ms, instance_id, client_id,
+                ae200_device_id, request_json, outcome, response_summary
+            ) VALUES (1, 2, 'production', 'web', '10',
+                      '{"Drive":"ON"}', 'confirmed', 'setResponse: Drive=ON')
+            """
+        )
+        with pytest.raises(sqlite3.IntegrityError):
+            conn.execute(
+                """
+                INSERT INTO ae200_command_log (
+                    requested_at_ms, completed_at_ms, instance_id, client_id,
+                    ae200_device_id, request_json, outcome, response_summary
+                ) VALUES (1, 2, 'production', 'web', '10',
+                          'not-json', 'confirmed', 'bad')
+                """
+            )
+        indexes = {
+            row[1] for row in conn.execute("PRAGMA index_list(ae200_command_log)")
+        }
+    assert "idx_ae200_command_log_requested_at" in indexes
 
 
 def test_baseline_migration_does_not_create_flyway_history_table():

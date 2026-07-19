@@ -281,6 +281,44 @@ def test_ae200_exchange_times_real_local_websocket(monkeypatch):
     assert sample.response_bytes == len(response_xml.encode("utf-8"))
 
 
+def test_ae200_set_waits_for_and_parses_real_controller_response(monkeypatch):
+    """A write must consume setResponse so audit data is a real acknowledgement."""
+    response_xml = """<Packet><Command>setResponse</Command><DatabaseManager>
+    <Mnet Group="10" Drive="ON" FanSpeed="HIGH"/>
+    </DatabaseManager></Packet>"""
+
+    async def exercise():
+        async def handler(websocket):
+            request_xml = await websocket.recv()
+            assert "<Command>setRequest</Command>" in request_xml
+            assert 'Drive="ON"' in request_xml
+            await websocket.send(response_xml)
+
+        async with websockets.serve(
+            handler, "127.0.0.1", 0, subprotocols=["b_xmlproc"]
+        ) as server:
+            port = server.sockets[0].getsockname()[1]
+            controller = ae200.AE200Functions(f"127.0.0.1:{port}")
+            sample = performance_monitoring.new_ae200_sample(
+                performance_monitoring.OPERATION_SET,
+                controller.address,
+                10,
+            )
+            result = await controller.sendAsync(
+                10, {ae200.AE200_DRIVE_KEY: "ON"}, sample
+            )
+            return result, sample
+
+    monkeypatch.setattr(ae200, "AE200_SIMULATOR", False)
+    monkeypatch.delenv("PYTEST", raising=False)
+    result, sample = asyncio.run(exercise())
+
+    assert result.command == "setResponse"
+    assert result.response_fields == {"Drive": "ON", "FanSpeed": "HIGH"}
+    assert result.summary() == "setResponse: Drive=ON FanSpeed=HIGH"
+    assert sample.response_bytes == len(response_xml.encode("utf-8"))
+
+
 def test_performance_api_and_page(flask_test_client, test_database_conn):
     """The page is linked to a bounded API that returns persisted samples."""
     performance_monitoring.insert_sample(test_database_conn, _sample(20_000))

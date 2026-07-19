@@ -1,0 +1,54 @@
+{% extends 'base.html' %}
+{% block title %} AE-200 {% endblock %}
+{% block head %}
+{% if dist %}
+  <script src="https://cdn.jsdelivr.net/npm/echarts@{{ echarts_version }}"></script>
+{% else %}
+  <script src="/static/echarts@5"></script>
+{% endif %}
+<script src="/static/performance_monitoring.js"></script>
+{% endblock %}
+{% block body %}
+<main class="ae200-page">
+  <h1>AE-200</h1>
+  <p id="ae200-summary" role="status">Loading controller status…</p>
+  <p>
+    Schedule fields below are current controller flags, not the underlying
+    Mitsubishi schedule program. This page refreshes its read-only snapshot once
+    a minute.
+  </p>
+
+  <h2>Real-time controller data</h2>
+  <div class="table-scroll">
+    <table class="pure-table data-table" id="ae200-status-table">
+      <thead>
+        <tr>
+          <th>Unit</th><th>Drive</th><th>Mode</th><th>Mode status</th>
+          <th>Fan</th><th>Inlet °C</th><th>Set °C</th>
+          <th>Schedule</th><th>Schedule available</th><th>Hold</th>
+          <th>Warnings</th><th>All fields</th>
+        </tr>
+      </thead>
+      <tbody><tr><td colspan="12">Loading…</td></tr></tbody>
+    </table>
+  </div>
+
+  <h2>AE-200 request performance</h2>
+  <p id="ae200-performance-summary" role="status"></p>
+  <div id="ae200-performance-chart" class="performance-chart" aria-label="AE-200 request latency over the last day"></div>
+
+  <h2>Last 50 commands</h2>
+  <div class="table-scroll">
+    <table class="pure-table data-table" id="ae200-command-table">
+      <thead>
+        <tr>
+          <th>Time</th><th>Unit ID</th><th>Request</th><th>Outcome</th>
+          <th>AE-200 response</th><th>Process</th>
+        </tr>
+      </thead>
+      <tbody><tr><td colspan="6">Loading…</td></tr></tbody>
+    </table>
+  </div>
+</main>
+<script src="/static/ae200_page.js"></script>
+{% endblock %}

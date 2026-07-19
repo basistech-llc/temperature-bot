@@ -576,8 +576,8 @@ class AqiWeatherResponse(BaseModel):
     """Combined outdoor AQI and weather payload."""
 
     aqi: AqiSummary
+    aqi_observed_at: int | None = None
     weather: WeatherData | Dict[str, Any]
-
 
 class ControlRequest(BaseModel):
     """Strict base for request bodies that control devices or configuration."""
