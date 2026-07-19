@@ -2,7 +2,7 @@
 
 from conftest import flask_test_client  # noqa: F401  # pylint: disable=unused-import
 
-from app import ae200
+from app import ae200, ae200_notifications
 
 
 def test_ae200_page_links_live_performance_and_command_sections(flask_test_client):  # noqa: F811
@@ -39,3 +39,18 @@ def test_ae200_command_api_returns_latest_parsed_command(flask_test_client):  # 
 
     invalid = flask_test_client.get("/api/v1/ae200/commands?limit=0")
     assert invalid.status_code == 400
+
+
+def test_ae200_notification_api_returns_unattributed_observations(
+    flask_test_client, test_database_conn
+):  # noqa: F811
+    event = ae200_notifications.AE200Notification(
+        ae200_group_id="10", values={"Drive": "OFF"}
+    )
+    ae200_notifications.insert_notifications(test_database_conn, [event])
+    test_database_conn.commit()
+
+    response = flask_test_client.get("/api/v1/ae200/notifications?limit=50")
+    assert response.status_code == 200
+    assert response.json["notifications"][0]["ae200_group_id"] == "10"
+    assert response.json["notifications"][0]["values"] == {"Drive": "OFF"}

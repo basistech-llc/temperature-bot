@@ -34,6 +34,8 @@ Temperature Bot now tracks SQL schema versions with Flyway.
   AE-200 write requests, parsed controller acknowledgements, and failures. Unix
   times are integer milliseconds; request and response JSON use SQLite `TEXT`
   storage with `json_valid()` constraints.
+- `etc/flyway/sql/V18__ae200_notifications.sql` stores unsolicited AE-200
+  `notifyRequest` observations without claiming which actor caused the change.
 - `etc/flyway/sql/R__performance_samples.sql` adds integration and network
   timing samples. It is repeatable so it can be deployed before or after the
   independent branch that owns V12-V15; see `doc/performance-monitoring.md`.

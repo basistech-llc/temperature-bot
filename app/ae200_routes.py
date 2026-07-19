@@ -7,7 +7,7 @@ import time
 from flask import Blueprint, jsonify, render_template, request
 from pydantic import BaseModel, Field
 
-from . import ae200, ae200_command_log
+from . import ae200, ae200_command_log, ae200_notifications
 from .models import json_ready
 from .util import get_config
 from .utils.db_utils import with_db_connection
@@ -81,6 +81,18 @@ def ae200_commands(conn):
     try:
         limit = int(request.args.get("limit", ae200_command_log.DEFAULT_LIMIT))
         page = ae200_command_log.fetch_recent(conn, limit)
+    except ValueError as error:
+        return jsonify({"error": str(error)}), 400
+    return jsonify(page.model_dump(mode="json"))
+
+
+@ae200_routes.get("/api/v1/ae200/notifications")
+@with_db_connection
+def ae200_notification_events(conn):
+    """Return recent unsolicited controller state observations."""
+    try:
+        limit = int(request.args.get("limit", ae200_notifications.DEFAULT_LIMIT))
+        page = ae200_notifications.fetch_recent(conn, limit)
     except ValueError as error:
         return jsonify({"error": str(error)}), 400
     return jsonify(page.model_dump(mode="json"))

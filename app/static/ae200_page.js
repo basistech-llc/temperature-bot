@@ -90,6 +90,34 @@ function renderCommands(page) {
   body.replaceChildren(...rows);
 }
 
+function renderNotifications(page) {
+  const body = document.querySelector("#ae200-notification-table tbody");
+  const rows = page.notifications.map((notification) => {
+    const row = document.createElement("tr");
+    row.appendChild(cell(localTimestamp(notification.observed_at_ms)));
+    row.appendChild(cell(
+      notification.ae200_group_id
+        ? `group ${notification.ae200_group_id}`
+        : `address ${notification.ae200_address}`,
+    ));
+    row.appendChild(cell(
+      Object.entries(notification.values)
+        .map(([key, value]) => `${key}=${value}`)
+        .join(" "),
+    ));
+    row.appendChild(cell(notification.instance_id));
+    return row;
+  });
+  if (!rows.length) {
+    const empty = document.createElement("tr");
+    const message = cell("No notifications have been collected.");
+    message.colSpan = 4;
+    empty.appendChild(message);
+    rows.push(empty);
+  }
+  body.replaceChildren(...rows);
+}
+
 async function loadJson(url) {
   const response = await fetch(url);
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -98,12 +126,14 @@ async function loadJson(url) {
 
 async function refreshAe200() {
   try {
-    const [snapshot, commands] = await Promise.all([
+    const [snapshot, commands, notifications] = await Promise.all([
       loadJson("/api/v1/ae200/status"),
       loadJson("/api/v1/ae200/commands?limit=50"),
+      loadJson("/api/v1/ae200/notifications?limit=50"),
     ]);
     renderStatus(snapshot);
     renderCommands(commands);
+    renderNotifications(notifications);
   } catch (error) {
     document.getElementById("ae200-summary").textContent =
       `Unable to load AE-200 diagnostics: ${error}`;

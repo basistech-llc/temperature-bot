@@ -18,6 +18,8 @@ surface quickly.
   probes, storage, charting, deployment, and staging-load experiments.
 - `app/templates/ae200.html`, `app/ae200_routes.py`: Deep Dive AE-200 live
   status, request-performance chart, and durable command audit.
+- `bin/ae200_notifications.py`, `app/ae200_notifications.py`: authenticated
+  persistent WebSocket collection and storage of unsolicited controller changes.
 - `doc/rooms-implementation-review.md`: room dashboard debt, open room issues,
   and Hickory/Kitchen dashboard generalization notes.
 - `doc/rooms-implementation-plan.md`: approved FCU-owned room model, grouped

@@ -20,6 +20,7 @@ MIGRATED_APP_TABLES = BASELINE_APP_TABLES | {
     "fcu_set_ranges",
     "performance_samples",
     "ae200_command_log",
+    "ae200_notifications",
 }
 BASELINE_MIGRATION_PATH = (
     Path(ROOT_DIR) / "etc" / "flyway" / "sql" / "V1__baseline_schema.sql"
@@ -28,6 +29,7 @@ MIGRATION_DIR = Path(ROOT_DIR) / "etc" / "flyway" / "sql"
 PERFORMANCE_MIGRATION_PATH = MIGRATION_DIR / "R__performance_samples.sql"
 CHANGELOG_ACTION_MIGRATION_PATH = MIGRATION_DIR / "V16__changelog_action.sql"
 AE200_COMMAND_MIGRATION_PATH = MIGRATION_DIR / "V17__ae200_command_log.sql"
+AE200_NOTIFICATION_MIGRATION_PATH = MIGRATION_DIR / "V18__ae200_notifications.sql"
 
 
 def run_command(command):
@@ -129,7 +131,7 @@ def test_deploy_flyway_accepts_pending_migrations_and_backs_up_first(tmp_path):
             WHERE version IS NOT NULL AND success=1
             """
         ).fetchone()[0]
-        assert latest_migrated_version == 17
+        assert latest_migrated_version == 18
         assert (
             migrated.execute(
                 "SELECT COUNT(*) FROM sqlite_master WHERE name='performance_samples'"
@@ -230,6 +232,33 @@ def test_ae200_command_migration_enforces_json_and_creates_time_index():
             row[1] for row in conn.execute("PRAGMA index_list(ae200_command_log)")
         }
     assert "idx_ae200_command_log_requested_at" in indexes
+
+
+def test_ae200_notification_migration_requires_source_and_valid_json():
+    """V18 observations always identify a group/address and contain valid JSON."""
+    with closing(sqlite3.connect(":memory:")) as conn:
+        conn.executescript(
+            AE200_NOTIFICATION_MIGRATION_PATH.read_text(encoding="utf-8")
+        )
+        conn.execute(
+            """
+            INSERT INTO ae200_notifications (
+                observed_at_ms, instance_id, ae200_group_id, values_json
+            ) VALUES (1, 'production', '10', '{"Drive":"ON"}')
+            """
+        )
+        with pytest.raises(sqlite3.IntegrityError):
+            conn.execute(
+                """
+                INSERT INTO ae200_notifications (
+                    observed_at_ms, instance_id, values_json
+                ) VALUES (1, 'production', '{}')
+                """
+            )
+        indexes = {
+            row[1] for row in conn.execute("PRAGMA index_list(ae200_notifications)")
+        }
+    assert "idx_ae200_notifications_observed_at" in indexes
 
 
 def test_baseline_migration_does_not_create_flyway_history_table():

@@ -187,17 +187,15 @@ it must not present an observation as a TemperatureBot command.
 
 Reverse engineering in the
 [`kenkeiter/ae200py`](https://github.com/kenkeiter/ae200py/blob/main/doc/protocol.md)
-project documents the WebSocket message types used by firmware 7.98. A successful `setRequest` produces a
-`setResponse`; TemperatureBot now parses and audits that acknowledgement. A
-persistent web client also receives unsolicited `notifyRequest` messages when
-state changes, including changes made by schedules or other controllers. The
-current TemperatureBot client opens one short-lived WebSocket per request, so it
-cannot yet attribute those notifications or distinguish a schedule action from
-a wall controller action. Implementing that audit correctly requires one
-long-running authenticated listener with reconnect, duplicate suppression, and
-explicit `observed` provenance. The reverse-engineered protocol still lists
-schedule definition read/write as unknown, so notification support would expose
-autonomous changes but not the weekly schedule program.
+project documents the WebSocket message types used by firmware 7.98. A
+successful `setRequest` produces a `setResponse`; TemperatureBot parses and
+audits that acknowledgement. The separately deployed
+`bin.ae200_notifications` collector maintains an authenticated WebSocket and
+stores unsolicited `notifyRequest` changes with explicit observed provenance.
+The protocol does not say which actor caused a notification, so the application
+does not label these events as autonomous or correlate them to commands. The
+reverse-engineered protocol still lists schedule definition read/write as
+unknown: notifications expose changes, not the weekly schedule program.
 
 A second read-only production snapshot on July 19, 2026 found `Schedule=ON` on
 all 12 units, while `ScheduleAvail` was mixed. `Hold=ON` appeared on Broadway
@@ -207,8 +205,36 @@ a particular state change.
 
 The Deep Dive **AE-200** page shows the current per-unit status fields, including
 the schedule flags, one day of existing request-performance samples, and the 50
-most recent commands with their controller-level response. Its status polling is
-read-only and occurs once per minute while the page is open.
+most recent commands with their controller-level response. It also shows the 50
+most recent unsolicited controller notifications. Its status polling is read-only
+and occurs once per minute while the page is open.
+
+## Notification Collector Deployment
+
+The collector authenticates in-band using the same password-obfuscation scheme
+as the AE-200 web interface. Put credentials in a root-readable environment file,
+not in the repository:
+
+```text
+AE200_NOTIFICATION_USER=administrator
+AE200_NOTIFICATION_PASSWORD=the-controller-password
+# Optional; defaults to 90 days.
+AE200_NOTIFICATION_RETENTION_DAYS=90
+```
+
+Install that file as `/etc/temperature-bot-ae200-notifications.env` with mode
+`0600`, copy `etc/temperature-bot-ae200-notifications.service` to systemd, and
+enable it after Flyway V18 is applied. An empty password is supported for
+controllers configured without a password. On authentication or network failure,
+the process reconnects with exponential backoff capped at 60 seconds.
+
+Each `<Mnet>` in a notification becomes one `ae200_notifications` row. A row
+contains the observation time, collector instance, group or address, and only
+the fields that changed. The database intentionally has no `origin` or
+`autonomous` column because the packet provides neither fact. The collector
+removes observations older than the configured retention period after its first
+event and then at most once per hour, keeping the audit table bounded even when
+the controller emits frequent temperature changes.
 
 ## Guideline for Future Changes
 

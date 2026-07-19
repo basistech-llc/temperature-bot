@@ -33,6 +33,20 @@
     </table>
   </div>
 
+  <h2>Recent controller notifications</h2>
+  <p>
+    These are unsolicited state changes. The AE-200 protocol does not identify
+    whether a schedule, wall controller, web user, or Temperature Bot caused them.
+  </p>
+  <div class="table-scroll">
+    <table class="pure-table data-table" id="ae200-notification-table">
+      <thead>
+        <tr><th>Time</th><th>Group/address</th><th>Changed fields</th><th>Collector</th></tr>
+      </thead>
+      <tbody><tr><td colspan="4">Loading…</td></tr></tbody>
+    </table>
+  </div>
+
   <h2>AE-200 request performance</h2>
   <p id="ae200-performance-summary" role="status"></p>
   <div id="ae200-performance-chart" class="performance-chart" aria-label="AE-200 request latency over the last day"></div>
