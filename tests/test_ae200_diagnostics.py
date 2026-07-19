@@ -2,7 +2,7 @@
 
 from conftest import flask_test_client  # noqa: F401  # pylint: disable=unused-import
 
-from app import ae200, ae200_notifications
+from app import ae200, ae200_command_log, ae200_notifications
 
 
 def test_ae200_page_links_live_performance_and_command_sections(flask_test_client):  # noqa: F811
@@ -39,6 +39,19 @@ def test_ae200_command_api_returns_latest_parsed_command(flask_test_client):  # 
 
     invalid = flask_test_client.get("/api/v1/ae200/commands?limit=0")
     assert invalid.status_code == 400
+
+
+def test_ae200_command_error_is_bounded_and_queryable(test_database_conn):
+    record = ae200_command_log.new_record("10", {"Drive": "ON"})
+    ae200_command_log.mark_error(record, RuntimeError("x" * 1000))
+    ae200_command_log.insert_record(test_database_conn, record)
+    test_database_conn.commit()
+
+    command = ae200_command_log.fetch_recent(test_database_conn, limit=1).commands[0]
+    assert command.outcome == "error"
+    assert command.error_type == "RuntimeError"
+    assert command.error_message == "x" * ae200_command_log.MAX_ERROR_LENGTH
+    assert len(command.response_summary) == ae200_command_log.MAX_ERROR_LENGTH
 
 
 def test_ae200_notification_api_returns_unattributed_observations(
