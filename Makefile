@@ -265,6 +265,7 @@ test-js: $(REQ) ## Run the JavaScript unit tests
 	node tests/test_room_matrix.js
 	node tests/test_room_map.js
 	node tests/test_fcu_history_chart.js
+	node tests/test_performance_monitoring.js
 test: $(REQ) ## Run both Python and JavaScript test suites
 	@python_exit=0; js_exit=0; \
 	make pytest || python_exit=$$?; \
@@ -292,7 +293,7 @@ outdated: $(REQ) ## Report outdated Python and CDN dependencies
 ## Cron targets
 ## Here mostly for testing. The actual cron entries are:
 ##
-##  * * * * * cd /home/air/temperature-bot ; DB_PATH=/var/db/temperature-bot.db .venv/bin/python -m bin.runner --loglevel INFO >> /home/air/temperature-bot.log 2>&1
+##  * * * * * cd /home/air/temperature-bot ; DB_PATH=/var/db/temperature-bot.db TEMPERATURE_BOT_INSTANCE=production PERFORMANCE_CLIENT_ID=minute-runner .venv/bin/python -m bin.runner --loglevel INFO >> /home/air/temperature-bot.log 2>&1
 ##
 ##
 ## @daily    cd /home/air/temperature-bot ; sleep 15 ; DB_PATH=/var/db/temperature-bot.db .venv/bin/python -m bin.runner --loglevel INFO --daily  >> /home/air/temperature-bot-daily.log 2>&1
@@ -301,7 +302,10 @@ outdated: $(REQ) ## Report outdated Python and CDN dependencies
 ## Question - should we just have cron do a 'make daily' and 'make every-minute' ?
 
 every-minute: $(REQ) ## Run the per-minute data collection runner
-	$(PYTHON) -m bin.runner
+	PERFORMANCE_CLIENT_ID=minute-runner $(PYTHON) -m bin.runner
+
+performance-probe: $(REQ) ## Record one AE-200 DNS, ICMP, and TCP-reject probe
+	PERFORMANCE_CLIENT_ID=network-probe $(PYTHON) -m bin.performance_monitor --once
 
 daily: $(REQ) ## Run the daily data collection runner
 	$(PYTHON) -m bin.runner --daily
@@ -309,7 +313,7 @@ daily: $(REQ) ## Run the daily data collection runner
 monthly-backup: ## Back up the production database with a dated copy
 	sudo cp /var/db/temperature-bot.db /var/db/temperature-bot.backup.$$(date -I).db
 
-.PHONY: every-minute daily monthly-backup
+.PHONY: every-minute performance-probe daily monthly-backup
 
 ################################################################
 ## Installation targets

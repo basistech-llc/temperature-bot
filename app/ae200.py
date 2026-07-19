@@ -22,6 +22,7 @@ import xml.etree.ElementTree as ET
 import logging
 import json
 import threading
+import time
 
 import concurrent.futures
 import websockets
@@ -29,6 +30,7 @@ from websockets.extensions import permessage_deflate
 from websockets.typing import Origin, Subprotocol
 
 from app.util import env_flag_enabled, get_config
+from app import performance_monitoring
 
 logger = logging.getLogger(__name__)
 B_XMLPROC_SUBPROTOCOL = Subprotocol("b_xmlproc")
@@ -223,15 +225,30 @@ class AsyncRunner:  # pylint: disable=too-few-public-methods
     def __init__(self):
         self._command_semaphore = threading.BoundedSemaphore(value=1)
 
-    def run_async_safely(self, coro):
+    def run_async_safely(self, coro, *, sample=None):
         """Run an async coroutine safely, handling existing event loops"""
+        started_ns = time.perf_counter_ns()
         try:
             with self._command_semaphore:
                 with ae200_command_lock():
-                    return self._run_async_safely(coro)
-        except Exception:
+                    if sample is not None:
+                        sample.lock_wait_ms = performance_monitoring.elapsed_ms(
+                            started_ns
+                        )
+                    result = self._run_async_safely(coro)
+            if sample is not None:
+                sample.success = True
+                sample.outcome = "ok"
+            return result
+        except Exception as error:
             coro.close()
+            if sample is not None:
+                sample.mark_error(error)
             raise
+        finally:
+            if sample is not None:
+                sample.total_ms = performance_monitoring.elapsed_ms(started_ns)
+                performance_monitoring.record_sample_best_effort(sample)
 
     @staticmethod
     def _run_async_safely(coro):
@@ -276,75 +293,118 @@ class AE200Functions:
             address = get_config()["ae200"]["host"]
         self.address = address
 
-    async def getDevicesAsync(self):
-        if AE200_SIMULATOR:
-            raise RuntimeError("AE200_SIMULATOR not compatiable with AE200Functions")
+    async def _exchange(self, payload, sample, *, receive):
+        """Send one XML payload while timing WebSocket phases."""
+        connect_started_ns = time.perf_counter_ns()
         async with websockets.connect(
             f"ws://{self.address}/b_xmlproc/",
             extensions=[permessage_deflate.ClientPerMessageDeflateFactory()],
             origin=Origin(f"http://{self.address}"),
             subprotocols=[B_XMLPROC_SUBPROTOCOL],
         ) as websocket:
-            await websocket.send(getUnitsPayload)
-            unitsResultStr = await websocket.recv()
-            unitsResultXML = ET.fromstring(unitsResultStr)
-
-            groupList = []
-            for r in unitsResultXML.findall(
-                "./DatabaseManager/ControlGroup/MnetList/MnetRecord"
-            ):
-                # print( ET.tostring(r) )
-                groupList.append({"id": r.get("Group"), "name": r.get("GroupNameWeb")})
+            if sample is not None:
+                sample.connect_ms = performance_monitoring.elapsed_ms(
+                    connect_started_ns
+                )
+            response_started_ns = time.perf_counter_ns()
+            await websocket.send(payload)
+            response = await websocket.recv() if receive else None
+            if sample is not None:
+                sample.response_ms = performance_monitoring.elapsed_ms(
+                    response_started_ns
+                )
+                if response is not None:
+                    sample.response_bytes = len(
+                        response.encode("utf-8")
+                        if isinstance(response, str)
+                        else response
+                    )
+            close_started_ns = time.perf_counter_ns()
             await websocket.close()
-            return groupList
+            if sample is not None:
+                sample.close_ms = performance_monitoring.elapsed_ms(close_started_ns)
+            return response
+
+    async def getDevicesAsync(self, sample=None):
+        if AE200_SIMULATOR:
+            raise RuntimeError("AE200_SIMULATOR not compatible with AE200Functions")
+        unitsResultStr = await self._exchange(
+            getUnitsPayload, sample, receive=True
+        )
+        unitsResultXML = ET.fromstring(unitsResultStr)
+
+        groupList = []
+        for r in unitsResultXML.findall(
+            "./DatabaseManager/ControlGroup/MnetList/MnetRecord"
+        ):
+            # print( ET.tostring(r) )
+            groupList.append({"id": r.get("Group"), "name": r.get("GroupNameWeb")})
+        return groupList
 
     def getDevices(self):
-        return runner.run_async_safely(self.getDevicesAsync())
+        sample = (
+            None
+            if AE200_SIMULATOR
+            else performance_monitoring.new_ae200_sample(
+                performance_monitoring.OPERATION_GET_DEVICES, self.address
+            )
+        )
+        return runner.run_async_safely(
+            self.getDevicesAsync(sample), sample=sample
+        )
 
-    async def getDeviceInfoAsync(self, deviceId, clean=True):
+    async def getDeviceInfoAsync(self, deviceId, clean=True, sample=None):
         """:param deviceId: The numeric ID of the device to get
         :param clean: if True (default), then remove keys with empty values.
         """
         if AE200_SIMULATOR:
-            raise RuntimeError("AE200_SIMULATOR not compatiable with AE200Functions")
-        async with websockets.connect(
-            f"ws://{self.address}/b_xmlproc/",
-            extensions=[permessage_deflate.ClientPerMessageDeflateFactory()],
-            origin=Origin(f"http://{self.address}"),
-            subprotocols=[B_XMLPROC_SUBPROTOCOL],
-        ) as websocket:
-            getMnetDetailsPayload = getMnetDetails([deviceId])
-            await websocket.send(getMnetDetailsPayload)
-            mnetDetailsResultStr = await websocket.recv()
-            mnetDetailsResultXML = ET.fromstring(mnetDetailsResultStr)
+            raise RuntimeError("AE200_SIMULATOR not compatible with AE200Functions")
+        getMnetDetailsPayload = getMnetDetails([deviceId])
+        mnetDetailsResultStr = await self._exchange(
+            getMnetDetailsPayload, sample, receive=True
+        )
+        mnetDetailsResultXML = ET.fromstring(mnetDetailsResultStr)
 
-            # result = {}
-            node = mnetDetailsResultXML.find("./DatabaseManager/Mnet")
-            await websocket.close()
-            if node is None:
-                raise ValueError(f"AE-200 response omitted Mnet data for device {deviceId}")
-            return cleanDeviceInfo(node.attrib) if clean else node.attrib
+        # result = {}
+        node = mnetDetailsResultXML.find("./DatabaseManager/Mnet")
+        if node is None:
+            raise ValueError(f"AE-200 response omitted Mnet data for device {deviceId}")
+        return cleanDeviceInfo(node.attrib) if clean else node.attrib
 
     def getDeviceInfo(self, deviceId, clean=True):
-        return runner.run_async_safely(self.getDeviceInfoAsync(deviceId, clean=clean))
+        sample = (
+            None
+            if AE200_SIMULATOR
+            else performance_monitoring.new_ae200_sample(
+                performance_monitoring.OPERATION_GET_DEVICE_INFO,
+                self.address,
+                deviceId,
+            )
+        )
+        return runner.run_async_safely(
+            self.getDeviceInfoAsync(deviceId, clean=clean, sample=sample),
+            sample=sample,
+        )
 
-    async def sendAsync(self, deviceId, attributes):
+    async def sendAsync(self, deviceId, attributes, sample=None):
         assert "PYTEST" not in os.environ
         if AE200_SIMULATOR:
-            raise RuntimeError("AE200_SIMULATOR not compatiable with AE200Functions")
-        async with websockets.connect(
-            f"ws://{self.address}/b_xmlproc/",
-            extensions=[permessage_deflate.ClientPerMessageDeflateFactory()],
-            origin=Origin(f"http://{self.address}"),
-            subprotocols=[B_XMLPROC_SUBPROTOCOL],
-        ) as websocket:
-            attrs = " ".join([f'{key}="{attributes[key]}"' for key in attributes])
-            payload = setRequestPayload.format(deviceId=deviceId, attrs=attrs)
-            await websocket.send(payload)
-            await websocket.close()
+            raise RuntimeError("AE200_SIMULATOR not compatible with AE200Functions")
+        attrs = " ".join([f'{key}="{attributes[key]}"' for key in attributes])
+        payload = setRequestPayload.format(deviceId=deviceId, attrs=attrs)
+        await self._exchange(payload, sample, receive=False)
 
     def send(self, deviceId, attributes):
-        return runner.run_async_safely(self.sendAsync(deviceId, attributes))
+        sample = (
+            None
+            if AE200_SIMULATOR
+            else performance_monitoring.new_ae200_sample(
+                performance_monitoring.OPERATION_SET, self.address, deviceId
+            )
+        )
+        return runner.run_async_safely(
+            self.sendAsync(deviceId, attributes, sample=sample), sample=sample
+        )
 
 
 ################################################################

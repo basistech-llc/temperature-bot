@@ -26,6 +26,7 @@ from app import ae200
 from app import airthings
 from app import db
 from app import hubitat
+from app import performance_monitoring
 from app.device_types import (
     DEVICE_SUBTYPE_AIRTHINGS,
     DEVICE_TYPE_SENSOR,
@@ -286,6 +287,11 @@ def daily_cleanup(conn, when):
     """
     print("Daily cleanup")
     c = conn.cursor()
+    deleted_performance_samples = performance_monitoring.delete_expired_samples(conn)
+    conn.commit()
+    logger.info(
+        "Deleted %d expired performance samples", deleted_performance_samples
+    )
 
     # See if there are any in the previous week that need to be
     prev_week_start = (when - datetime.timedelta(weeks=2)).timestamp()

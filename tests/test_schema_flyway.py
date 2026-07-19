@@ -16,11 +16,13 @@ MIGRATED_APP_TABLES = BASELINE_APP_TABLES | {
     "rooms",
     "fcu_temp_sources",
     "fcu_set_ranges",
+    "performance_samples",
 }
 BASELINE_MIGRATION_PATH = (
     Path(ROOT_DIR) / "etc" / "flyway" / "sql" / "V1__baseline_schema.sql"
 )
 MIGRATION_DIR = Path(ROOT_DIR) / "etc" / "flyway" / "sql"
+PERFORMANCE_MIGRATION_PATH = MIGRATION_DIR / "R__performance_samples.sql"
 
 
 def table_names_created_by(sql_path):
@@ -59,6 +61,31 @@ def test_schema_file_can_be_applied_twice():
         schema_sql = Path(SCHEMA_FILE_PATH).read_text(encoding="utf-8")
         conn.executescript(schema_sql)
         conn.executescript(schema_sql)
+
+
+def test_performance_repeatable_migration_is_idempotent_and_indexed():
+    """The conflict-safe repeatable migration can be reapplied by Flyway."""
+    with closing(sqlite3.connect(":memory:")) as conn:
+        migration_sql = PERFORMANCE_MIGRATION_PATH.read_text(encoding="utf-8")
+        conn.executescript(migration_sql)
+        conn.executescript(migration_sql)
+        columns = {
+            row[1] for row in conn.execute("PRAGMA table_info(performance_samples)")
+        }
+        indexes = {
+            row[1] for row in conn.execute("PRAGMA index_list(performance_samples)")
+        }
+
+    assert {
+        "observed_at_ms",
+        "sample_type",
+        "lock_wait_ms",
+        "connect_ms",
+        "response_ms",
+        "total_ms",
+        "outcome",
+    } <= columns
+    assert "idx_performance_samples_instance_type_time" in indexes
 
 
 def test_baseline_migration_does_not_create_flyway_history_table():
