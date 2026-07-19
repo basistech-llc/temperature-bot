@@ -1,7 +1,7 @@
 CREATE TABLE IF NOT EXISTS devices (
     device_id INTEGER PRIMARY KEY AUTOINCREMENT,
     device_name TEXT UNIQUE NOT NULL
-, ae200_device_id INTEGER, disabled_until INTEGER, notes TEXT, aqi_mon INTEGER DEFAULT 0, room_id INTEGER REFERENCES rooms(room_id), display_name TEXT, device_type TEXT, rules_enabled INTEGER NOT NULL DEFAULT 1);
+, ae200_device_id INTEGER, disabled_until INTEGER, notes TEXT, aqi_mon INTEGER DEFAULT 0, room_id INTEGER REFERENCES rooms(room_id), display_name TEXT, device_type TEXT, rules_enabled INTEGER NOT NULL DEFAULT 1, device_subtype TEXT);
 CREATE INDEX IF NOT EXISTS idx_devices_device_name ON devices (device_name);
 CREATE TABLE IF NOT EXISTS devlog (
     log_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -40,7 +40,6 @@ CREATE TABLE IF NOT EXISTS alerts (
     FOREIGN KEY (device_id) REFERENCES devices (device_id)
 );
 CREATE INDEX IF NOT EXISTS idx_alerts_device_id ON alerts (device_id);
-CREATE INDEX IF NOT EXISTS idx_alerts_active ON alerts (end_time) WHERE end_time IS NULL;
 CREATE INDEX IF NOT EXISTS idx_alerts_type ON alerts (alert_type);
 CREATE INDEX IF NOT EXISTS idx_alerts_start_time ON alerts (start_time);
 CREATE INDEX IF NOT EXISTS idx_changelog_logtime ON changelog (logtime);
@@ -93,6 +92,30 @@ CREATE INDEX IF NOT EXISTS idx_presence_events_device_observed_at
 ON presence_events(device_id, observed_at);
 CREATE INDEX IF NOT EXISTS idx_devlog_device_logtime_log_id
 ON devlog (device_id, logtime DESC, log_id DESC);
+CREATE TABLE IF NOT EXISTS alert_events (
+    alert_event_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    alert_id INTEGER NOT NULL,
+    event_time INTEGER NOT NULL,
+    event_type TEXT NOT NULL CHECK (event_type IN ('triggered', 'reminder', 'resolved')),
+    message TEXT NOT NULL,
+    slack_status TEXT NOT NULL CHECK (slack_status IN ('pending', 'sent', 'failed')),
+    -- Slack calls this value a timestamp ("ts"), but it is an opaque message
+    -- identifier returned as a decimal string. Store it as TEXT to preserve the
+    -- value exactly for later Slack API calls; REAL could lose precision.
+    slack_message_ts TEXT,
+    slack_error TEXT, slack_attempt_count INTEGER NOT NULL DEFAULT 0
+        CHECK (slack_attempt_count >= 0), slack_last_attempt_time INTEGER, slack_next_attempt_time INTEGER, slack_terminal INTEGER NOT NULL DEFAULT 0
+        CHECK (slack_terminal IN (0, 1)),
+    FOREIGN KEY (alert_id) REFERENCES alerts (alert_id)
+);
+CREATE INDEX IF NOT EXISTS idx_alert_events_alert_time
+    ON alert_events (alert_id, event_time DESC, alert_event_id DESC);
+CREATE INDEX IF NOT EXISTS idx_alert_events_slack_outbox
+    ON alert_events (slack_terminal, slack_next_attempt_time, alert_event_id)
+    WHERE slack_status IN ('pending', 'failed');
+CREATE UNIQUE INDEX IF NOT EXISTS idx_alerts_active
+    ON alerts (device_id, alert_type)
+    WHERE end_time IS NULL;
 CREATE TABLE IF NOT EXISTS performance_samples (
     sample_id INTEGER PRIMARY KEY AUTOINCREMENT,
     observed_at_ms INTEGER NOT NULL,

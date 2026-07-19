@@ -14,6 +14,18 @@ Temperature Bot now tracks SQL schema versions with Flyway.
   for FCU ownership and assignment.
 - `etc/flyway/sql/V10__room_presence.sql` stores room-at-observation presence
   events and indexes current and historical room queries.
+- `etc/flyway/sql/V11__devlog_latest_device_reading_index.sql` indexes each
+  device's newest logged reading.
+- `etc/flyway/sql/V12__alert_events.sql` adds the durable record of alert
+  notifications and Slack delivery outcomes. Slack's message `ts` is an opaque
+  decimal identifier stored as `TEXT` so no precision is lost.
+- `etc/flyway/sql/V13__alert_delivery_outbox.sql` adds attempt counts, Unix
+  timestamps for last and next attempts, and explicit terminal state so failed
+  Slack notifications can be retried safely across runner processes.
+- `etc/flyway/sql/V14__device_subtype.sql` adds nullable device discovery
+  metadata used to identify Airthings sensors without relying on display names.
+- `etc/flyway/sql/V15__unique_active_alert.sql` closes older duplicate active
+  alert rows and enforces one active lifecycle per device and alert type.
 - `etc/flyway/sql/R__performance_samples.sql` adds integration and network
   timing samples. It is repeatable so it can be deployed before or after the
   independent branch that owns V12-V15; see `doc/performance-monitoring.md`.

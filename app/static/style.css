@@ -656,6 +656,25 @@ td.cell-notes {
     font-size: 0.9em;
 }
 
+.aqi-summary-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    color: inherit;
+    cursor: pointer;
+    text-decoration: none;
+}
+
+.aqi-summary-link:hover {
+    text-decoration: underline;
+    text-underline-offset: 0.12em;
+}
+
+.aqi-summary-link:focus-visible {
+    outline: 2px solid #3b82f6;
+    outline-offset: 2px;
+}
+
 /* Utility: hide element; JS toggles by adding/removing this class */
 .hidden {
     display: none !important;

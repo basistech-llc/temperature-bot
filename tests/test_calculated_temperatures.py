@@ -332,15 +332,14 @@ def test_temperature_rules_context_prefers_calculated_fcu_temp(
         rules_engine,
         "get_rules",
         lambda: (
-            "if get_temp(BROADWAY_SOUTH) == 23.0:\n"
-            "    set_fan_speed(BROADWAY_SOUTH, 3)\n"
+            "from app.models import RuleResult\n"
+            "def run_rules_for_device(device, now, aqi):\n"
+            "    if device.name == 'Broadway South' and device.temperature_c == 23.0:\n"
+            "        return RuleResult(fan_speed='MID1')\n"
         ),
     )
 
-    assert (
-        rules_engine.rules_results(conn, when=now)
-        == f"Device {fcu_id} speed set to 3"
-    )
+    assert rules_engine.rules_results(conn, when=now) == f"Device {fcu_id} speed set to MID1"
 
 
 def test_temperature_rules_context_exposes_raw_fcu_temp(
@@ -377,16 +376,15 @@ def test_temperature_rules_context_exposes_raw_fcu_temp(
         rules_engine,
         "get_rules",
         lambda: (
-            "if get_temp(RULE_RAW_FCU) == 23.0 and "
-            "get_fcu_temp(RULE_RAW_FCU) == 20.0:\n"
-            "    set_fan_speed(RULE_RAW_FCU, 2)\n"
+            "from app.models import RuleResult\n"
+            "def run_rules_for_device(device, now, aqi):\n"
+            "    if device.name == 'Rule Raw FCU' and "
+            "device.temperature_c == 23.0 and device.fcu_temperature_c == 20.0:\n"
+            "        return RuleResult(fan_speed='MID2')\n"
         ),
     )
 
-    assert (
-        rules_engine.rules_results(conn, when=now)
-        == f"Device {fcu_id} speed set to 2"
-    )
+    assert rules_engine.rules_results(conn, when=now) == f"Device {fcu_id} speed set to MID2"
 
 
 def _connect_test_db():

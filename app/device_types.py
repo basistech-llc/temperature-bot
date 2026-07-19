@@ -11,6 +11,8 @@ DEVICE_TYPE_INTERNAL = "INTERNAL"
 DEVICE_TYPE_ERV = "ERV"
 DEVICE_TYPE_FCU = "FCU"
 
+DEVICE_SUBTYPE_AIRTHINGS = "AIRTHINGS"
+
 
 class HubitatCommand(BaseModel):
     """Command entry returned by Maker API."""

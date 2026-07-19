@@ -13,6 +13,7 @@ from urllib.parse import parse_qs, urlparse
 import requests
 import pytest
 from playwright.sync_api import sync_playwright, expect
+from werkzeug.serving import make_server
 
 from conftest import test_database_conn_with_test_data, skip_on_github  # noqa: F401,F811  # pylint: disable=unused-import
 from app.main import app
@@ -153,6 +154,100 @@ def test_chart_page_no_dom_errors(test_database_conn_with_test_data):  # noqa: F
         )
 
         browser.close()
+
+
+@pytest.mark.skipif(SKIP_BROWSER_TEST, reason="SKIP_BROWSER_TEST is set")
+def test_aqi_chart_first_render_and_selected_axis(
+    test_database_conn_with_test_data,
+):  # noqa: F811  # pylint: disable=unused-argument
+    """AQI renders without console errors and owns the scale and grid when selected alone."""
+    server = make_server("127.0.0.1", 0, app, threaded=True)
+    server_thread = threading.Thread(target=server.serve_forever, daemon=True)
+    server_thread.start()
+    base_url = f"http://127.0.0.1:{server.server_port}"
+
+    try:
+        wait_for_server(f"{base_url}/health", timeout=20)
+        with sync_playwright() as playwright, playwright.chromium.launch(
+            headless=True
+        ) as browser:
+            page = browser.new_page()
+            errors = []
+            page.on(
+                "console",
+                lambda message: errors.append(message.text)
+                if message.type == "error"
+                else None,
+            )
+            page.goto(f"{base_url}/chart_aqi", wait_until="networkidle")
+            page.wait_for_function("aqiChart && aqiChart.getOption().series")
+            chart_box = page.locator("#aqi-chart").bounding_box()
+            assert chart_box is not None
+            for name in ["PM2.5", "PM10", "O₃", "NO₂", "CO"]:
+                point = page.evaluate(
+                    """
+                    (name) => {
+                      const points = aqiChart.getZr().storage.getDisplayList()
+                        .filter((item) => item.style?.text === name)
+                        .map((item) => {
+                          const rect = item.getBoundingRect();
+                          const matrix = item.getComputedTransform()
+                            || [1, 0, 0, 1, 0, 0];
+                          const x = rect.x + rect.width / 2;
+                          const y = rect.y + rect.height / 2;
+                          return {
+                            x: matrix[0] * x + matrix[2] * y + matrix[4],
+                            y: matrix[1] * x + matrix[3] * y + matrix[5],
+                          };
+                        })
+                        .filter((candidate) => candidate.y < 100)
+                        .sort((left, right) => left.y - right.y);
+                      if (!points.length) throw new Error(`Legend item ${name} not found`);
+                      return points[0];
+                    }
+                    """,
+                    name,
+                )
+                page.mouse.click(
+                    chart_box["x"] + point["x"],
+                    chart_box["y"] + point["y"],
+                )
+                page.wait_for_timeout(50)
+            layout = page.evaluate(
+                """
+                () => {
+                  const option = aqiChart.getOption();
+                  return {
+                    axes: option.yAxis.map((axis) => ({
+                      name: axis.name,
+                      show: axis.show,
+                      offset: axis.offset,
+                      splitLine: axis.splitLine.show,
+                    })),
+                    selected: option.legend[0].selected,
+                  };
+                }
+                """
+            )
+
+            aqi_axis = next(axis for axis in layout["axes"] if axis["name"] == "AQI")
+            assert aqi_axis == {
+                "name": "AQI",
+                "show": True,
+                "offset": 0,
+                "splitLine": True,
+            }
+            assert all(
+                not axis["show"]
+                for axis in layout["axes"]
+                if axis["name"] != "AQI"
+            )
+            assert layout["selected"]["AQI"] is True
+            assert not errors
+    finally:
+        server.shutdown()
+        server.server_close()
+        server_thread.join(timeout=2)
 
 
 @pytest.mark.skipif(SKIP_BROWSER_TEST, reason="SKIP_BROWSER_TEST is set")

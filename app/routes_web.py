@@ -14,6 +14,7 @@ import time
 from collections.abc import Callable
 from typing import Any
 from flask import render_template, request, redirect, url_for
+from markupsafe import escape
 
 from .constants import DASHBOARD_AIR_QUALITY_DEVICE_EXPIRATION_SECONDS
 from .device_types import (
@@ -287,6 +288,38 @@ def _dashboard_device_update_text(device: dict[str, Any], now: int) -> str:
     return f"{updated_datetime} - {updated_age} ago"
 
 
+def _rules_forecast_table(conn, hour_now: datetime.datetime) -> list[str]:
+    """Build the seven-day forecast with one compiled rules program."""
+    aqi_values = (0, 51, 101, 151)
+    compiled_rules = rules_engine.compile_rules()
+    rows = [
+        "<table class='rules-table'>",
+        "<tr><th>Time</th>"
+        + "".join(f"<th>AQI {aqi}</th>" for aqi in aqi_values)
+        + "</tr>",
+    ]
+    for hour in range(24 * 7):
+        when = hour_now + datetime.timedelta(hours=hour)
+        rows.append(f"<tr><th>{when}</th>")
+        for aqi in aqi_values:
+            results = rules_engine.rules_results(
+                conn,
+                when.timestamp(),
+                aqi=aqi,
+                compiled_rules=compiled_rules,
+            )
+            formatted_results = _format_rules_result(results)
+            rows.append(f"<td class='rule-result'>{formatted_results}</td>")
+        rows.append("</tr>")
+    rows.append("</table>")
+    return rows
+
+
+def _format_rules_result(result: str) -> str:
+    """Escape dynamic rule output while preserving visible line breaks."""
+    return str(escape(result)).replace("\n", "<br>")
+
+
 def _register_core_routes(app):
     """Register core web routes that back the main navigation."""
 
@@ -339,26 +372,7 @@ def _register_core_routes(app):
         hour_now = datetime.datetime.now().replace(minute=0, second=0, microsecond=0)
 
         # If requests, see how the rules will render for the next seven days
-        rule_table = []
-        AQI_LIST = [0, 51, 101, 151]
-        if run_rules:
-            rule_table.append("<table class='rules-table'>")
-            rule_table.append(
-                "<tr><th>Time</th>"
-                + "".join([f"<th>AQI {aqi}</th>" for aqi in AQI_LIST])
-                + "</tr>"
-            )
-            for hour in range(24 * 7):
-                when = hour_now + datetime.timedelta(hours=hour)
-                rule_table.append(f"<tr><th>{str(when)}</th>")
-                for aqi in AQI_LIST:
-                    new_results = rules_engine.rules_results(
-                        conn, when.timestamp(), aqi=aqi
-                    )
-                    rule_table.append(
-                        f"<td class='rule-result'>{new_results.replace('\n', '<br>')}</td>"
-                    )
-                rule_table.append("</tr>")
+        rule_table = _rules_forecast_table(conn, hour_now) if run_rules else []
 
         rules_disabled_until = rules_engine.all_rules_disabled_until(conn)
         rules_disabled_until_asc = time.asctime(time.localtime(rules_disabled_until))

@@ -5,11 +5,380 @@ Uses the same schema and connection conventions as app.db.
 
 import json
 import logging
+import sqlite3
 import time
+from functools import lru_cache
 
 from . import ae200
+from .device_types import DEVICE_SUBTYPE_AIRTHINGS, DEVICE_TYPE_SENSOR
+from .models import (
+    ActiveAlertCreation,
+    AlertDeliveryStatus,
+    AlertEventRecord,
+    AlertEventType,
+    AlertEventWindow,
+    AlertRecord,
+    AlertRuleDevice,
+    StatusPayload,
+)
 
 logger = logging.getLogger(__name__)
+
+
+def _normalize_json_numbers(value: object) -> object:
+    """Make integral JSON floats compare equal to their integer representation."""
+    if isinstance(value, dict):
+        return {key: _normalize_json_numbers(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_normalize_json_numbers(item) for item in value]
+    if isinstance(value, float) and value.is_integer():
+        return int(value)
+    return value
+
+
+@lru_cache(maxsize=1024)
+def _canonical_status_json(status_json: str) -> str:
+    """Cache normalized JSON so key order and numeric notation do not differ."""
+    normalized = _normalize_json_numbers(json.loads(status_json))
+    return json.dumps(normalized, sort_keys=True, separators=(",", ":"))
+
+
+def get_alert_rule_devices(
+    conn, *, now: int, history_seconds: int
+) -> list[AlertRuleDevice]:
+    """Return discovered Airthings observations with a bounded exact-value run.
+
+    ``devlog`` splits identical payloads at ``MAX_DURATION``. Walking backward
+    across adjacent, equivalent rows preserves the unchanged start time needed
+    by the rule without rescanning an indefinitely long stuck run each minute.
+    The Airthings collector persists the source as ``device_subtype``;
+    ``aqi_mon`` controls UI display and must not limit safety monitoring.
+    """
+    if history_seconds <= 0:
+        raise ValueError("history_seconds must be positive")
+    history_start = now - history_seconds
+    devices = conn.execute(
+        """
+        SELECT device_id, device_name, device_type, device_subtype
+        FROM devices
+        WHERE device_type=? AND device_subtype=?
+        ORDER BY device_name
+        """,
+        (DEVICE_TYPE_SENSOR, DEVICE_SUBTYPE_AIRTHINGS),
+    ).fetchall()
+    contexts: list[AlertRuleDevice] = []
+    for device in devices:
+        latest = conn.execute(
+            """
+            SELECT logtime, duration, status_json
+            FROM devlog
+            WHERE device_id=? AND logtime<=? AND status_json IS NOT NULL
+            ORDER BY logtime DESC, log_id DESC
+            LIMIT 1
+            """,
+            (device["device_id"], now),
+        ).fetchone()
+        if latest is None:
+            contexts.append(
+                AlertRuleDevice(
+                    device_id=device["device_id"],
+                    name=device["device_name"],
+                    device_type=device["device_type"],
+                    device_subtype=device["device_subtype"],
+                    input_error="no status reading is available",
+                )
+            )
+            continue
+
+        rows = conn.execute(
+            """
+            SELECT logtime, duration, status_json
+            FROM devlog
+            WHERE device_id=?
+              AND logtime<=?
+              AND logtime + MAX(COALESCE(duration, 1), 1) - 1 >= ?
+              AND status_json IS NOT NULL
+            ORDER BY logtime DESC, log_id DESC
+            """,
+            (device["device_id"], now, history_start),
+        )
+        try:
+            latest_status = StatusPayload.model_validate_json(latest["status_json"])
+            latest_canonical = _canonical_status_json(latest["status_json"])
+        except (TypeError, ValueError, json.JSONDecodeError):
+            logger.warning(
+                "Alert device %s has an invalid latest status payload",
+                device["device_id"],
+            )
+            contexts.append(
+                AlertRuleDevice(
+                    device_id=device["device_id"],
+                    name=device["device_name"],
+                    device_type=device["device_type"],
+                    device_subtype=device["device_subtype"],
+                    input_error="the latest status payload is invalid",
+                )
+            )
+            continue
+
+        latest_duration = max(1, int(latest["duration"] or 1))
+        observed_through = min(now, int(latest["logtime"]) + latest_duration - 1)
+        unchanged_since = int(latest["logtime"])
+
+        for row in rows:
+            try:
+                same_status = (
+                    _canonical_status_json(row["status_json"]) == latest_canonical
+                )
+            except (TypeError, ValueError, json.JSONDecodeError):
+                break
+            row_duration = max(1, int(row["duration"] or 1))
+            row_end = min(now, int(row["logtime"]) + row_duration - 1)
+            if not same_status or row_end < unchanged_since - 1:
+                break
+            unchanged_since = int(row["logtime"])
+
+        contexts.append(
+            AlertRuleDevice(
+                device_id=device["device_id"],
+                name=device["device_name"],
+                device_type=device["device_type"],
+                device_subtype=device["device_subtype"],
+                status=latest_status,
+                unchanged_since=unchanged_since,
+                observed_through=observed_through,
+                unchanged_for_seconds=max(0, observed_through - unchanged_since),
+                reading_age_seconds=max(0, now - observed_through),
+            )
+        )
+    return contexts
+
+
+def get_active_alert_record(
+    conn, device_id: int, alert_type: str
+) -> AlertRecord | None:
+    """Return the active alert for a device and rule type, if any."""
+    row = conn.execute(
+        """
+        SELECT alert_id, device_id, alert_type, alert_value, start_time, end_time
+        FROM alerts
+        WHERE device_id=? AND alert_type=? AND end_time IS NULL
+        ORDER BY alert_id DESC
+        LIMIT 1
+        """,
+        (device_id, alert_type),
+    ).fetchone()
+    return AlertRecord.model_validate(dict(row)) if row else None
+
+
+def create_alert_record(
+    conn, *, device_id: int, alert_type: str, start_time: int
+) -> AlertRecord:
+    """Create active alert state without committing the caller's transaction."""
+    cursor = conn.execute(
+        """
+        INSERT INTO alerts (device_id, alert_type, alert_value, start_time, end_time)
+        VALUES (?, ?, 'ON', ?, NULL)
+        """,
+        (device_id, alert_type, start_time),
+    )
+    return AlertRecord(
+        alert_id=int(cursor.lastrowid),
+        device_id=device_id,
+        alert_type=alert_type,
+        alert_value="ON",
+        start_time=start_time,
+    )
+
+
+def get_or_create_active_alert_record(
+    conn, *, device_id: int, alert_type: str, start_time: int
+) -> ActiveAlertCreation:
+    """Atomically create an active alert or return a concurrent survivor."""
+    try:
+        alert = create_alert_record(
+            conn,
+            device_id=device_id,
+            alert_type=alert_type,
+            start_time=start_time,
+        )
+        return ActiveAlertCreation(alert=alert, created=True)
+    except sqlite3.IntegrityError:
+        existing = get_active_alert_record(conn, device_id, alert_type)
+        if existing is None:
+            raise
+        return ActiveAlertCreation(alert=existing, created=False)
+
+
+def resolve_alert_record(conn, alert_id: int, *, end_time: int) -> None:
+    """Close an active alert without committing the caller's transaction."""
+    conn.execute(
+        "UPDATE alerts SET end_time=? WHERE alert_id=? AND end_time IS NULL",
+        (end_time, alert_id),
+    )
+
+
+def get_latest_alert_event(conn, alert_id: int) -> AlertEventRecord | None:
+    """Return the newest logged notification for an alert."""
+    row = conn.execute(
+        """
+        SELECT alert_event_id, alert_id, event_time, event_type, message,
+               slack_status, slack_message_ts, slack_error,
+               slack_attempt_count, slack_last_attempt_time,
+               slack_next_attempt_time, slack_terminal
+        FROM alert_events
+        WHERE alert_id=?
+        ORDER BY event_time DESC, alert_event_id DESC
+        LIMIT 1
+        """,
+        (alert_id,),
+    ).fetchone()
+    return AlertEventRecord.model_validate(dict(row)) if row else None
+
+
+def get_alert_event_window(conn, alert_id: int) -> AlertEventWindow | None:
+    """Return notification cadence anchors for an alert, if it has events."""
+    row = conn.execute(
+        """
+        SELECT MIN(event_time) AS first_event_time,
+               MAX(event_time) AS last_event_time
+        FROM alert_events
+        WHERE alert_id=?
+        """,
+        (alert_id,),
+    ).fetchone()
+    if row is None or row["first_event_time"] is None:
+        return None
+    return AlertEventWindow.model_validate(dict(row))
+
+
+def get_due_alert_events(
+    conn, *, now: int, limit: int
+) -> list[AlertEventRecord]:
+    """Return retryable outbox events whose next attempt is due."""
+    rows = conn.execute(
+        """
+        SELECT alert_event_id, alert_id, event_time, event_type, message,
+               slack_status, slack_message_ts, slack_error,
+               slack_attempt_count, slack_last_attempt_time,
+               slack_next_attempt_time, slack_terminal
+        FROM alert_events
+        WHERE slack_status IN ('pending', 'failed')
+          AND slack_terminal=0
+          AND slack_next_attempt_time<=?
+        ORDER BY slack_next_attempt_time, alert_event_id
+        LIMIT ?
+        """,
+        (now, limit),
+    ).fetchall()
+    return [AlertEventRecord.model_validate(dict(row)) for row in rows]
+
+
+def create_alert_event(
+    conn,
+    *,
+    alert_id: int,
+    event_time: int,
+    event_type: AlertEventType,
+    message: str,
+) -> AlertEventRecord:
+    """Log an alert event as pending without committing the transaction."""
+    cursor = conn.execute(
+        """
+        INSERT INTO alert_events
+            (alert_id, event_time, event_type, message, slack_status,
+             slack_next_attempt_time)
+        VALUES (?, ?, ?, ?, ?, ?)
+        """,
+        (
+            alert_id,
+            event_time,
+            event_type.value,
+            message,
+            AlertDeliveryStatus.PENDING.value,
+            event_time,
+        ),
+    )
+    return AlertEventRecord(
+        alert_event_id=int(cursor.lastrowid),
+        alert_id=alert_id,
+        event_time=event_time,
+        event_type=event_type,
+        message=message,
+        slack_status=AlertDeliveryStatus.PENDING,
+        slack_next_attempt_time=event_time,
+    )
+
+
+def claim_alert_event_delivery(
+    conn,
+    alert_event_id: int,
+    *,
+    attempted_at: int,
+    retry_at: int,
+) -> bool:
+    """Atomically claim a due event and persist its attempt before I/O."""
+    cursor = conn.execute(
+        """
+        UPDATE alert_events
+        SET slack_attempt_count=slack_attempt_count+1,
+            slack_last_attempt_time=?, slack_next_attempt_time=?,
+            slack_error=NULL
+        WHERE alert_event_id=?
+          AND slack_status IN ('pending', 'failed')
+          AND slack_terminal=0
+          AND slack_next_attempt_time<=?
+        """,
+        (attempted_at, retry_at, alert_event_id, attempted_at),
+    )
+    conn.commit()
+    return int(cursor.rowcount) == 1
+
+
+def mark_alert_event_sent(
+    conn,
+    alert_event_id: int,
+    *,
+    message_ts: str,
+) -> None:
+    """Record successful Slack delivery as terminal."""
+    conn.execute(
+        """
+        UPDATE alert_events
+        SET slack_status=?, slack_message_ts=?, slack_error=NULL,
+            slack_next_attempt_time=NULL, slack_terminal=1
+        WHERE alert_event_id=?
+        """,
+        (AlertDeliveryStatus.SENT.value, message_ts, alert_event_id),
+    )
+    conn.commit()
+
+
+def mark_alert_event_failed(
+    conn,
+    alert_event_id: int,
+    *,
+    error: str,
+    retry_at: int | None,
+    terminal: bool,
+) -> None:
+    """Record a failed attempt and its next retry or terminal state."""
+    conn.execute(
+        """
+        UPDATE alert_events
+        SET slack_status=?, slack_error=?, slack_next_attempt_time=?,
+            slack_terminal=?
+        WHERE alert_event_id=?
+        """,
+        (
+            AlertDeliveryStatus.FAILED.value,
+            error,
+            retry_at,
+            int(terminal),
+            alert_event_id,
+        ),
+    )
+    conn.commit()
 
 
 def _attach_device_details(conn, alert_dict, device_id, device_name, start_time):
@@ -46,6 +415,7 @@ def format_alert_type_display(alert_type):
         "ErrorSign": "Error",
         "FilterSign": "Filter warning",
         "CheckWater": "Water issue",
+        "SensorStuck": "Sensor stuck",
     }
     return mapping.get(alert_type, alert_type)
 

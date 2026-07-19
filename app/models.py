@@ -16,8 +16,15 @@ becomes a mapping.
 """
 
 from enum import StrEnum
+from collections.abc import Callable
 from typing import Annotated, Any, Dict, Iterable, Literal
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    field_validator,
+    model_validator,
+)
 
 from . import ae200
 
@@ -42,6 +49,12 @@ class Device(BaseModel):
     name: str = Field(description="the name of the device")
     device_type: str | None = Field(default=None, description="Configured device type.")
     rules_enabled: bool = Field(default=True, description="Whether rules may act.")
+    temperature_c: float | None = Field(
+        default=None, description="Effective calculated-or-raw temperature."
+    )
+    fcu_temperature_c: float | None = Field(
+        default=None, description="Raw device inlet temperature."
+    )
 
 class RuleResult(BaseModel):
     """Results passed back to Rules Engine"""
@@ -61,6 +74,17 @@ class RuleResult(BaseModel):
     def normalize_drive(cls, value):
         """Allow rules to use ON/OFF names or legacy drive codes."""
         return _rule_name(value, ae200.DRIVES, ae200.DRIVE_NAMES, "drive")
+
+
+class CompiledRules(BaseModel):
+    """One execution of ``rules.py`` shared by all rule entry points."""
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    action_rule: Callable[..., object] | None = None
+    alert_rule: Callable[..., object] | None = None
+    alert_history_seconds: int | None = None
+    compile_error: bool = False
 
 
 def _rule_code(value, names_to_codes: dict[str, int], field_name: str):
@@ -144,6 +168,156 @@ class StatusPayload(BaseModel):
     """
 
     model_config = ConfigDict(extra="allow")
+
+
+class AirthingsSensorReading(BaseModel):
+    """One sensor value returned by the Airthings consumer API."""
+
+    model_config = ConfigDict(extra="ignore", populate_by_name=True)
+
+    sensor_type: str = Field(alias="sensorType", min_length=1)
+    value: float
+    unit: str = Field(min_length=1)
+
+
+class AirthingsDeviceReading(BaseModel):
+    """Validated Airthings device payload ready for database persistence."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    name: str = Field(min_length=1)
+    sensors: list[AirthingsSensorReading] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_sensor_types(self):
+        sensor_types = [sensor.sensor_type for sensor in self.sensors]
+        if len(sensor_types) != len(set(sensor_types)):
+            raise ValueError("sensorType values must be unique per device")
+        if "temp" not in sensor_types:
+            raise ValueError("temp sensor is required")
+        return self
+
+    def status_payload(self) -> dict[str, dict[str, float | str]]:
+        """Return the vendor-keyed status structure stored in ``devlog``."""
+        return {
+            sensor.sensor_type: sensor.model_dump(include={"value", "unit"})
+            for sensor in self.sensors
+        }
+
+    def temperature(self) -> float:
+        """Return the required temperature sensor value."""
+        return next(
+            sensor.value for sensor in self.sensors if sensor.sensor_type == "temp"
+        )
+
+
+class AlertEventType(StrEnum):
+    """Lifecycle events emitted for a persistent alert."""
+
+    TRIGGERED = "triggered"
+    REMINDER = "reminder"
+    RESOLVED = "resolved"
+
+
+class AlertDeliveryStatus(StrEnum):
+    """Slack delivery state for one alert event."""
+
+    PENDING = "pending"
+    SENT = "sent"
+    FAILED = "failed"
+
+
+class AlertRuleState(StrEnum):
+    """Three-state result of evaluating one alert condition."""
+
+    ACTIVE = "active"
+    INACTIVE = "inactive"
+    INDETERMINATE = "indeterminate"
+
+
+class AlertRuleDevice(BaseModel):
+    """Latest device observation and exact-value run supplied to alert rules."""
+
+    device_id: int
+    name: str
+    device_type: str | None = None
+    device_subtype: str | None = None
+    status: StatusPayload | None = None
+    unchanged_since: int | None = None
+    observed_through: int | None = None
+    unchanged_for_seconds: int | None = None
+    reading_age_seconds: int | None = None
+    input_error: str | None = None
+
+
+class AlertRuleResult(BaseModel):
+    """Condition state returned by ``run_alert_rules_for_device``."""
+
+    alert_type: str = Field(min_length=1)
+    state: AlertRuleState
+    started_at: int | None = None
+    message: str = Field(min_length=1)
+    resolved_message: str = Field(min_length=1)
+
+
+class AlertRuleEvaluation(BaseModel):
+    """One alert-rule result plus execution state."""
+
+    device_id: int
+    result: AlertRuleResult
+    now: int
+    commit: bool
+
+
+class AlertEventNotification(BaseModel):
+    """Event content passed from alert state handling to delivery."""
+
+    alert_id: int
+    event_time: int
+    event_type: AlertEventType
+    message: str
+
+
+class AlertEventWindow(BaseModel):
+    """Oldest and newest persisted notifications for one alert."""
+
+    first_event_time: int
+    last_event_time: int
+
+
+class AlertRecord(BaseModel):
+    """Persistent active-alert state."""
+
+    alert_id: int
+    device_id: int
+    alert_type: str
+    alert_value: str
+    start_time: int
+    end_time: int | None = None
+
+
+class ActiveAlertCreation(BaseModel):
+    """Result of atomically creating or finding one active alert."""
+
+    alert: AlertRecord
+    created: bool
+
+
+class AlertEventRecord(BaseModel):
+    """One logged alert notification or recovery event."""
+
+    alert_event_id: int
+    alert_id: int
+    event_time: int
+    event_type: AlertEventType
+    message: str
+    slack_status: AlertDeliveryStatus
+    slack_message_ts: str | None = None
+    slack_error: str | None = None
+    slack_attempt_count: int = Field(default=0, ge=0)
+    slack_last_attempt_time: int | None = None
+    slack_next_attempt_time: int | None = None
+    slack_terminal: bool = False
 
 
 class RoomConfig(BaseModel):
@@ -374,6 +548,13 @@ class AqiSummary(BaseModel):
     color: str = Field(description="Display hex color for the AQI category.")
 
 
+class AqiRuleObservation(BaseModel):
+    """Outdoor AQI value and source timestamp used by HVAC action rules."""
+
+    value: int
+    observed_at: int
+
+
 class AqiWeatherResponse(BaseModel):
     """Combined outdoor AQI and weather payload."""
 
@@ -594,6 +775,10 @@ class DeviceStatus(BaseModel):
     device_type: str | None = Field(
         default=None,
         description="Configured or inferred device type.",
+    )
+    device_subtype: str | None = Field(
+        default=None,
+        description="Integration-assigned device subtype, such as AIRTHINGS.",
     )
     log_id: int | None = Field(default=None, description="Latest devlog row id.")
     logtime: int | None = Field(default=None, description="Unix timestamp for the row.")

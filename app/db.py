@@ -44,6 +44,7 @@ from .constants import (
 )
 from .models import (
     AqiSummary,
+    AqiRuleObservation,
     AqiWeatherResponse,
     ChangelogResponse,
     ChangelogRow,
@@ -124,6 +125,7 @@ LATEST_DEVICE_STATUS_SQL = """
         d.device_name,
         d.display_name,
         d.device_type,
+        d.device_subtype,
         d.rules_enabled,
         d.aqi_mon,
         d.ae200_device_id,
@@ -500,33 +502,83 @@ def setup_database(conn, schema_file):
 ## Device management
 
 
+def _cached_discovered_device_id(
+    cursor,
+    device_name: str,
+    device_type: str | None,
+    device_subtype: str | None,
+) -> int | None:
+    """Fill nullable discovery metadata and return a cached device id."""
+    device_id = DEVICE_MAP.get(device_name)
+    if device_id is None:
+        return None
+    if not device_type and not device_subtype:
+        return device_id
+    cursor.execute("SAVEPOINT cached_discovery_metadata")
+    try:
+        if device_type:
+            cursor.execute(
+                "UPDATE devices SET device_type=? "
+                "WHERE device_id=? AND device_type IS NULL",
+                (device_type, device_id),
+            )
+        if device_subtype:
+            cursor.execute(
+                "UPDATE devices SET device_subtype=? "
+                "WHERE device_id=? AND device_subtype IS NULL",
+                (device_subtype, device_id),
+            )
+        if device_type == DEVICE_TYPE_FCU:
+            _ensure_fcu_room(cursor, device_id)
+        cursor.execute("RELEASE SAVEPOINT cached_discovery_metadata")
+    except (sqlite3.Error, ValueError):
+        cursor.execute("ROLLBACK TO SAVEPOINT cached_discovery_metadata")
+        cursor.execute("RELEASE SAVEPOINT cached_discovery_metadata")
+        raise
+    return device_id
+
+
 def get_or_create_device_id(
-    conn, device_name, use_cache=True, *, device_type: str | None = None
+    conn,
+    device_name,
+    use_cache=True,
+    *,
+    device_type: str | None = None,
+    device_subtype: str | None = None,
 ):
     """
     Retrieves the ID for a given device name. If the device name does not exist
     in the devices table, it inserts it and returns the newly generated ID.
+    Discovery-provided type and subtype values fill only unset metadata.
     Don't use the cache when testing
     """
     cursor = conn.cursor()
+    normalized_type = normalize_device_type(device_type)
+    normalized_subtype = normalize_device_subtype(device_subtype)
 
     if "PYTEST" in os.environ:
         use_cache = False
 
-    if use_cache and (device_name in DEVICE_MAP) and device_type is None:
+    device_id = (
+        _cached_discovered_device_id(
+            cursor, device_name, normalized_type, normalized_subtype
+        )
+        if use_cache
+        else None
+    )
+    if device_id is not None:
         logger.debug(
             "get_or_create_device_id DEVICE_MAP[%s]=%s",
             device_name,
-            DEVICE_MAP[device_name],
+            device_id,
         )
-        return DEVICE_MAP[device_name]
+        return device_id
 
     try:
         logger.debug("INSERT OR IGNORE device_name=%s", device_name)
         cursor.execute(
             "INSERT OR IGNORE INTO devices (device_name) VALUES (?);", (device_name,)
         )
-        normalized_type = normalize_device_type(device_type)
         if normalized_type:
             cursor.execute(
                 """
@@ -534,6 +586,14 @@ def get_or_create_device_id(
                 WHERE device_name=? AND device_type IS NULL
                 """,
                 (normalized_type, device_name),
+            )
+        if normalized_subtype:
+            cursor.execute(
+                """
+                UPDATE devices SET device_subtype=?
+                WHERE device_name=? AND device_subtype IS NULL
+                """,
+                (normalized_subtype, device_name),
             )
         cursor.execute("SELECT * FROM devices WHERE device_name = ?;", (device_name,))
         result = cursor.fetchone()
@@ -593,6 +653,11 @@ def normalize_device_type(device_type: object) -> str | None:
     return normalized or None
 
 
+def normalize_device_subtype(device_subtype: object) -> str | None:
+    """Normalize integration-assigned subtype metadata."""
+    return normalize_device_type(device_subtype)
+
+
 def infer_device_type(devdict: dict[str, Any]) -> str | None:
     configured = normalize_device_type(devdict.get("device_type"))
     if configured:
@@ -611,7 +676,7 @@ def get_device_metadata(conn) -> list[dict[str, Any]]:
     c.execute(
         """
         SELECT d.device_id, d.device_name, d.display_name, d.device_type,
-               d.rules_enabled, d.ae200_device_id, d.disabled_until,
+               d.device_subtype, d.rules_enabled, d.ae200_device_id, d.disabled_until,
                d.notes, d.aqi_mon, d.room_id, r.room_name
         FROM devices d
         LEFT JOIN rooms r ON d.room_id = r.room_id
@@ -1266,6 +1331,26 @@ def insert_changelog(
         conn.commit()
 
 
+def insert_action_rule_failure(
+    conn,
+    *,
+    device_id: int,
+    ae200_device_id: int | None,
+    error_type: str,
+    error_message: str,
+):
+    """Persist one action-rule exception in the existing change audit log."""
+    insert_changelog(
+        conn,
+        ipaddr="",
+        device_id=device_id,
+        ae200_device_id=ae200_device_id,
+        new_value=error_type,
+        agent="rules runner",
+        comment=f"action-rule failure: {error_message}",
+    )
+
+
 def update_devlog_map(conn, device_name: str, ae200_device_id: int):
     logger.debug("device_name=%s ae200_device_id=%s", device_name, ae200_device_id)
     c = conn.cursor()
@@ -1532,16 +1617,17 @@ def temporal_quantification(cmd, args):
 
 ################################################################
 ## AQI
-def get_last_aqi(conn):
+def get_last_aqi(conn) -> AqiRuleObservation | None:
+    """Return the latest timestamped AQI observation without inventing a value."""
     c = conn.cursor()
-    c.execute("select aqi from aqi order by logtime DESC limit 1")
+    c.execute("SELECT aqi, logtime FROM aqi ORDER BY logtime DESC LIMIT 1")
     row = c.fetchone()
     if row is None:
-        logger.warning("No AQI data available; defaulting to 50")
-        return 50
-    aqi = row[0]
-    logger.debug("last_aqi=%s", aqi)
-    return aqi
+        logger.debug("No AQI data available")
+        return None
+    observation = AqiRuleObservation(value=row["aqi"], observed_at=row["logtime"])
+    logger.debug("last_aqi=%s observed_at=%s", observation.value, observation.observed_at)
+    return observation
 
 
 def get_aqi_series(conn):

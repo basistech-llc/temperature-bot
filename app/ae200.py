@@ -50,6 +50,15 @@ AE200_HEAT_SET_TEMP_KEY = "SetTemp2"
 AE200_AUTO_MIN_KEY = "AutoMin"
 AE200_AUTO_MAX_KEY = "AutoMax"
 AE200_ALLOWED_SET_MODES = frozenset({"FAN", "COOL", "DRY", "HEAT", "AUTO"})
+ERROR_SIGN = "ErrorSign"
+FILTER_SIGN = "FilterSign"
+CHECK_WATER = "CheckWater"
+ALERT_FIELDS = (ERROR_SIGN, FILTER_SIGN, CHECK_WATER)
+ALERT_LABELS = {
+    ERROR_SIGN: "error condition",
+    FILTER_SIGN: "filter warning",
+    CHECK_WATER: "water issue",
+}
 AE200_COMMAND_LOCK_PATH = os.getenv("AE200_COMMAND_LOCK_PATH", "/tmp/temperature-bot-ae200.lock")
 
 # User-facing fan-speed labels, keyed by speed number. These intentionally

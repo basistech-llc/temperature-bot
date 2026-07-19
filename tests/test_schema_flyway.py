@@ -131,7 +131,13 @@ def test_schema_file_contains_rooms_fcu_temp_source_and_set_range_columns():
         }
 
     assert {"room_id", "room_name", "map_json", "fcu_device_id"} <= room_columns
-    assert {"room_id", "display_name", "device_type", "rules_enabled"} <= device_columns
+    assert {
+        "room_id",
+        "display_name",
+        "device_type",
+        "device_subtype",
+        "rules_enabled",
+    } <= device_columns
     assert {
         "fcu_device_id",
         "source_device_id",
@@ -236,6 +242,143 @@ def test_fcu_owned_rooms_migration_bootstraps_existing_devices():
             conn.execute(
                 "UPDATE devices SET room_id=? WHERE device_id=?",
                 (existing_room_id, second_fcu_id),
+            )
+
+
+def test_alert_outbox_migration_backfills_existing_delivery_state():
+    with closing(sqlite3.connect(":memory:")) as conn:
+        for version in range(1, 13):
+            migration = next(MIGRATION_DIR.glob(f"V{version}__*.sql"))
+            conn.executescript(migration.read_text(encoding="utf-8"))
+        device_id = conn.execute(
+            "INSERT INTO devices (device_name) VALUES ('Airthings Dungeon')"
+        ).lastrowid
+        alert_id = conn.execute(
+            """
+            INSERT INTO alerts
+                (device_id, alert_type, alert_value, start_time, end_time)
+            VALUES (?, 'SensorStuck', 'ON', 1000, NULL)
+            """,
+            (device_id,),
+        ).lastrowid
+        conn.executemany(
+            """
+            INSERT INTO alert_events
+                (alert_id, event_time, event_type, message, slack_status)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (
+                (alert_id, 1600, "triggered", "pending", "pending"),
+                (alert_id, 1700, "reminder", "failed", "failed"),
+                (alert_id, 1800, "resolved", "sent", "sent"),
+            ),
+        )
+        conn.execute("DROP INDEX idx_alerts_active")
+
+        conn.executescript(
+            (MIGRATION_DIR / "V13__alert_delivery_outbox.sql").read_text(
+                encoding="utf-8"
+            )
+        )
+
+        events = conn.execute(
+            """
+            SELECT slack_status, slack_attempt_count, slack_last_attempt_time,
+                   slack_next_attempt_time, slack_terminal
+            FROM alert_events
+            ORDER BY alert_event_id
+            """
+        ).fetchall()
+        assert events == [
+            ("pending", 0, None, 1600, 0),
+            ("failed", 0, None, 1700, 0),
+            ("sent", 0, None, None, 1),
+        ]
+        indexes = {
+            row[1]
+            for row in conn.execute("PRAGMA index_list(alert_events)").fetchall()
+        }
+        assert "idx_alert_events_slack_outbox" in indexes
+
+
+def test_device_subtype_migration_adds_nullable_discovery_metadata():
+    """V14 adds subtype storage without guessing identity from an existing name."""
+    with closing(sqlite3.connect(":memory:")) as conn:
+        for version in range(1, 14):
+            migration = next(MIGRATION_DIR.glob(f"V{version}__*.sql"))
+            conn.executescript(migration.read_text(encoding="utf-8"))
+        device_id = conn.execute(
+            "INSERT INTO devices (device_name) VALUES ('Airthings Legacy')"
+        ).lastrowid
+
+        conn.executescript(
+            (MIGRATION_DIR / "V14__device_subtype.sql").read_text(encoding="utf-8")
+        )
+
+        columns = {
+            row[1] for row in conn.execute("PRAGMA table_info(devices)").fetchall()
+        }
+        subtype = conn.execute(
+            "SELECT device_subtype FROM devices WHERE device_id=?", (device_id,)
+        ).fetchone()[0]
+        assert "device_subtype" in columns
+    assert subtype is None
+
+
+def test_unique_active_alert_migration_reconciles_existing_duplicates():
+    """V15 closes older duplicates before enforcing one active lifecycle."""
+    with closing(sqlite3.connect(":memory:")) as conn:
+        for version in range(1, 15):
+            migration = next(MIGRATION_DIR.glob(f"V{version}__*.sql"))
+            conn.executescript(migration.read_text(encoding="utf-8"))
+        device_id = conn.execute(
+            "INSERT INTO devices (device_name) VALUES ('Airthings Legacy')"
+        ).lastrowid
+        conn.executemany(
+            """
+            INSERT INTO alerts
+                (device_id, alert_type, alert_value, start_time, end_time)
+            VALUES (?, ?, 'ON', ?, ?)
+            """,
+            (
+                (device_id, "SensorStuck", 1000, None),
+                (device_id, "SensorStuck", 900, None),
+                (device_id, "SensorStuck", 1200, None),
+                (device_id, "FilterSign", 1100, None),
+                (device_id, "SensorStuck", 800, 850),
+            ),
+        )
+
+        conn.executescript(
+            (MIGRATION_DIR / "V15__unique_active_alert.sql").read_text(
+                encoding="utf-8"
+            )
+        )
+
+        sensor_rows = conn.execute(
+            """
+            SELECT start_time, end_time
+            FROM alerts
+            WHERE device_id=? AND alert_type='SensorStuck'
+            ORDER BY alert_id
+            """,
+            (device_id,),
+        ).fetchall()
+        assert sensor_rows == [(1000, 1200), (900, 1200), (1200, None), (800, 850)]
+        active_index = next(
+            row
+            for row in conn.execute("PRAGMA index_list(alerts)")
+            if row[1] == "idx_alerts_active"
+        )
+        assert active_index[2] == 1
+        with pytest.raises(sqlite3.IntegrityError):
+            conn.execute(
+                """
+                INSERT INTO alerts
+                    (device_id, alert_type, alert_value, start_time, end_time)
+                VALUES (?, 'SensorStuck', 'ON', 1300, NULL)
+                """,
+                (device_id,),
             )
 
 
