@@ -14,6 +14,8 @@ surface quickly.
   Makefile targets, and migration rules.
 - `doc/frontend-rendering-strategy.md`: frontend architecture and where SSR,
   JSON APIs, and static JavaScript belong.
+- `doc/performance-monitoring.md`: AE-200 request timing, independent network
+  probes, storage, charting, deployment, and staging-load experiments.
 - `doc/rooms-implementation-review.md`: room dashboard debt, open room issues,
   and Hickory/Kitchen dashboard generalization notes.
 - `doc/rooms-implementation-plan.md`: approved FCU-owned room model, grouped

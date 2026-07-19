@@ -419,6 +419,7 @@ def prepare_output_dir(output_dir: Path) -> None:
 
 
 def create_database(db_path: Path) -> dict[str, int]:
+    from app import performance_monitoring
     from app.paths import SCHEMA_FILE_PATH
 
     conn = sqlite3.connect(db_path)
@@ -578,6 +579,70 @@ def create_database(db_path: Path) -> dict[str, int]:
                 ),
             )
 
+        now_ms = now * 1000
+        for index in range(24):
+            observed_at_ms = now_ms - (23 - index) * 60 * 60 * 1000
+            lock_wait_ms = 1.0 + index % 4
+            connect_ms = 18.0 + index % 6
+            response_ms = 85.0 + index * 2.5
+            performance_monitoring.insert_sample(
+                conn,
+                performance_monitoring.PerformanceSample(
+                    observed_at_ms=observed_at_ms,
+                    instance_id="production",
+                    client_id="minute-runner",
+                    sample_type=performance_monitoring.SAMPLE_TYPE_AE200,
+                    operation=performance_monitoring.OPERATION_GET_DEVICES,
+                    target_host="ae200.example",
+                    target_port=80,
+                    lock_wait_ms=lock_wait_ms,
+                    connect_ms=connect_ms,
+                    response_ms=response_ms,
+                    close_ms=2.0,
+                    total_ms=lock_wait_ms + connect_ms + response_ms + 2.0,
+                    success=True,
+                    outcome="ok",
+                    response_bytes=2048,
+                ),
+            )
+            if index % 2 == 0:
+                performance_monitoring.insert_sample(
+                    conn,
+                    performance_monitoring.PerformanceSample(
+                        observed_at_ms=observed_at_ms + 30_000,
+                        instance_id="production",
+                        client_id="network-probe",
+                        sample_type=performance_monitoring.SAMPLE_TYPE_ICMP,
+                        operation=performance_monitoring.OPERATION_ECHO,
+                        target_host="ae200.example",
+                        resolved_ip="192.0.2.10",
+                        icmp_min_ms=11.0 + index / 10,
+                        icmp_median_ms=12.0 + index / 10,
+                        icmp_max_ms=13.5 + index / 10,
+                        packet_loss_pct=0,
+                        total_ms=2010,
+                        success=True,
+                        outcome="reply",
+                    ),
+                )
+                performance_monitoring.insert_sample(
+                    conn,
+                    performance_monitoring.PerformanceSample(
+                        observed_at_ms=observed_at_ms + 31_000,
+                        instance_id="production",
+                        client_id="network-probe",
+                        sample_type=performance_monitoring.SAMPLE_TYPE_TCP_REJECT,
+                        operation=performance_monitoring.OPERATION_REJECT,
+                        target_host="ae200.example",
+                        target_port=1,
+                        resolved_ip="192.0.2.10",
+                        connect_ms=17.0 + index / 8,
+                        total_ms=17.0 + index / 8,
+                        success=True,
+                        outcome="refused",
+                    ),
+                )
+
         conn.commit()
         return device_ids
     finally:
@@ -662,6 +727,13 @@ def page_specs(device_ids: dict[str, int]) -> list[PageSpec]:
         PageSpec(slug="lighting-chart", title="Lighting Chart", path="/lighting_chart", wait_selector="#lighting-chart canvas"),
         *metric_pages,
         PageSpec(slug="aqi-chart", title="Air Quality Chart", path="/chart_aqi", wait_selector="#aqi-chart canvas"),
+        PageSpec(
+            slug="performance-monitoring",
+            title="Performance Monitoring",
+            path="/performance-monitoring",
+            wait_selector="#performance-chart canvas",
+            settle_ms=900,
+        ),
         PageSpec(slug="alerts", title="Alerts", path="/alerts", wait_selector="#active-alerts-table"),
         PageSpec(slug="rules", title="Rules", path="/rules?run_rules=0", wait_selector=".suspend-rules-buttons"),
         PageSpec(slug="logs-today", title="Activity Log", path="/logs_today", wait_selector="#log-table"),

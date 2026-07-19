@@ -14,6 +14,9 @@ Temperature Bot now tracks SQL schema versions with Flyway.
   for FCU ownership and assignment.
 - `etc/flyway/sql/V10__room_presence.sql` stores room-at-observation presence
   events and indexes current and historical room queries.
+- `etc/flyway/sql/R__performance_samples.sql` adds integration and network
+  timing samples. It is repeatable so it can be deployed before or after the
+  independent branch that owns V12-V15; see `doc/performance-monitoring.md`.
 - Flyway creates and manages `flyway_schema_history`; do not add that table to a versioned migration or to `etc/schema.sql`.
 - Existing populated databases are baselined at V1 by `make migrate-db` and `make deploy`, then any later migrations are applied.
 - `etc/schema.sql` is generated from the Flyway migration history for tests and compatibility. Do not hand-edit it for schema changes.
@@ -59,7 +62,9 @@ flyway \
 
 ## Adding a new migration
 
-1. Add a new SQL file in `etc/flyway/sql/`.
+1. Add a new SQL file in `etc/flyway/sql/`. Normally use the next versioned
+   migration. Use a repeatable migration only when the change is idempotent and
+   branch-order compatibility requires it; document that decision in the SQL.
 2. Use a Flyway versioned filename, for example:
    - `V3__add_new_table.sql`
    - `V4__add_alert_indexes.sql`
