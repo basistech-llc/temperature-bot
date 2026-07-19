@@ -49,6 +49,23 @@ def test_fcu_state_contract_rejects_missing_or_unknown_controls(payload, message
         fcu_control.FcuStateControl.model_validate(payload)
 
 
+def test_fcu_state_endpoint_reports_controller_protocol_failure(
+    monkeypatch, flask_test_client
+):  # noqa: F811
+    def fail_command(*_args, **_kwargs):
+        raise ae200.AE200VerificationError(
+            "AE-200 returned getResponse for setRequest"
+        )
+
+    monkeypatch.setattr("app.routes_api.rules_engine.set_body_fcu_state", fail_command)
+    response = flask_test_client.post(
+        "/api/v1/set_fcu_state",
+        json={"device_id": 1, "drive": 1, "fan_speed": 4},
+    )
+    assert response.status_code == 502
+    assert response.json == {"error": "AE-200 did not confirm requested state"}
+
+
 def test_set_fcu_state_is_atomic_verified_and_logged_once(flask_test_client):  # noqa: F811
     """One dashboard selection writes one state and one suspension audit row."""
     ae200.set_fcu_state(AE200_UNIT, drive=0, fan_speed=-1)

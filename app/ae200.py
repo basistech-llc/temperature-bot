@@ -403,7 +403,9 @@ class AE200Functions:
         response_root = ET.fromstring(response_xml)
         command = response_root.findtext("./Command") or ""
         if command != "setResponse":
-            raise ValueError(f"AE-200 returned {command or 'no command'} for setRequest")
+            raise AE200VerificationError(
+                f"AE-200 returned {command or 'no command'} for setRequest"
+            )
         node = response_root.find("./DatabaseManager/Mnet")
         response_attributes = cleanDeviceInfo(node.attrib) if node is not None else {}
         response_attributes.pop(AE200_GROUP_KEY, None)
