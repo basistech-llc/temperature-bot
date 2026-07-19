@@ -1739,6 +1739,32 @@ async function setFanSpeed(device_id, fan_speed) {
   }
 }
 
+async function setFcuState(device_id, fan_speed) {
+  const body = fcuStateRequestBody(device_id, fan_speed);
+  const response = await fetch("/api/v1/set_fcu_state", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const result = await response.json();
+  if (!response.ok) {
+    throw new Error(result.error || "Unable to set FCU state.");
+  }
+  forceRefresh = true;
+  return result;
+}
+
+function fcuStateRequestBody(device_id, fan_speed) {
+  const body = {
+    device_id: device_id,
+    drive: fan_speed === 0 ? 0 : 1,
+  };
+  if (fan_speed !== 0) {
+    body.fan_speed = fan_speed;
+  }
+  return body;
+}
+
 async function setDeviceMode(deviceId, mode) {
   try {
     const response = await fetch("/api/v1/set_mode", {
@@ -1812,17 +1838,10 @@ function setupMatrixListeners() {
       pendingFanRadioIds.set(deviceId, pendingChange);
 
       try {
-        // Off button (0): turn off drive
-        if (fan_speed === 0) {
-          await setDrive(deviceId, 0);
-        }
-        // Speed buttons: turn on drive AND set speed
-        else {
-          await Promise.all([
-            setDrive(deviceId, 1),
-            setFanSpeed(deviceId, fan_speed),
-          ]);
-        }
+        await setFcuState(deviceId, fan_speed);
+      } catch (error) {
+        console.error("Failed to set FCU state:", error);
+        alert(error.message || "Error setting FCU state.");
       } finally {
         clearPendingFanChange(pendingFanRadioIds, deviceId, pendingChange);
         forceRefresh = true;
@@ -3250,6 +3269,7 @@ if (typeof module !== "undefined" && module.exports) {
     deviceUpdateTooltipText,
     deviceUpdateTimestampSeconds,
     ensureModeSelectOption,
+    fcuStateRequestBody,
     fanRadioIdForDevice,
     FCU_MODE_OPTIONS,
     fcuTempSourcesTitle,

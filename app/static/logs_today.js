@@ -7,6 +7,48 @@ let logRows = [];
 let newestLogtime = null;
 let allHistoryLoaded = false;
 
+const CHANGELOG_ACTION_LABELS = {
+  legacy: "Legacy change",
+  fan_speed: "Fan speed",
+  drive: "Drive",
+  fcu_state: "FCU state",
+  mode: "Mode",
+  set_temperature: "Set temperature",
+  set_auto_temperature: "Auto set temperatures",
+  set_range: "Rule set range",
+  temperature_source: "Temperature source",
+  rules_suspension: "Rules suspension",
+  rules_master: "Master rules",
+  action_rule_failure: "Action-rule failure",
+};
+
+function changelogActionLabel(action) {
+  return CHANGELOG_ACTION_LABELS[action] || action || "Legacy change";
+}
+
+function formatChangelogTimestamp(value) {
+  const timestamp = Number(value);
+  if (!Number.isFinite(timestamp) || timestamp <= 0) {
+    return "Rules enabled";
+  }
+  return new Intl.DateTimeFormat(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    timeZoneName: "short",
+  }).format(new Date(timestamp * 1000));
+}
+
+function formatChangelogValue(action, value) {
+  if (action === "rules_suspension" || action === "rules_master") {
+    return formatChangelogTimestamp(value);
+  }
+  return value == null ? "" : String(value);
+}
+
 function updateRangeSummary() {
   const summary = document.getElementById("log-range-summary");
   if (!summary) return;
@@ -73,7 +115,24 @@ function createLogTable() {
       },
       { title: "IP Address", field: "ipaddr", width: 130 },
       { title: "Unit", field: "unit", hozAlign: "left", minWidth: 260, widthGrow: 3 },
-      { title: "Speed", field: "new_value", hozAlign: "center" },
+      {
+        title: "Action",
+        field: "action",
+        formatter: (cell) => changelogActionLabel(cell.getValue()),
+        minWidth: 150,
+      },
+      {
+        title: "Previous",
+        field: "current_values",
+        formatter: (cell) =>
+          formatChangelogValue(cell.getRow().getData().action, cell.getValue()),
+      },
+      {
+        title: "New value",
+        field: "new_value",
+        formatter: (cell) =>
+          formatChangelogValue(cell.getRow().getData().action, cell.getValue()),
+      },
       { title: "Agent", field: "agent", widthGrow: 1 },
       { title: "Comment", field: "comment", widthGrow: 3 },
     ],
@@ -169,3 +228,10 @@ window.addEventListener("DOMContentLoaded", function () {
 
   setInterval(refreshLogTable, 30000); // Refresh every 30 seconds
 });
+
+if (typeof module !== "undefined" && module.exports) {
+  module.exports = {
+    changelogActionLabel,
+    formatChangelogValue,
+  };
+}

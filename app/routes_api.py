@@ -52,6 +52,7 @@ from .models import (
     TemperatureSeriesResponse,
     json_ready,
 )
+from .fcu_control import FcuStateControl
 
 logger = logging.getLogger(__name__)
 
@@ -78,12 +79,41 @@ def _command_error_response(error: ValueError):
 
 def _ae200_error_response(error):
     logger.warning("AE-200 request failed: %s", error)
+    if isinstance(error, ae200.AE200VerificationError):
+        return jsonify({"error": "AE-200 did not confirm requested state"}), 502
     return jsonify({"error": "AE-200 request failed"}), 502
 
 
 @api_v1.route("/version")
 def get_version_json():
     return jsonify({"version": __version__, "sha": git_sha()})
+
+
+@api_v1.route("/set_fcu_state", methods=["POST"])
+@validate()
+@with_db_connection
+def set_fcu_state(conn, body: FcuStateControl):
+    """Set drive/fan fields in one AE-200 request and verify the result."""
+    try:
+        ret = rules_engine.set_body_fcu_state(
+            conn,
+            body,
+            request.remote_addr,
+            "web",
+        )
+    except ValueError as exc:
+        return _command_error_response(exc)
+    except (ET.ParseError, OSError, RuntimeError, WebSocketException) as exc:
+        return _ae200_error_response(exc)
+    db.disable_rules_for_device(
+        conn,
+        device_id=ret["device_id"],
+        seconds=constants.RULES_DISABLE_SECONDS,
+        ipaddr=request.remote_addr,
+        agent=request.headers.get("User-Agent"),
+        comment=_rules_disabled_comment(),
+    )
+    return jsonify(json_ready(CommandResponse.model_validate({"status": "ok", **ret})))
 
 
 @api_v1.route("/set_fan_speed", methods=["POST"])
@@ -105,6 +135,7 @@ def set_fan_speed(conn, body: SpeedControl):
         seconds=constants.RULES_DISABLE_SECONDS,
         ipaddr=request.remote_addr,
         agent=request.headers.get("User-Agent"),
+        comment=_rules_disabled_comment(),
     )
     return jsonify(json_ready(CommandResponse.model_validate({"status": "ok", **ret})))
 

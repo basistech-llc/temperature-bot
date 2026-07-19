@@ -7,6 +7,11 @@ import pytest
     ("method", "path", "payload"),
     (
         ("POST", "/api/v1/set_fan_speed", {"device_id": 1, "fan_speed": 1}),
+        (
+            "POST",
+            "/api/v1/set_fcu_state",
+            {"device_id": 1, "drive": 1, "fan_speed": 1},
+        ),
         ("POST", "/api/v1/set_drive", {"device_id": 1, "drive": 1}),
         ("POST", "/api/v1/set_mode", {"device_id": 1, "mode": "COOL"}),
         ("POST", "/api/v1/set_temp", {"device_id": 1, "set_temp_c": 21}),

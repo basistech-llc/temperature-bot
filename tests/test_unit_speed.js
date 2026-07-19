@@ -26,6 +26,7 @@ const {
   enableRulesForDevice,
   ensureModeSelectOption,
   fanRadioIdForDevice,
+  fcuStateRequestBody,
   FCU_MODE_OPTIONS,
   fcuTempSourcesTitle,
   isAutoOperationMode,
@@ -94,6 +95,17 @@ function checkContains(label, actual, expectedFragment) {
     );
   }
 }
+
+check(
+  "high selection is one combined state request",
+  JSON.stringify(fcuStateRequestBody(7, 4)),
+  JSON.stringify({ device_id: 7, drive: 1, fan_speed: 4 }),
+);
+check(
+  "off selection preserves the stored fan speed",
+  JSON.stringify(fcuStateRequestBody(7, 0)),
+  JSON.stringify({ device_id: 7, drive: 0 }),
+);
 
 function fakeClassList() {
   const classes = new Set();

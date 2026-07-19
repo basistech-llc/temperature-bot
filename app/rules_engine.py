@@ -27,6 +27,7 @@ from . import slack
 
 from .models import (
     AutoSetTempControl,
+    ChangelogAction,
     SpeedControl,
     DriveControl,
     ModeControl,
@@ -43,6 +44,7 @@ from .models import (
     CompiledRules,
     RuleResult,
 )
+from .fcu_control import FcuStateControl
 
 logger = logging.getLogger(__name__)
 
@@ -185,108 +187,125 @@ def prune_rules(conn):
     conn.commit()
 
 def set_body_fan_speed(conn, body: SpeedControl, ipaddr, agent):
-    """
-    :param conn: SQLIte3 database conneciton
-    :param body: Unit to set, and new speed
-    :param ipaddr: Who requested the change
-    :param agent: What requested the change.
-    """
-
-    unit_id = db.get_ae200_unit(conn, body.device_id)
-
-    # Get the current speed of the unit
-    current_fan_speed = ae200.get_device_fan_speed(unit_id)
-    if current_fan_speed == body.fan_speed:
-        logger.info(
-            "set_body_fan_speed body=[%s] ipaddr=%s agent=%s. Speed will not change",
-            body,
-            ipaddr,
-            agent,
-        )
-    else:
-        logger.info(
-            "set_body_fan_speed body=[%s] ipaddr=%s agent=%s. Speed changed. current_fan_speed=%s",
-            body,
-            ipaddr,
-            agent,
-            current_fan_speed,
-        )
-        db.insert_changelog(
-            conn,
-            ipaddr=ipaddr,
-            device_id=body.device_id,
-            ae200_device_id=unit_id,
-            current_values=str(current_fan_speed),
-            new_value=str(body.fan_speed),
-            agent=agent,
-        )
-        ae200.set_fan_speed(unit_id, body.fan_speed)
-    data = ae200.get_device_info(unit_id)
-    # The hardware may not yet reflect the FanSpeed we just sent (the read-back
-    # can race the command), so record the commanded value rather than a
-    # possibly stale reading. The next runner poll reconciles with hardware.
-    data["FanSpeed"] = ae200.FAN_SPEEDS[body.fan_speed]
-    temp = data.get("InletTemp", None)
-    db.insert_devlog_entry(conn, device_id=body.device_id, temp=temp, statusdict=data)
-    return {
-        "unit": unit_id,
-        "temp": temp,
-        "device_id": body.device_id,
-        "speed": body.fan_speed,
-    }
+    """Set and verify one fan-speed-only command."""
+    return set_body_fcu_state(
+        conn,
+        FcuStateControl(device_id=body.device_id, fan_speed=body.fan_speed),
+        ipaddr,
+        agent,
+    )
 
 
 def set_body_drive(conn, body: DriveControl, ipaddr, agent):
-    """
-    :param conn: SQLIte3 database conneciton
-    :param body: Unit to set, and new drive
-    :param ipaddr: Who requested the change
-    :param agent: What requested the change.
-    """
-    logger.debug("==== set_body_drive body=%s", body)
+    """Set and verify one drive-only command."""
+    return set_body_fcu_state(
+        conn,
+        FcuStateControl(device_id=body.device_id, drive=body.drive),
+        ipaddr,
+        agent,
+    )
 
+
+def _fcu_state_text(drive: str, fan_speed: str) -> str:
+    return f"Drive={drive} FanSpeed={fan_speed}"
+
+
+def _fcu_state_action(body: FcuStateControl) -> ChangelogAction:
+    if body.drive is not None and body.fan_speed is not None:
+        return ChangelogAction.FCU_STATE
+    if body.drive is not None:
+        return ChangelogAction.DRIVE
+    return ChangelogAction.FAN_SPEED
+
+
+def set_body_fcu_state(conn, body: FcuStateControl, ipaddr, agent):
+    """Atomically set requested FCU fields and persist only verified state."""
     unit_id = db.get_ae200_unit(conn, body.device_id)
+    before = ae200.get_device_info(unit_id)
+    current_drive = before[ae200.AE200_DRIVE_KEY]
+    current_speed = before[ae200.AE200_FAN_SPEED_KEY]
+    requested_drive = (
+        ae200.DRIVES[body.drive] if body.drive is not None else current_drive
+    )
+    requested_speed = (
+        ae200.FAN_SPEEDS[body.fan_speed]
+        if body.fan_speed is not None
+        else current_speed
+    )
+    old_value = _fcu_state_text(current_drive, current_speed)
+    new_value = _fcu_state_text(requested_drive, requested_speed)
+    action = _fcu_state_action(body)
 
-    # Get the current speed of the unit
-    current_drive = ae200.get_device_drive(unit_id)
-    if current_drive == body.drive:
-        logger.info(
-            "set_body_drive body=[%s] ipaddr=%s agent=%s. Drive will not change",
-            body,
-            ipaddr,
-            agent,
-        )
+    if old_value == new_value:
+        verified = before
     else:
-        logger.info(
-            "set_body_drive body=[%s] ipaddr=%s agent=%s. Drive changed. current_drive=%s",
-            body,
-            ipaddr,
-            agent,
-            current_drive,
-        )
+        try:
+            ae200.set_fcu_state(
+                unit_id,
+                drive=body.drive,
+                fan_speed=body.fan_speed,
+            )
+            verified = ae200.get_device_info_after_write(unit_id)
+        except Exception as error:  # pylint: disable=broad-except
+            db.insert_changelog(
+                conn,
+                ipaddr=ipaddr,
+                device_id=body.device_id,
+                ae200_device_id=unit_id,
+                action=action,
+                current_values=old_value,
+                new_value=new_value,
+                agent=agent,
+                comment=f"command failed: {type(error).__name__}",
+            )
+            raise
+
+        actual_drive = verified.get(ae200.AE200_DRIVE_KEY)
+        actual_speed = verified.get(ae200.AE200_FAN_SPEED_KEY)
+        confirmed = actual_drive == requested_drive and actual_speed == requested_speed
         db.insert_changelog(
             conn,
             ipaddr=ipaddr,
             device_id=body.device_id,
             ae200_device_id=unit_id,
-            current_values=str(current_drive),
-            new_value=str(body.drive),
+            action=action,
+            current_values=old_value,
+            new_value=new_value,
             agent=agent,
+            comment=(
+                "confirmed"
+                if confirmed
+                else "not confirmed; actual="
+                + _fcu_state_text(str(actual_drive), str(actual_speed))
+            ),
         )
-        ae200.set_drive(unit_id, body.drive)
-    data = ae200.get_device_info(unit_id)
-    # The hardware may not yet reflect the Drive we just sent (the read-back can
-    # race the command), so record the commanded value rather than a possibly
-    # stale reading. Otherwise /status can report the old drive and the UI snaps
-    # back to the prior state. The next runner poll reconciles with hardware.
-    data["Drive"] = ae200.int_to_drive(body.drive)
-    temp = data.get("InletTemp", None)
-    db.insert_devlog_entry(conn, device_id=body.device_id, temp=temp, statusdict=data)
+        if not confirmed:
+            temp = verified.get("InletTemp")
+            db.insert_devlog_entry(
+                conn,
+                device_id=body.device_id,
+                temp=temp,
+                statusdict=verified,
+            )
+            raise ae200.AE200VerificationError(
+                f"AE-200 did not confirm {new_value}; "
+                f"reported {_fcu_state_text(str(actual_drive), str(actual_speed))}"
+            )
+
+    temp = verified.get("InletTemp")
+    db.insert_devlog_entry(
+        conn,
+        device_id=body.device_id,
+        temp=temp,
+        statusdict=verified,
+    )
     return {
         "unit": unit_id,
         "temp": temp,
         "device_id": body.device_id,
-        "drive": body.drive,
+        "drive": ae200.DRIVE_NAMES[verified[ae200.AE200_DRIVE_KEY]],
+        "speed": ae200.FAN_SPEED_NAMES[verified[ae200.AE200_FAN_SPEED_KEY]],
+        "verified": True,
     }
 
 
@@ -316,6 +335,7 @@ def set_body_mode(conn, body: ModeControl, ipaddr, agent):
             ipaddr=ipaddr,
             device_id=body.device_id,
             ae200_device_id=unit_id,
+            action=ChangelogAction.MODE,
             current_values=str(current_mode) if current_mode is not None else "",
             new_value=body.mode,
             agent=agent,
@@ -364,6 +384,7 @@ def set_body_set_temp(conn, body: SetTempControl, ipaddr, agent):
                 ipaddr=ipaddr,
                 device_id=body.device_id,
                 ae200_device_id=unit_id,
+                action=ChangelogAction.SET_TEMPERATURE,
                 current_values=current_value_str,
                 new_value=new_value_str,
                 agent=agent,
@@ -406,6 +427,7 @@ def set_body_auto_set_temp(conn, body: AutoSetTempControl, ipaddr, agent):
             ipaddr=ipaddr,
             device_id=body.device_id,
             ae200_device_id=unit_id,
+            action=ChangelogAction.SET_AUTO_TEMPERATURE,
             current_values=current_value_str,
             new_value=new_value_str,
             agent=agent,
@@ -471,23 +493,26 @@ def _require_rule_result(result) -> RuleResult:
 
 
 def _commit_rule_result(conn, dev: Device, result: RuleResult):
-    if result.drive is not None:
-        set_body_drive(
-            conn,
-            DriveControl(device_id=dev.device_id, drive=ae200.DRIVE_NAMES[result.drive]),
-            "n/a",
-            "rule",
-        )
-    if result.fan_speed is not None:
-        set_body_fan_speed(
-            conn,
-            SpeedControl(
-                device_id=dev.device_id,
-                fan_speed=ae200.FAN_SPEED_NAMES[result.fan_speed],
+    if result.drive is None and result.fan_speed is None:
+        return
+    set_body_fcu_state(
+        conn,
+        FcuStateControl(
+            device_id=dev.device_id,
+            drive=(
+                ae200.DRIVE_NAMES[result.drive]
+                if result.drive is not None
+                else None
             ),
-            "n/a",
-            "rule",
-        )
+            fan_speed=(
+                ae200.FAN_SPEED_NAMES[result.fan_speed]
+                if result.fan_speed is not None
+                else None
+            ),
+        ),
+        "n/a",
+        "rule",
+    )
 
 
 def _record_action_rule_failure(conn, devdict, error: Exception, *, commit: bool):

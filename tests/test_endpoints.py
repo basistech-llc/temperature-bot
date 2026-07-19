@@ -1,7 +1,4 @@
-"""
-test Flask endpoints
-"""
-
+"""Test Flask endpoints."""
 import logging
 import sqlite3
 import os
@@ -10,14 +7,16 @@ import time
 from unittest.mock import patch
 
 import pytest
-from conftest import flask_test_client, skip_on_github  # noqa: F401  # pylint: disable=unused-import
+# Pytest discovers the imported fixture even though Python code does not call it.
+from conftest import flask_test_client, skip_on_github  # pylint: disable=unused-import
 from helpers.data_factories import DeviceTestData
 from helpers.mock_helpers import MockHelper
 
 from app import ae200, db, rules_engine
 from app.constants import RULES_MASTER_DEVICE_NAME
 from app.version import __version__, git_sha
-from app.models import DriveControl, SpeedControl
+from app.models import ChangelogAction, DriveControl, SpeedControl
+
 logger = logging.getLogger(__name__)
 
 
@@ -454,61 +453,62 @@ def _latest_devlog_status(conn, device_id):
     return ae200.extract_drive_and_fan_speed(json.loads(row["status_json"]))
 
 
-def test_set_body_drive_records_commanded_drive_when_readback_is_stale(
+def test_set_body_drive_rejects_unconfirmed_readback(
     test_database_conn,
 ):  # noqa: F811
-    """Regression: set_body_drive must record the commanded Drive even when the
-    hardware read-back still reports the old state (the read-back can race the
-    command). Otherwise /status reports the stale drive and the UI snaps back to
-    the prior selection."""
+    """A stale readback is recorded as actual state and returned as failure."""
     conn = test_database_conn
     device_id = _link_device_to_unit(conn, "Readback Race Drive Test")
 
     # Unit is currently ON; the post-command read-back returns a STALE status
     # that still shows Drive=ON even though we are commanding OFF.
     stale_status = {"Drive": "ON", "FanSpeed": "AUTO", "InletTemp": "22.0"}
-    with patch.object(ae200, "get_device_drive", return_value=1), patch.object(
-        ae200, "set_drive"
-    ) as mock_set_drive, patch.object(
+    with patch.object(
         ae200, "get_device_info", return_value=dict(stale_status)
+    ), patch.object(ae200, "set_fcu_state") as set_state, patch.object(
+        ae200, "get_device_info_after_write", return_value=dict(stale_status)
     ):
-        rules_engine.set_body_drive(
-            conn,
-            DriveControl(device_id=device_id, drive=0),
-            "127.0.0.1",
-            "web",
-        )
-        mock_set_drive.assert_called_once()
+        with pytest.raises(ae200.AE200VerificationError):
+            rules_engine.set_body_drive(
+                conn,
+                DriveControl(device_id=device_id, drive=0),
+                "127.0.0.1",
+                "web",
+            )
+    set_state.assert_called_once_with(BROADWAY_SOUTH, drive=0, fan_speed=None)
+    assert _latest_devlog_status(conn, device_id)["drive"] == 1
+    audit = conn.execute(
+        "SELECT action, comment FROM changelog WHERE device_id=?",
+        (device_id,),
+    ).fetchone()
+    assert audit["action"] == ChangelogAction.DRIVE.value
+    assert audit["comment"].startswith("not confirmed")
 
-    # The recorded status must reflect the commanded OFF, not the stale ON.
-    assert _latest_devlog_status(conn, device_id)["drive"] == 0
 
-
-def test_set_body_fan_speed_records_commanded_speed_when_readback_is_stale(
+def test_set_body_fan_speed_rejects_unconfirmed_readback(
     test_database_conn,
 ):  # noqa: F811
-    """Regression: set_body_fan_speed must record the commanded FanSpeed even
-    when the hardware read-back still reports the old speed."""
+    """An unconfirmed fan speed must not be manufactured in devlog."""
     conn = test_database_conn
     device_id = _link_device_to_unit(conn, "Readback Race Speed Test")
 
     # Unit is currently on LOW (1); the read-back still reports LOW even though
     # we are commanding MID1 (3).
     stale_status = {"Drive": "ON", "FanSpeed": "LOW", "InletTemp": "22.0"}
-    with patch.object(ae200, "get_device_fan_speed", return_value=1), patch.object(
-        ae200, "set_fan_speed"
-    ) as mock_set_speed, patch.object(
+    with patch.object(
         ae200, "get_device_info", return_value=dict(stale_status)
+    ), patch.object(ae200, "set_fcu_state"), patch.object(
+        ae200, "get_device_info_after_write", return_value=dict(stale_status)
     ):
-        rules_engine.set_body_fan_speed(
-            conn,
-            SpeedControl(device_id=device_id, fan_speed=3),
-            "127.0.0.1",
-            "web",
-        )
-        mock_set_speed.assert_called_once()
+        with pytest.raises(ae200.AE200VerificationError):
+            rules_engine.set_body_fan_speed(
+                conn,
+                SpeedControl(device_id=device_id, fan_speed=3),
+                "127.0.0.1",
+                "web",
+            )
 
-    assert _latest_devlog_status(conn, device_id)["fan_speed"] == 3
+    assert _latest_devlog_status(conn, device_id)["fan_speed"] == 1
 
 
 @pytest.mark.parametrize(

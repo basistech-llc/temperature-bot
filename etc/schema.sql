@@ -23,7 +23,7 @@ CREATE TABLE IF NOT EXISTS changelog (
                     new_value TEXT,
                     agent TEXT,
                     comment TEXT
-                , ipaddr text);
+                , ipaddr text, action TEXT NOT NULL DEFAULT 'legacy');
 CREATE TABLE IF NOT EXISTS aqi (
     logtime INTEGER NOT NULL,
     aqi INTEGER NOT NULL

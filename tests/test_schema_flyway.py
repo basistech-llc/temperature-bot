@@ -1,7 +1,9 @@
 """Flyway schema tests."""
 
 from contextlib import closing
+import shutil
 import sqlite3
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -23,6 +25,18 @@ BASELINE_MIGRATION_PATH = (
 )
 MIGRATION_DIR = Path(ROOT_DIR) / "etc" / "flyway" / "sql"
 PERFORMANCE_MIGRATION_PATH = MIGRATION_DIR / "R__performance_samples.sql"
+CHANGELOG_ACTION_MIGRATION_PATH = MIGRATION_DIR / "V16__changelog_action.sql"
+
+
+def run_command(command):
+    """Run a migration command from the repository root."""
+    return subprocess.run(
+        command,
+        cwd=ROOT_DIR,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
 
 
 def table_names_created_by(sql_path):
@@ -55,12 +69,111 @@ def test_schema_file_contains_application_tables_only():
     assert "flyway_schema_history" not in tables
 
 
+def test_deploy_flyway_accepts_pending_migrations_and_backs_up_first(tmp_path):
+    """A production-style V11 database is backed up before pending migrations."""
+    if shutil.which("flyway") is None:
+        pytest.skip("Flyway is not installed")
+
+    old_migrations = tmp_path / "old-migrations"
+    old_migrations.mkdir()
+    for migration in MIGRATION_DIR.glob("V*.sql"):
+        version = int(migration.name.split("__", maxsplit=1)[0][1:])
+        if version <= 11:
+            shutil.copy2(migration, old_migrations / migration.name)
+
+    database = tmp_path / "production.db"
+    backups = tmp_path / "backups"
+    run_command(
+        [
+            "flyway",
+            "migrate",
+            f"-url=jdbc:sqlite:{database}",
+            f"-locations=filesystem:{old_migrations}",
+        ]
+    )
+
+    run_command(
+        [
+            "make",
+            f"DEPLOY_DB={database}",
+            f"DEPLOY_BACKUP_DIR={backups}",
+            "deploy-flyway",
+        ]
+    )
+
+    backup_files = list(backups.glob("temperature-bot.*.db"))
+    assert len(backup_files) == 1
+    with closing(sqlite3.connect(backup_files[0])) as backup:
+        latest_backup_version = backup.execute(
+            """
+            SELECT MAX(CAST(version AS INTEGER))
+            FROM flyway_schema_history
+            WHERE version IS NOT NULL AND success=1
+            """
+        ).fetchone()[0]
+        assert latest_backup_version == 11
+        assert (
+            backup.execute(
+                "SELECT COUNT(*) FROM sqlite_master WHERE name='performance_samples'"
+            ).fetchone()[0]
+            == 0
+        )
+
+    with closing(sqlite3.connect(database)) as migrated:
+        latest_migrated_version = migrated.execute(
+            """
+            SELECT MAX(CAST(version AS INTEGER))
+            FROM flyway_schema_history
+            WHERE version IS NOT NULL AND success=1
+            """
+        ).fetchone()[0]
+        assert latest_migrated_version == 16
+        assert (
+            migrated.execute(
+                "SELECT COUNT(*) FROM sqlite_master WHERE name='performance_samples'"
+            ).fetchone()[0]
+            == 1
+        )
+
+
 def test_schema_file_can_be_applied_twice():
     """The generated compatibility schema must remain idempotent."""
     with closing(sqlite3.connect(":memory:")) as conn:
         schema_sql = Path(SCHEMA_FILE_PATH).read_text(encoding="utf-8")
         conn.executescript(schema_sql)
         conn.executescript(schema_sql)
+
+
+def test_changelog_action_migration_classifies_only_unambiguous_history():
+    """V16 recognizes duplicate web timers but preserves ambiguous values."""
+    with closing(sqlite3.connect(":memory:")) as conn:
+        conn.executescript(BASELINE_MIGRATION_PATH.read_text(encoding="utf-8"))
+        conn.executemany(
+            """
+            INSERT INTO changelog
+                (logtime, device_id, new_value, agent, comment)
+            VALUES (1, 1, ?, ?, ?)
+            """,
+            [
+                ("1784431629", "web", "Rules disabled for 180 minutes"),
+                ("1784431629", "Mozilla/5.0", None),
+                ("24.4", "web", ""),
+                ("68-76", "web", "set range"),
+            ],
+        )
+        conn.executescript(
+            CHANGELOG_ACTION_MIGRATION_PATH.read_text(encoding="utf-8")
+        )
+
+        rows = conn.execute(
+            "SELECT new_value, action FROM changelog ORDER BY changelog_id"
+        ).fetchall()
+        assert rows == [
+            ("1784431629", "rules_suspension"),
+            ("1784431629", "rules_suspension"),
+            ("24.4", "legacy"),
+            ("68-76", "set_range"),
+        ]
 
 
 def test_performance_repeatable_migration_is_idempotent_and_indexed():

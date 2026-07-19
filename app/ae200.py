@@ -35,6 +35,11 @@ from app import performance_monitoring
 logger = logging.getLogger(__name__)
 B_XMLPROC_SUBPROTOCOL = Subprotocol("b_xmlproc")
 
+
+class AE200VerificationError(RuntimeError):
+    """The controller read-back did not match a completed write request."""
+
+
 # Fan mapping speeds. Note that there is no 'OFF'
 FAN_SPEED_AUTO = -1
 DRIVES = {0:"OFF", 1:"ON"}
@@ -60,6 +65,7 @@ ALERT_LABELS = {
     CHECK_WATER: "water issue",
 }
 AE200_COMMAND_LOCK_PATH = os.getenv("AE200_COMMAND_LOCK_PATH", "/tmp/temperature-bot-ae200.lock")
+AE200_WRITE_SETTLE_SECONDS = float(os.getenv("AE200_WRITE_SETTLE_SECONDS", "0.25"))
 
 # User-facing fan-speed labels, keyed by speed number. These intentionally
 # mirror the speed-button text rendered in room_dashboard.html / index.html so
@@ -459,6 +465,29 @@ def set_fan_speed(ae200_device, speed):
         return
     d = AE200Functions()
     d.send(ae200_device, {"FanSpeed": fan_speed})
+
+
+def set_fcu_state(ae200_device, *, drive=None, fan_speed=None):
+    """Send drive and fan speed in one AE-200 write request."""
+    attributes = {}
+    if drive is not None:
+        attributes[AE200_DRIVE_KEY] = DRIVES[drive]
+    if fan_speed is not None:
+        attributes[AE200_FAN_SPEED_KEY] = FAN_SPEEDS[fan_speed]
+    if not attributes:
+        raise ValueError("drive or fan_speed is required")
+    logger.info("set_fcu_state(%s,%s)", ae200_device, attributes)
+    if AE200_SIMULATOR:
+        simulated_devices[str(ae200_device)].update(attributes)
+        return
+    AE200Functions().send(ae200_device, attributes)
+
+
+def get_device_info_after_write(device):
+    """Read state after the configured AE-200 write-settling interval."""
+    if not AE200_SIMULATOR:
+        time.sleep(AE200_WRITE_SETTLE_SECONDS)
+    return get_device_info(device)
 
 
 def set_set_temp(ae200_device, set_temp_c):

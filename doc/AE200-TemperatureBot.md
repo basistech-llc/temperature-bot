@@ -161,6 +161,30 @@ This distinction matters in the UI:
 - Fan-speed `AUTO` means the unit chooses fan speed automatically.
 - Operation mode `AUTO` means automatic heating/cooling changeover.
 
+## AE-200 Schedules
+
+The Mitsubishi manuals document five weekly schedules, five annual patterns,
+and a current-day schedule. They also document a per-group operation that makes
+the controller's scheduled events available or unavailable. Remote-controller
+schedules are separate and are not necessarily disabled by that operation.
+
+TemperatureBot's current private `b_xmlproc` status request reads only the
+per-unit `Schedule`, `ScheduleAvail`, `TimerItem`, and `Hold` attributes. A
+read-only production query on July 18, 2026 confirmed that these flags are
+reported per unit. The current request does not retrieve the schedule events,
+times, weekly patterns, annual assignments, or current-day definitions.
+
+Do not infer a writable schedule-definition API from these status flags. Do not
+send `Schedule` or `Hold` changes until their exact protocol values and effects
+have been verified on a non-production controller or by capturing the AE-200
+web interface's request. Until then TemperatureBot cannot safely display all
+schedule contents or disable AE-200 scheduling programmatically.
+
+The minute collector already preserves the raw schedule flags and other AE-200
+state in `devlog.status_json`. A future autonomous-change audit should compare
+successive collected control fields and add explicit observed-change records;
+it must not present an observation as a TemperatureBot command.
+
 ## Guideline for Future Changes
 
 Do not add a mode to the FCU dropdown merely because the AE-200 can report it.
