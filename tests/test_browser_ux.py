@@ -13,6 +13,7 @@ from urllib.parse import parse_qs, urlparse
 import requests
 import pytest
 from playwright.sync_api import sync_playwright, expect
+from werkzeug.serving import make_server
 
 from conftest import test_database_conn_with_test_data, skip_on_github  # noqa: F401,F811  # pylint: disable=unused-import
 from app.main import app
@@ -160,26 +161,24 @@ def test_aqi_chart_first_render_and_selected_axis(
     test_database_conn_with_test_data,
 ):  # noqa: F811  # pylint: disable=unused-argument
     """AQI renders without console errors and owns the scale and grid when selected alone."""
-    base_url = "http://127.0.0.1:5008"
-
-    def run_app():
-        app.run(host="127.0.0.1", port=5008, debug=False, use_reloader=False)
-
-    server_thread = threading.Thread(target=run_app, daemon=True)
+    server = make_server("127.0.0.1", 0, app, threaded=True)
+    server_thread = threading.Thread(target=server.serve_forever, daemon=True)
     server_thread.start()
-    wait_for_server(f"{base_url}/health", timeout=20)
+    base_url = f"http://127.0.0.1:{server.server_port}"
 
-    with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(headless=True)
-        page = browser.new_page()
-        errors = []
-        page.on(
-            "console",
-            lambda message: errors.append(message.text)
-            if message.type == "error"
-            else None,
-        )
-        try:
+    try:
+        wait_for_server(f"{base_url}/health", timeout=20)
+        with sync_playwright() as playwright, playwright.chromium.launch(
+            headless=True
+        ) as browser:
+            page = browser.new_page()
+            errors = []
+            page.on(
+                "console",
+                lambda message: errors.append(message.text)
+                if message.type == "error"
+                else None,
+            )
             page.goto(f"{base_url}/chart_aqi", wait_until="networkidle")
             page.wait_for_function("aqiChart && aqiChart.getOption().series")
             chart_box = page.locator("#aqi-chart").bounding_box()
@@ -245,8 +244,10 @@ def test_aqi_chart_first_render_and_selected_axis(
             )
             assert layout["selected"]["AQI"] is True
             assert not errors
-        finally:
-            browser.close()
+    finally:
+        server.shutdown()
+        server.server_close()
+        server_thread.join(timeout=2)
 
 
 @pytest.mark.skipif(SKIP_BROWSER_TEST, reason="SKIP_BROWSER_TEST is set")

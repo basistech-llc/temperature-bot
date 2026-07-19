@@ -28,12 +28,12 @@ jobs:
       FLYWAY_VERSION: '12.8.1'
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           submodules: true
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
           cache: 'pip'
@@ -41,13 +41,13 @@ jobs:
             poetry.lock
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
-          node-version: '20'
+          node-version: '24'
 
       # Cache the project venv (created by Poetry in-project)
       - name: Cache .venv
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: .venv
           key: venv-${{ runner.os }}-${{ matrix.python-version }}-${{ hashFiles('poetry.lock') }}
@@ -56,7 +56,7 @@ jobs:
 
       # (Optional) cache ruff’s cache
       - name: Cache ruff cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.cache/ruff
           key: ruff-${{ runner.os }}-${{ hashFiles('.ruff*', 'pyproject.toml') }}
@@ -65,7 +65,7 @@ jobs:
 
       # Use a repo-local Playwright cache to make cross-OS paths easy
       - name: Cache Playwright browsers
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: .playwright
           key: pw-${{ runner.os }}-${{ hashFiles('poetry.lock') }}
