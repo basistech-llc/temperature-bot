@@ -67,6 +67,9 @@ ALERT_LABELS = {
 }
 AE200_COMMAND_LOCK_PATH = os.getenv("AE200_COMMAND_LOCK_PATH", "/tmp/temperature-bot-ae200.lock")
 AE200_WRITE_SETTLE_SECONDS = float(os.getenv("AE200_WRITE_SETTLE_SECONDS", "0.25"))
+AE200_WRITE_RESPONSE_TIMEOUT_SECONDS = float(
+    os.getenv("AE200_WRITE_RESPONSE_TIMEOUT_SECONDS", "10")
+)
 
 # User-facing fan-speed labels, keyed by speed number. These intentionally
 # mirror the speed-button text rendered in room_dashboard.html / index.html so
@@ -399,7 +402,15 @@ class AE200Functions:
             raise RuntimeError("AE200_SIMULATOR not compatible with AE200Functions")
         attrs = " ".join([f'{key}="{attributes[key]}"' for key in attributes])
         payload = setRequestPayload.format(deviceId=deviceId, attrs=attrs)
-        response_xml = await self._exchange(payload, sample, receive=True)
+        try:
+            response_xml = await asyncio.wait_for(
+                self._exchange(payload, sample, receive=True),
+                timeout=AE200_WRITE_RESPONSE_TIMEOUT_SECONDS,
+            )
+        except TimeoutError as error:
+            raise AE200VerificationError(
+                "Timed out waiting for AE-200 setResponse"
+            ) from error
         response_root = ET.fromstring(response_xml)
         command = response_root.findtext("./Command") or ""
         if command != "setResponse":

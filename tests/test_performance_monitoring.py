@@ -1,6 +1,7 @@
 """Substantive SQLite, timing, parser, and loopback probe tests."""
 
 import asyncio
+import contextlib
 import logging
 import socket
 import time
@@ -337,6 +338,27 @@ def test_ae200_set_classifies_unexpected_response_as_controller_failure(monkeypa
     monkeypatch.setattr(ae200, "AE200_SIMULATOR", False)
     monkeypatch.delenv("PYTEST", raising=False)
     with pytest.raises(ae200.AE200VerificationError, match="getResponse"):
+        asyncio.run(exercise())
+
+
+def test_ae200_set_times_out_waiting_for_controller_response(monkeypatch):
+    async def exercise():
+        async def handler(websocket):
+            with contextlib.suppress(websockets.exceptions.ConnectionClosed):
+                await websocket.recv()
+                await websocket.wait_closed()
+
+        async with websockets.serve(
+            handler, "127.0.0.1", 0, subprotocols=["b_xmlproc"]
+        ) as server:
+            port = server.sockets[0].getsockname()[1]
+            controller = ae200.AE200Functions(f"127.0.0.1:{port}")
+            await controller.sendAsync(10, {ae200.AE200_DRIVE_KEY: "ON"})
+
+    monkeypatch.setattr(ae200, "AE200_SIMULATOR", False)
+    monkeypatch.setattr(ae200, "AE200_WRITE_RESPONSE_TIMEOUT_SECONDS", 0.25)
+    monkeypatch.delenv("PYTEST", raising=False)
+    with pytest.raises(ae200.AE200VerificationError, match="Timed out"):
         asyncio.run(exercise())
 
 
