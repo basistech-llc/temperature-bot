@@ -1,5 +1,7 @@
 """Typed FCU command contract shared by routes and the rules engine."""
 
+from collections.abc import Hashable
+
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from . import ae200
@@ -37,7 +39,9 @@ class FcuStateControl(BaseModel):
     @classmethod
     def normalize_fan_speed(cls, value):
         code = _control_code(value, ae200.FAN_SPEED_NAMES, "fan_speed")
-        if code is not None and code not in ae200.FAN_SPEEDS:
+        if code is not None and (
+            not isinstance(code, Hashable) or code not in ae200.FAN_SPEEDS
+        ):
             raise ValueError(f"unknown fan_speed: {value!r}")
         return code
 

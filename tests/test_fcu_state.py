@@ -39,6 +39,7 @@ def test_fcu_state_contract_normalizes_named_and_numeric_controls(
         ({"device_id": 1, "drive": 9}, "unknown drive"),
         ({"device_id": 1, "drive": "running"}, "unknown drive"),
         ({"device_id": 1, "drive": []}, "valid integer"),
+        ({"device_id": 1, "fan_speed": []}, "unknown fan_speed"),
         ({"device_id": 1, "fan_speed": 9}, "unknown fan_speed"),
         ({"device_id": 1, "fan_speed": "turbo"}, "unknown fan_speed"),
     ],

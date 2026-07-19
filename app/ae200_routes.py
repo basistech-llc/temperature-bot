@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import time
+import xml.etree.ElementTree as ET
 
 from flask import Blueprint, jsonify, render_template, request
 from pydantic import BaseModel, Field
+from websockets.exceptions import WebSocketException
 
 from . import ae200, ae200_command_log, ae200_notifications
 from .models import json_ready
@@ -57,7 +59,13 @@ def ae200_status():
                     status=status,
                 )
             )
-        except (OSError, RuntimeError, ValueError) as error:
+        except (
+            OSError,
+            RuntimeError,
+            ValueError,
+            ET.ParseError,
+            WebSocketException,
+        ) as error:
             units.append(
                 AE200UnitSnapshot(
                     device_id=device_id,

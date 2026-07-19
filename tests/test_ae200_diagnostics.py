@@ -1,5 +1,10 @@
 """AE-200 diagnostics page and typed audit API tests."""
 
+import xml.etree.ElementTree as ET
+
+import pytest
+from websockets.exceptions import WebSocketException
+
 from conftest import flask_test_client  # noqa: F401  # pylint: disable=unused-import
 
 from app import ae200, ae200_command_log, ae200_notifications
@@ -25,6 +30,22 @@ def test_ae200_status_preserves_schedule_and_raw_controller_fields(flask_test_cl
     assert {"device_id", "name", "status"} <= snapshot["units"][0].keys()
     assert "Schedule" in snapshot["units"][0]["status"]
     assert "ScheduleAvail" in snapshot["units"][0]["status"]
+
+
+@pytest.mark.parametrize(
+    "error", [WebSocketException("disconnected"), ET.ParseError("malformed XML")]
+)
+def test_ae200_status_isolates_transport_and_xml_errors(
+    error, monkeypatch, flask_test_client
+):  # noqa: F811
+    def fail_device_read(_device_id):
+        raise error
+
+    monkeypatch.setattr(ae200, "get_device_info", fail_device_read)
+    response = flask_test_client.get("/api/v1/ae200/status")
+    assert response.status_code == 200
+    assert response.json["units"]
+    assert all(unit["error"].endswith(str(error)) for unit in response.json["units"])
 
 
 def test_ae200_command_api_returns_latest_parsed_command(flask_test_client):  # noqa: F811
