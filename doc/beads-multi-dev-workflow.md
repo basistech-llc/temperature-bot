@@ -38,9 +38,10 @@ developers; agents follow the same steps but defer `bd dolt push` and
 **Session start (and before picking work):**
 
 ```bash
-git pull            # or your normal branch update
-bd dolt pull        # get teammates' issue state
-bd ready            # what's unblocked and unclaimed
+git pull                 # or your normal branch update
+bd dolt pull             # get teammates' issue state
+bin/beads_pr_sweep.py    # dry run: spot beads gone stale vs PR state
+bd ready                 # what's unblocked and unclaimed
 ```
 
 **Starting a task:**
@@ -53,20 +54,61 @@ git checkout -b hvac-NN-short-description
 ```
 
 Reference the bead id in the branch name, commits, and PR description.
+End the first line of each commit message with the bead id in parentheses,
+e.g. `Fix damper hysteresis (hvac-NN)` — the PR sweep (below) greps for it.
 
 **During work:** file discovered problems as you go
 (`bd create ... --deps discovered-from:hvac-NN`) and `bd dolt push` state
 changes that matter to others.
 
-**At PR merge (not at branch push):**
+**When you commit bead work to the branch** (first commit is enough),
+record the branch on the bead so merge-time reconciliation can find it:
 
 ```bash
-bd close hvac-NN --reason "Merged in PR #NNN"
+bd update hvac-NN --set-metadata branch=$(git branch --show-current)
+```
+
+**When the PR opens**, stamp every bead riding it (several beads per
+branch/PR is normal) and list the bead ids in the PR description:
+
+```bash
+bd update hvac-NN --set-metadata pr=204   # repeat for each bead in the PR
+```
+
+**At PR merge (not at branch push)** — whoever merges runs:
+
+```bash
+bin/beads_pr_sweep.py --close   # closes every bead stamped with the merged PR
 bd dolt push
 ```
 
+Without `gh` available, fall back to closing manually, one
+`bd close hvac-NN --reason "Merged in PR #NNN"` per bead.
+
 Close on merge, not on "code done" — a PR can be sent back in review, and an
-open in-review bead tells the truth better than a closed one.
+open in-review bead tells the truth better than a closed one. The
+session-start sweep finds beads whose PR has merged, so nothing is lost if
+this step is missed.
+
+## Automation: the PR sweep
+
+`bin/beads_pr_sweep.py` reconciles open beads against GitHub PR state using
+the `branch`/`pr` metadata stamped above (requires `gh`, authenticated):
+
+```bash
+bin/beads_pr_sweep.py           # dry run: report only
+bin/beads_pr_sweep.py --close   # stamp discovered PR numbers, close merged
+```
+
+It reports beads whose PR is still open, proposes `pr=` stamps for beads
+whose branch has grown a PR, closes beads whose PR merged (`--close`), and
+flags beads whose PR was closed without merging. As a safety net it also
+scans recent merged PRs (title, body, commit messages) for bead ids that
+were never stamped; those are reported for manual review, never auto-closed,
+because a mention alone does not prove the work is complete.
+
+Run it after `bd dolt pull` at session start, or any time after merging a
+PR. It never pushes — follow with `bd dolt push` when appropriate.
 
 ## The JSONL file: where PRs and Beads collide
 
