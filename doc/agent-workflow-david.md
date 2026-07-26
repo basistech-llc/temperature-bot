@@ -2,7 +2,9 @@
 
 GitHub Issues are the canonical tracker for durable project work in this repo.
 Use `doc/agent-workflow-simson.md` for project issue tracking, including work
-driven by David.
+driven by David. For sharing the Beads queue across multiple developers
+(branch/PR flow, `bd dolt` push/pull, JSONL conflict handling), see
+`doc/beads-multi-dev-workflow.md`.
 
 David may still use **bd (Beads)** as a personal/local working queue. Beads
 entries are not authoritative project records. Only use `bd` when the user

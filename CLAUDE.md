@@ -42,7 +42,10 @@ tracking, creating, updating, or closing work.
 David may still use Beads as a personal/local working queue. Beads entries are
 not authoritative project records. Do not create, close, or rely on Beads issues
 for project tracking unless the user explicitly asks for local Beads
-housekeeping; for that narrow case, read `doc/agent-workflow-david.md`.
+housekeeping; for that narrow case, read `doc/agent-workflow-david.md`. When
+multiple developers share the Beads queue (branch/PR flow, `bd dolt`
+push/pull, JSONL conflict handling), follow
+`doc/beads-multi-dev-workflow.md`.
 
 `.beads/` is intentionally kept in the Git repo so agents can read and review
 David's local or historical queue. Keep `.beads/issues.jsonl`, metadata, and
