@@ -53,9 +53,10 @@ bd dolt push                # publish the claim now, not at merge time
 git checkout -b hvac-NN-short-description
 ```
 
-Reference the bead id in the branch name, commits, and PR description.
-End the first line of each commit message with the bead id in parentheses,
-e.g. `Fix damper hysteresis (hvac-NN)` — the PR sweep (below) greps for it.
+Reference the bead id in the branch name and in every commit. End the first line
+of each commit message with the bead id in parentheses, e.g.
+`Fix damper hysteresis (hvac-NN)` — the PR sweep (below) greps commit messages
+for it, so this convention is what makes the safety net work.
 
 **During work:** file discovered problems as you go
 (`bd create ... --deps discovered-from:hvac-NN`) and `bd dolt push` state
@@ -69,11 +70,19 @@ bd update hvac-NN --set-metadata branch=$(git branch --show-current)
 ```
 
 **When the PR opens**, stamp every bead riding it (several beads per
-branch/PR is normal) and list the bead ids in the PR description:
+branch/PR is normal):
 
 ```bash
 bd update hvac-NN --set-metadata pr=204   # repeat for each bead in the PR
 ```
+
+The `pr=` stamp is the whole mechanism: it is what closes the bead at merge.
+Listing bead ids or notes in the PR *description* is optional human courtesy for
+reviewers — the sweep does read PR bodies, but only in its report-only safety-net
+scan, which the commit-message convention above already covers. Do not treat a
+hand-written description list as required, and do not hand-maintain it: it is a
+mirror of machine-derived state, so it silently goes stale when beads join or
+leave the branch, where metadata cannot.
 
 **At PR merge (not at branch push)** — whoever merges runs:
 
