@@ -105,6 +105,7 @@ def set_fan_speed(conn, body: SpeedControl):
         seconds=constants.RULES_DISABLE_SECONDS,
         ipaddr=request.remote_addr,
         agent=request.headers.get("User-Agent"),
+        comment=_rules_disabled_comment(),
     )
     return jsonify(json_ready(CommandResponse.model_validate({"status": "ok", **ret})))
 
@@ -405,7 +406,12 @@ def disable_rules(conn):
     if seconds is None:
         return jsonify({"error": "seconds parameter is required"}), 400
 
-    rules_engine.disable_all_rules(conn, seconds)
+    rules_engine.disable_all_rules(
+        conn,
+        seconds,
+        ipaddr=request.remote_addr,
+        agent=request.headers.get("User-Agent"),
+    )
     return jsonify({"status": "success", "seconds": seconds})
 
 

@@ -92,6 +92,17 @@ def test_set_auto_temp_endpoint_updates_dual_setpoints(flask_test_client):  # no
             status = json.loads(row["status_json"])
             assert status[ae200.AE200_HEAT_SET_TEMP_KEY] == "20.0"
             assert status[ae200.AE200_COOL_SET_TEMP_KEY] == "25.0"
+
+            changelog = conn.execute(
+                "SELECT current_values, new_value, comment FROM changelog "
+                "WHERE device_id=? ORDER BY changelog_id DESC LIMIT 1",
+                (device_id,),
+            ).fetchone()
+            assert changelog["current_values"] == "Heat=19.0 Cool=24.0"
+            assert changelog["new_value"] == "Heat=20.0 Cool=25.0"
+            assert changelog["comment"] == (
+                "set auto temps Heat=19 Cool=24 -> Heat=20 Cool=25"
+            )
         finally:
             conn.close()
     finally:
@@ -163,6 +174,16 @@ def test_set_mode_endpoint_records_mode_and_disables_rules(flask_test_client):  
             (device_id,),
         )
         assert verify_cursor.fetchone()["comment"] == "Rules disabled for 180 minutes"
+        verify_cursor.execute(
+            """
+            SELECT comment FROM changelog
+            WHERE device_id=? AND new_value=?
+            ORDER BY changelog_id DESC
+            LIMIT 1
+            """,
+            (device_id, target_mode),
+        )
+        assert verify_cursor.fetchone()["comment"] == "mode COOL -> AUTO"
         verify_conn.close()
     finally:
         if original_mode in ae200.AE200_ALLOWED_SET_MODES:

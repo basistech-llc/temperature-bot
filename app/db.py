@@ -1671,7 +1671,14 @@ def _float_or_none(value: object) -> float | None:
     return number if math.isfinite(number) else None
 
 
-def _set_temp_c_from_status(status: dict[str, Any] | None) -> float | None:
+def set_temp_c_from_status(status: dict[str, Any] | None) -> float | None:
+    """Return the numeric SetTemp from an AE-200 status dict, if it has one.
+
+    The AE-200 reports SetTemp as a string and not always in a canonical form
+    ("24" and "24.0" both occur), so comparing set points as raw strings reports
+    changes that did not happen. Auto-mode's pair has the same hazard; it goes
+    through ``ae200.extract_set_temperatures``.
+    """
     if not isinstance(status, dict):
         return None
     return _float_or_none(status.get("SetTemp"))
@@ -1696,7 +1703,7 @@ def _latest_set_temp_c_for_device(conn, device_id: int) -> float | None:
         status = json.loads(row["status_json"] or "{}")
     except json.JSONDecodeError:
         return None
-    return _set_temp_c_from_status(status)
+    return set_temp_c_from_status(status)
 
 
 def _round_temp_c(value: float) -> float:
@@ -2707,7 +2714,7 @@ def get_device_status(conn) -> List[Dict[str, Any]]:
         if data["device_id"] in fcu_device_ids:
             set_range = set_ranges.get(data["device_id"]) or default_fcu_set_range(
                 data["device_id"],
-                _set_temp_c_from_status(data.get("status")),
+                set_temp_c_from_status(data.get("status")),
             )
             data["set_range_low_c"] = set_range.set_range_low_c
             data["set_range_high_c"] = set_range.set_range_high_c
