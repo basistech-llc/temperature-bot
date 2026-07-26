@@ -5,7 +5,7 @@
 // - STATUS_ENDPOINT, buildSeriesAndAxis, loadAllSensors,
 //   clearTemporalButtonSelection, setTemporalButtonSelection,
 //   setPickersFromRange, pickersChanged, setTimePrevDays, formatTime,
-//   renderSensorCheckboxes.
+//   renderSensorCheckboxes, setupCsvDownload, checkedVisibleSeries.
 
 let tempChart = null; // ECharts instance for temperature
 let tempData = []; // series from /api/v1/temperature
@@ -431,66 +431,25 @@ function setupTemperatureEventListeners() {
   if (ed) ed.addEventListener("change", () => { pickersChanged(); reloadData(); });
 
   // CSV export
-  const downloadBtn = document.getElementById("downloadCsv");
-  if (downloadBtn) {
-    downloadBtn.addEventListener("click", () => {
-      const checkboxes = document.querySelectorAll(
-        "#checkboxes input[type=checkbox]",
-      );
-      const visibleSeries = [];
-
-      if (currentDeviceIds && currentDeviceIds.length > 0) {
-        visibleSeries.push(...tempData);
-      } else {
-        const tempDataMap = new Map(
-          tempData.map((s) => [s.device_id, s]),
-        );
-        checkboxes.forEach((cb, i) => {
-          const sensor = allSensors[i];
-          if (!sensor) return;
-          const seriesData = tempDataMap.get(sensor.device_id);
-          if (cb.checked && seriesData) {
-            visibleSeries.push(seriesData);
-          }
-        });
-      }
-
-      if (visibleSeries.length === 0) {
-        alert("No data to export");
-        return;
-      }
-
-      const csvNames = visibleSeries.map(
-        (s) => (allSensors.find((sens) => sens.device_id === s.device_id) || {}).fullName || s.name,
-      );
-      let csvContent = "data:text/csv;charset=utf-8,";
-      csvContent += "Time," + csvNames.join(",") + "\n";
-
-      const allTimestamps = new Set();
-      visibleSeries.forEach((series) => {
-        series.data.forEach(([ts]) => allTimestamps.add(ts));
-      });
-
-      const sortedTimestamps = Array.from(allTimestamps).sort((a, b) => a - b);
-
-      sortedTimestamps.forEach((ts) => {
-        const row = [formatTime(ts * 1000)];
-        visibleSeries.forEach((series) => {
-          const dataPoint = series.data.find(([t]) => t === ts);
-          row.push(dataPoint ? dataPoint[1] : "");
-        });
-        csvContent += row.join(",") + "\n";
-      });
-
-      const encodedUri = encodeURI(csvContent);
-      const link = document.createElement("a");
-      link.setAttribute("href", encodedUri);
-      link.setAttribute("download", "temperature_data.csv");
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-    });
-  }
+  setupCsvDownload(() => {
+    const checkboxes = document.querySelectorAll(
+      "#checkboxes input[type=checkbox]",
+    );
+    const visibleSeries =
+      currentDeviceIds && currentDeviceIds.length > 0
+        ? tempData.slice()
+        : checkedVisibleSeries(
+            checkboxes,
+            allSensors,
+            new Map(tempData.map((s) => [s.device_id, s])),
+          );
+    const names = visibleSeries.map(
+      (s) =>
+        (allSensors.find((sens) => sens.device_id === s.device_id) || {})
+          .fullName || s.name,
+    );
+    return { visibleSeries, names, filename: "temperature_data.csv" };
+  });
 
   // Checkbox controls (Select All / Clear All)
   const selectAllBtn = document.getElementById("selectAllBtn");

@@ -410,10 +410,101 @@ function renderSensorCheckboxes(availableNames, onChange) {
   );
 }
 
+/****************************************************************
+ * CSV export (shared)
+ ****************************************************************/
+/**
+ * Collect the series whose checkbox is checked. Checkboxes are aligned by
+ * index with sensors; dataMap is keyed by device_id.
+ */
+function checkedVisibleSeries(checkboxes, sensors, dataMap) {
+  const visibleSeries = [];
+  checkboxes.forEach((cb, i) => {
+    const sensor = sensors[i];
+    if (!sensor) return;
+    const seriesData = dataMap.get(sensor.device_id);
+    if (cb.checked && seriesData) {
+      visibleSeries.push(seriesData);
+    }
+  });
+  return visibleSeries;
+}
+
+/**
+ * Build CSV text from visible series: a "Time,<name>,..." header, then one
+ * row per timestamp in the union of all series' timestamps (epoch seconds),
+ * with blank cells where a series has no reading at that timestamp. Values
+ * are exported raw as stored (e.g. Celsius, Bq/m³), independent of
+ * display-unit preferences.
+ *
+ * @param {Array<{data: Array<[number, number]>}>} visibleSeries
+ * @param {string[]} seriesNames - column headers, aligned with visibleSeries
+ * @param {(ts: number) => string} [formatTimestamp] - defaults to formatTime
+ */
+function buildCsvContent(visibleSeries, seriesNames, formatTimestamp) {
+  const formatter = formatTimestamp || ((ts) => formatTime(ts * 1000));
+  // Quote fields that would break the row layout — formatTime output and
+  // sensor names routinely contain commas.
+  const csvField = (value) => {
+    if (value === null || value === undefined) return "";
+    const text = String(value);
+    return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+  };
+  let csvContent = "Time," + seriesNames.map(csvField).join(",") + "\n";
+
+  const allTimestamps = new Set();
+  const seriesValueMaps = visibleSeries.map((series) => {
+    series.data.forEach(([ts]) => allTimestamps.add(ts));
+    return new Map(series.data);
+  });
+  const sortedTimestamps = Array.from(allTimestamps).sort((a, b) => a - b);
+
+  sortedTimestamps.forEach((ts) => {
+    const row = [csvField(formatter(ts))];
+    seriesValueMaps.forEach((valueMap) => {
+      row.push(valueMap.has(ts) ? csvField(valueMap.get(ts)) : "");
+    });
+    csvContent += row.join(",") + "\n";
+  });
+  return csvContent;
+}
+
+function triggerCsvDownload(csvContent, filename) {
+  // encodeURIComponent, not encodeURI: a "#" in a sensor name or value would
+  // otherwise truncate the data: URI.
+  const encodedUri =
+    "data:text/csv;charset=utf-8," + encodeURIComponent(csvContent);
+  const link = document.createElement("a");
+  link.setAttribute("href", encodedUri);
+  link.setAttribute("download", filename);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+
+/**
+ * Wire the page's #downloadCsv button. getExport returns
+ * { visibleSeries, names, filename } for the currently-displayed data.
+ */
+function setupCsvDownload(getExport) {
+  const downloadBtn = document.getElementById("downloadCsv");
+  if (!downloadBtn) return;
+  downloadBtn.addEventListener("click", () => {
+    const { visibleSeries, names, filename } = getExport();
+    if (visibleSeries.length === 0) {
+      alert("No data to export");
+      return;
+    }
+    triggerCsvDownload(buildCsvContent(visibleSeries, names), filename);
+  });
+}
+
 if (typeof module !== "undefined" && module.exports) {
   module.exports = {
+    buildCsvContent,
     buildSeriesAndAxis,
     CHART_GAP_BREAK_SECONDS,
+    checkedVisibleSeries,
     lineDataWithGapBreaks,
     shiftTimeWindow,
     timeWindowFromPercent,

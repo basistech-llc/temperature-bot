@@ -2,6 +2,7 @@
 {% block title %}FCU and Room History{% endblock %}
 {% block head %}
 {% if dist %}<script src="https://cdn.jsdelivr.net/npm/echarts@{{ echarts_version }}"></script>{% else %}<script src="/static/echarts@5"></script>{% endif %}
+<script src="/static/time_series_chart_core.js"></script>
 <script src="/static/fcu_history_chart.js"></script>
 {% endblock %}
 {% block body %}
@@ -9,5 +10,6 @@
   <h1>FCU and Room History</h1>
   <p id="fcu-history-message" role="status" aria-live="polite"></p>
   <div id="fcu-history-chart" class="fcu-history-chart"></div>
+  <button id="downloadCsv">Download CSV</button>
 </main>
 {% endblock %}
