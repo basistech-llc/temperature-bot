@@ -21,8 +21,8 @@ rather than a canonical record, and is marked unverified where it appears.
 |---|---|---|---|---|---|
 | `air.basistech.net` | 8100 | `air_basistech_net.service` | `/home/air/temperature-bot` | `simsong` | `/var/db/temperature-bot.db` |
 | staging | 8101 | `air-stage_basistech_net.service` | `/home/air-stage/temperature-bot` | `simsong` | `/home/air-stage/var/db/temperature-bot.db` |
-| `slg1.basistech.net` | 8003 | `slg1_basistech_net.service` | `/home/simsong/temperature-bot` | `simsong` | `/var/db/temperature-bot.db` (**production DB**) |
-| `deg1.basistech.net` | 8004 | `deg1_basistech_net.service` | `/home/deg/temperature-bot` | `deg` | `/home/deg/temperature-bot/temperature-bot.db` |
+| `slg1.basistech.net` | 8003 | `slg1_basistech_net.service` | `/home/simsong/temperature-bot` | `simsong` | selectable — see below |
+| `deg1.basistech.net` | 8004 | `deg1_basistech_net.service` | `/home/deg/temperature-bot` | `deg` | selectable — see below |
 
 Ports, app directories, service accounts, and `DB_PATH` in this table are read
 from the checked-in unit files in `etc/*.service`, which must be copied to
@@ -35,16 +35,31 @@ resource, and CPU and memory pressure from one instance is felt by all of them �
 including production. Deploying to a "test" instance is not free of production
 risk.
 
-Three consequences worth internalizing before touching anything:
+`slg1` and `deg1` are parallel developer instances — one playground each, `slg1`
+for Simson and `deg1` for David. They differ only in DNS name, port, service
+account, and home directory. Neither is more authoritative or more "staging"
+than the other, and neither is inherently a sandbox: each selects its database
+through `DB_PATH` in its own unit file, and can point at the live production
+database or at a private copy. See "Choosing which database a developer instance
+uses" below.
 
-- `slg1` points at the **production database**. It is a second web front end on
-  production data, not an isolated sandbox.
-- `deg1` is the safe place to observe application changes first: it is the only
-  instance with its own database. It is *not* an independent host-capacity test,
-  because it shares the machine with production.
-- The deployment order for any change is local → `deg1` → `slg1` → `air`
-  (`doc/tech-debt.md`). Deployment to `slg1` and `air` is human-authorized and
-  human-executed; agents are not authorized to deploy there.
+Consequences worth internalizing before touching anything:
+
+- **Read the installed unit before assuming which database an instance is on.**
+  `/etc/systemd/system/<unit>` is what runs; the copy in `etc/` is only what was
+  last committed, and the two drift. An instance pointed at
+  `/var/db/temperature-bot.db` is another front end on live production data.
+- **Pointing at production is not read-only.** The web app writes — changelog
+  entries, rules-disable timers, device metadata — and SQLite in WAL mode needs
+  write access to the database and its directory even to read.
+- These instances are *not* independent host-capacity tests, because they share
+  the machine with production. Watch aggregate CPU and memory, not just the one
+  process.
+- `doc/tech-debt.md` records a promotion order of local → `deg1` → `slg1` →
+  `air` for changes under review. Read that as a sequence for staged review, not
+  as a difference in kind between the two developer instances. Deployment to
+  `air` is human-authorized and human-executed; agents are not authorized to
+  deploy to `slg1` or `air`.
 
 ## Prerequisites
 
@@ -211,9 +226,9 @@ The per-minute runner does more than read: it executes the rules engine and
 issues real fan-speed and drive commands to the AE-200. **Only one instance may
 run it.** A second collector will fight production for control of the hardware.
 
-An observation instance such as `deg1` should run the web service only, with no
-runner cron entries. Rules changes are shadow-only on `deg1` and `slg1` and must
-not send commands until a human approves the cutover (`doc/tech-debt.md`).
+A developer instance — `slg1` or `deg1` — should run the web service only, with
+no runner cron entries. Rules changes are shadow-only on both and must not send
+commands until a human approves the cutover (`doc/tech-debt.md`).
 
 If this instance genuinely is the collector, the production cron entries are
 recorded as comments in the Makefile (`Cron targets` section) and cover the
@@ -234,6 +249,114 @@ flyway validate -url="jdbc:sqlite:<DB_PATH>" -locations="filesystem:etc/flyway/s
 Then load the site through nginx and confirm the dashboard renders. Watch CPU
 and memory for a few minutes — the shared machine hosts several instances, and
 worker counts are generous.
+
+## Choosing which database a developer instance uses
+
+`slg1` and `deg1` each select their database with `DB_PATH` in their unit file.
+Switching between the live production database and a private copy is routine:
+production data makes a change realistic, a private copy makes it safe. This
+section is the procedure for both instances — substitute the account, port, and
+unit name from the inventory table.
+
+### 1. Get a database to point at
+
+Skip this when switching *to* production. To take a private copy, run this on
+the server:
+
+```bash
+mkdir -p /home/deg/temperature-bot/var/db
+sqlite3 /var/db/temperature-bot.db \
+  ".backup '/home/deg/temperature-bot/var/db/temperature-bot.db'"
+```
+
+`.backup` is the right tool here: production is written every minute, and it
+takes a consistent snapshot where `cp` can capture a torn page.
+
+If reading `/var/db/temperature-bot.db` requires `sudo`, `chown` the copy to the
+service account afterwards. A root-owned copy leaves the instance unable to
+write it, which surfaces as the permission failure described below rather than
+as anything mentioning ownership.
+
+`make fetch-dev-db` also produces this layout, but it is built for a developer
+laptop — it rsyncs `air.basistech.net:/var/db/` (the same machine, when run on
+the server) and passes `--delete`, so it will remove anything else living in the
+target directory. Prefer `.backup` on the server itself.
+
+A copy is a fork, not a view: it stops receiving new readings the moment it is
+made, and nothing written through it reaches production.
+
+### 2. Point the unit at it
+
+Edit the instance's unit in `etc/` so the change is versioned rather than only
+live, then install it:
+
+```bash
+# Edit etc/deg1_basistech_net.service so exactly one DB_PATH line is active:
+#   Environment="DB_PATH=/home/deg/temperature-bot/var/db/temperature-bot.db"
+sudo cp -f etc/deg1_basistech_net.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl restart deg1_basistech_net.service
+```
+
+Two cautions on this step:
+
+- **`daemon-reload` before `restart`**, or systemd restarts the old definition
+  and the instance silently keeps using the previous database.
+- **A repo edit becomes a dirty working tree.** `make deploy` starts with
+  `git pull --ff-only`, which refuses to run when an incoming commit also
+  touches the file you edited — and, when it does not, silently leaves your
+  edit in place, so the checkout quietly diverges from the branch instead.
+  Either commit the change, or use a systemd drop-in instead —
+  `/etc/systemd/system/deg1_basistech_net.service.d/db.conf` containing a
+  `[Service]` section with the `Environment=` line — which overrides the unit
+  without touching the repository. A drop-in also keeps one developer's
+  playground state out of shared history; the tradeoff is that the setting is
+  then invisible to anyone reading `etc/`.
+
+### 3. Verify the switch took
+
+```bash
+systemctl show deg1_basistech_net.service -p Environment   # which DB_PATH is live
+curl -m 10 -sS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8004/
+ss -ltn 'sport = :8004'
+sudo journalctl -u deg1_basistech_net.service -e -n 100
+```
+
+`systemctl show` is the authoritative answer to "which database is this instance
+actually using" — it reflects what systemd loaded, including any drop-in, rather
+than what a file on disk says.
+
+In the `ss` output, `Recv-Q` on a *listening* socket is the number of connections
+that finished the TCP handshake and are queued waiting for the application to
+accept them; it should be `0`. A number that stays above zero means the workers
+are wedged — blocked on a database they cannot open, for example — and are no
+longer accepting connections, even though the port is still open and systemd
+reports the service as active.
+
+Expect the dashboard to show different data after the switch. Confirm you are
+looking at the instance you think you are by checking its port directly rather
+than its URL — nginx is believed to route unmatched server names to production
+(see the unverified nginx section above), so a misconfigured name can quietly
+show you production instead.
+
+### Failure modes to expect
+
+- **The instance does not come up, and the journal names a schema mismatch.**
+  Most likely the database is older than the code. `app/main.py` calls
+  `validate_database_schema_on_startup()` while building the Flask app, which
+  refuses to serve against a stale schema and exits instead. This is the guard
+  working. Migrate the copy with
+  `flyway migrate -url="jdbc:sqlite:<path>" -locations="filesystem:etc/flyway/sql"`
+  and restart. This is the guard working, not a bug.
+- **Permission denied on the database.** The service account must be able to
+  write both the database file *and* its directory — WAL mode creates `-wal` and
+  `-shm` siblings. `deg1` runs as `deg`, so pointing it at `/var/db/` requires
+  that account to have write access there; check before assuming a read-only
+  front end is possible.
+- **An empty file where the database should be.** Anything that starts the app
+  against a missing or empty database gets a schema bootstrapped from
+  `etc/schema.sql` with no Flyway history — see the warning in step 6 of the
+  bring-up. Delete it and take the copy again.
 
 ## Deploying to an existing instance
 
