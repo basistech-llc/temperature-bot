@@ -18,6 +18,7 @@ from app.dashboard_views import (
     build_dashboard_page,
 )
 from app.models import Room
+from tests.conftest import flask_test_client  # noqa: F401  pylint: disable=unused-import
 
 
 def _raw_row(**overrides):
@@ -136,3 +137,37 @@ def test_build_dashboard_page_groups_and_summarizes():
     hickory = page.room_groups[0]
     assert [device.device_name for device in hickory.devices] == ["Hickory Sensor"]
     assert page.table_update_summaries["fcu"] is not None
+
+
+def test_fcu_without_a_temperature_still_renders_its_live_cell(
+    flask_test_client, test_database_conn_with_test_data  # noqa: F811
+):
+    """An FCU whose latest reading has no temperature keeps its poll target.
+
+    unit_speed.js fills the FCU temperature cell by id on every poll. The
+    template used to guard that cell with `device.temp10x is not none`, which
+    was always true only because a missing temperature meant the dict key was
+    absent -- Jinja's Undefined, not None. Typing the row turned that into a
+    real None and made the previously dead `n/a` branch live, which would drop
+    the id and leave the cell blank for the lifetime of the page even after the
+    unit resumed reporting.
+    """
+    conn, _, _ = test_database_conn_with_test_data
+    device_id = conn.execute(
+        "INSERT INTO devices (device_name, device_type) VALUES ('Templess FCU', 'FCU')"
+    ).lastrowid
+    conn.execute(
+        "INSERT INTO devlog (device_id, logtime, duration, temp10x, status_json)"
+        " VALUES (?, ?, 60, NULL, ?)",
+        (
+            device_id,
+            int(time.time()),
+            '{"Drive": "ON", "FanSpeed": "LOW", "Mode": "COOL", "SetTemp": "22"}',
+        ),
+    )
+    conn.commit()
+
+    html = flask_test_client.get("/").get_data(as_text=True)
+
+    assert f'id="fcu-temp-{device_id}"' in html
+    assert "cell-temp-na" not in html

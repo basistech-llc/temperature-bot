@@ -9,8 +9,17 @@ between the route and ``index.html`` explicit and checkable.
 Two rules make that work:
 
 - ``DashboardDeviceView`` sets ``extra="forbid"``. A key the database layer
-  starts emitting, or a display field this module forgets to declare, raises at
-  build time instead of quietly vanishing from the page.
+  starts emitting, or a display field this module forgets to declare, raises
+  instead of quietly vanishing from the page.
+
+  That raise happens at *request* time, not at import or in CI: there is no
+  build step. A migration that adds a column to ``devices`` or ``devlog`` will
+  therefore surface here first, because ``LATEST_DEVICE_STATUS_SQL`` selects
+  ``l.*`` -- and it will take ``/`` down rather than degrade, since web routes
+  have no error handler. Failing loudly is the intent (a silently missing
+  dashboard field is worse than an obvious outage), but adding a column means
+  declaring it here in the same change. ``/api/v1/status`` and
+  ``/api/v1/devices`` are unaffected; they still serve raw dictionaries.
 - Every field ``index.html`` reads is declared here. Fields the template shows
   unconditionally are required, so omitting one is an error rather than a blank
   cell.
@@ -143,6 +152,10 @@ def build_dashboard_page(
     from the annotated dictionaries (rather than assigning fields one by one) is
     what makes ``extra="forbid"`` useful: a key nobody declared raises here,
     where it is a visible failure, instead of disappearing into the template.
+
+    ``rows`` is mutated in place. Every caller passes a fresh list straight from
+    ``db.get_device_status()``, which rebuilds its dictionaries per call, so the
+    display keys cannot leak into ``/api/v1/status``.
     """
     now = int(time.time()) if now is None else now
     annotate_device_rows(rows, now)

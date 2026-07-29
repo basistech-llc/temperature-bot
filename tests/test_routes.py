@@ -133,7 +133,7 @@ def test_rooms_menu_has_one_plain_link_per_room(flask_test_client):  # noqa: F81
     assert "no-return" not in html
 
 
-def testdevice_label_uses_stored_status_label():
+def test_device_label_uses_stored_status_label():
     """Index labels must not require a live Hubitat fetch."""
     label = device_label(
         {
@@ -145,7 +145,7 @@ def testdevice_label_uses_stored_status_label():
     assert label == "Lobby Sensor"
 
 
-def testdevice_label_icons_are_idempotent():
+def test_device_label_icons_are_idempotent():
     assert (
         device_label_with_icon(
             {
@@ -178,7 +178,7 @@ def testdevice_label_icons_are_idempotent():
     )
 
 
-def testdevice_update_tooltip_uses_device_update_time():
+def test_device_update_tooltip_uses_device_update_time():
     tooltip = device_update_tooltip(
         {
             "device_name": "Area 51",
@@ -241,7 +241,7 @@ def test_index_does_not_fetch_hubitat_labels_on_render(
     mock_get_name_to_label.assert_not_called()
 
 
-def testtable_update_summary_uses_oldest_status_end_time():
+def test_table_update_summary_uses_oldest_status_end_time():
     summary = table_update_summary(
         [
             {"device_type": "ERV", "logtime": 900, "duration": 1},
