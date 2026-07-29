@@ -4,13 +4,29 @@ import re
 import time
 
 from app.models import Room
-from app.routes_web import _room_matrix_groups
+from app.dashboard_views import room_matrix_groups
+
+
+def _with_display_fields(devices):
+    """Supply the display fields room_matrix_groups requires, and nothing else.
+
+    annotate_device_rows() cannot be used here: it recomputes
+    dashboard_air_quality_active from logtime/temp10x, which these fixtures
+    deliberately omit. The grouping behavior under test is about that flag's
+    value, not about how it is derived.
+    """
+    for device in devices:
+        name = device["device_name"]
+        device.setdefault("device_label", name)
+        device.setdefault("device_label_with_icon", name)
+        device.setdefault("device_update_text", "")
+        device.setdefault("device_update_tooltip", name)
+    return devices
 
 
 def test_room_matrix_groups_include_empty_rooms_and_unassigned():
-    groups = _room_matrix_groups(
-        [
-            {
+    devices = [
+        {
                 "device_id": 4,
                 "device_name": "Zulu FCU",
                 "device_type": "FCU",
@@ -38,7 +54,9 @@ def test_room_matrix_groups_include_empty_rooms_and_unassigned():
                 "device_type": "SENSOR",
                 "dashboard_air_quality_active": True,
             },
-        ],
+    ]
+    groups = room_matrix_groups(
+        _with_display_fields(devices),
         [
             Room(room_id=2, room_name="Zulu"),
             Room(room_id=1, room_name="Alpha"),
@@ -59,9 +77,8 @@ def test_room_matrix_groups_include_empty_rooms_and_unassigned():
 
 
 def test_room_matrix_groups_exclude_non_sensor_infrastructure_rows():
-    groups = _room_matrix_groups(
-        [
-            {
+    devices = [
+        {
                 "device_id": device_id,
                 "device_name": device_type,
                 "device_type": device_type,
@@ -71,7 +88,9 @@ def test_room_matrix_groups_exclude_non_sensor_infrastructure_rows():
             for device_id, device_type in enumerate(
                 ["FCU", "ERV", "INTERNAL"], start=1
             )
-        ],
+    ]
+    groups = room_matrix_groups(
+        _with_display_fields(devices),
         [Room(room_id=1, room_name="Alpha")],
         {1},
     )

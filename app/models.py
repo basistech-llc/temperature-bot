@@ -957,18 +957,6 @@ class DeviceStatus(BaseModel):
     )
 
 
-class RoomMatrixGroup(BaseModel):
-    """One room section in the main-page sensor matrix."""
-
-    room_id: int | None = None
-    room_name: str
-    fcu_device_id: int | None = None
-    calculated_temp10x: int | None = None
-    calculated_humidity: float | None = None
-    can_delete: bool = False
-    devices: list[DeviceStatus] = Field(default_factory=list)
-
-
 class RoomDashboardSensorAttributes(BaseModel):
     """Fresh canonical metrics rendered on a room sensor tile."""
 
@@ -1048,16 +1036,6 @@ class PresenceHistoryResponse(BaseModel):
     """Presence observations retained with their room-at-observation identity."""
 
     events: list[PresenceEvent]
-
-
-class TableUpdateSummary(BaseModel):
-    """Oldest timestamp represented by the data currently shown in a table."""
-
-    oldest_update_at: int
-    oldest_update_datetime: str
-    oldest_update_age: str
-    source_device_name: str | None = None
-    label: str
 
 
 def json_ready(model: BaseModel) -> Dict[str, Any]:
