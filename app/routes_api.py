@@ -120,6 +120,31 @@ def _command_response(ret: dict):
 
 
 @contextmanager
+def _domain_errors():
+    """Translate the remaining untyped database failures into API errors.
+
+    ``db`` raises :class:`NotFound` and :class:`Conflict` directly for missing
+    entities and state conflicts, and those pass straight through to the
+    blueprint handler. What is left is genuine input validation (an unusable set
+    range, a missing required field), which is a 400, plus SQLite uniqueness
+    violations, which are a 409.
+
+    ``Conflict`` subclasses ``ValueError`` so non-route callers catching the
+    builtin keep working, which makes the ordering here load-bearing: catching
+    ``ValueError`` without letting an ``ApiError`` through first would report an
+    already-classified 409 as a generic 400.
+    """
+    try:
+        yield
+    except sqlite3.IntegrityError as e:
+        raise Conflict(str(e)) from e
+    except ValueError as e:
+        if isinstance(e, ApiError):
+            raise
+        raise BadRequest(str(e)) from e
+
+
+@contextmanager
 def _hubitat_control(what: str):
     """Map Hubitat actuator failures to one upstream error.
 
@@ -204,7 +229,9 @@ def set_auto_temp(conn, body: AutoSetTempControl):
 @with_db_connection
 def set_range(conn, body: SetRangeControl):
     """Persist the FCU set range in Celsius."""
-    try:
+    # db raises NotFound for an unknown device; a plain ValueError here is a
+    # range-validation failure.
+    with _domain_errors():
         response = db.set_fcu_set_range(
             conn,
             device_id=body.device_id,
@@ -213,11 +240,6 @@ def set_range(conn, body: SetRangeControl):
             ipaddr=request.remote_addr,
             agent=request.headers.get("User-Agent"),
         )
-    except ValueError as e:
-        # Step 2 replaces this message-prefix test with typed db exceptions.
-        if str(e).startswith("Unknown"):
-            raise NotFound(str(e)) from e
-        raise BadRequest(str(e)) from e
     return jsonify(response)
 
 
@@ -256,10 +278,8 @@ def update_device(conn, device_id: int):
     allowed_fields = {"display_name", "device_type", "rules_enabled", "notes"}
     update_fields = allowed_fields.intersection(payload)
     body = DeviceMetadataControl.model_validate({**payload, "device_id": device_id})
-    try:
+    with _domain_errors():
         device = db.update_device_metadata(conn, body, fields=update_fields)
-    except ValueError as e:
-        raise NotFound(str(e)) from e
     return jsonify(device)
 
 
@@ -325,10 +345,7 @@ def get_fcu_history(conn):
     fcu_device_id = request.args.get("fcu_device_id", type=int)
     if fcu_device_id is None:
         raise BadRequest("fcu_device_id is required")
-    try:
-        history = db.get_fcu_history(conn, fcu_device_id)
-    except LookupError as error:
-        raise NotFound(str(error)) from error
+    history = db.get_fcu_history(conn, fcu_device_id)
     return jsonify(json_ready(FcuHistoryResponse.model_validate(history)))
 
 
@@ -458,12 +475,8 @@ def rooms(conn):
         return jsonify(json_ready(RoomListResponse(rooms=db.get_rooms(conn))))
 
     body = RoomCreate.model_validate(request.get_json(silent=True) or {})
-    try:
+    with _domain_errors():
         room = db.create_room(conn, Room(room_name=body.room_name, map=body.map))
-    except sqlite3.IntegrityError as e:
-        raise Conflict(str(e)) from e
-    except ValueError as e:
-        raise BadRequest(str(e)) from e
     return jsonify(json_ready(room)), 201
 
 
@@ -518,12 +531,8 @@ def update_room(conn, room_id: int):
         update.room_name = body.room_name
     if "map" in body.model_fields_set:
         update.map = body.map
-    try:
+    with _domain_errors():
         room = db.update_room(conn, update)
-    except sqlite3.IntegrityError as e:
-        raise Conflict(str(e)) from e
-    except ValueError as e:
-        raise BadRequest(str(e)) from e
     if room is None:
         raise NotFound("room not found")
     return jsonify(json_ready(room))
@@ -533,10 +542,8 @@ def update_room(conn, room_id: int):
 @with_db_connection
 def delete_room(conn, room_id: int):
     """Delete a room only when it has no FCU owner or assigned devices."""
-    try:
+    with _domain_errors():
         deleted = db.delete_empty_room(conn, room_id)
-    except ValueError as e:
-        raise Conflict(str(e)) from e
     if not deleted:
         raise NotFound("room not found")
     return "", 204
@@ -547,12 +554,8 @@ def delete_room(conn, room_id: int):
 @with_db_connection
 def update_device_room(conn, body: DeviceRoomControl):
     """Assign a device to a room, or clear the assignment with room_id=null."""
-    try:
+    with _domain_errors():
         device_id = db.update_device_room(conn, body.device_id, body.room_id)
-    except LookupError as e:
-        raise NotFound(str(e)) from e
-    except ValueError as e:
-        raise Conflict(str(e)) from e
     return jsonify(json_ready(CommandResponse(device_id=device_id)))
 
 
@@ -563,10 +566,7 @@ def get_fcu_temp_sources(conn):
     fcu_device_id = request.args.get("fcu_device_id", type=int)
     if fcu_device_id is None:
         raise BadRequest("fcu_device_id is required")
-    try:
-        return jsonify(db.get_fcu_temp_sources(conn, fcu_device_id))
-    except ValueError as e:
-        raise NotFound(str(e)) from e
+    return jsonify(db.get_fcu_temp_sources(conn, fcu_device_id))
 
 
 @api_v1.route("/fcu_temp_source", methods=["POST"])
@@ -583,15 +583,13 @@ def set_fcu_temp_source(conn):
     if len(fcu_device_ids) > 1:
         raise BadRequest("all updates must use the same fcu_device_id")
 
-    try:
+    with _domain_errors():
         response = db.set_fcu_temp_source_multipliers(
             conn,
             updates=updates,
             ipaddr=request.remote_addr,
             agent=request.headers.get("User-Agent"),
         )
-    except ValueError as e:
-        raise NotFound(str(e)) from e
     return jsonify(response)
 
 

@@ -7,6 +7,8 @@ one contract. See ``app/api_errors.py``.
 
 import pytest
 
+from app import api_errors
+
 from tests.conftest import flask_test_client  # noqa: F401  pylint: disable=unused-import
 
 
@@ -90,6 +92,41 @@ def test_decorated_and_manual_validation_agree(flask_test_client):  # noqa: F811
     for body in (decorated, manual):
         for entry in body["details"]:
             assert {"loc", "msg", "type", "location"} <= entry.keys()
+
+
+def test_db_conflict_is_not_flattened_to_bad_request(flask_test_client, monkeypatch):  # noqa: F811
+    """A db-raised Conflict must keep its 409 status.
+
+    ``Conflict`` subclasses ``ValueError`` so non-route callers catching the
+    builtin keep working. That makes route error handling order-sensitive: an
+    ``except ValueError`` arm that does not let ``ApiError`` through first would
+    silently downgrade every domain conflict to a generic 400.
+    """
+    def conflict(*_args, **_kwargs):
+        raise api_errors.Conflict("room is still in use")
+
+    monkeypatch.setattr("app.routes_api.db.delete_empty_room", conflict)
+    response = flask_test_client.delete("/api/v1/rooms/1")
+
+    assert response.status_code == 409
+    body = response.get_json()
+    assert body["code"] == "conflict"
+    assert body["error"] == "room is still in use"
+
+
+def test_db_not_found_keeps_its_status(flask_test_client, monkeypatch):  # noqa: F811
+    """A db-raised NotFound reaches the client as 404, not 400 or 500."""
+    def missing(*_args, **_kwargs):
+        raise api_errors.NotFound("Unknown device_id: 4242")
+
+    monkeypatch.setattr("app.routes_api.db.update_device_room", missing)
+    response = flask_test_client.post(
+        "/api/v1/update_device_room",
+        json={"device_id": 4242, "room_id": None},
+    )
+
+    assert response.status_code == 404
+    assert response.get_json()["code"] == "not_found"
 
 
 def test_unexpected_errors_do_not_leak_exception_text(flask_test_client, monkeypatch):  # noqa: F811
