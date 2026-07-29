@@ -29,10 +29,13 @@ from collections.abc import Iterable, Mapping
 from typing import Any
 
 from flask import jsonify, request
-from werkzeug.exceptions import HTTPException
+from werkzeug.exceptions import HTTPException, UnsupportedMediaType
 from pydantic import ValidationError
 
-from flask_pydantic.exceptions import ValidationError as FlaskPydanticValidationError
+from flask_pydantic.exceptions import (
+    JsonBodyParsingError,
+    ValidationError as FlaskPydanticValidationError,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -215,6 +218,28 @@ def register_error_handlers(blueprint) -> None:
     @blueprint.errorhandler(ValidationError)
     def _handle_pydantic_error(error: ValidationError):
         return _handle_api_error(validation_failed_from_pydantic(error))
+
+    @blueprint.errorhandler(JsonBodyParsingError)
+    def _handle_unparseable_body(_error: JsonBodyParsingError):
+        # flask_pydantic raises this when the body is valid JSON but not an
+        # object -- `[1,2,3]` or `"hi"`. It is neither an HTTPException nor
+        # flask_pydantic's own ValidationError, so without this arm the generic
+        # Exception handler answers 500 (with a traceback) for what is plainly
+        # a caller mistake.
+        return _handle_api_error(
+            ValidationFailed("request body must be a JSON object")
+        )
+
+    @blueprint.errorhandler(UnsupportedMediaType)
+    def _handle_unsupported_media_type(_error: UnsupportedMediaType):
+        # Werkzeug answers 415 when Content-Type is not application/json, but
+        # only for routes that parse the body through @validate(); routes that
+        # validated a model by hand have always answered 400. Answer 400
+        # everywhere so one missing header does not produce two different
+        # statuses depending on which validation style a route happens to use.
+        return _handle_api_error(
+            BadRequest("request body must be JSON with Content-Type: application/json")
+        )
 
     @blueprint.errorhandler(HTTPException)
     def _handle_http_exception(error: HTTPException):

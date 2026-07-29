@@ -6,6 +6,7 @@ one contract. See ``app/api_errors.py``.
 """
 
 import pytest
+from pydantic import TypeAdapter
 
 from app import api_errors, models
 
@@ -215,3 +216,58 @@ def test_alert_rows_keep_nulls_but_omit_absent_details():
         }
     )
     assert models.alert_json_ready(with_details)["details"] == {"mode": "COOL"}
+
+
+def test_non_object_json_body_is_a_client_error(flask_test_client):  # noqa: F811
+    """A JSON body that is not an object must be 400, not 500.
+
+    `flask_pydantic` raises JsonBodyParsingError for `[1,2,3]` or `"hi"`. It is
+    neither an HTTPException nor flask_pydantic's own ValidationError, so
+    without a dedicated handler the generic Exception arm answers 500 -- and
+    logs a full traceback -- for a plain caller mistake.
+    """
+    for payload in ([1, 2, 3], "hi", 5):
+        response = flask_test_client.post("/api/v1/set_fan_speed", json=payload)
+        assert response.status_code == 400, payload
+        assert response.get_json()["code"] == "validation_error"
+
+
+def test_missing_content_type_is_400_for_every_validation_style(flask_test_client):  # noqa: F811
+    """One missing header must not produce two different statuses.
+
+    Routes using @validate() get werkzeug's 415 when Content-Type is absent,
+    while routes that validate a model by hand have always answered 400. The
+    status a caller sees should not depend on which validation style a route
+    happens to use internally.
+    """
+    cases = [
+        ("/api/v1/set_fan_speed", '{"device_id": 1, "fan_speed": 1}'),
+        ("/api/v1/update_note", '{"device_id": 1, "notes": "x"}'),
+        ("/api/v1/set_device_disabled_until", '{"device_id": 1, "disabled_until": 9}'),
+        ("/api/v1/hickory/dimmer", '{"level": 50}'),
+        ("/api/v1/rules_master", '{"enabled": true}'),
+        ("/api/v1/rooms", '{"room_name": "x"}'),
+    ]
+    for path, body in cases:
+        response = flask_test_client.post(path, data=body)
+        assert response.status_code == 400, path
+
+
+def test_bad_database_row_is_a_server_error(flask_test_client, monkeypatch):  # noqa: F811
+    """A row failing our own model is a 500, not a 400 blaming the caller.
+
+    pydantic's ValidationError subclasses ValueError, so `_domain_errors`'
+    ValueError arm would otherwise report server-side data corruption as a
+    client error -- echoing raw pydantic text, including the version-stamped
+    errors.pydantic.dev URL that _normalize_pydantic_errors strips everywhere
+    else.
+    """
+    def bad_row(*_args, **_kwargs):
+        TypeAdapter(int).validate_python("not-an-int")
+
+    monkeypatch.setattr("app.routes_api.db.delete_empty_room", bad_row)
+    response = flask_test_client.delete("/api/v1/rooms/1")
+
+    assert response.status_code == 500
+    assert response.get_json()["code"] == "internal_error"
+    assert "not-an-int" not in response.get_data(as_text=True)

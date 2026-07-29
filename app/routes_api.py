@@ -10,7 +10,7 @@ from contextlib import contextmanager
 
 from flask import Blueprint, request, jsonify
 from flask_pydantic import validate
-from pydantic import TypeAdapter
+from pydantic import TypeAdapter, ValidationError
 from websockets.exceptions import WebSocketException
 
 from . import constants
@@ -148,8 +148,19 @@ def _domain_errors():
         yield
     except sqlite3.IntegrityError as e:
         raise Conflict(str(e)) from e
+    except ValidationError as e:
+        # A row we just read failed one of OUR OWN models: a server-side data
+        # problem, not a caller mistake. Answer 500 with the detail in the log.
+        # Merely re-raising is not enough -- the blueprint's client-validation
+        # handler would turn it into a 400 that blames the caller and echoes
+        # raw pydantic text. This arm must precede the ValueError one below,
+        # because ValidationError subclasses ValueError.
+        logger.exception("Database row failed model validation on %s", request.path)
+        raise ApiError() from e
     except ValueError as e:
         if isinstance(e, ApiError):
+            # Already classified further down; keep its status rather than
+            # flattening a 409 Conflict into a generic 400.
             raise
         raise BadRequest(str(e)) from e
 
