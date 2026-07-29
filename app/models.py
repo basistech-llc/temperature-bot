@@ -15,6 +15,8 @@ boundaries instead of ``typing.cast`` so the data is actually validated before i
 becomes a mapping.
 """
 
+# pylint: disable=too-many-lines
+
 from enum import StrEnum
 from collections.abc import Callable
 from typing import Annotated, Any, Dict, Iterable, Literal
@@ -320,6 +322,41 @@ class AlertEventRecord(BaseModel):
     slack_terminal: bool = False
 
 
+class ActiveAlert(BaseModel):
+    """One unresolved alert as returned by ``/api/v1/alerts/active``."""
+
+    alert_id: int
+    device_name: str
+    alert_type: str
+    alert_value: str
+    start_time: int
+    age: int
+    details: Dict[str, Any] | None = Field(
+        default=None,
+        description="Device status at alert time; present only when requested.",
+    )
+
+
+class AlertHistoryEntry(BaseModel):
+    """One alert as returned by ``/api/v1/alerts/history``.
+
+    ``end_time`` and ``duration`` are null while an alert is still active, so
+    they are serialized as explicit nulls rather than omitted.
+    """
+
+    alert_id: int
+    device_name: str
+    alert_type: str
+    alert_value: str
+    start_time: int
+    end_time: int | None = None
+    duration: int | None = None
+    details: Dict[str, Any] | None = Field(
+        default=None,
+        description="Device status at alert time; present only when requested.",
+    )
+
+
 class RoomConfig(BaseModel):
     """Static dashboard configuration for one room."""
 
@@ -459,6 +496,12 @@ class TimeSeries(BaseModel):
     data: list[tuple[int, float | None]] = Field(
         description="Ordered (unix time, value) samples; null preserves a data gap."
     )
+
+
+class TimeSeriesResponse(BaseModel):
+    """Chart series for endpoints that return series without window flags."""
+
+    series: list[TimeSeries] = Field(default_factory=list)
 
 
 class TemperatureSeriesResponse(BaseModel):
@@ -981,3 +1024,17 @@ def json_ready(model: BaseModel) -> Dict[str, Any]:
 def json_ready_list(models: Iterable[BaseModel]) -> list[Dict[str, Any]]:
     """Dump validated models to JSON-ready mappings."""
     return [json_ready(model) for model in models]
+
+
+def alert_json_ready(model: BaseModel) -> Dict[str, Any]:
+    """Dump one alert row, keeping nulls but omitting an absent ``details``.
+
+    Alert rows mix two conventions that ``json_ready``'s ``exclude_none`` cannot
+    express together: the scalar columns are always present and may be null (an
+    active alert has no ``end_time``), while ``details`` appears only when the
+    caller passed ``include_details``.
+    """
+    data = model.model_dump(mode="json", by_alias=True)
+    if data.get("details") is None:
+        data.pop("details", None)
+    return data

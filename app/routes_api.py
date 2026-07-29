@@ -36,6 +36,8 @@ from .utils.request_utils import parse_device_ids
 from .utils.db_utils import with_db_connection
 
 from .models import (
+    ActiveAlert,
+    AlertHistoryEntry,
     AutoSetTempControl,
     CommandResponse,
     DeviceMetadataControl,
@@ -59,6 +61,8 @@ from .models import (
     SetTempControl,
     SpeedControl,
     TemperatureSeriesResponse,
+    TimeSeriesResponse,
+    alert_json_ready,
     json_ready,
 )
 
@@ -375,7 +379,7 @@ def get_lighting(conn):
             hubitat_label=hub_label,
             source="hubitat",
         )
-    return jsonify({"series": series})
+    return jsonify(json_ready(TimeSeriesResponse.model_validate({"series": series})))
 
 
 @api_v1.route("/metric")
@@ -399,7 +403,7 @@ def get_metric(conn):
             hubitat_label=hub_label,
             source="airthings",
         )
-    return jsonify({"series": series})
+    return jsonify(json_ready(TimeSeriesResponse.model_validate({"series": series})))
 
 
 @api_v1.route("/logs")
@@ -625,7 +629,9 @@ def alerts_active(conn):
     device_id = request.args.get("device_id", type=int)
     include_details = request.args.get("include_details", "false").lower() == "true"
     alerts = db_alerts.get_active_alerts(conn, device_id, include_details)
-    return jsonify(alerts)
+    return jsonify(
+        [alert_json_ready(ActiveAlert.model_validate(alert)) for alert in alerts]
+    )
 
 
 @api_v1.route("/alerts/history")
@@ -636,7 +642,9 @@ def alerts_history(conn):
     limit = request.args.get("limit", type=int, default=100)
     include_details = request.args.get("include_details", "false").lower() == "true"
     alerts = db_alerts.get_alert_history(conn, device_id, limit, include_details)
-    return jsonify(alerts)
+    return jsonify(
+        [alert_json_ready(AlertHistoryEntry.model_validate(alert)) for alert in alerts]
+    )
 
 
 @api_v1.route("/update_note", methods=["POST"])

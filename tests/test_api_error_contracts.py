@@ -7,7 +7,7 @@ one contract. See ``app/api_errors.py``.
 
 import pytest
 
-from app import api_errors
+from app import api_errors, models
 
 from tests.conftest import flask_test_client  # noqa: F401  pylint: disable=unused-import
 
@@ -143,3 +143,41 @@ def test_unexpected_errors_do_not_leak_exception_text(flask_test_client, monkeyp
         "code": "internal_error",
     }
     assert "s3cret" not in response.get_data(as_text=True)
+
+
+def test_alert_rows_keep_nulls_but_omit_absent_details():
+    """Alert rows mix two serialization conventions; both must survive.
+
+    ``json_ready``'s ``exclude_none`` would drop ``end_time`` from an
+    unresolved alert, and a plain dump would emit ``"details": null`` for a
+    caller that did not ask for details. ``alert_json_ready`` is the reason
+    these endpoints do not use ``json_ready``.
+    """
+    unresolved = models.AlertHistoryEntry.model_validate(
+        {
+            "alert_id": 1,
+            "device_name": "d",
+            "alert_type": "t",
+            "alert_value": "ON",
+            "start_time": 100,
+            "end_time": None,
+            "duration": None,
+        }
+    )
+    dumped = models.alert_json_ready(unresolved)
+    assert dumped["end_time"] is None
+    assert dumped["duration"] is None
+    assert "details" not in dumped
+
+    with_details = models.ActiveAlert.model_validate(
+        {
+            "alert_id": 1,
+            "device_name": "d",
+            "alert_type": "t",
+            "alert_value": "ON",
+            "start_time": 100,
+            "age": 5,
+            "details": {"mode": "COOL"},
+        }
+    )
+    assert models.alert_json_ready(with_details)["details"] == {"mode": "COOL"}
