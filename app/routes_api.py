@@ -39,6 +39,8 @@ from .models import (
     ActiveAlert,
     AlertHistoryEntry,
     AutoSetTempControl,
+    DeviceDisableUntilControl,
+    DisableRulesQuery,
     CommandResponse,
     DeviceMetadataControl,
     DeviceRoomControl,
@@ -56,7 +58,11 @@ from .models import (
     PresenceHistoryResponse,
     RoomPresenceResponse,
     RoomControlStatus,
+    RoomDimmerControl,
     RoomDimmerState,
+    RoomTvControl,
+    RoomWallLightControl,
+    RulesMasterControl,
     RoomSwitchState,
     SetTempControl,
     SpeedControl,
@@ -420,14 +426,12 @@ def get_logs(conn):
 
 
 @api_v1.route("/disable-rules")
+@validate()
 @with_db_connection
-def disable_rules(conn):
+def disable_rules(conn, query: DisableRulesQuery):
     """Disable rules for a specified number of seconds"""
-    seconds = request.args.get("seconds", type=int)
+    seconds = query.seconds
     logging.debug("/disable-rules seconds=%s", seconds)
-    if seconds is None:
-        raise BadRequest("seconds parameter is required")
-
     rules_engine.disable_all_rules(
         conn,
         seconds,
@@ -438,22 +442,17 @@ def disable_rules(conn):
 
 
 @api_v1.route("/set_device_disabled_until", methods=["POST"])
+@validate()
 @with_db_connection
-def set_device_disabled_until(conn):
+def set_device_disabled_until(conn, body: DeviceDisableUntilControl):
     """Set the per-device rules disable timer to an absolute epoch timestamp.
 
-    Body: {"device_id": int, "disabled_until": int}
-    A disabled_until <= now re-enables rules for the device (stored as 0).
+    A ``disabled_until`` at or before now re-enables rules for the device
+    (stored as 0).
     """
-    payload = request.get_json(silent=True) or {}
-    try:
-        device_id = int(payload["device_id"])
-        disabled_until = int(payload["disabled_until"])
-    except (KeyError, ValueError, TypeError) as e:
-        raise BadRequest("device_id and disabled_until (int) are required") from e
-
+    device_id = body.device_id
     now = int(time.time())
-    seconds = max(0, disabled_until - now)
+    seconds = max(0, body.disabled_until - now)
     db.disable_rules_for_device(
         conn,
         device_id=device_id,
@@ -610,13 +609,10 @@ def rules_master(conn):
         enabled = db.get_rules_master_enabled(conn)
         return jsonify({"enabled": enabled})
 
-    # POST
-    payload = request.get_json(silent=True) or {}
-
-    if "enabled" not in payload:
-        raise BadRequest("Missing 'enabled' field")
-
-    enabled = bool(payload["enabled"])
+    # POST. Validated by hand rather than with @validate() because the same
+    # view serves GET, which has no body to validate.
+    body = RulesMasterControl.model_validate(request.get_json(silent=True) or {})
+    enabled = body.enabled
     db.set_rules_master_enabled(conn, enabled)
     logger.info("Master rules switch set to enabled=%s", enabled)
     return jsonify({"enabled": enabled})
@@ -700,61 +696,49 @@ def room_control_status(room_key: str):
 
 @api_v1.route("/hickory/dimmer", methods=["POST"], defaults={"room_key": "hickory"})
 @api_v1.route("/room/<room_key>/dimmer", methods=["POST"])
-def room_dimmer(room_key: str):
+@validate()
+def room_dimmer(room_key: str, body: RoomDimmerControl):
     """Set a configured room's light dimmer level (0-100)."""
     config = _require_room_config(room_key)
     device_id = config.dimmer_id
     if not device_id:
         raise NotFound("No dimmer configured")
-    payload = request.get_json(silent=True) or {}
-    level = payload.get("level")
-    if level is None or not isinstance(level, int) or not 0 <= level <= 100:
-        raise BadRequest("level must be an integer 0-100")
     with _hubitat_control("Dimmer"):
-        hubitat.set_dimmer_level(device_id, level)
-    return jsonify(json_ready(CommandResponse(level=level)))
+        hubitat.set_dimmer_level(device_id, body.level)
+    return jsonify(json_ready(CommandResponse(level=body.level)))
 
 
 @api_v1.route("/hickory/wall_light", methods=["POST"], defaults={"room_key": "hickory"})
 @api_v1.route("/room/<room_key>/wall_light", methods=["POST"])
-def room_wall_light(room_key: str):
+@validate()
+def room_wall_light(room_key: str, body: RoomWallLightControl):
     """Toggle a configured room's wall light on or off."""
     config = _require_room_config(room_key)
-    payload = request.get_json(silent=True) or {}
-    light = payload.get("light")
-    state = payload.get("state")
-
     id_map = {"inner": config.wall_inner_id, "outer": config.wall_outer_id}
-    if not isinstance(light, str):
-        raise BadRequest("light must be 'inner' or 'outer'")
-    device_id = id_map.get(light)
+    device_id = id_map.get(body.light)
     if not device_id:
-        raise BadRequest("light must be 'inner' or 'outer'")
-    if not isinstance(state, str) or state not in ("on", "off"):
-        raise BadRequest("state must be 'on' or 'off'")
+        # The name is valid but this room has no such light configured.
+        raise NotFound(f"No {body.light} wall light configured")
     with _hubitat_control("Wall light"):
-        hubitat.set_switch(device_id, state)
-    return jsonify(json_ready(CommandResponse(light=light, state=state)))
+        hubitat.set_switch(device_id, body.state)
+    return jsonify(json_ready(CommandResponse(light=body.light, state=body.state)))
 
 
 @api_v1.route("/hickory/tv", methods=["POST"], defaults={"room_key": "hickory"})
 @api_v1.route("/room/<room_key>/tv", methods=["POST"])
-def room_tv(room_key: str):
+@validate()
+def room_tv(room_key: str, body: RoomTvControl):
     """Control a configured room's TV lift (up/down)."""
     config = _require_room_config(room_key)
     if not config.tv_up_label or not config.tv_down_label:
         raise NotFound("No TV configured")
-    payload = request.get_json(silent=True) or {}
-    direction = payload.get("direction")
-    if direction not in ("up", "down"):
-        raise BadRequest("direction must be 'up' or 'down'")
     with _hubitat_control("TV"):
         hubitat.control_room_tv(
-            direction,
+            body.direction,
             up_label=config.tv_up_label,
             down_label=config.tv_down_label,
         )
-    return jsonify(json_ready(CommandResponse(direction=direction)))
+    return jsonify(json_ready(CommandResponse(direction=body.direction)))
 
 
 @api_v1.route("/debug/db_devices")

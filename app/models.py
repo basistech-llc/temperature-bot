@@ -745,6 +745,50 @@ class DeviceRoomControl(ControlRequest):
     room_id: int | None = Field(description="Room id, or null to clear assignment.")
 
 
+class RoomDimmerControl(ControlRequest):
+    """Request body for setting a room light dimmer level."""
+
+    level: int = Field(ge=0, le=100, description="Dimmer level as a percentage.")
+
+
+class RoomWallLightControl(ControlRequest):
+    """Request body for switching a room wall light on or off."""
+
+    light: Literal["inner", "outer"] = Field(description="Which wall light to switch.")
+    state: Literal["on", "off"] = Field(description="Requested switch state.")
+
+
+class RoomTvControl(ControlRequest):
+    """Request body for driving a room TV lift."""
+
+    direction: Literal["up", "down"] = Field(description="Requested lift direction.")
+
+
+class DeviceDisableUntilControl(ControlRequest):
+    """Request body for the per-device rules disable timer.
+
+    ``disabled_until`` is an absolute Unix timestamp; a value at or before now
+    re-enables rules for the device.
+    """
+
+    device_id: int = Field(description="Local device id from the devices table.")
+    disabled_until: int = Field(description="Unix timestamp to disable rules until.")
+
+
+class RulesMasterControl(ControlRequest):
+    """Request body for the global master rules switch."""
+
+    enabled: bool = Field(description="Whether the rules engine may act at all.")
+
+
+class DisableRulesQuery(BaseModel):
+    """Query string for the global timed rules disable."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    seconds: int = Field(description="How long to disable all rules, in seconds.")
+
+
 class FcuTempSourceControl(ControlRequest):
     """Request body for one FCU temperature source multiplier."""
 

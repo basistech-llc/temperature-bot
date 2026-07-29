@@ -26,18 +26,20 @@ ERROR_CASES = [
     # Models validated by hand inside the route
     ("POST", "/api/v1/rooms", {}, 400, "validation_error"),
     ("POST", "/api/v1/fcu_temp_source", {}, 400, "validation_error"),
-    # Hand-rolled request checks
-    ("POST", "/api/v1/hickory/dimmer", {"level": 500}, 400, "bad_request"),
-    ("POST", "/api/v1/hickory/wall_light", {"light": "sideways"}, 400, "bad_request"),
-    ("POST", "/api/v1/hickory/tv", {"direction": "sideways"}, 400, "bad_request"),
-    ("POST", "/api/v1/rules_master", {}, 400, "bad_request"),
-    ("POST", "/api/v1/set_device_disabled_until", {}, 400, "bad_request"),
+    # Room and rules controls, converted from hand-rolled checks in Step 4
+    ("POST", "/api/v1/hickory/dimmer", {"level": 500}, 400, "validation_error"),
+    ("POST", "/api/v1/hickory/wall_light", {"light": "sideways"}, 400,
+     "validation_error"),
+    ("POST", "/api/v1/hickory/tv", {"direction": "sideways"}, 400,
+     "validation_error"),
+    ("POST", "/api/v1/rules_master", {}, 400, "validation_error"),
+    ("POST", "/api/v1/set_device_disabled_until", {}, 400, "validation_error"),
     # Query-string checks
     ("GET", "/api/v1/temperature?mode=bogus", None, 400, "bad_request"),
     ("GET", "/api/v1/temperature?device_ids=abc", None, 400, "bad_request"),
     ("GET", "/api/v1/lighting?device_ids=abc", None, 400, "bad_request"),
     ("GET", "/api/v1/metric?metric=nosuchmetric", None, 400, "bad_request"),
-    ("GET", "/api/v1/disable-rules", None, 400, "bad_request"),
+    ("GET", "/api/v1/disable-rules", None, 400, "validation_error"),
     ("GET", "/api/v1/fcu_history", None, 400, "bad_request"),
     ("GET", "/api/v1/fcu_temp_sources", None, 400, "bad_request"),
     # Not-found paths
