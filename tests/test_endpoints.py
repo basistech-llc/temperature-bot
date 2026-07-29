@@ -426,7 +426,10 @@ def test_set_fan_speed_endpoint_reports_ae200_failure(
     )
 
     assert response.status_code == 502
-    assert response.json == {"error": "AE-200 request failed"}
+    assert response.json == {
+        "error": "AE-200 request failed",
+        "code": "upstream_unavailable",
+    }
     assert "opening handshake" not in response.get_data(as_text=True)
 
 
@@ -807,9 +810,10 @@ def test_debug_hubitat_devices_endpoint_error(mock_get_all_devices, flask_test_c
     mock_get_all_devices.side_effect = RuntimeError("Hubitat connection error")
 
     response = flask_test_client.get("/api/v1/debug/hubitat_devices")
-    assert response.status_code == 500
+    assert response.status_code == 502
     response_json = response.json
-    assert "error" in response_json
+    assert response_json["code"] == "upstream_unavailable"
+    assert "connection error" not in response.get_data(as_text=True)
 
 
 @patch("app.routes_api.ae200.get_device_info")
@@ -847,7 +851,10 @@ def test_debug_ae200_devices_endpoint_error(mock_get_devices, flask_test_client)
     response = flask_test_client.get("/api/v1/debug/ae200_devices")
     assert response.status_code == 502
     response_json = response.json
-    assert response_json == {"error": "AE-200 request failed"}
+    assert response_json == {
+        "error": "AE-200 request failed",
+        "code": "upstream_unavailable",
+    }
     assert "connection error" not in response.get_data(as_text=True)
 
 

@@ -481,7 +481,8 @@ def test_room_omits_none_values_and_updates_only_supplied_fields(flask_test_clie
         json={"room_name": "Bad Color", "map": {"color": "blue"}},
     )
     assert invalid_create_response.status_code == 400
-    assert invalid_create_response.json["error"] == "validation error"
+    assert invalid_create_response.json["code"] == "validation_error"
+    assert "map.color" in invalid_create_response.json["error"]
     assert isinstance(invalid_create_response.json["details"], list)
 
     invalid_patch_response = flask_test_client.patch(
@@ -489,7 +490,8 @@ def test_room_omits_none_values_and_updates_only_supplied_fields(flask_test_clie
         json={"map": {"color": "blue"}},
     )
     assert invalid_patch_response.status_code == 400
-    assert invalid_patch_response.json["error"] == "validation error"
+    assert invalid_patch_response.json["code"] == "validation_error"
+    assert "map.color" in invalid_patch_response.json["error"]
     assert isinstance(invalid_patch_response.json["details"], list)
 
     missing_name_response = flask_test_client.post(
@@ -497,7 +499,8 @@ def test_room_omits_none_values_and_updates_only_supplied_fields(flask_test_clie
         json={"map": {"color": "#abcdef"}},
     )
     assert missing_name_response.status_code == 400
-    assert missing_name_response.json["error"] == "validation error"
+    assert missing_name_response.json["code"] == "validation_error"
+    assert "room_name" in missing_name_response.json["error"]
 
 
 def test_fcu_temp_source_api_persists_multiplier_and_logs_old_new_values(

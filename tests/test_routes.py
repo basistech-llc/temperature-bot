@@ -873,13 +873,14 @@ def test_dimmer_non_integer(flask_test_client):  # noqa: F811
 
 @patch("app.routes_api.hubitat.set_dimmer_level", side_effect=OSError("timeout"))
 def test_dimmer_hubitat_error(_mock, flask_test_client):  # noqa: F811
-    """Hubitat failure returns 500."""
+    """Hubitat failure is reported as an upstream failure, not a server bug."""
     resp = flask_test_client.post(
         "/api/v1/hickory/dimmer",
         json={"level": 50},
     )
-    assert resp.status_code == 500
-    assert "error" in resp.get_json()
+    assert resp.status_code == 502
+    assert resp.get_json()["code"] == "upstream_unavailable"
+    assert "timeout" not in resp.get_data(as_text=True)
 
 
 # /api/v1/hickory/wall_light
@@ -938,13 +939,14 @@ def test_wall_light_missing_fields(flask_test_client):  # noqa: F811
 
 @patch("app.routes_api.hubitat.set_switch", side_effect=RuntimeError("hub down"))
 def test_wall_light_hubitat_error(_mock, flask_test_client):  # noqa: F811
-    """Hubitat failure returns 500."""
+    """Hubitat failure is reported as an upstream failure, not a server bug."""
     resp = flask_test_client.post(
         "/api/v1/hickory/wall_light",
         json={"light": "inner", "state": "on"},
     )
-    assert resp.status_code == 500
-    assert "error" in resp.get_json()
+    assert resp.status_code == 502
+    assert resp.get_json()["code"] == "upstream_unavailable"
+    assert "hub down" not in resp.get_data(as_text=True)
 
 
 # /api/v1/hickory/tv
@@ -996,13 +998,14 @@ def test_tv_missing_direction(flask_test_client):  # noqa: F811
 
 @patch("app.routes_api.hubitat.control_room_tv", side_effect=RuntimeError("not found"))
 def test_tv_hubitat_error(_mock, flask_test_client):  # noqa: F811
-    """Hubitat failure returns 500."""
+    """Hubitat failure is reported as an upstream failure, not a server bug."""
     resp = flask_test_client.post(
         "/api/v1/hickory/tv",
         json={"direction": "up"},
     )
-    assert resp.status_code == 500
-    assert "error" in resp.get_json()
+    assert resp.status_code == 502
+    assert resp.get_json()["code"] == "upstream_unavailable"
+    assert "not found" not in resp.get_data(as_text=True)
 
 
 def test_generic_room_control_routes_resolve_config(flask_test_client):  # noqa: F811

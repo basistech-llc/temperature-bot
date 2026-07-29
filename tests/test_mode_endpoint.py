@@ -258,7 +258,10 @@ def test_set_mode_endpoint_rejects_unmapped_simulator_unit(flask_test_client):  
     )
 
     assert response.status_code == 400
-    assert response.json == {"error": "Invalid command request"}
+    assert response.json == {
+        "error": "Invalid command request",
+        "code": "bad_request",
+    }
     assert "Missing Simulator Unit" not in response.get_data(as_text=True)
 
 

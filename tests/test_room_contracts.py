@@ -10,7 +10,8 @@ def test_room_writes_reject_response_only_fcu_owner(flask_test_client):
         json={"room_name": "Forged Owner", "fcu_device_id": 123},
     )
     assert rejected_create.status_code == 400
-    assert rejected_create.json["error"] == "validation error"
+    assert rejected_create.json["code"] == "validation_error"
+    assert "fcu_device_id" in rejected_create.json["error"]
 
     created = flask_test_client.post(
         "/api/v1/rooms",
@@ -24,7 +25,8 @@ def test_room_writes_reject_response_only_fcu_owner(flask_test_client):
         json={"fcu_device_id": 123},
     )
     assert rejected_patch.status_code == 400
-    assert rejected_patch.json["error"] == "validation error"
+    assert rejected_patch.json["code"] == "validation_error"
+    assert "fcu_device_id" in rejected_patch.json["error"]
 
     unchanged = flask_test_client.get(f"/api/v1/rooms/{room_id}")
     assert unchanged.status_code == 200
