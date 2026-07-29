@@ -143,6 +143,26 @@ def test_query_endpoints_ignore_unknown_parameters(flask_test_client):  # noqa: 
     assert response.status_code == 200
 
 
+def test_malformed_json_body_is_a_client_error(flask_test_client):  # noqa: F811
+    """A syntactically invalid body must be 400, not 500.
+
+    Werkzeug raises its own ``BadRequest`` from inside the view when
+    ``request.get_json()`` fails. Flask consults blueprint error handlers before
+    app-level ones, so without an ``HTTPException`` arm on the blueprint the
+    generic ``Exception`` handler catches it first and reports a client mistake
+    as a server error -- which is the exact failure mode this module exists to
+    remove.
+    """
+    response = flask_test_client.post(
+        "/api/v1/set_fan_speed",
+        data="{not json",
+        content_type="application/json",
+    )
+
+    assert response.status_code == 400
+    assert response.get_json()["code"] == "bad_request"
+
+
 def test_unexpected_errors_do_not_leak_exception_text(flask_test_client, monkeypatch):  # noqa: F811
     """An unhandled exception returns a generic body, not the message."""
     def explode(*_args, **_kwargs):

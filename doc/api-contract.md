@@ -105,10 +105,17 @@ anything; do not infer from type annotations.
 
 ## Known gap
 
-An unmatched path under `/api/v1/` — a typo'd URL — never reaches the blueprint
-error handler, because Flask has no blueprint context at routing time. Those
-requests get `main.py`'s app-level `HTTPException` handler instead, which
-returns `{"error": "..."}` with **no `code` field**. Clients must therefore
-tolerate a missing `code` on 404s from unknown paths. Closing this gap means
-branching on `request.path` in `main.py`, which also currently JSONifies
-HTTP errors for ordinary web pages.
+Requests that fail *before* a view runs — an unmatched path under `/api/v1/`, or
+a wrong method on a real route — never reach the blueprint error handler,
+because Flask has no blueprint context at routing time. They fall through to
+`main.py`'s app-level `HTTPException` handler, which returns `{"error": "..."}`
+with **no `code` field**. Clients must tolerate a missing `code` on 404s from
+unknown paths and on 405s.
+
+Werkzeug errors raised *inside* a view — a malformed JSON body, for instance —
+do get the full envelope, because the blueprint's `HTTPException` handler sees
+them. That handler exists specifically so the generic `Exception` handler cannot
+report those client mistakes as 500s.
+
+Closing the remaining gap means branching on `request.path` in `main.py`, which
+also currently JSONifies HTTP errors for ordinary web pages.

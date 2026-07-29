@@ -29,6 +29,7 @@ from collections.abc import Iterable, Mapping
 from typing import Any
 
 from flask import jsonify, request
+from werkzeug.exceptions import HTTPException
 from pydantic import ValidationError
 
 from flask_pydantic.exceptions import ValidationError as FlaskPydanticValidationError
@@ -57,7 +58,17 @@ class ApiError(Exception):
         self.message = message or type(self).message
         self.code = code or type(self).code
         self.details = details or []
+        self.status = type(self).status
         super().__init__(self.message)
+
+    def with_status(self, status: int) -> "ApiError":
+        """Override the status for one instance and return self.
+
+        Only the werkzeug passthrough needs this; subclasses carry their own
+        status as a class attribute.
+        """
+        self.status = status
+        return self
 
     def payload(self) -> dict[str, Any]:
         """Return the JSON body for this error."""
@@ -204,6 +215,22 @@ def register_error_handlers(blueprint) -> None:
     @blueprint.errorhandler(ValidationError)
     def _handle_pydantic_error(error: ValidationError):
         return _handle_api_error(validation_failed_from_pydantic(error))
+
+    @blueprint.errorhandler(HTTPException)
+    def _handle_http_exception(error: HTTPException):
+        # Werkzeug raises these from inside a view -- a malformed JSON body
+        # becomes a BadRequest, for example. Without this arm the generic
+        # Exception handler below would catch them first (Flask consults
+        # blueprint handlers before app-level ones) and report a client mistake
+        # as a 500. Werkzeug's own names map cleanly onto our code slugs:
+        # "Bad Request" -> bad_request, "Not Found" -> not_found.
+        code = (error.name or "error").strip().lower().replace(" ", "_")
+        return _handle_api_error(
+            ApiError(
+                error.description or error.name,
+                code=code or ApiError.code,
+            ).with_status(error.code or 500)
+        )
 
     @blueprint.errorhandler(Exception)
     def _handle_unexpected_error(error: Exception):
