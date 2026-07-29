@@ -113,12 +113,16 @@ def _normalize_pydantic_errors(
 
     ``ctx`` is dropped because it holds arbitrary objects that are not reliably
     JSON-serializable; the human-readable ``msg`` already states the constraint.
+    ``url`` is dropped because it embeds the installed pydantic version
+    (``errors.pydantic.dev/2.12/...``), and a documented API contract should not
+    change when a dependency is upgraded.
     ``location`` records which part of the request failed, which the raw
     per-parameter grouping would otherwise be the only way to express.
     """
+    dropped = {"ctx", "url"}
     normalized = []
     for error in errors:
-        entry = {key: value for key, value in error.items() if key != "ctx"}
+        entry = {key: value for key, value in error.items() if key not in dropped}
         entry["location"] = location
         normalized.append(entry)
     return normalized
