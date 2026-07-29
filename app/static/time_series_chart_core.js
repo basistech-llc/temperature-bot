@@ -437,7 +437,7 @@ function checkedVisibleSeries(checkboxes, sensors, dataMap) {
  * are exported raw as stored (e.g. Celsius, Bq/m³), independent of
  * display-unit preferences.
  *
- * @param {Array<{data: Array<[number, number]>}>} visibleSeries
+ * @param {Array<{data: Array<[number, number|string]>}>} visibleSeries
  * @param {string[]} seriesNames - column headers, aligned with visibleSeries
  * @param {(ts: number) => string} [formatTimestamp] - defaults to formatTime
  */

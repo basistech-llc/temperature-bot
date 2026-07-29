@@ -143,7 +143,10 @@ def disable_all_rules(conn, seconds: int, ipaddr=None, agent=None):
     manual control path.
     """
     logger.info("disable_all_rules(%s)", seconds)
-    comment = f"all rules disabled for {seconds / 60:g} minutes" if seconds else "all rules re-enabled"
+    if seconds:
+        comment = f"all rules disabled for {seconds / 60:g} minutes"
+    else:
+        comment = "all rules re-enabled"
     db.disable_rules_for_device(
         conn, rules_id(conn), seconds, ipaddr=ipaddr, agent=agent, comment=comment
     )
