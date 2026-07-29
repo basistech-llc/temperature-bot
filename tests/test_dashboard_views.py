@@ -90,18 +90,29 @@ def test_display_fields_are_required():
 
 
 def test_annotate_then_validate_accepts_a_sparse_row():
-    """A row with no status_json must still build.
+    """A row with no devlog status at all must still build.
 
-    Rows without a devlog status carry none of the has_* flags or AE-200
-    extracts, so every one of those fields has to be optional. This is the case
-    that would 500 the whole dashboard if a field were wrongly made required.
+    db.get_device_status() adds the has_* flags and the AE-200 extracts only
+    when a row actually has a status, so a status-less device carries none of
+    them -- the key is absent, not None. Every such field therefore has to stay
+    optional. One wrongly-required field would 500 the entire dashboard rather
+    than blanking a single cell, so this asserts the whole set at once instead
+    of spot-checking two of them.
     """
-    rows = [_raw_row(status=None)]
+    row = _raw_row()
+    assert "status" not in row, "fixture must model the genuinely sparse row"
+    rows = [row]
     annotate_device_rows(rows, int(time.time()))
+
     view = DashboardDeviceView.model_validate(rows[0])
 
-    assert view.has_co2 is False
-    assert view.drive is None
+    status_derived = {
+        name
+        for name in dict(DashboardDeviceView.model_fields)
+        if name.startswith("has_") or name in {"drive", "fan_speed", "mode"}
+    }
+    for name in status_derived:
+        assert getattr(view, name) in (None, False), name
     assert view.device_label == "Broadway South"
 
 

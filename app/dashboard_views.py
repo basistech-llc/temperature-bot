@@ -131,6 +131,29 @@ class DashboardPage(BaseModel):
     now: int
 
 
+def build_dashboard_page(
+    rows: list[dict[str, Any]],
+    rooms: list[Room],
+    assigned_room_ids: set[int],
+    now: int | None = None,
+) -> DashboardPage:
+    """Assemble the whole dashboard contract from raw status rows.
+
+    ``rows`` are annotated in place first, then validated. Building the models
+    from the annotated dictionaries (rather than assigning fields one by one) is
+    what makes ``extra="forbid"`` useful: a key nobody declared raises here,
+    where it is a visible failure, instead of disappearing into the template.
+    """
+    now = int(time.time()) if now is None else now
+    annotate_device_rows(rows, now)
+    return DashboardPage(
+        devices=[DashboardDeviceView.model_validate(row) for row in rows],
+        room_groups=room_matrix_groups(rows, rooms, assigned_room_ids),
+        table_update_summaries=index_table_update_summaries(rows, now),
+        now=now,
+    )
+
+
 def status_update_timestamp(row: dict[str, Any]) -> int | None:
     """Return the timestamp when a status row stopped being current."""
     try:
@@ -318,26 +341,3 @@ def room_matrix_groups(
             )
         )
     return sorted(groups.values(), key=lambda group: group.room_name.casefold())
-
-
-def build_dashboard_page(
-    rows: list[dict[str, Any]],
-    rooms: list[Room],
-    assigned_room_ids: set[int],
-    now: int | None = None,
-) -> DashboardPage:
-    """Assemble the whole dashboard contract from raw status rows.
-
-    ``rows`` are annotated in place first, then validated. Building the models
-    from the annotated dictionaries (rather than assigning fields one by one) is
-    what makes ``extra="forbid"`` useful: a key nobody declared raises here,
-    where it is a visible failure, instead of disappearing into the template.
-    """
-    now = int(time.time()) if now is None else now
-    annotate_device_rows(rows, now)
-    return DashboardPage(
-        devices=[DashboardDeviceView.model_validate(row) for row in rows],
-        room_groups=room_matrix_groups(rows, rooms, assigned_room_ids),
-        table_update_summaries=index_table_update_summaries(rows, now),
-        now=now,
-    )
