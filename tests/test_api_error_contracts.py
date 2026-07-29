@@ -131,6 +131,18 @@ def test_db_not_found_keeps_its_status(flask_test_client, monkeypatch):  # noqa:
     assert response.get_json()["code"] == "not_found"
 
 
+def test_query_endpoints_ignore_unknown_parameters(flask_test_client):  # noqa: F811
+    """Extra query parameters must not fail a request.
+
+    Request bodies forbid unknown fields, but query strings accumulate
+    incidental parameters (cache-busters, hand-edited URLs, proxy additions),
+    and every other GET endpoint ignores what it does not recognize.
+    """
+    response = flask_test_client.get("/api/v1/disable-rules?seconds=60&_=1738000000")
+
+    assert response.status_code == 200
+
+
 def test_unexpected_errors_do_not_leak_exception_text(flask_test_client, monkeypatch):  # noqa: F811
     """An unhandled exception returns a generic body, not the message."""
     def explode(*_args, **_kwargs):

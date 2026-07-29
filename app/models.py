@@ -782,9 +782,13 @@ class RulesMasterControl(ControlRequest):
 
 
 class DisableRulesQuery(BaseModel):
-    """Query string for the global timed rules disable."""
+    """Query string for the global timed rules disable.
 
-    model_config = ConfigDict(extra="forbid")
+    Unlike the request bodies above, this deliberately does *not* forbid extra
+    fields. Query strings collect incidental parameters -- cache-busters,
+    hand-edited URLs, values added by proxies -- and every other GET endpoint
+    reads ``request.args`` and ignores what it does not recognize.
+    """
 
     seconds: int = Field(description="How long to disable all rules, in seconds.")
 
