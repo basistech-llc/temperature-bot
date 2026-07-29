@@ -341,6 +341,19 @@ show you production instead.
 
 ### Failure modes to expect
 
+- **The site hangs in the browser instead of returning an error.** A wedged or
+  crash-looping upstream does not produce a `502`: the vhosts set
+  `proxy_read_timeout 86400`, so nginx holds the connection for ~24 hours waiting
+  for a response that never comes. From outside the machine this is easily
+  mistaken for DNS, a firewall, or a certificate problem. Four checks localize it
+  to the upstream before logging in — `dig <name>` resolves; `curl -sS -o /dev/null
+  -w '%{time_appconnect} %{time_starttransfer}\n' https://<name>/` completes the
+  TLS handshake but never starts the transfer; `curl -D- http://<name>/` returns
+  nginx's 301; and `openssl s_client -connect <ip>:443 -servername <name>` shows a
+  valid certificate. All four passing means nginx is healthy and the fault is
+  upstream of it — continue with the `Recv-Q` check above. The vhost files are not
+  in git (see the unverified nginx section), so that timeout is visible only on
+  the box.
 - **The instance does not come up, and the journal names a schema mismatch.**
   Most likely the database is older than the code. `app/main.py` calls
   `validate_database_schema_on_startup()` while building the Flask app, which
@@ -370,15 +383,21 @@ at production:
 ```bash
 make DEPLOY_HOSTNAME="$(hostname)" \
      DEPLOY_APP_DIR=/home/deg/temperature-bot \
-     DEPLOY_DB=/home/deg/temperature-bot/temperature-bot.db \
+     DEPLOY_DB=/home/deg/temperature-bot/var/db/temperature-bot.db \
      DEPLOY_BACKUP_DIR=/home/deg/temperature-bot-backups \
      deploy
 ```
 
 Setting `DEPLOY_HOSTNAME="$(hostname)"` makes the wrong-machine guard
-unconditionally pass, so check `DEPLOY_DB` twice before running it. A dedicated
-per-instance target with fixed values would be safer, and is listed below as
-missing automation.
+unconditionally pass, so check `DEPLOY_DB` twice before running it. It must name
+the database the instance's *installed* unit actually uses — confirm with
+`systemctl show -p Environment <unit>` rather than reading the copy in `etc/`.
+The path above is the private-copy case. Migrating a database the instance does
+not read accomplishes nothing, and an instance currently pointed at
+`/var/db/temperature-bot.db` would instead have `make deploy` migrate the
+production database, which is human-authorized and human-executed only. A
+dedicated per-instance target with fixed values would be safer, and is listed
+below as missing automation.
 
 `make deploy-stage` is the only fully automated non-production path, and its
 account, paths, and service name are hardcoded to `air-stage`.
