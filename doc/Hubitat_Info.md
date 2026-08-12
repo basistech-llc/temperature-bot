@@ -277,8 +277,51 @@ Maker API command URLs and are not safe to assume simulated.
 - device command execution.
 
 The runner currently uses only the all-devices URL for collection. The web/API
-control code uses all-devices reads and command execution. The dashboard dump
-and per-device helper functions are available for diagnostics and future work.
+control code uses per-device reads for room control status and the all-devices
+read elsewhere, plus command execution. The dashboard dump and the remaining
+per-device helpers are available for diagnostics and future work.
+
+### The two attribute shapes
+
+The two read endpoints disagree about `attributes`, and the difference is easy
+to miss because both are valid JSON describing the same device:
+
+```text
+GET /devices/all       "attributes": {"switch": "on", "level": "70", ...}
+GET /devices/<id>      "attributes": [{"name": "switch", "currentValue": "on",
+                                       "dataType": "ENUM"}, ...]
+```
+
+`HubitatControlDevice` accepts both and normalizes the list into the mapping.
+Before it did, every room control status read failed model validation, so the
+Hickory tiles reported their controls unreadable in production and each failure
+logged a large warning.
+
+Two quirks the captured fixtures in `app/test_data/hubitat_control_devices.json`
+pin down:
+
+- A `FanControl` device publishes a wider speed vocabulary than the four speeds
+  we command — `low`, `medium-low`, `medium`, `medium-high`, `high`, `on`,
+  `off`, `auto`. This is why the speed we report is an untyped string.
+- The `hueBridgeGroup` driver lists `switch` and `colorName` twice. The last
+  entry wins; both carried the same value when observed.
+
+Attributes a device does not report are absent, not defaulted. A fan with no
+`switch` attribute must not be published as off.
+
+### Hub endpoints outside Maker API
+
+Maker API only ever describes the devices it has been told to expose. To see
+what the hub itself knows, including Hub Mesh devices shared from another hub,
+read the hub UI's own JSON. These need no access token and are read-only:
+
+```text
+GET http://10.2.3.51/hub2/devicesList     every device, with source Linked/System/User
+GET http://10.2.3.51/apps/api/520/rooms   Hubitat's own rooms, which we do not use
+```
+
+The first is the right tool for "is this device on the hub at all", a question
+the Maker API device list cannot answer.
 
 ## Tests And Local Development
 

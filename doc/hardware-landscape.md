@@ -54,8 +54,20 @@ reports temperature, humidity, illuminance, motion, tamper, and battery. The
 switches are a mix of in-wall relays and smart plugs (GE Enbrighten, Zooz,
 Minoston) plus a Hue bridge group for dimmable lights.
 
-**Pairing** — joining a device to the hub's radio mesh — happens on the hub, by
-a person standing next to the device. Temperature Bot never pairs anything.
+Three different operations get muddled here, and keeping them apart saves a lot
+of confusion:
+
+- **Pairing** joins a device to a hub's *radio* mesh. This is the only one that
+  involves the physical device, and it is rare — everything in the building is
+  already paired. Temperature Bot never pairs anything.
+- **Hub Mesh** shares an already-paired device from one hub to another. It is a
+  web-UI setting on the hubs, done from a browser anywhere on the network.
+- **Exposing** a device through Maker API is ticking a checkbox in an app's
+  configuration page, also from a browser.
+
+Only the first needs anyone near the hardware. Asking for the second or third
+does not require a site visit, and describing them as though it did will
+rightly get you corrected.
 
 ### Apps, and why they matter more than you would expect
 
@@ -82,37 +94,56 @@ code:
 
 | Hub | Used for | App | Notes |
 | --- | --- | --- | --- |
-| `10.2.3.51` | **Everything Temperature Bot does** | Maker API, app `520` | Configured in `temperature-bot-config.yaml`. Authorizes 21 devices. |
-| `10.2.3.52` | Hubitat's own wall dashboards | Dashboard, app `449` ("Broadway Controls") and others | We do not talk to this hub at all. |
+| `10.2.3.51` | **Everything Temperature Bot does** | Maker API, app `520` | Configured in `temperature-bot-config.yaml`. |
+| `10.2.3.52` | Hubitat's own wall dashboards | Dashboard, app `449` ("Broadway Controls") and others | We never call this hub. |
 
 `temperature-bot-config.yaml` has exactly one `hubitat.host` and one
 `hubitat.appId`. **The code cannot reach a second hub.** Supporting one would be
 a change to the configuration model, not just an extra token.
 
-**Hub Mesh** is a Hubitat feature that mirrors a device from one hub onto
-another so both can use it. Some of our sensors are meshed this way, and the
-mirrored copy **gets a different device id on each hub**. The same physical
-sensor in the Broadway space is:
+**Hub Mesh** shares a device from one hub onto another so both can use it. A
+shared device is a first-class device on the receiving hub — it appears in that
+hub's device list with `source: Linked` — but it **gets a different device id on
+each hub**. The same physical sensor in the Broadway space is:
 
 - id `37` on hub `.52`, labelled `Broadway Sensor Center`
 - id `525` on hub `.51`, labelled `Broadway Center`
 
-So a device id copied from a Hubitat dashboard URL or layout is meaningless to
-us unless that device is also meshed to `.51` and ticked in Maker API app 520.
+So an id copied from another hub's dashboard is at best dead here and at worst
+names a different device. This is not hypothetical: three Broadway control ids
+were once taken from `.52`, and on `.51` they were Kitchen Counter Lights, Cedar
+Lights, and Willow Lights.
 
-### Practical consequence
+### Two different questions, and the trap between them
 
-When someone says "add the X control to a Temperature Bot page", the first
-question is not a code question. It is: *is X exposed by Maker API app 520 on
-hub `.51`?* Check with:
+"Is the device **on** hub `.51`?" and "is it **exposed** by Maker API app 520?"
+are different questions with different answers. At the time of writing the hub
+has 118 devices and the app exposes 29 of them. Answering the first with a tool
+that reports the second is a mistake that has already been made here, and it led
+to a request for hardware work that was not needed.
+
+Check exposure — what we can actually read and command:
 
 ```bash
 poetry run python -m app.hubitat --list-devices
 ```
 
-If it is not in that list, the work is blocked on a hub-side change by someone
-on site — mesh the device to `.51` if needed, then tick it in the Maker API app.
-No amount of application code substitutes for that.
+Check presence — everything the hub knows about, meshed devices included:
+
+```bash
+curl -s http://10.2.3.51/hub2/devicesList | python3 -m json.tool | less
+```
+
+Then:
+
+- **Exposed** → nothing to do; use its `.51` id.
+- **On the hub but not exposed** → tick it in the Maker API app at
+  `http://10.2.3.51/installedapp/configure/520/mainPage`, then **Done**. Browser
+  only. Leave the existing selections alone and do not touch "Create New Access
+  Token", which would invalidate the token in the config file and stop all
+  collection.
+- **Not on the hub** → it needs Hub Mesh from whichever hub has it. Still a
+  browser change, but on the other hub.
 
 ## The AE-200
 
@@ -191,8 +222,15 @@ Consecutive identical readings are run-length encoded into one row with a longer
 
 ## Rooms
 
-A **room** is our own concept, not a Hubitat or Mitsubishi one. It exists so the
-UI can say "the Bamboo room is 23°" rather than naming a sensor.
+A **room** in this application is our own model. It exists so the UI can say
+"the Bamboo room is 23°" rather than naming a sensor.
+
+Be aware that **Hubitat has its own, separate room concept** — 14 of them,
+including a "Broadway" (id 132) — and every device payload carries `room` and
+`roomId` fields from it. Maker API even exposes room endpoints. We read none of
+that: our rooms live in the `rooms` table and are assigned through our own UI.
+The two models overlap in name and disagree in structure, so a Hubitat room name
+in a device payload is not evidence about our topology.
 
 The rules, from `doc/rooms-implementation-plan.md`:
 
@@ -232,8 +270,9 @@ switch command is not automatically safe just because the simulator is on.
 
 | Symptom | Likely cause |
 | --- | --- |
-| A device appears on a Hubitat dashboard but not in our UI | Not ticked in Maker API app 520, or only exists on hub `.52`. |
-| A device id from a Hubitat URL does not work in our config | Ids are per-hub. Hub Mesh gives the same sensor a different id on each hub. |
+| A device appears on a Hubitat dashboard but not in our UI | Usually just not ticked in Maker API app 520. Check `/hub2/devicesList` before concluding it is absent from the hub — most Broadway devices were already meshed onto `.51` and merely unexposed. |
+| A device id from a Hubitat URL does not work in our config | Ids are per-hub. Hub Mesh gives the same device a different id on each hub, and the foreign id may name an unrelated device here. |
+| A control tile is inert and the log shows validation failures | Maker API sends `attributes` as a mapping from `/devices/all` but as a list from `/devices/<id>`. See `doc/Hubitat_Info.md`. |
 | A room dashboard tile says "No data for 2h" | Its last reading is older than the ten-minute freshness cutoff. Says nothing about the device itself — the runner, cron, or the hub may be what stopped. |
 | A control tile says "Unavailable" | Different condition: the live Maker API read for that device just failed, so it is not exposed on hub `.51` or the hub is unreachable. |
 | A sensor logs data but appears on no room page | It has no `room_id`. Assign it in the Air Quality matrix. |
