@@ -12,7 +12,10 @@
 const {
   applyControlState,
   computeFitScale,
+  pendingControlChanges,
   reconcileControlAvailability,
+  recordPendingControl,
+  setControlAvailability,
   createRoomStatusRefresher,
   createStatusRefresher,
   requestRoomStatus,
@@ -204,6 +207,8 @@ function fakeElement(attributes = {}, { dragging = false } = {}) {
     // A slider reports :active only while a pointer is on it.
     matches: selector => selector === ":active" && dragging,
     classList: {
+      add: name => classes.add(name),
+      remove: name => classes.delete(name),
       toggle: (name, on) => (on ? classes.add(name) : classes.delete(name)),
       contains: name => classes.has(name),
     },
@@ -360,11 +365,102 @@ function testUnavailableControls() {
     tiles[1].classList.contains("control-unavailable"));
 }
 
+function testAbsentAttributes() {
+  // A readable device that reported no switch. Treating that as "off" would
+  // light the OFF button under a fan that is actually running.
+  const fanButtons = ["off", "low", "medium", "high"].map(speed =>
+    fakeElement({ "data-speed": speed }));
+  const switchButton = fakeElement();
+  const slider = fakeElement();
+  const valueEl = fakeElement();
+  const doc = fakeDocument({
+    'button.fan-btn[data-control-key="fan"]': fanButtons,
+    'button.wall-btn[data-control-key="sw"]': switchButton,
+    'input.dimmer-slider[data-control-key="dim"]': slider,
+    '.dimmer-value[data-control-key="dim"]': valueEl,
+  });
+
+  applyControlState(doc, { key: "fan", kind: "fan", speed: "medium" });
+  check("fan with no switch attribute trusts its reported speed",
+    fanButtons[2].classList.contains("is-on") &&
+    !fanButtons[0].classList.contains("is-on"));
+
+  applyControlState(doc, { key: "sw", kind: "switch" });
+  check("switch with no switch attribute shows unknown, not OFF",
+    switchButton.textContent === "—" && !switchButton.classList.contains("is-on"));
+
+  applyControlState(doc, { key: "dim", kind: "dimmer" });
+  check("dimmer with no level is left alone rather than snapped to 0%",
+    slider.value === null && valueEl.textContent === "");
+}
+
+function testPendingControlReconcile() {
+  const buttons = ["off", "low", "medium", "high"].map(speed =>
+    fakeElement({ "data-speed": speed }));
+  const doc = fakeDocument({
+    'button.fan-btn[data-control-key="fan"]': buttons,
+  });
+
+  // User taps MED: the handler records the intent and lights MED at once.
+  recordPendingControl("fan", { speed: "medium" });
+  buttons.forEach(b => b.classList.toggle("is-on",
+    b.getAttribute("data-speed") === "medium"));
+  // The hub has not caught up and still reports the old speed.
+  applyControlState(doc, { key: "fan", kind: "fan", switch: "on", speed: "high" });
+  check("a lagging poll does not bounce the highlight off the commanded speed",
+    buttons[2].classList.contains("is-on") && !buttons[3].classList.contains("is-on"));
+
+  // Once the hub agrees, the pending hold is released and later polls apply.
+  applyControlState(doc, { key: "fan", kind: "fan", switch: "on", speed: "medium" });
+  applyControlState(doc, { key: "fan", kind: "fan", switch: "on", speed: "high" });
+  check("once the hub agrees, later polls are applied again",
+    buttons[3].classList.contains("is-on"));
+
+  // A switch command that the device has not yet echoed holds the same way.
+  const switchButton = fakeElement();
+  const switchDoc = fakeDocument({
+    'button.wall-btn[data-control-key="sw"]': switchButton,
+  });
+  recordPendingControl("sw", { state: "on" });
+  applyControlState(switchDoc, { key: "sw", kind: "switch", switch: "off" });
+  check("a lagging switch poll does not revert the commanded state",
+    switchButton.textContent === "");
+  delete pendingControlChanges.sw;
+}
+
+function testAvailabilityOnlyWritesOnTransition() {
+  // The poll runs every 10s and a command takes a moment. If a poll rewrote
+  // `disabled` unconditionally it would re-enable a button mid-command and let
+  // a second request reach the hub.
+  const button = fakeElement();
+  const tile = fakeTile("sw", "switch");
+  const doc = fakeDocument({
+    ".room-control-tile[data-control-key]": [tile],
+    '.room-control-tile[data-control-key="sw"]': tile,
+    'button.wall-btn[data-control-key="sw"]': button,
+  });
+
+  button.disabled = true;  // a click handler disabled it for its POST
+  reconcileControlAvailability(doc, [{ key: "sw", kind: "switch", switch: "on" }]);
+  check("a poll leaves an in-flight button disabled", button.disabled === true);
+
+  // A genuine transition still writes.
+  reconcileControlAvailability(doc, []);
+  check("becoming unavailable still disables and marks the tile",
+    tile.classList.contains("control-unavailable") && button.disabled === true);
+  button.disabled = true;
+  reconcileControlAvailability(doc, [{ key: "sw", kind: "switch", switch: "on" }]);
+  check("recovering still re-enables", button.disabled === false);
+}
+
 testDimmerState();
 testFanState();
 testSwitchState();
 testMissingElements();
 testUnavailableControls();
+testAbsentAttributes();
+testPendingControlReconcile();
+testAvailabilityOnlyWritesOnTransition();
 
 testRoomStatusPolling()
   .then(testDeviceStatusSingleFlight)

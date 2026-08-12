@@ -684,11 +684,14 @@ def _require_control(
     A body may omit the control key when the room offers exactly one control of
     that kind, which is the shape the wall-mounted dashboards have always sent.
     """
-    control = (
-        config.sole_control(kind) if key is None else config.find_control(key, kind)
-    )
+    if key is None:
+        control = config.sole_control(kind)
+        if control is None:
+            raise NotFound(f"No {kind} configured")
+        return control
+    control = config.find_control(key, kind)
     if control is None:
-        raise NotFound(f"No {kind} control {key!r} configured" if key else f"No {kind} configured")
+        raise NotFound(f"No {kind} control {key!r} configured")
     return control
 
 
@@ -737,9 +740,12 @@ def room_control_status(room_key: str):
             RoomControlState(
                 key=control.key,
                 kind=control.kind,
-                switch=device.attributes.switch or "off",
+                # Pass attributes through as reported. An absent attribute is
+                # reported absent rather than defaulted, so the page never shows
+                # a running fan as off or a lit dimmer at zero.
+                switch=device.attributes.switch,
                 level=(
-                    device.attributes.level or 0
+                    device.attributes.level
                     if control.kind is RoomControlKind.DIMMER
                     else None
                 ),

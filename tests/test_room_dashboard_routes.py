@@ -193,3 +193,43 @@ def test_single_room_dashboard_shows_only_its_own_room(
     body = flask_test_client.get(f"/room/{room.room_id}").get_data(as_text=True)
     assert "Solo Sensor" in body
     assert "Other Sensor" not in body
+
+
+def test_kitchen_membership_still_resolves_its_own_room(
+    flask_test_client, test_database_conn_with_test_data
+):
+    """Kitchen must keep working now that membership comes from a config string.
+
+    Broadway's multi-room union is covered above, but Kitchen is the plain
+    single-member case, and a typo in its one members entry would render an
+    empty dashboard while every other test still passed.
+    """
+    conn, _, _ = test_database_conn_with_test_data
+    kitchen = db.create_room(conn, Room(room_name="Kitchen"))
+    elsewhere = db.create_room(conn, Room(room_name="Bamboo"))
+    _add_sensor(conn, "Lobby Sensor", kitchen.room_id, 230)
+    _add_sensor(conn, "Bamboo Sensor", elsewhere.room_id, 210)
+
+    body = flask_test_client.get("/kitchen").get_data(as_text=True)
+    assert "Lobby Sensor" in body
+    assert "Bamboo Sensor" not in body
+    assert "23.0°C" in body
+
+
+def test_kitchen_membership_follows_its_fcu_after_a_rename(
+    flask_test_client, test_database_conn_with_test_data
+):
+    """A member key also matches the owning FCU, so a rename keeps the sensors.
+
+    This is the whole reason membership is not keyed by room name alone.
+    """
+    conn, _, _ = test_database_conn_with_test_data
+    conn.execute("INSERT INTO devices (device_name, device_type) VALUES ('Kitchen', 'FCU')")
+    conn.commit()
+    db.reconcile_fcu_rooms(conn)
+    room = next(item for item in db.get_rooms(conn) if item.room_name == "Kitchen")
+    db.update_room(conn, Room(room_id=room.room_id, room_name="Canteen"))
+    _add_sensor(conn, "Lobby Sensor", room.room_id, 230)
+
+    body = flask_test_client.get("/kitchen").get_data(as_text=True)
+    assert "Lobby Sensor" in body

@@ -1136,11 +1136,17 @@ class RoomControlState(BaseModel):
     Only the fields a kind actually has are populated: ``level`` for dimmers,
     ``speed`` for fans. Unreadable devices are omitted from the response rather
     than reported with a guessed state.
+
+    Every field is optional for the same reason the whole control is omitted
+    when unreadable: a device that answers without an attribute has not told us
+    that attribute's value. Defaulting a missing ``switch`` to ``off`` would
+    show a running fan as stopped, and a missing ``level`` as ``0`` would show a
+    lit dimmer at zero percent.
     """
 
     key: str
     kind: RoomControlKind
-    switch: Literal["on", "off"]
+    switch: Literal["on", "off"] | None = None
     level: int | None = Field(default=None, ge=0, le=100)
     speed: str | None = None
 

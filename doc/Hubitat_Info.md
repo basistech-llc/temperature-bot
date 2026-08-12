@@ -239,9 +239,12 @@ control by the `key` given to it in `app/room_config.py`:
   `medium`, or `high`.
 - `POST /api/v1/room/<room_key>/tv` with `direction` of `up` or `down`.
 - `GET /api/v1/room/<room_key>/room_status` returns `{"controls": [...]}`, one
-  entry per readable control, carrying `key`, `kind`, `switch`, and whichever of
-  `level` or `speed` that kind has. A TV lift is momentary and reports no state;
-  a control whose device could not be read is omitted rather than guessed at.
+  entry per readable control. Each carries `key` and `kind`, plus whichever of
+  `switch`, `level` (dimmers), and `speed` (fans) the device actually reported.
+  A TV lift is momentary and reports no state, so it never appears; a control
+  whose device could not be read is omitted rather than guessed at; and an
+  attribute the device omitted is absent rather than defaulted, so a running fan
+  that reports no `switch` is never published as off.
 
 A control key the room does not configure is a 404, the same answer an unknown
 room gets.

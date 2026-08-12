@@ -497,18 +497,74 @@ function requestRoomStatus(endpoint, request = fetch) {
     });
 }
 
+// Optimistic control state, mirroring the AE-200 speed buttons above: a command
+// is reflected the moment it is sent, and the poll loop is not allowed to revert
+// it until the backend catches up or this backstop elapses. Hubitat read-back
+// can lag a command, which would otherwise bounce a button back and forth for a
+// poll or two. Keyed by control key.
+const CONTROL_RECONCILE_MS = 60000;
+const pendingControlChanges = {};
+
+/**
+ * Record the state a control was just commanded into.
+ * @param {string} key - Configured control key
+ * @param {Object} intent - {state} for a switch, {speed} for a fan
+ */
+function recordPendingControl(key, intent) {
+    pendingControlChanges[key] = {
+        ...intent,
+        expiresAt: Date.now() + CONTROL_RECONCILE_MS,
+    };
+}
+
+/** Which fan speed button a polled state should light. */
+function activeFanSpeed(state) {
+    // A stopped fan still reports the speed it last ran at, so an explicit
+    // "off" wins over `speed`. A state with no `switch` at all is a device that
+    // did not report one, which is not the same as reporting off.
+    return state.switch === 'off' ? 'off' : state.speed;
+}
+
+/**
+ * Whether a polled state has caught up with the command we last sent.
+ * @param {Object} state - One entry from the room_status controls list
+ * @param {Object} pending - Recorded intent
+ * @returns {boolean}
+ */
+function controlStateMatchesPending(state, pending) {
+    if (pending.state !== undefined) {
+        return state.switch === pending.state;
+    }
+    if (pending.speed !== undefined) {
+        return activeFanSpeed(state) === pending.speed;
+    }
+    return true;
+}
+
 /**
  * Apply one control's polled state to its tile.
  *
  * Controls the server could not read are absent from the response entirely, so
  * their tiles keep whatever they last showed rather than being told a state the
- * device never reported.
+ * device never reported. Individual attributes may also be absent, and are
+ * likewise left alone rather than defaulted.
  * @param {Document} pageDocument - Document to update
  * @param {Object} state - One entry from the room_status controls list
  */
 function applyControlState(pageDocument, state) {
+    const pending = pendingControlChanges[state.key];
+    if (pending) {
+        if (Date.now() < pending.expiresAt && !controlStateMatchesPending(state, pending)) {
+            return;  // Backend hasn't caught up; hold the commanded state.
+        }
+        delete pendingControlChanges[state.key];
+    }
+
     const scope = `[data-control-key="${state.key}"]`;
     if (state.kind === 'dimmer') {
+        if (state.level == null) {
+            return;
+        }
         const slider = pageDocument.querySelector(`input.dimmer-slider${scope}`);
         const valueEl = pageDocument.querySelector(`.dimmer-value${scope}`);
         // Don't yank the handle out from under a finger mid-drag.
@@ -521,9 +577,7 @@ function applyControlState(pageDocument, state) {
         return;
     }
     if (state.kind === 'fan') {
-        // A fan that is off reports its last speed, so trust `switch` over
-        // `speed` when deciding which button is lit.
-        const active = state.switch === 'on' ? state.speed : 'off';
+        const active = activeFanSpeed(state);
         pageDocument.querySelectorAll(`button.fan-btn${scope}`).forEach(button => {
             button.classList.toggle(
                 'is-on', button.getAttribute('data-speed') === active);
@@ -551,6 +605,14 @@ const CONTROL_INPUT_SELECTORS = [
 function setControlAvailability(pageDocument, key, available) {
     const scope = `[data-control-key="${key}"]`;
     const tile = pageDocument.querySelector(`.room-control-tile${scope}`);
+    const wasUnavailable = tile ? tile.classList.contains('control-unavailable') : false;
+    // Only act on a change. Writing `disabled` on every poll would re-enable a
+    // button that a click handler had disabled for the duration of its command,
+    // letting a second command reach the hub while the first is still in
+    // flight.
+    if (available !== wasUnavailable) {
+        return;
+    }
     if (tile) {
         tile.classList.toggle('control-unavailable', !available);
     }
@@ -652,6 +714,13 @@ function updateSwitchButton(control, state, pageDocument = document) {
     if (!btn) {
         return;
     }
+    if (state !== 'on' && state !== 'off') {
+        // Readable device that reported no switch attribute. Saying nothing
+        // beats asserting OFF for something that may well be on.
+        btn.textContent = '—';
+        btn.classList.remove('is-on');
+        return;
+    }
     const isOn = state === 'on';
     btn.textContent = isOn ? 'ON' : 'OFF';
     btn.classList.toggle('is-on', isOn);
@@ -666,15 +735,22 @@ function handleSwitchButton(button) {
     const isOn = button.classList.contains('is-on');
     const newState = isOn ? 'off' : 'on';
 
+    // Show the commanded state at once and hold it against the poll loop until
+    // the hub's read-back agrees.
+    recordPendingControl(control, { state: newState });
+    updateSwitchButton(control, newState);
+
     button.disabled = true;
     apiCall(
         roomControlEndpoint('switch'),
         { control, state: newState },
         'Error toggling switch.'
     ).then(() => {
-        updateSwitchButton(control, newState);
         button.disabled = false;
     }).catch(() => {
+        // The command failed, so stop holding a state the device never took;
+        // the next poll restores the truth.
+        delete pendingControlChanges[control];
         button.disabled = false;
     });
 }
@@ -688,18 +764,21 @@ function handleFanButton(button) {
     const speed = button.getAttribute('data-speed');
     const siblings = document.querySelectorAll(
         `button.fan-btn[data-control-key="${control}"]`);
-    siblings.forEach(b => { b.disabled = true; });
+
+    recordPendingControl(control, { speed });
+    siblings.forEach(b => {
+        b.classList.toggle('is-on', b === button);
+        b.disabled = true;
+    });
 
     apiCall(
         roomControlEndpoint('fan'),
         { control, speed },
         'Error setting fan speed.'
     ).then(() => {
-        siblings.forEach(b => {
-            b.classList.toggle('is-on', b === button);
-            b.disabled = false;
-        });
+        siblings.forEach(b => { b.disabled = false; });
     }).catch(() => {
+        delete pendingControlChanges[control];
         siblings.forEach(b => { b.disabled = false; });
     });
 }
@@ -899,7 +978,10 @@ if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
         applyControlState,
         computeFitScale,
+        pendingControlChanges,
         reconcileControlAvailability,
+        recordPendingControl,
+        setControlAvailability,
         createRoomStatusRefresher,
         createStatusRefresher,
         refreshRoomStatus,

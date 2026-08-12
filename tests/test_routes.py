@@ -23,7 +23,6 @@ from app.routes_web import (
     _rules_forecast_table,
 )
 from app import room_config
-from app import routes_api
 from app.version import __version__
 
 def test_status_endpoint(flask_test_client): # noqa: F811
@@ -954,11 +953,63 @@ def test_room_status_reports_fan_speed(mock_get_device_info, flask_test_client):
     }
 
 
+@patch("app.routes_api.hubitat.get_device_info")
+def test_room_status_passes_absent_attributes_through(mock_get_device_info, flask_test_client):  # noqa: F811
+    """A readable device that omits an attribute must not be given a value.
+
+    Defaulting a missing switch to "off" would show a running fan as stopped,
+    and a missing level as 0 would show a lit dimmer at zero percent. The
+    browser distinguishes absent from off; the API has to preserve that.
+    """
+    mock_get_device_info.return_value = {"attributes": {"speed": "medium"}}
+    states = {
+        state["key"]: state
+        for state in flask_test_client.get(
+            "/api/v1/room/broadway/room_status"
+        ).get_json()["controls"]
+    }
+    assert states["data-closet-fan"] == {
+        "key": "data-closet-fan",
+        "kind": "fan",
+        "speed": "medium",
+    }
+    assert states["pendant-lights"] == {"key": "pendant-lights", "kind": "switch"}
+
+
+@patch("app.routes_api.hubitat.set_dimmer_level")
+def test_dimmer_accepts_the_control_key_the_browser_sends(_mock, flask_test_client):  # noqa: F811
+    """room_dashboard.js addresses dimmers by control key, not by room alone.
+
+    The older tests post the legacy body with no control key, so without this a
+    find_control regression would break every dashboard while the suite stayed
+    green.
+    """
+    resp = flask_test_client.post(
+        "/api/v1/room/hickory/dimmer",
+        json={"control": "main", "level": 40},
+    )
+    assert resp.status_code == 200
+    _mock.assert_called_once_with("581", 40)
+
+
+@patch("app.routes_api.hubitat.control_room_tv")
+def test_tv_accepts_the_control_key_the_browser_sends(_mock, flask_test_client):  # noqa: F811
+    """Same contract check for the TV lift, which the browser also keys."""
+    resp = flask_test_client.post(
+        "/api/v1/room/hickory/tv",
+        json={"control": "tv", "direction": "down"},
+    )
+    assert resp.status_code == 200
+    _mock.assert_called_once_with("down", up_label="TV Up", down_label="TV Down")
+
+
 @patch("app.routes_api.hubitat.get_device_info", side_effect=RuntimeError("unreachable"))
 def test_unreachable_control_warns_once_per_device(mock_get_device_info, flask_test_client, caplog):  # noqa: F811
-    """Ten unreachable controls polled every ten seconds must not flood the log."""
-    # pylint: disable=protected-access
-    routes_api._failed_control_devices.clear()
+    """Ten unreachable controls polled every ten seconds must not flood the log.
+
+    The warn-once set is cleared by an autouse fixture in conftest, so this does
+    not depend on which tests ran before it.
+    """
     with caplog.at_level(logging.WARNING, logger="app.routes_api"):
         first = flask_test_client.get("/api/v1/room/broadway/room_status")
         second = flask_test_client.get("/api/v1/room/broadway/room_status")

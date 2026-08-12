@@ -30,6 +30,7 @@ from .util import github_style_duration
 from .models import (
     DeviceMetadataControl,
     Room,
+    RoomConfig,
     RoomDashboardSensor,
     RoomDashboardSensorAttributes,
 )
@@ -428,28 +429,32 @@ def _collect_device_notes(devices):
     return " | ".join(notes) if notes else None
 
 
-def _owning_fcu_name(conn, room: Room | None) -> str:
+def _owning_fcu_name(fcu_names: dict[int, str], room: Room | None) -> str:
     """Return the casefolded device name of the FCU that owns a room."""
-    if not (room and room.fcu_device_id):
+    if room is None or room.room_id is None:
         return ""
-    owner = db.get_device(conn, room.fcu_device_id)
-    return str((owner or {}).get("device_name") or "").casefold()
+    return fcu_names.get(room.room_id, "").casefold()
 
 
-def _room_control_key(conn, room: Room | None, fallback: str) -> str:
+def _room_control_key(
+    fcu_names: dict[int, str], room: Room | None, fallback: str
+) -> str:
     """Bind configured controls to the room's stable owning FCU identity."""
-    owner_key = _owning_fcu_name(conn, room)
+    owner_key = _owning_fcu_name(fcu_names, room)
     if owner_key and room_config.find_room_config(owner_key) is not None:
         return owner_key
     return fallback.casefold()
 
 
-def _find_room(conn, rooms: list[Room], key: str) -> Room | None:
+def _find_room(
+    rooms: list[Room], fcu_names: dict[int, str], key: str
+) -> Room | None:
     """Resolve one room key against a room name, then an owning FCU name.
 
     Both spellings are accepted because neither alone covers the rooms we need
     to address: an FCU name survives a room rename, but a room with no FCU can
-    only be named directly.
+    only be named directly. Room name wins, so a room deliberately named after
+    another room's FCU still resolves to itself.
     """
     wanted = key.casefold()
     by_name = next(
@@ -466,13 +471,18 @@ def _find_room(conn, rooms: list[Room], key: str) -> Room | None:
         (
             candidate
             for candidate in rooms
-            if _owning_fcu_name(conn, candidate) == wanted
+            if _owning_fcu_name(fcu_names, candidate) == wanted
         ),
         None,
     )
 
 
-def _member_room_ids(conn, rooms: list[Room], config, addressed: Room | None) -> set[int]:
+def _member_room_ids(
+    rooms: list[Room],
+    fcu_names: dict[int, str],
+    config: RoomConfig,
+    addressed: Room | None,
+) -> set[int]:
     """Resolve a dashboard's member rooms, warning about keys that match nothing.
 
     Membership is keyed by name, so renaming a member room silently drops it.
@@ -482,7 +492,7 @@ def _member_room_ids(conn, rooms: list[Room], config, addressed: Room | None) ->
         return {addressed.room_id} if addressed and addressed.room_id else set()
     room_ids = set()
     for key in config.members:
-        member = _find_room(conn, rooms, key)
+        member = _find_room(rooms, fcu_names, key)
         if member is None or member.room_id is None:
             logger.warning(
                 "Room dashboard member %r matches no room name or FCU name", key
@@ -495,14 +505,15 @@ def _member_room_ids(conn, rooms: list[Room], config, addressed: Room | None) ->
 def _render_room_dashboard_with_data(conn, location: str, room_id: int | None = None):
     """Render room dashboard with device data filtered by configuration."""
     rooms = db.get_rooms(conn)
+    fcu_names = db.get_room_fcu_names(conn)
     room = (
         db.get_room(conn, room_id)
         if room_id is not None
-        else _find_room(conn, rooms, location)
+        else _find_room(rooms, fcu_names, location)
     )
     if room_id is not None and room is None:
         return "Unknown room", 404
-    control_key = _room_control_key(conn, room, location)
+    control_key = _room_control_key(fcu_names, room, location)
     config = room_config.get_room_config(control_key)
 
     all_devices = db.get_device_status(conn)
@@ -513,7 +524,7 @@ def _render_room_dashboard_with_data(conn, location: str, room_id: int | None = 
     fan_devices = _filter_speed_control_devices(all_devices, config.fans)
 
     hubitat_sensors = _canonical_room_sensors(
-        conn, _member_room_ids(conn, rooms, config, room)
+        conn, _member_room_ids(rooms, fcu_names, config, room)
     )
 
     # Collect notes
