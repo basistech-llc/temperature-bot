@@ -10,6 +10,7 @@
  * "fit the tighter of the two axes" and degenerate-size guards.
  */
 const {
+  applyControlState,
   computeFitScale,
   createRoomStatusRefresher,
   createStatusRefresher,
@@ -187,6 +188,111 @@ async function testRoomControlStatusSingleFlight() {
     console.error('FAIL failed room-control request must release single-flight');
   }
 }
+
+/**
+ * Minimal DOM stand-in: enough for applyControlState's selector-based lookups
+ * without pulling in a headless browser.
+ */
+function fakeElement(attributes = {}, { dragging = false } = {}) {
+  const classes = new Set();
+  return {
+    value: null,
+    textContent: "",
+    getAttribute: name => attributes[name] ?? null,
+    // A slider reports :active only while a pointer is on it.
+    matches: selector => selector === ":active" && dragging,
+    classList: {
+      toggle: (name, on) => (on ? classes.add(name) : classes.delete(name)),
+      contains: name => classes.has(name),
+    },
+  };
+}
+
+function fakeDocument(elementsBySelector) {
+  return {
+    querySelector: selector => elementsBySelector[selector] ?? null,
+    querySelectorAll: selector => elementsBySelector[selector] ?? [],
+  };
+}
+
+function check(label, condition) {
+  if (condition) {
+    passed++;
+  } else {
+    failed++;
+    console.error(`FAIL ${label}`);
+  }
+}
+
+function testDimmerState() {
+  const slider = fakeElement();
+  const valueEl = fakeElement();
+  const doc = fakeDocument({
+    'input.dimmer-slider[data-control-key="main"]': slider,
+    '.dimmer-value[data-control-key="main"]': valueEl,
+  });
+  applyControlState(doc, { key: "main", kind: "dimmer", switch: "on", level: 42 });
+  check("dimmer state moves the slider", slider.value === 42);
+  check("dimmer state labels the level", valueEl.textContent === "42%");
+
+  // Mid-drag the poll must not yank the handle back to the server's value.
+  const dragging = fakeElement({}, { dragging: true });
+  const draggingDoc = fakeDocument({
+    'input.dimmer-slider[data-control-key="main"]': dragging,
+    '.dimmer-value[data-control-key="main"]': fakeElement(),
+  });
+  applyControlState(draggingDoc, { key: "main", kind: "dimmer", switch: "on", level: 7 });
+  check("a slider being dragged is left alone", dragging.value === null);
+}
+
+function testFanState() {
+  const buttons = ["off", "low", "medium", "high"].map(speed =>
+    fakeElement({ "data-speed": speed }));
+  const doc = fakeDocument({
+    'button.fan-btn[data-control-key="fan"]': buttons,
+  });
+
+  applyControlState(doc, { key: "fan", kind: "fan", switch: "on", speed: "medium" });
+  check("running fan lights its speed",
+    buttons[2].classList.contains("is-on"));
+  check("running fan lights only its speed",
+    buttons.filter(b => b.classList.contains("is-on")).length === 1);
+
+  // A stopped fan still reports the speed it last ran at. Trusting `speed` over
+  // `switch` here would light a speed button on a fan that is not turning.
+  applyControlState(doc, { key: "fan", kind: "fan", switch: "off", speed: "high" });
+  check("stopped fan lights Off, not its last speed",
+    buttons[0].classList.contains("is-on") && !buttons[3].classList.contains("is-on"));
+}
+
+function testSwitchState() {
+  const button = fakeElement();
+  const doc = fakeDocument({
+    'button.wall-btn[data-control-key="inner"]': button,
+  });
+  applyControlState(doc, { key: "inner", kind: "switch", switch: "on" });
+  check("switch on reads ON", button.textContent === "ON");
+  check("switch on is highlighted", button.classList.contains("is-on"));
+
+  applyControlState(doc, { key: "inner", kind: "switch", switch: "off" });
+  check("switch off reads OFF", button.textContent === "OFF");
+  check("switch off is not highlighted", !button.classList.contains("is-on"));
+}
+
+// A control the server could not read is absent from the response, so nothing
+// should throw when its tile has no matching element either.
+function testMissingElements() {
+  const doc = fakeDocument({});
+  applyControlState(doc, { key: "gone", kind: "dimmer", switch: "on", level: 5 });
+  applyControlState(doc, { key: "gone", kind: "fan", switch: "on", speed: "low" });
+  applyControlState(doc, { key: "gone", kind: "switch", switch: "on" });
+  check("absent control elements are tolerated", true);
+}
+
+testDimmerState();
+testFanState();
+testSwitchState();
+testMissingElements();
 
 testRoomStatusPolling()
   .then(testDeviceStatusSingleFlight)

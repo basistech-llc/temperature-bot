@@ -31,32 +31,42 @@ surface quickly.
 - `doc/rooms-implementation-plan.md`: approved FCU-owned room model, grouped
   sensor matrix, room calculations, implementation beads, and issue map.
 
-## Hickory Dashboard Map
+## Room Dashboard Map
 
-Use this section for `/hickory`, `/kitchen`, room control tiles, and room
-dashboard frontend work.
+Use this section for `/hickory`, `/kitchen`, `/broadway`, `/room/<room_id>`,
+room control tiles, and room dashboard frontend work.
 
 - `app/routes_web.py`
   - `_render_room_dashboard_with_data()`: gathers room dashboard data and
     renders `room_dashboard.html`.
-  - `/hickory` and `/kitchen`: current room dashboard routes.
+  - `_find_room()`: resolves a room key by room name, then by owning FCU name.
+  - `_member_room_ids()`: resolves a dashboard's member rooms and warns about
+    keys that match nothing.
+  - `_canonical_room_sensors()`: sensor tiles for a set of room ids.
 - `app/room_config.py`
-  - Hardcoded room dashboard membership and Hickory-specific control ids.
-  - Hickory currently has TV, dimmer, and wall light controls.
+  - Per-dashboard member rooms, AE-200 unit names, and actuator controls.
+    Sensor membership is canonical and is never listed here.
+  - Broadway spans four rooms and configures nine switches plus a fan; its
+    devices live on the Hubitat hub we cannot reach.
+- `app/models.py`
+  - `RoomConfig`, `RoomControl`, `RoomControlKind`: the control vocabulary.
+    Adding a control is a config entry, not new markup or a new endpoint.
 - `app/templates/room_dashboard.html`
-  - Shared room dashboard Jinja template for Kitchen and Hickory.
-  - Pre-renders HVAC cards, room controls, sensors, live clock, and script
-    includes.
+  - Shared room dashboard Jinja template. Loops the configured control list and
+    pre-renders HVAC cards, sensors, live clock, and script includes.
 - `app/static/room_dashboard.js`
   - Room dashboard behavior: speed buttons, set temperature controls, configured
     room controls, polling, and scale-to-fit.
-  - Derives room-control endpoints from the template's room key.
+  - `applyControlState()`: applies one polled control state to its tile.
+  - Derives room-control endpoints from the template's room key, and addresses
+    controls by `data-control-key`.
 - `app/routes_api.py`
   - `/api/v1/status`: live HVAC/device status.
   - `/api/v1/set_drive`, `/api/v1/set_fan_speed`, `/api/v1/set_temp`: HVAC
     control APIs.
-  - `/api/v1/room/<room_key>/room_status`, `/dimmer`, `/wall_light`, `/tv`:
-    configured room-control APIs. Legacy Hickory aliases remain compatible.
+  - `/api/v1/room/<room_key>/room_status`, `/switch`, `/dimmer`, `/fan`, `/tv`:
+    configured room-control APIs. `/wall_light` and the Hickory aliases remain
+    compatible, each under its own Flask endpoint name.
 
 ## Canonical Room Metrics
 

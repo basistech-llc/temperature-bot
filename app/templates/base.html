@@ -46,11 +46,14 @@
   <div class="pure-menu pure-menu-horizontal">
     <a href="." class="pure-menu-heading pure-menu-link{% if current_page == 'home' %} pure-menu-selected{% endif %}">BasisTech HVAC</a>
     <ul class="pure-menu-list">
-      <li class="pure-menu-item{% if current_page in ['kitchen', 'hickory', 'map'] %} pure-menu-selected{% endif %}">
+      {# Room dashboards render with hide_nav, so only /map can select this item. #}
+      <li class="pure-menu-item{% if current_page == 'map' %} pure-menu-selected{% endif %}">
         <a href="#" id="rooms-menu-link" class="pure-menu-link">Rooms ▾</a>
         <div id="rooms-popup" class="github-popup">
-          <a href="/hickory">Hickory</a>
-          <a href="/kitchen">Kitchen</a>
+          {# Generated from app/room_config.py so a new dashboard needs no edit here. #}
+          {% for dashboard in room_dashboards %}
+          <a href="{{ dashboard.url }}">{{ dashboard.label }}</a>
+          {% endfor %}
           <a href="/map">Map</a>
         </div>
       </li>

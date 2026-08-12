@@ -32,11 +32,17 @@ class HubitatDevice(BaseModel):
 
 
 class HubitatControlAttributes(BaseModel):
-    """Control attributes returned by the Maker API single-device endpoint."""
+    """Control attributes returned by the Maker API single-device endpoint.
+
+    ``speed`` is reported by ``FanControl`` devices and is deliberately untyped:
+    Hubitat drivers publish their own vocabularies (``medium-low``, ``auto``,
+    ``on``), and rejecting an unfamiliar one would lose the whole reading.
+    """
 
     model_config = ConfigDict(extra="ignore")
     level: int | None = Field(default=None, ge=0, le=100)
     switch: Literal["on", "off"] | None = None
+    speed: str | None = None
 
 
 class HubitatControlDevice(BaseModel):

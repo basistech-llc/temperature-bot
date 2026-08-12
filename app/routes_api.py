@@ -57,13 +57,16 @@ from .models import (
     RoomPatch,
     PresenceHistoryResponse,
     RoomPresenceResponse,
+    RoomConfig,
+    RoomControl,
+    RoomControlKind,
+    RoomControlState,
     RoomControlStatus,
     RoomDimmerControl,
-    RoomDimmerState,
+    RoomFanControl,
+    RoomSwitchControl,
     RoomTvControl,
-    RoomWallLightControl,
     RulesMasterControl,
-    RoomSwitchState,
     SetTempControl,
     SpeedControl,
     TemperatureSeriesResponse,
@@ -665,7 +668,7 @@ def update_note(conn, body: NoteControl):
     return jsonify(json_ready(CommandResponse(device_id=device_id)))
 
 
-def _require_room_config(room_key: str):
+def _require_room_config(room_key: str) -> RoomConfig:
     """Return the dashboard configuration for a room key, or raise 404."""
     config = room_config.find_room_config(room_key.casefold())
     if config is None:
@@ -673,81 +676,150 @@ def _require_room_config(room_key: str):
     return config
 
 
-@api_v1.route("/hickory/room_status", defaults={"room_key": "hickory"})
+def _require_control(
+    config: RoomConfig, key: str | None, kind: RoomControlKind
+) -> RoomControl:
+    """Return one configured control, or raise 404 naming what was not found.
+
+    A body may omit the control key when the room offers exactly one control of
+    that kind, which is the shape the wall-mounted dashboards have always sent.
+    """
+    control = (
+        config.sole_control(kind) if key is None else config.find_control(key, kind)
+    )
+    if control is None:
+        raise NotFound(f"No {kind} control {key!r} configured" if key else f"No {kind} configured")
+    return control
+
+
+# Hubitat devices that are configured but unreachable would otherwise log once
+# per control per poll, which at a ten-second refresh buries everything else.
+# Warn on the transition into failure and again on recovery, not in between.
+_failed_control_devices: set[str] = set()
+
+
+def _read_control_device(device_id: str) -> HubitatControlDevice | None:
+    """Read one control device's live attributes, or None when unreadable."""
+    try:
+        device = HubitatControlDevice.model_validate(hubitat.get_device_info(device_id))
+    except (RuntimeError, OSError, ValueError) as e:
+        if device_id not in _failed_control_devices:
+            _failed_control_devices.add(device_id)
+            logger.warning("Room device %s status fetch failed: %s", device_id, e)
+        return None
+    if device_id in _failed_control_devices:
+        _failed_control_devices.discard(device_id)
+        logger.info("Room device %s status fetch recovered", device_id)
+    return device
+
+
+@api_v1.route(
+    "/hickory/room_status",
+    defaults={"room_key": "hickory"},
+    endpoint="hickory_room_status",
+)
 @api_v1.route("/room/<room_key>/room_status")
 def room_control_status(room_key: str):
-    """Return current state of one configured room's control devices."""
+    """Return current state of one configured room's control devices.
+
+    TV lifts are momentary and report no state, so they are absent here; so is
+    any control whose device could not be read.
+    """
     config = _require_room_config(room_key)
-    result = RoomControlStatus()
-
-    def read_device(device_id: str | None) -> HubitatControlDevice | None:
-        if device_id is None:
-            return None
-        try:
-            return HubitatControlDevice.model_validate(hubitat.get_device_info(device_id))
-        except (RuntimeError, OSError, ValueError) as e:
-            logger.warning("Room device %s status fetch failed: %s", device_id, e)
-            return None
-
-    if dimmer := read_device(config.dimmer_id):
-        result.dimmer = RoomDimmerState(
-            level=dimmer.attributes.level or 0,
-            switch=dimmer.attributes.switch or "off",
+    states = []
+    for control in config.controls:
+        if control.device_id is None:
+            continue
+        device = _read_control_device(control.device_id)
+        if device is None:
+            continue
+        states.append(
+            RoomControlState(
+                key=control.key,
+                kind=control.kind,
+                switch=device.attributes.switch or "off",
+                level=(
+                    device.attributes.level or 0
+                    if control.kind is RoomControlKind.DIMMER
+                    else None
+                ),
+                speed=(
+                    device.attributes.speed
+                    if control.kind is RoomControlKind.FAN
+                    else None
+                ),
+            )
         )
-    if wall_inner := read_device(config.wall_inner_id):
-        result.wall_inner = RoomSwitchState(
-            switch=wall_inner.attributes.switch or "off"
-        )
-    if wall_outer := read_device(config.wall_outer_id):
-        result.wall_outer = RoomSwitchState(
-            switch=wall_outer.attributes.switch or "off"
-        )
-    return jsonify(json_ready(result))
+    return jsonify(json_ready(RoomControlStatus(controls=states)))
 
 
-@api_v1.route("/hickory/dimmer", methods=["POST"], defaults={"room_key": "hickory"})
+@api_v1.route(
+    "/hickory/dimmer",
+    methods=["POST"],
+    defaults={"room_key": "hickory"},
+    endpoint="hickory_dimmer",
+)
 @api_v1.route("/room/<room_key>/dimmer", methods=["POST"])
 @validate()
 def room_dimmer(room_key: str, body: RoomDimmerControl):
     """Set a configured room's light dimmer level (0-100)."""
     config = _require_room_config(room_key)
-    device_id = config.dimmer_id
-    if not device_id:
-        raise NotFound("No dimmer configured")
+    control = _require_control(config, body.control, RoomControlKind.DIMMER)
     with _hubitat_control("Dimmer"):
-        hubitat.set_dimmer_level(device_id, body.level)
+        hubitat.set_dimmer_level(control.device_id, body.level)
     return jsonify(json_ready(CommandResponse(level=body.level)))
 
 
-@api_v1.route("/hickory/wall_light", methods=["POST"], defaults={"room_key": "hickory"})
+@api_v1.route(
+    "/hickory/wall_light",
+    methods=["POST"],
+    defaults={"room_key": "hickory"},
+    endpoint="hickory_wall_light",
+)
 @api_v1.route("/room/<room_key>/wall_light", methods=["POST"])
+@api_v1.route("/room/<room_key>/switch", methods=["POST"])
 @validate()
-def room_wall_light(room_key: str, body: RoomWallLightControl):
-    """Toggle a configured room's wall light on or off."""
+def room_switch(room_key: str, body: RoomSwitchControl):
+    """Switch one configured room control on or off.
+
+    Reachable as ``/switch`` and, for the wall lights it was introduced for, as
+    ``/wall_light`` with the control key spelled ``light``.
+    """
     config = _require_room_config(room_key)
-    id_map = {"inner": config.wall_inner_id, "outer": config.wall_outer_id}
-    device_id = id_map.get(body.light)
-    if not device_id:
-        # The name is valid but this room has no such light configured.
-        raise NotFound(f"No {body.light} wall light configured")
-    with _hubitat_control("Wall light"):
-        hubitat.set_switch(device_id, body.state)
-    return jsonify(json_ready(CommandResponse(light=body.light, state=body.state)))
+    control = _require_control(config, body.control, RoomControlKind.SWITCH)
+    with _hubitat_control("Switch"):
+        hubitat.set_switch(control.device_id, body.state)
+    return jsonify(json_ready(CommandResponse(control=control.key, state=body.state)))
 
 
-@api_v1.route("/hickory/tv", methods=["POST"], defaults={"room_key": "hickory"})
+@api_v1.route("/room/<room_key>/fan", methods=["POST"])
+@validate()
+def room_fan(room_key: str, body: RoomFanControl):
+    """Set a configured room fan's speed."""
+    config = _require_room_config(room_key)
+    control = _require_control(config, body.control, RoomControlKind.FAN)
+    with _hubitat_control("Fan"):
+        hubitat.set_fan_speed(control.device_id, body.speed)
+    return jsonify(json_ready(CommandResponse(speed=body.speed)))
+
+
+@api_v1.route(
+    "/hickory/tv",
+    methods=["POST"],
+    defaults={"room_key": "hickory"},
+    endpoint="hickory_tv",
+)
 @api_v1.route("/room/<room_key>/tv", methods=["POST"])
 @validate()
 def room_tv(room_key: str, body: RoomTvControl):
     """Control a configured room's TV lift (up/down)."""
     config = _require_room_config(room_key)
-    if not config.tv_up_label or not config.tv_down_label:
-        raise NotFound("No TV configured")
+    control = _require_control(config, body.control, RoomControlKind.TV)
     with _hubitat_control("TV"):
         hubitat.control_room_tv(
             body.direction,
-            up_label=config.tv_up_label,
-            down_label=config.tv_down_label,
+            up_label=control.up_label,
+            down_label=control.down_label,
         )
     return jsonify(json_ready(CommandResponse(direction=body.direction)))
 

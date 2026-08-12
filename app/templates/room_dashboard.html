@@ -397,6 +397,44 @@ body {
   background: #66bb6a;
 }
 
+/* Fan speeds share the wall-light button shape but sit in a row, and mark the
+   selected speed the way the AE-200 speed buttons do. */
+.fan-btn {
+  flex: 1 1 0;
+  min-width: 0;
+  box-sizing: border-box;
+  height: clamp(44px, 7vh, 54px);
+  padding: 0 0.25em;
+  border: 3px solid transparent;
+  border-radius: 10px;
+  font: bold clamp(0.65rem, 1.4vw, 1em) sans-serif;
+  line-height: 1;
+  cursor: pointer;
+  color: white;
+  background: #90a4ae;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.12);
+  transition: all 0.15s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+}
+
+.fan-btn.is-on {
+  background: #66bb6a;
+  border-color: var(--color-yellow-border);
+}
+
+.fan-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(0,0,0,0.18);
+}
+
+.fan-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .wall-btn:hover:not(:disabled) {
   transform: translateY(-1px);
   box-shadow: 0 4px 8px rgba(0,0,0,0.18);
@@ -486,7 +524,7 @@ body {
   .sensor-tile { padding: 0.6em; min-height: 60px; }
   .sensor-temp { font-size: 1.3em; }
   .room-control-buttons { gap: 0.35em; }
-  .tv-btn, .wall-btn { padding: 0 0.2em; }
+  .tv-btn, .wall-btn, .fan-btn { padding: 0 0.2em; }
   .room-controls-grid { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
 }
 
@@ -581,39 +619,39 @@ body {
 </div>
 {% endmacro %}
 
-<!-- Room Controls (TV, Lights) — moved above the device cards per Carl; caption
-     removed since the TV / Main Lights / Green Wall labels are self-evident. -->
-{% if show_tv_control %}
+<!-- Room Controls — moved above the device cards per Carl; caption removed since
+     the per-tile labels are self-evident. Rendered from the room's configured
+     control list, so a new control is a config entry rather than more markup. -->
+{% if room_controls %}
 <div class="device-card room-controls-card">
   <div class="room-controls-grid">
-    <div class="room-control-tile">
-      <div class="room-control-tile-label">TV</div>
+    {% for control in room_controls %}
+    <div class="room-control-tile" data-control-key="{{ control.key }}" data-control-kind="{{ control.kind }}">
+      <div class="room-control-tile-label">{{ control.label }}</div>
+      {% if control.kind == 'tv' %}
       <div class="room-control-buttons">
-        <button class="tv-btn" id="tv-up-btn" data-direction="up">▲ Up</button>
-        <button class="tv-btn" id="tv-down-btn" data-direction="down">▼ Down</button>
+        <button class="tv-btn" data-control-key="{{ control.key }}" data-direction="up">▲ Up</button>
+        <button class="tv-btn" data-control-key="{{ control.key }}" data-direction="down">▼ Down</button>
       </div>
-    </div>
-    {% if dimmer_id %}
-    <div class="room-control-tile">
-      <div class="room-control-tile-label">Main Lights</div>
+      {% elif control.kind == 'dimmer' %}
       <div class="dimmer-control">
-        <input type="range" id="dimmer-slider" class="dimmer-slider" min="0" max="100" value="0">
-        <span class="dimmer-value" id="dimmer-value">--%</span>
+        <input type="range" class="dimmer-slider" data-control-key="{{ control.key }}"
+               min="0" max="100" value="0">
+        <span class="dimmer-value" data-control-key="{{ control.key }}">--%</span>
       </div>
+      {% elif control.kind == 'fan' %}
+      <div class="room-control-buttons">
+        {% for speed in ['off', 'low', 'medium', 'high'] %}
+        <button class="fan-btn" data-control-key="{{ control.key }}" data-speed="{{ speed }}">
+          {{ speed | capitalize }}
+        </button>
+        {% endfor %}
+      </div>
+      {% else %}
+      <button class="wall-btn" data-control-key="{{ control.key }}">...</button>
+      {% endif %}
     </div>
-    {% endif %}
-    {% if wall_inner_id %}
-    <div class="room-control-tile">
-      <div class="room-control-tile-label">Green Wall - Inner</div>
-      <button class="wall-btn" id="wall-inner-btn" data-light="inner">...</button>
-    </div>
-    {% endif %}
-    {% if wall_outer_id %}
-    <div class="room-control-tile">
-      <div class="room-control-tile-label">Green Wall - Outer</div>
-      <button class="wall-btn" id="wall-outer-btn" data-light="outer">...</button>
-    </div>
-    {% endif %}
+    {% endfor %}
   </div>
 </div>
 {% endif %}

@@ -23,7 +23,6 @@ from .version import __version__
 from . import db
 from . import db_alerts
 from . import rules_engine
-from . import hubitat
 from . import room_config
 from .display_names import display_device_name
 from .dashboard_views import build_dashboard_page
@@ -360,54 +359,30 @@ def _filter_speed_control_devices(devices, device_names):
     ]
 
 
-def _get_hubitat_sensors(sensor_names):
-    """Fetch and filter Hubitat temperature sensors by exact name match.
+def _canonical_room_sensors(conn, room_ids: set[int]) -> list[RoomDashboardSensor]:
+    """Build room sensor tiles from persisted assignment and shared freshness.
 
-    Returns an entry for every configured name.  Sensors not found in
-    Hubitat (or unreachable) are represented as placeholder dicts with
-    ``offline=True`` so the template can still render them.
+    A dashboard may span several rooms (Broadway is served by two FCUs, and each
+    FCU owns its own room), so membership is a set. Freshness is still selected
+    per room, because the shared selector answers questions about one room.
     """
-    if not sensor_names:
-        return []
-
-    try:
-        all_hubitat = hubitat.get_all_devices()
-    except (ValueError, RuntimeError, OSError) as e:
-        logger.warning("Failed to fetch Hubitat sensors: %s", e)
-        all_hubitat = []
-
-    found = [
-        dev
-        for dev in all_hubitat
-        if "TemperatureMeasurement" in dev.get("capabilities", [])
-        and dev.get("name") in sensor_names
-    ]
-    found_names = {dev.get("name") for dev in found}
-
-    for name in sensor_names:
-        if name not in found_names:
-            logger.warning("Configured sensor %r not found in Hubitat", name)
-            found.append({"name": name, "label": name, "offline": True, "attributes": {}})
-
-    return found
-
-
-def _canonical_room_sensors(conn, room_id: int) -> list[RoomDashboardSensor]:
-    """Build room sensor tiles from persisted assignment and shared freshness."""
     snapshots = db.fetch_latest_room_metric_snapshots(conn)
     at_time = time.time()
-    temperatures = select_room_metric_sources(
-        snapshots, room_id=room_id, metric=RoomMetric.TEMPERATURE, at_time=at_time
-    )
-    humidities = select_room_metric_sources(
-        snapshots, room_id=room_id, metric=RoomMetric.HUMIDITY, at_time=at_time
-    )
-    temperature_by_device = {
-        source.device_id: source.value for source in temperatures.sources
-    }
-    humidity_by_device = {
-        source.device_id: source.value for source in humidities.sources
-    }
+    temperature_by_device: dict[int, float] = {}
+    humidity_by_device: dict[int, float] = {}
+    for room_id in room_ids:
+        temperatures = select_room_metric_sources(
+            snapshots, room_id=room_id, metric=RoomMetric.TEMPERATURE, at_time=at_time
+        )
+        humidities = select_room_metric_sources(
+            snapshots, room_id=room_id, metric=RoomMetric.HUMIDITY, at_time=at_time
+        )
+        temperature_by_device.update(
+            {source.device_id: source.value for source in temperatures.sources}
+        )
+        humidity_by_device.update(
+            {source.device_id: source.value for source in humidities.sources}
+        )
     return sorted(
         [
             RoomDashboardSensor(
@@ -425,7 +400,7 @@ def _canonical_room_sensors(conn, room_id: int) -> list[RoomDashboardSensor]:
                 ),
             )
             for snapshot in snapshots
-            if snapshot.room_id == room_id
+            if snapshot.room_id in room_ids
             and snapshot.device_type
             not in {DEVICE_TYPE_FCU, DEVICE_TYPE_ERV, DEVICE_TYPE_INTERNAL}
             and snapshot.temp10x is not None
@@ -444,40 +419,81 @@ def _collect_device_notes(devices):
     return " | ".join(notes) if notes else None
 
 
+def _owning_fcu_name(conn, room: Room | None) -> str:
+    """Return the casefolded device name of the FCU that owns a room."""
+    if not (room and room.fcu_device_id):
+        return ""
+    owner = db.get_device(conn, room.fcu_device_id)
+    return str((owner or {}).get("device_name") or "").casefold()
+
+
 def _room_control_key(conn, room: Room | None, fallback: str) -> str:
     """Bind configured controls to the room's stable owning FCU identity."""
-    if room and room.fcu_device_id:
-        owner = db.get_device(conn, room.fcu_device_id)
-        owner_key = str((owner or {}).get("device_name") or "").casefold()
-        if room_config.find_room_config(owner_key) is not None:
-            return owner_key
+    owner_key = _owning_fcu_name(conn, room)
+    if owner_key and room_config.find_room_config(owner_key) is not None:
+        return owner_key
     return fallback.casefold()
+
+
+def _find_room(conn, rooms: list[Room], key: str) -> Room | None:
+    """Resolve one room key against a room name, then an owning FCU name.
+
+    Both spellings are accepted because neither alone covers the rooms we need
+    to address: an FCU name survives a room rename, but a room with no FCU can
+    only be named directly.
+    """
+    wanted = key.casefold()
+    by_name = next(
+        (
+            candidate
+            for candidate in rooms
+            if (candidate.room_name or "").casefold() == wanted
+        ),
+        None,
+    )
+    if by_name is not None:
+        return by_name
+    return next(
+        (
+            candidate
+            for candidate in rooms
+            if _owning_fcu_name(conn, candidate) == wanted
+        ),
+        None,
+    )
+
+
+def _member_room_ids(conn, rooms: list[Room], config, addressed: Room | None) -> set[int]:
+    """Resolve a dashboard's member rooms, warning about keys that match nothing.
+
+    Membership is keyed by name, so renaming a member room silently drops it.
+    Log the miss rather than rendering a quietly incomplete dashboard.
+    """
+    if not config.members:
+        return {addressed.room_id} if addressed and addressed.room_id else set()
+    room_ids = set()
+    for key in config.members:
+        member = _find_room(conn, rooms, key)
+        if member is None or member.room_id is None:
+            logger.warning(
+                "Room dashboard member %r matches no room name or FCU name", key
+            )
+            continue
+        room_ids.add(member.room_id)
+    return room_ids
 
 
 def _render_room_dashboard_with_data(conn, location: str, room_id: int | None = None):
     """Render room dashboard with device data filtered by configuration."""
-    room_key = location.lower()
     rooms = db.get_rooms(conn)
-    room = db.get_room(conn, room_id) if room_id is not None else next(
-        (
-            candidate
-            for candidate in rooms
-            if (candidate.room_name or "").casefold() == room_key
-        ),
-        None,
+    room = (
+        db.get_room(conn, room_id)
+        if room_id is not None
+        else _find_room(conn, rooms, location)
     )
-    if room is None and room_id is None:
-        room = next(
-            (
-                candidate
-                for candidate in rooms
-                if _room_control_key(conn, candidate, "") == room_key
-            ),
-            None,
-        )
     if room_id is not None and room is None:
         return "Unknown room", 404
-    control_key = _room_control_key(conn, room, room_key)
+    control_key = _room_control_key(conn, room, location)
     config = room_config.get_room_config(control_key)
 
     all_devices = db.get_device_status(conn)
@@ -487,10 +503,8 @@ def _render_room_dashboard_with_data(conn, location: str, room_id: int | None = 
 
     fan_devices = _filter_speed_control_devices(all_devices, config.fans)
 
-    hubitat_sensors = (
-        _canonical_room_sensors(conn, room.room_id)
-        if room and room.room_id
-        else []
+    hubitat_sensors = _canonical_room_sensors(
+        conn, _member_room_ids(conn, rooms, config, room)
     )
 
     # Collect notes
@@ -507,10 +521,7 @@ def _render_room_dashboard_with_data(conn, location: str, room_id: int | None = 
         fan_devices=fan_devices,
         hubitat_sensors=hubitat_sensors,
         notes=notes,
-        show_tv_control=config.tv_control,
-        dimmer_id=config.dimmer_id,
-        wall_inner_id=config.wall_inner_id,
-        wall_outer_id=config.wall_outer_id,
+        room_controls=config.controls,
         room_control_key=control_key,
     )
 
@@ -578,6 +589,12 @@ def _register_room_routes(app):
     def hickory_dashboard(conn):
         """Hickory HVAC control dashboard."""
         return _render_room_dashboard_with_data(conn, "Hickory")
+
+    @app.route("/broadway")
+    @with_db_connection
+    def broadway_dashboard(conn):
+        """Broadway dashboard, spanning the rooms its two FCUs own."""
+        return _render_room_dashboard_with_data(conn, "Broadway")
 
     @app.get("/room/<int:room_id>")
     @with_db_connection

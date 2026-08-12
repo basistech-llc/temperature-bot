@@ -219,6 +219,7 @@ The source contains these Hubitat control helpers:
 - `hubitat.send_device_command(device_id, command, secondary_value="")`
 - `hubitat.set_dimmer_level(device_id, level)`
 - `hubitat.set_switch(device_id, state)`
+- `hubitat.set_fan_speed(device_id, speed)`
 - `hubitat.control_hickory_tv(direction)`
 
 They use Maker API command URLs:
@@ -227,17 +228,32 @@ They use Maker API command URLs:
 GET /apps/api/{appId}/devices/{device_id}/{command}/{secondary_value}?access_token={access_token}
 ```
 
-Current app routes expose configured room controls:
+Current app routes expose configured room controls. Each body addresses one
+control by the `key` given to it in `app/room_config.py`:
 
-- `POST /api/v1/room/<room_key>/dimmer` with integer `level` from 0 to 100.
-- `POST /api/v1/room/<room_key>/wall_light` with `light` of `inner` or `outer`, and
-  `state` of `on` or `off`.
+- `POST /api/v1/room/<room_key>/switch` with `control` and `state` of `on` or
+  `off`.
+- `POST /api/v1/room/<room_key>/dimmer` with integer `level` from 0 to 100, and
+  `control` when the room has more than one dimmer.
+- `POST /api/v1/room/<room_key>/fan` with `control` and `speed` of `off`, `low`,
+  `medium`, or `high`.
 - `POST /api/v1/room/<room_key>/tv` with `direction` of `up` or `down`.
-- `GET /api/v1/room/<room_key>/room_status` for current control states.
+- `GET /api/v1/room/<room_key>/room_status` returns `{"controls": [...]}`, one
+  entry per readable control, carrying `key`, `kind`, `switch`, and whichever of
+  `level` or `speed` that kind has. A TV lift is momentary and reports no state;
+  a control whose device could not be read is omitted rather than guessed at.
+
+A control key the room does not configure is a 404, the same answer an unknown
+room gets.
 
 Device ids and TV component labels are configured per room in
 `app/room_config.py`. The helper sends `on` to the selected TV component
-switch. The old `/api/v1/hickory/...` paths remain compatibility aliases.
+switch.
+
+`/api/v1/room/<room_key>/wall_light` is an alias of `/switch` that spells the
+control key `light`, and the `/api/v1/hickory/...` paths remain compatibility
+aliases. Each alias is registered under its own Flask endpoint name; sharing one
+endpoint made Werkzeug 308-redirect the generic URL to the Hickory-specific one.
 
 Simulator mode only simulates `get_all_devices()`. Command helpers still build
 Maker API command URLs and are not safe to assume simulated.

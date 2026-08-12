@@ -473,13 +473,14 @@ function roomControlEndpoint(action, roomKeyOverride = null) {
 }
 
 /**
- * Set the dimmer level via API.
+ * Set a dimmer's level via API.
+ * @param {string} control - Configured control key
  * @param {number} level - 0-100
  */
-function setDimmerLevel(level) {
+function setDimmerLevel(control, level) {
     apiCall(
         roomControlEndpoint('dimmer'),
-        { level },
+        { control, level },
         'Error setting dimmer.'
     );
 }
@@ -496,6 +497,42 @@ function requestRoomStatus(endpoint, request = fetch) {
     });
 }
 
+/**
+ * Apply one control's polled state to its tile.
+ *
+ * Controls the server could not read are absent from the response entirely, so
+ * their tiles keep whatever they last showed rather than being told a state the
+ * device never reported.
+ * @param {Document} pageDocument - Document to update
+ * @param {Object} state - One entry from the room_status controls list
+ */
+function applyControlState(pageDocument, state) {
+    const scope = `[data-control-key="${state.key}"]`;
+    if (state.kind === 'dimmer') {
+        const slider = pageDocument.querySelector(`input.dimmer-slider${scope}`);
+        const valueEl = pageDocument.querySelector(`.dimmer-value${scope}`);
+        // Don't yank the handle out from under a finger mid-drag.
+        if (slider && !slider.matches(':active')) {
+            slider.value = state.level;
+        }
+        if (valueEl) {
+            valueEl.textContent = state.level + '%';
+        }
+        return;
+    }
+    if (state.kind === 'fan') {
+        // A fan that is off reports its last speed, so trust `switch` over
+        // `speed` when deciding which button is lit.
+        const active = state.switch === 'on' ? state.speed : 'off';
+        pageDocument.querySelectorAll(`button.fan-btn${scope}`).forEach(button => {
+            button.classList.toggle(
+                'is-on', button.getAttribute('data-speed') === active);
+        });
+        return;
+    }
+    updateSwitchButton(state.key, state.switch, pageDocument);
+}
+
 function createRoomStatusRefresher(request = fetch, documentRef) {
     const pageDocument = documentRef ?? document;
     return createSingleFlight(async () => {
@@ -507,22 +544,8 @@ function createRoomStatusRefresher(request = fetch, documentRef) {
                 roomControlEndpoint('room_status'),
                 request,
             );
-            if (data.dimmer) {
-                const slider = pageDocument.getElementById('dimmer-slider');
-                const valueEl = pageDocument.getElementById('dimmer-value');
-                if (slider && !slider.matches(':active')) {
-                    slider.value = data.dimmer.level;
-                }
-                if (valueEl) {
-                    valueEl.textContent = data.dimmer.level + '%';
-                }
-            }
-            if (data.wall_inner) {
-                updateWallButton('inner', data.wall_inner.switch);
-            }
-            if (data.wall_outer) {
-                updateWallButton('outer', data.wall_outer.switch);
-            }
+            (data.controls || []).forEach(
+                state => applyControlState(pageDocument, state));
             return true;
         } catch (error) {
             if (DEBUG) {
@@ -538,33 +561,33 @@ const refreshRoomStatus = typeof document === 'undefined'
     : createRoomStatusRefresher();
 
 /**
- * Set up dimmer slider interaction.
+ * Set up every dimmer slider on the page, each addressing its own control.
  */
-function setupDimmer() {
-    const slider = document.getElementById('dimmer-slider');
-    if (!slider) {
-        return;
-    }
+function setupDimmers() {
+    document.querySelectorAll('input.dimmer-slider[data-control-key]').forEach(slider => {
+        const control = slider.getAttribute('data-control-key');
+        const valueEl = document.querySelector(
+            `.dimmer-value[data-control-key="${control}"]`);
+        const debouncedSet = debounce(level => setDimmerLevel(control, level), 300);
 
-    const valueEl = document.getElementById('dimmer-value');
-    const debouncedSet = debounce(setDimmerLevel, 300);
-
-    slider.addEventListener('input', () => {
-        const level = parseInt(slider.value);
-        if (valueEl) {
-            valueEl.textContent = level + '%';
-        }
-        debouncedSet(level);
+        slider.addEventListener('input', () => {
+            const level = parseInt(slider.value);
+            if (valueEl) {
+                valueEl.textContent = level + '%';
+            }
+            debouncedSet(level);
+        });
     });
 }
 
 /**
- * Update a wall light button to reflect current state.
- * @param {string} light - 'inner' or 'outer'
+ * Update a switch button to reflect current state.
+ * @param {string} control - Configured control key
  * @param {string} state - 'on' or 'off'
+ * @param {Document} pageDocument - Document to update
  */
-function updateWallButton(light, state) {
-    const btn = document.getElementById('wall-' + light + '-btn');
+function updateSwitchButton(control, state, pageDocument = document) {
+    const btn = pageDocument.querySelector(`button.wall-btn[data-control-key="${control}"]`);
     if (!btn) {
         return;
     }
@@ -574,24 +597,49 @@ function updateWallButton(light, state) {
 }
 
 /**
- * Handle wall light button click — toggle on/off.
+ * Handle switch button click — toggle on/off.
  * @param {HTMLElement} button - Clicked button element
  */
-function handleWallButton(button) {
-    const light = button.getAttribute('data-light');
+function handleSwitchButton(button) {
+    const control = button.getAttribute('data-control-key');
     const isOn = button.classList.contains('is-on');
     const newState = isOn ? 'off' : 'on';
 
     button.disabled = true;
     apiCall(
-        roomControlEndpoint('wall_light'),
-        { light, state: newState },
-        'Error toggling wall light.'
+        roomControlEndpoint('switch'),
+        { control, state: newState },
+        'Error toggling switch.'
     ).then(() => {
-        updateWallButton(light, newState);
+        updateSwitchButton(control, newState);
         button.disabled = false;
     }).catch(() => {
         button.disabled = false;
+    });
+}
+
+/**
+ * Handle fan speed button click.
+ * @param {HTMLElement} button - Clicked button element
+ */
+function handleFanButton(button) {
+    const control = button.getAttribute('data-control-key');
+    const speed = button.getAttribute('data-speed');
+    const siblings = document.querySelectorAll(
+        `button.fan-btn[data-control-key="${control}"]`);
+    siblings.forEach(b => { b.disabled = true; });
+
+    apiCall(
+        roomControlEndpoint('fan'),
+        { control, speed },
+        'Error setting fan speed.'
+    ).then(() => {
+        siblings.forEach(b => {
+            b.classList.toggle('is-on', b === button);
+            b.disabled = false;
+        });
+    }).catch(() => {
+        siblings.forEach(b => { b.disabled = false; });
     });
 }
 
@@ -600,13 +648,15 @@ function handleWallButton(button) {
  * @param {HTMLElement} button - Clicked button element
  */
 function handleTvButton(button) {
+    const control = button.getAttribute('data-control-key');
     const direction = button.getAttribute('data-direction');
-    const buttons = document.querySelectorAll('.tv-btn');
+    const buttons = document.querySelectorAll(
+        `.tv-btn[data-control-key="${control}"]`);
     buttons.forEach(b => { b.disabled = true; });
 
     apiCall(
         roomControlEndpoint('tv'),
-        { direction },
+        { control, direction },
         'Error controlling TV.'
     ).then(() => {
         buttons.forEach(b => { b.disabled = false; });
@@ -752,12 +802,17 @@ function setupRoomDashboard() {
     // Set up set temperature controls
     setupSetTempControls();
 
-    // Set up dimmer
-    setupDimmer();
+    // Set up dimmers
+    setupDimmers();
 
-    // Set up wall light buttons
-    document.querySelectorAll('.wall-btn[data-light]').forEach(button => {
-        button.addEventListener('click', () => handleWallButton(button));
+    // Set up switch buttons
+    document.querySelectorAll('.wall-btn[data-control-key]').forEach(button => {
+        button.addEventListener('click', () => handleSwitchButton(button));
+    });
+
+    // Set up fan speed buttons
+    document.querySelectorAll('.fan-btn[data-control-key][data-speed]').forEach(button => {
+        button.addEventListener('click', () => handleFanButton(button));
     });
 
     initializeSensorTemperatures();
@@ -781,6 +836,7 @@ if (typeof window !== 'undefined') {
 // Node.js export for testing.
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
+        applyControlState,
         computeFitScale,
         createRoomStatusRefresher,
         createStatusRefresher,
