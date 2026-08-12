@@ -2,7 +2,7 @@
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 DEVICE_TYPE_SENSOR = "SENSOR"
 DEVICE_TYPE_FAN = "FAN"
@@ -50,6 +50,30 @@ class HubitatControlDevice(BaseModel):
 
     model_config = ConfigDict(extra="ignore")
     attributes: HubitatControlAttributes = Field(default_factory=HubitatControlAttributes)
+
+    @field_validator("attributes", mode="before")
+    @classmethod
+    def _accept_either_attribute_shape(cls, value):
+        """Normalize the two shapes Maker API uses for ``attributes``.
+
+        ``/devices/all`` returns a mapping of name to value, but
+        ``/devices/<id>`` -- the endpoint room control status reads -- returns a
+        list of ``{name, currentValue, dataType}`` records. Only the mapping was
+        accepted, so every live control read failed validation and every room
+        dashboard reported its controls unreadable.
+
+        Where a device lists an attribute twice, as the Hue group driver does
+        for ``switch`` and ``colorName``, the last entry wins. Both entries
+        carried the same value in the observed payloads, so this picks an order
+        rather than resolving a real conflict.
+        """
+        if not isinstance(value, list):
+            return value
+        return {
+            entry["name"]: entry.get("currentValue")
+            for entry in value
+            if isinstance(entry, dict) and entry.get("name")
+        }
 
 
 FAN_CAPABILITIES = frozenset({"FanControl"})
