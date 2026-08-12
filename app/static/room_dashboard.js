@@ -533,6 +533,66 @@ function applyControlState(pageDocument, state) {
     updateSwitchButton(state.key, state.switch, pageDocument);
 }
 
+// Every interactive element a control tile can hold. Kept document-scoped (like
+// applyControlState) so availability is decided by the same selector contract.
+const CONTROL_INPUT_SELECTORS = [
+    'button.wall-btn',
+    'button.fan-btn',
+    'button.tv-btn',
+    'input.dimmer-slider',
+];
+
+/**
+ * Mark one control as readable or not, and disable its inputs when it is not.
+ * @param {Document} pageDocument - Document to update
+ * @param {string} key - Configured control key
+ * @param {boolean} available - Whether the server could read the device
+ */
+function setControlAvailability(pageDocument, key, available) {
+    const scope = `[data-control-key="${key}"]`;
+    const tile = pageDocument.querySelector(`.room-control-tile${scope}`);
+    if (tile) {
+        tile.classList.toggle('control-unavailable', !available);
+    }
+    CONTROL_INPUT_SELECTORS.forEach(selector => {
+        pageDocument.querySelectorAll(`${selector}${scope}`).forEach(element => {
+            element.disabled = !available;
+        });
+    });
+    if (!available) {
+        const button = pageDocument.querySelector(`button.wall-btn${scope}`);
+        if (button) {
+            button.textContent = 'Unavailable';
+        }
+    }
+}
+
+/**
+ * Reconcile every rendered control against the controls the server could read.
+ *
+ * Called only after a *successful* poll. A failed request means we cannot tell
+ * whether the devices are reachable, which is not the same as knowing they are
+ * not, so it must leave the tiles alone rather than greying out the whole page
+ * on a momentary network blip.
+ *
+ * TV lifts are momentary and deliberately report no state, so they are never in
+ * the response and must not be judged by their absence from it.
+ * @param {Document} pageDocument - Document to update
+ * @param {Array<Object>} states - The controls list from room_status
+ */
+function reconcileControlAvailability(pageDocument, states) {
+    const readable = new Set(states.map(state => state.key));
+    pageDocument
+        .querySelectorAll('.room-control-tile[data-control-key]')
+        .forEach(tile => {
+            if (tile.getAttribute('data-control-kind') === 'tv') {
+                return;
+            }
+            const key = tile.getAttribute('data-control-key');
+            setControlAvailability(pageDocument, key, readable.has(key));
+        });
+}
+
 function createRoomStatusRefresher(request = fetch, documentRef) {
     const pageDocument = documentRef ?? document;
     return createSingleFlight(async () => {
@@ -544,8 +604,9 @@ function createRoomStatusRefresher(request = fetch, documentRef) {
                 roomControlEndpoint('room_status'),
                 request,
             );
-            (data.controls || []).forEach(
-                state => applyControlState(pageDocument, state));
+            const states = data.controls || [];
+            states.forEach(state => applyControlState(pageDocument, state));
+            reconcileControlAvailability(pageDocument, states);
             return true;
         } catch (error) {
             if (DEBUG) {
@@ -838,6 +899,7 @@ if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
         applyControlState,
         computeFitScale,
+        reconcileControlAvailability,
         createRoomStatusRefresher,
         createStatusRefresher,
         refreshRoomStatus,

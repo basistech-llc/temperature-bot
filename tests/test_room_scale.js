@@ -12,6 +12,7 @@
 const {
   applyControlState,
   computeFitScale,
+  reconcileControlAvailability,
   createRoomStatusRefresher,
   createStatusRefresher,
   requestRoomStatus,
@@ -154,7 +155,7 @@ async function testRoomControlStatusSingleFlight() {
   const responseReady = new Promise(resolve => { releaseRequest = resolve; });
   const documentRef = {
     querySelector: () => ({}),
-    getElementById: () => null,
+    querySelectorAll: () => [],
   };
   const refreshRoomStatus = createRoomStatusRefresher(async () => {
     requests++;
@@ -198,6 +199,7 @@ function fakeElement(attributes = {}, { dragging = false } = {}) {
   return {
     value: null,
     textContent: "",
+    disabled: false,
     getAttribute: name => attributes[name] ?? null,
     // A slider reports :active only while a pointer is on it.
     matches: selector => selector === ":active" && dragging,
@@ -208,10 +210,34 @@ function fakeElement(attributes = {}, { dragging = false } = {}) {
   };
 }
 
-function fakeDocument(elementsBySelector) {
+function fakeTile(key, kind) {
+  const classes = new Set();
   return {
-    querySelector: selector => elementsBySelector[selector] ?? null,
-    querySelectorAll: selector => elementsBySelector[selector] ?? [],
+    key,
+    getAttribute: name =>
+      ({ "data-control-key": key, "data-control-kind": kind })[name] ?? null,
+    classList: {
+      toggle: (name, on) => (on ? classes.add(name) : classes.delete(name)),
+      contains: name => classes.has(name),
+    },
+  };
+}
+
+function fakeDocument(elementsBySelector) {
+  // Mirrors the real DOM's split: querySelector yields one node or null,
+  // querySelectorAll always yields a list.
+  return {
+    querySelector: selector => {
+      const found = elementsBySelector[selector];
+      return (Array.isArray(found) ? found[0] : found) ?? null;
+    },
+    querySelectorAll: selector => {
+      const found = elementsBySelector[selector];
+      if (!found) {
+        return [];
+      }
+      return Array.isArray(found) ? found : [found];
+    },
   };
 }
 
@@ -289,10 +315,56 @@ function testMissingElements() {
   check("absent control elements are tolerated", true);
 }
 
+function testUnavailableControls() {
+  const switchButton = fakeElement();
+  const fanButton = fakeElement({ "data-speed": "low" });
+  const tvButton = fakeElement({ "data-direction": "up" });
+  const tiles = [
+    fakeTile("pendant-lights", "switch"),
+    fakeTile("data-closet-fan", "fan"),
+    fakeTile("tv", "tv"),
+  ];
+  const doc = fakeDocument({
+    ".room-control-tile[data-control-key]": tiles,
+    '.room-control-tile[data-control-key="pendant-lights"]': tiles[0],
+    '.room-control-tile[data-control-key="data-closet-fan"]': tiles[1],
+    '.room-control-tile[data-control-key="tv"]': tiles[2],
+    'button.wall-btn[data-control-key="pendant-lights"]': switchButton,
+    'button.fan-btn[data-control-key="data-closet-fan"]': [fanButton],
+    'button.tv-btn[data-control-key="tv"]': [tvButton],
+  });
+
+  // Nothing readable: the unreachable-hub case Broadway is in today.
+  reconcileControlAvailability(doc, []);
+  check("unreadable switch tile is marked unavailable",
+    tiles[0].classList.contains("control-unavailable"));
+  check("unreadable switch says so rather than showing a placeholder",
+    switchButton.textContent === "Unavailable");
+  check("unreadable switch is disabled", switchButton.disabled === true);
+  check("unreadable fan is disabled", fanButton.disabled === true);
+
+  // A TV lift is momentary and never reports state. Judging it by its absence
+  // from the response would grey out a control that works perfectly.
+  check("tv tile is never marked unavailable",
+    !tiles[2].classList.contains("control-unavailable"));
+  check("tv button stays enabled", tvButton.disabled === false);
+
+  // The device comes back once someone exposes it on the reachable hub.
+  reconcileControlAvailability(doc, [
+    { key: "pendant-lights", kind: "switch", switch: "on" },
+  ]);
+  check("recovered control drops the unavailable mark",
+    !tiles[0].classList.contains("control-unavailable"));
+  check("recovered control is re-enabled", switchButton.disabled === false);
+  check("a still-unreadable sibling stays marked",
+    tiles[1].classList.contains("control-unavailable"));
+}
+
 testDimmerState();
 testFanState();
 testSwitchState();
 testMissingElements();
+testUnavailableControls();
 
 testRoomStatusPolling()
   .then(testDeviceStatusSingleFlight)

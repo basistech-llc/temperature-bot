@@ -309,10 +309,31 @@ body {
   text-align: center;
 }
 
+/* Grid stretches every tile in a row to the same height, but a label that wraps
+   to two lines would otherwise push only its own button down. Pinning the
+   control area to the bottom of the tile keeps a row's buttons on one line
+   whatever the labels do. */
+.room-control-buttons,
+.dimmer-control {
+  margin-top: auto;
+}
+
 .room-control-buttons {
   display: flex;
   gap: 0.5em;
   width: 100%;
+}
+
+/* A control whose Hubitat device could not be read. Distinct from "still
+   loading": the tile is legible but visibly inert, so an operator can see the
+   device is missing rather than tapping a button that will never answer. */
+.room-control-tile.control-unavailable {
+  opacity: 0.55;
+}
+
+.room-control-tile.control-unavailable .room-control-tile-label {
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
 }
 
 .tv-btn {
@@ -640,15 +661,20 @@ body {
         <span class="dimmer-value" data-control-key="{{ control.key }}">--%</span>
       </div>
       {% elif control.kind == 'fan' %}
+      {# Abbreviated to match the AE-200 speed buttons below; the wire values
+         stay off/low/medium/high. #}
       <div class="room-control-buttons">
-        {% for speed in ['off', 'low', 'medium', 'high'] %}
+        {% for speed, caption in [('off', 'OFF'), ('low', 'LO'), ('medium', 'MED'), ('high', 'HI')] %}
         <button class="fan-btn" data-control-key="{{ control.key }}" data-speed="{{ speed }}">
-          {{ speed | capitalize }}
+          {{ caption }}
         </button>
         {% endfor %}
       </div>
       {% else %}
-      <button class="wall-btn" data-control-key="{{ control.key }}">...</button>
+      {# Wrapped like the other kinds so one rule bottom-aligns every control. #}
+      <div class="room-control-buttons">
+        <button class="wall-btn" data-control-key="{{ control.key }}">…</button>
+      </div>
       {% endif %}
     </div>
     {% endfor %}
