@@ -688,10 +688,14 @@ def _require_control(
         control = config.sole_control(kind)
         if control is None:
             raise NotFound(f"No {kind} configured")
-        return control
-    control = config.find_control(key, kind)
-    if control is None:
-        raise NotFound(f"No {kind} control {key!r} configured")
+    else:
+        control = config.find_control(key, kind)
+        if control is None:
+            raise NotFound(f"No {kind} control {key!r} configured")
+    if control.unavailable_note:
+        # Rendered on the page so the gap is visible, but there is no device to
+        # command, so a request for one is as much a 404 as an unknown key.
+        raise NotFound(f"Control {control.key!r} has no reachable device")
     return control
 
 

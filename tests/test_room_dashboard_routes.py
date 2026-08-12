@@ -233,3 +233,32 @@ def test_kitchen_membership_follows_its_fcu_after_a_rename(
 
     body = flask_test_client.get("/kitchen").get_data(as_text=True)
     assert "Lobby Sensor" in body
+
+
+def test_control_with_no_reachable_device_is_shown_as_unavailable(flask_test_client):
+    """A control we cannot reach yet stays visible instead of disappearing.
+
+    Dropping it would hide the fact that hardware is missing. Giving it a
+    placeholder device id is worse: ids are per hub, and that is exactly how
+    three Broadway controls came to name unrelated devices on the wrong hub.
+    An explicit note carries the state with no id at all.
+    """
+    body = flask_test_client.get("/broadway").get_data(as_text=True)
+
+    assert 'data-control-key="tv-cart-left"' in body
+    assert "TV Cart Left" in body
+    # Rendered unavailable server-side, not left to a poll that will never
+    # report a control the API deliberately omits. Counts the rendered class
+    # attribute, since the stylesheet also mentions the class.
+    assert body.count('class="room-control-tile control-unavailable"') == 2
+    assert "not meshed onto 10.2.3.51" in body
+
+
+def test_unreachable_control_cannot_be_commanded(flask_test_client):
+    """The tile is visible, but there is no device behind it to switch."""
+    resp = flask_test_client.post(
+        "/api/v1/room/broadway/switch",
+        json={"control": "tv-cart-left", "state": "on"},
+    )
+    assert resp.status_code == 404
+    assert resp.get_json()["code"] == "not_found"

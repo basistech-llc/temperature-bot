@@ -650,9 +650,17 @@ body {
 <div class="device-card room-controls-card">
   <div class="room-controls-grid">
     {% for control in room_controls %}
-    <div class="room-control-tile" data-control-key="{{ control.key }}" data-control-kind="{{ control.kind }}">
+    <div class="room-control-tile{% if control.unavailable_note %} control-unavailable{% endif %}"
+         data-control-key="{{ control.key }}" data-control-kind="{{ control.kind }}"
+         {% if control.unavailable_note %}title="{{ control.unavailable_note }}"{% endif %}>
       <div class="room-control-tile-label">{{ control.label }}</div>
-      {% if control.kind == 'tv' %}
+      {% if control.unavailable_note %}
+      {# Known to have no reachable device, so say so at render time rather
+         than waiting for a poll that will never report it. #}
+      <div class="room-control-buttons">
+        <button class="wall-btn" data-control-key="{{ control.key }}" disabled>Unavailable</button>
+      </div>
+      {% elif control.kind == 'tv' %}
       <div class="room-control-buttons">
         <button class="tv-btn" data-control-key="{{ control.key }}" data-direction="up">▲ Up</button>
         <button class="tv-btn" data-control-key="{{ control.key }}" data-direction="down">▼ Down</button>

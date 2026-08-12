@@ -75,14 +75,28 @@ ROOM_CONFIGS: dict[str, RoomConfig] = {
     # were wrong: device ids are per hub, and three of them named unrelated
     # devices here (.52's 291 "Broadway Pendant Lights" is 291 "Kitchen Counter
     # Lights" on .51). They are now the ids on 10.2.3.51, the only hub we reach.
-    # Two Broadway TV Cart switches are deliberately absent: they exist only on
-    # .52, and a placeholder id would be the same hazard again.
+    # The two TV Cart switches carry no id at all: they exist only on .52, and a
+    # placeholder would be the same hazard again. They stay on the page as
+    # visibly unavailable tiles so the missing hardware is obvious rather than
+    # quietly absent.
     "broadway": RoomConfig(
         url="/broadway",
         label="Broadway",
         members=["Broadway North", "Broadway South", "Data Closet", "Garage"],
         fans=["Broadway North", "Broadway South"],
         controls=[
+            RoomControl(
+                key="tv-cart-left",
+                kind=RoomControlKind.SWITCH,
+                label="TV Cart Left",
+                unavailable_note="Only on hub 10.2.3.52; not meshed onto 10.2.3.51",
+            ),
+            RoomControl(
+                key="tv-cart-right",
+                kind=RoomControlKind.SWITCH,
+                label="TV Cart Right",
+                unavailable_note="Only on hub 10.2.3.52; not meshed onto 10.2.3.51",
+            ),
             RoomControl(
                 key="pendant-lights",
                 kind=RoomControlKind.SWITCH,

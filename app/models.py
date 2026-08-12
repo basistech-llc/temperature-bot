@@ -385,6 +385,13 @@ class RoomControl(BaseModel):
     )
     up_label: str | None = Field(default=None, description="TV-up component label.")
     down_label: str | None = Field(default=None, description="TV-down component label.")
+    unavailable_note: str | None = Field(
+        default=None,
+        description=(
+            "Why this control has no reachable device. Set it to render the "
+            "tile permanently unavailable instead of omitting the control."
+        ),
+    )
 
     @model_validator(mode="after")
     def _check_addressing(self) -> "RoomControl":
@@ -392,7 +399,18 @@ class RoomControl(BaseModel):
 
         A TV lift is driven through two Hubitat component switches addressed by
         label; every other kind is driven by device id.
+
+        A control with an ``unavailable_note`` is exempt and must carry no
+        device id. That combination is how a control we cannot reach yet stays
+        visible on the page: the alternative, a placeholder id, is how three of
+        these came to name unrelated devices on the wrong hub.
         """
+        if self.unavailable_note:
+            if self.device_id:
+                raise ValueError(
+                    f"control {self.key!r} has both a device_id and an unavailable_note"
+                )
+            return self
         if self.kind is RoomControlKind.TV:
             if not (self.up_label and self.down_label):
                 raise ValueError(f"TV control {self.key!r} needs up_label and down_label")
@@ -443,9 +461,15 @@ class RoomConfig(BaseModel):
         """Return the only control of a kind, for bodies that omit ``control``.
 
         Rooms with a single dimmer predate per-control addressing, so their
-        request bodies carry no control key.
+        request bodies carry no control key. Controls with no reachable device
+        do not count towards being the only one: Broadway has two unavailable
+        switches, which must not make a third switch ambiguous or absent.
         """
-        matches = [control for control in self.controls if control.kind is kind]
+        matches = [
+            control
+            for control in self.controls
+            if control.kind is kind and not control.unavailable_note
+        ]
         return matches[0] if len(matches) == 1 else None
 
 
