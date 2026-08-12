@@ -7,6 +7,10 @@ surface quickly.
 
 ## Workflow Entrypoints
 
+- `doc/hardware-landscape.md`: what the physical equipment is, the two Hubitat
+  hubs and why only one is reachable, Maker API apps versus dashboards, FCU/ERV
+  definitions, and how a device becomes a row. Read this before any hardware
+  task if you have not seen the building.
 - `AGENTS.md`: maintainer workflow selection, signed commit rules, and
   non-interactive shell command requirements.
 - `CLAUDE.md`: Claude-specific architecture summary and Makefile test examples.

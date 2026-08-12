@@ -4,6 +4,11 @@ This document describes how Temperature Bot talks to Hubitat, what must be set
 up on the Hubitat side, how sensors are discovered, and how Hubitat readings
 are stored.
 
+If you do not already know what a Hubitat hub or a Maker API app is, read
+`doc/hardware-landscape.md` first. It also documents the two-hub topology: this
+document describes hub `10.2.3.51` and Maker API app `520`, which is the only
+Hubitat installation Temperature Bot can reach.
+
 ## Source Map
 
 - `app/hubitat.py`: Hubitat Maker API client, simulator support, and device
@@ -11,8 +16,8 @@ are stored.
 - `bin/runner.py`: minute runner that polls Hubitat and writes readings.
 - `app/db.py`: device creation, current status, time-series queries, and log
   compression.
-- `app/room_config.py`: current static room-dashboard Hubitat sensor lists and
-  Hickory control device ids.
+- `app/room_config.py`: room-dashboard membership and actuator configuration.
+  Sensor membership is canonical; the actuator devices are configured here.
 - `app/routes_api.py`: JSON API routes for status, charts, debug views, rooms,
   and Hickory Hubitat controls.
 - `app/routes_web.py`: room-dashboard rendering and Hubitat sensor filtering.
@@ -42,13 +47,16 @@ successful collection. Temperature Bot re-enumerates the Maker API
 should be picked up on the next scan. Production cron normally runs that scan
 once per minute.
 
-Room dashboards are different: the current `/kitchen` and `/hickory`
-dashboards still use exact static sensor names in `app/room_config.py`. A newly
-logged Hubitat sensor will appear in the database and chart/status APIs, but it
-will not appear on those room dashboards until its exact Hubitat `name` is added
-to the room's `RoomConfig.sensors` list. The database has `rooms` and
-`devices.room_id`, plus `/api/v1/update_device_room`, but the room dashboards
-do not currently use that metadata for Hubitat sensor selection.
+Room dashboards select sensors canonically: `_canonical_room_sensors()` reads
+`devices.room_id`, so a newly logged Hubitat sensor appears on a room dashboard
+as soon as it is assigned to that room. Assign it by dragging its row in the
+main-page Air Quality matrix, or through `/api/v1/update_device_room`. No code
+or configuration change is required, and no sensor names are listed in
+`app/room_config.py`.
+
+Actuators are the exception. Which switches, dimmers, and lifts a dashboard
+offers is deliberate presentation configuration, so it stays in
+`app/room_config.py` rather than being derived from room membership.
 
 ## Configuration And Authentication
 
@@ -196,8 +204,9 @@ Hubitat data reaches the app through several paths:
 - `/api/v1/debug/hubitat_devices`: live Maker API device names and payloads.
 - `/all_devices`: web debug page that compares database, Hubitat, and AE-200
   devices through debug APIs.
-- `/kitchen` and `/hickory`: room dashboards that fetch live Hubitat sensor
-  payloads and filter by `app/room_config.py`.
+- `/kitchen`, `/hickory`, `/broadway`, and `/room/<room_id>`: room dashboards
+  whose sensor tiles come from canonical `devices.room_id` membership and whose
+  actuator tiles come from `app/room_config.py`.
 
 Temperature chart and lighting chart display names prefer the current Hubitat
 `label` when Hubitat is reachable, then apply the shared display-name helper.
@@ -290,7 +299,7 @@ Temperature Bot creates the `devices` row and starts writing `devlog` rows.
 Because the runner enumerates `/devices/all` every scan, no Temperature Bot
 restart or local database edit is needed for normal logging.
 
-They are not automatically added to the current room-dashboard sensor tiles.
-Add the exact Hubitat `name` to `app/room_config.py` for the relevant room until
-the room dashboards are changed to use `devices.room_id` or another metadata
-driven assignment path.
+They do not appear on a room dashboard until they are assigned to a room, because
+dashboard sensor tiles come from `devices.room_id`. A new sensor starts
+Unassigned; drag it onto a room in the main-page Air Quality matrix, and it
+appears on that room's dashboard immediately. No code change is involved.
