@@ -15,6 +15,8 @@ boundaries instead of ``typing.cast`` so the data is actually validated before i
 becomes a mapping.
 """
 
+# pylint: disable=too-many-lines
+
 from enum import StrEnum
 from collections.abc import Callable
 from typing import Annotated, Any, Dict, Iterable, Literal
@@ -320,6 +322,41 @@ class AlertEventRecord(BaseModel):
     slack_terminal: bool = False
 
 
+class ActiveAlert(BaseModel):
+    """One unresolved alert as returned by ``/api/v1/alerts/active``."""
+
+    alert_id: int
+    device_name: str
+    alert_type: str
+    alert_value: str
+    start_time: int
+    age: int
+    details: Dict[str, Any] | None = Field(
+        default=None,
+        description="Device status at alert time; present only when requested.",
+    )
+
+
+class AlertHistoryEntry(BaseModel):
+    """One alert as returned by ``/api/v1/alerts/history``.
+
+    ``end_time`` and ``duration`` are null while an alert is still active, so
+    they are serialized as explicit nulls rather than omitted.
+    """
+
+    alert_id: int
+    device_name: str
+    alert_type: str
+    alert_value: str
+    start_time: int
+    end_time: int | None = None
+    duration: int | None = None
+    details: Dict[str, Any] | None = Field(
+        default=None,
+        description="Device status at alert time; present only when requested.",
+    )
+
+
 class RoomConfig(BaseModel):
     """Static dashboard configuration for one room."""
 
@@ -459,6 +496,12 @@ class TimeSeries(BaseModel):
     data: list[tuple[int, float | None]] = Field(
         description="Ordered (unix time, value) samples; null preserves a data gap."
     )
+
+
+class TimeSeriesResponse(BaseModel):
+    """Chart series for endpoints that return series without window flags."""
+
+    series: list[TimeSeries] = Field(default_factory=list)
 
 
 class TemperatureSeriesResponse(BaseModel):
@@ -702,6 +745,54 @@ class DeviceRoomControl(ControlRequest):
     room_id: int | None = Field(description="Room id, or null to clear assignment.")
 
 
+class RoomDimmerControl(ControlRequest):
+    """Request body for setting a room light dimmer level."""
+
+    level: int = Field(ge=0, le=100, description="Dimmer level as a percentage.")
+
+
+class RoomWallLightControl(ControlRequest):
+    """Request body for switching a room wall light on or off."""
+
+    light: Literal["inner", "outer"] = Field(description="Which wall light to switch.")
+    state: Literal["on", "off"] = Field(description="Requested switch state.")
+
+
+class RoomTvControl(ControlRequest):
+    """Request body for driving a room TV lift."""
+
+    direction: Literal["up", "down"] = Field(description="Requested lift direction.")
+
+
+class DeviceDisableUntilControl(ControlRequest):
+    """Request body for the per-device rules disable timer.
+
+    ``disabled_until`` is an absolute Unix timestamp; a value at or before now
+    re-enables rules for the device.
+    """
+
+    device_id: int = Field(description="Local device id from the devices table.")
+    disabled_until: int = Field(description="Unix timestamp to disable rules until.")
+
+
+class RulesMasterControl(ControlRequest):
+    """Request body for the global master rules switch."""
+
+    enabled: bool = Field(description="Whether the rules engine may act at all.")
+
+
+class DisableRulesQuery(BaseModel):
+    """Query string for the global timed rules disable.
+
+    Unlike the request bodies above, this deliberately does *not* forbid extra
+    fields. Query strings collect incidental parameters -- cache-busters,
+    hand-edited URLs, values added by proxies -- and every other GET endpoint
+    reads ``request.args`` and ignores what it does not recognize.
+    """
+
+    seconds: int = Field(description="How long to disable all rules, in seconds.")
+
+
 class FcuTempSourceControl(ControlRequest):
     """Request body for one FCU temperature source multiplier."""
 
@@ -866,18 +957,6 @@ class DeviceStatus(BaseModel):
     )
 
 
-class RoomMatrixGroup(BaseModel):
-    """One room section in the main-page sensor matrix."""
-
-    room_id: int | None = None
-    room_name: str
-    fcu_device_id: int | None = None
-    calculated_temp10x: int | None = None
-    calculated_humidity: float | None = None
-    can_delete: bool = False
-    devices: list[DeviceStatus] = Field(default_factory=list)
-
-
 class RoomDashboardSensorAttributes(BaseModel):
     """Fresh canonical metrics rendered on a room sensor tile."""
 
@@ -959,16 +1038,6 @@ class PresenceHistoryResponse(BaseModel):
     events: list[PresenceEvent]
 
 
-class TableUpdateSummary(BaseModel):
-    """Oldest timestamp represented by the data currently shown in a table."""
-
-    oldest_update_at: int
-    oldest_update_datetime: str
-    oldest_update_age: str
-    source_device_name: str | None = None
-    label: str
-
-
 def json_ready(model: BaseModel) -> Dict[str, Any]:
     """Dump a validated model to the mapping shape used by routes/templates.
 
@@ -981,3 +1050,17 @@ def json_ready(model: BaseModel) -> Dict[str, Any]:
 def json_ready_list(models: Iterable[BaseModel]) -> list[Dict[str, Any]]:
     """Dump validated models to JSON-ready mappings."""
     return [json_ready(model) for model in models]
+
+
+def alert_json_ready(model: BaseModel) -> Dict[str, Any]:
+    """Dump one alert row, keeping nulls but omitting an absent ``details``.
+
+    Alert rows mix two conventions that ``json_ready``'s ``exclude_none`` cannot
+    express together: the scalar columns are always present and may be null (an
+    active alert has no ``end_time``), while ``details`` appears only when the
+    caller passed ``include_details``.
+    """
+    data = model.model_dump(mode="json", by_alias=True)
+    if data.get("details") is None:
+        data.pop("details", None)
+    return data

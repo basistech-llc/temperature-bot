@@ -69,6 +69,9 @@ the production host only. It pulls code, installs dependencies, validates
 Flyway migrations, backs up the production SQLite DB, applies pending
 migrations, and validates again.
 
+To stand up a new instance, or an additional observation instance on the shared
+server, follow `doc/operations-new-instance.md`.
+
 Tests and local runs use simulator flags for external systems where possible:
 `AE200_SIMULATOR=1`, `AIRTHINGS_SIMULATOR=1`, and `AQICN_SIMULATOR=1`.
 

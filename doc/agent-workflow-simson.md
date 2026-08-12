@@ -33,4 +33,5 @@ If a Beads id is mentioned in source notes or a user request:
 2. Find or create the corresponding GitHub issue for durable project work.
 3. Include the Beads id in the GitHub issue body or a comment for provenance.
 4. Do not update Beads unless the user explicitly asks for local Beads
-   housekeeping.
+   housekeeping. When Beads work is explicitly in scope and multiple
+   developers share the queue, follow `beads-multi-dev-workflow.md`.

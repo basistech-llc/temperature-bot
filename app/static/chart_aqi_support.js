@@ -1,9 +1,12 @@
-// chart_aqi_support.js - Air Quality chart only (standalone page)
+// chart_aqi_support.js - Air Quality chart wiring
+//
+// This file depends on globals and helpers defined in time_series_chart_core.js:
+// - currentStart/currentEnd, formatTime, clearTemporalButtonSelection,
+//   setTemporalButtonSelection, setPickersFromRange, pickersChanged,
+//   setTimePrevDays, setupCsvDownload.
 
 let aqiChart = null;
 let aqiData = [];
-let currentStart = null;
-let currentEnd = null;
 const AQI_ENDPOINT = "/api/v1/air_quality";
 const AIR_QUALITY_AXES = [
   { seriesName: "PM2.5", name: "PM2.5 (µg/m³)", position: "left" },
@@ -66,76 +69,6 @@ function airQualityAxisLayout(selected = {}) {
 
 function selectedLegendState(currentOption, selectedOverride = null) {
   return selectedOverride || currentOption?.legend?.[0]?.selected || {};
-}
-
-function formatTime(ts) {
-  const date = new Date(ts);
-  const isDayView =
-    currentStart && currentEnd && currentEnd - currentStart <= 24 * 60 * 60;
-
-  if (isDayView) {
-    return new Intl.DateTimeFormat(undefined, {
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: false,
-      timeZoneName: "short",
-    }).format(date);
-  } else {
-    return new Intl.DateTimeFormat(undefined, {
-      weekday: "short",
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: false,
-      timeZoneName: "short",
-    }).format(date);
-  }
-}
-
-function clearTemporalButtonSelection() {
-  const temporalButtons = document.querySelectorAll(".temporal-buttons button");
-  temporalButtons.forEach((button) => button.classList.remove("selected"));
-}
-
-function setTemporalButtonSelection(buttonId) {
-  clearTemporalButtonSelection();
-  const button = document.getElementById(buttonId);
-  if (button) button.classList.add("selected");
-}
-
-function setPickersFromRange() {
-  if (currentStart && currentEnd) {
-    const sd = new Date(currentStart * 1000);
-    const ed = new Date(currentEnd * 1000);
-    const pad = (n) => String(n).padStart(2, "0");
-    const toISODate = (d) =>
-      `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-    document.getElementById("startDate").value = toISODate(sd);
-    document.getElementById("endDate").value = toISODate(ed);
-  }
-  loadAirQualityData();
-}
-
-function pickersChanged() {
-  const sd = document.getElementById("startDate").value;
-  const ed = document.getElementById("endDate").value;
-  if (sd) {
-    const s = new Date(sd + "T00:00:00");
-    currentStart = Math.floor(s.getTime() / 1000);
-  }
-  if (ed) {
-    const e = new Date(ed + "T23:59:59");
-    currentEnd = Math.floor(e.getTime() / 1000);
-  }
-  clearTemporalButtonSelection();
-  loadAirQualityData();
-}
-
-function setTimePrevDays(days) {
-  currentEnd = Math.floor(Date.now() / 1000);
-  currentStart = currentEnd - days * 24 * 60 * 60;
-  setPickersFromRange();
 }
 
 function loadAirQualityData() {
@@ -255,18 +188,41 @@ function updateAQChart(selectedOverride = null) {
   aqiChart.setOption(option, { notMerge: true });
 }
 
+// Legend name and aqiData key for each exportable series, in display order.
+const AQI_CSV_SERIES = [
+  ["PM2.5", "pm25"],
+  ["PM10", "pm10"],
+  ["O₃", "o3"],
+  ["NO₂", "no2"],
+  ["CO", "co"],
+  ["AQI", "aqi"],
+];
+
+/**
+ * Series to export as CSV: legend-visible series that have data, in the
+ * shared { name, data: [[ts, value], ...] } shape (timestamps in seconds).
+ */
+function aqiSeriesForCsv(data, selected) {
+  return AQI_CSV_SERIES.filter(([name]) => selected[name] !== false)
+    .map(([name, key]) => ({ name, data: data[key] || [] }))
+    .filter((series) => series.data.length > 0);
+}
+
 function setupEventListeners() {
   document.getElementById("dayBtn").addEventListener("click", () => {
     setTemporalButtonSelection("dayBtn");
     setTimePrevDays(1);
+    loadAirQualityData();
   });
   document.getElementById("weekBtn").addEventListener("click", () => {
     setTemporalButtonSelection("weekBtn");
     setTimePrevDays(7);
+    loadAirQualityData();
   });
   document.getElementById("monthBtn").addEventListener("click", () => {
     setTemporalButtonSelection("monthBtn");
     setTimePrevDays(31);
+    loadAirQualityData();
   });
   document.getElementById("allBtn").addEventListener("click", () => {
     setTemporalButtonSelection("allBtn");
@@ -276,10 +232,25 @@ function setupEventListeners() {
     document.getElementById("endDate").value = "";
     loadAirQualityData();
   });
-  document
-    .getElementById("startDate")
-    .addEventListener("change", pickersChanged);
-  document.getElementById("endDate").addEventListener("change", pickersChanged);
+  document.getElementById("startDate").addEventListener("change", () => {
+    pickersChanged();
+    loadAirQualityData();
+  });
+  document.getElementById("endDate").addEventListener("change", () => {
+    pickersChanged();
+    loadAirQualityData();
+  });
+
+  // CSV export
+  setupCsvDownload(() => {
+    const selected = selectedLegendState(aqiChart ? aqiChart.getOption() : null);
+    const visibleSeries = aqiSeriesForCsv(aqiData, selected);
+    return {
+      visibleSeries,
+      names: visibleSeries.map((s) => s.name),
+      filename: "air_quality_data.csv",
+    };
+  });
 }
 
 if (typeof document !== "undefined") {
@@ -297,5 +268,5 @@ if (typeof document !== "undefined") {
 }
 
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { airQualityAxisLayout, selectedLegendState };
+  module.exports = { airQualityAxisLayout, aqiSeriesForCsv, selectedLegendState };
 }

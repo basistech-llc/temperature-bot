@@ -16,6 +16,7 @@ from collections.abc import Callable
 import requests
 
 
+from .changelog_comments import auto_temps_label, change_comment, temp_label
 from .constants import RULES_ENGINE_DEVICE_NAME
 from .device_types import DEVICE_TYPE_INTERNAL
 from .paths import BIN_DIR
@@ -135,12 +136,20 @@ def all_rules_disabled_until(conn) -> int:
     logger.info("all rules disabled until %s", until)
     return until if until else 0
 
-def disable_all_rules(conn, seconds: int):
-    """Enter a database engtry to disable the rules for a period of seconds.
-    :param seconds: how long to disable rules for
+def disable_all_rules(conn, seconds: int, ipaddr=None, agent=None):
+    """Disable every rule for `seconds` (0 re-enables immediately).
+
+    Takes ipaddr/agent so the audit row records who did it, like every other
+    manual control path.
     """
     logger.info("disable_all_rules(%s)", seconds)
-    db.disable_rules_for_device(conn, rules_id(conn), seconds)
+    if seconds:
+        comment = f"all rules disabled for {seconds / 60:g} minutes"
+    else:
+        comment = "all rules re-enabled"
+    db.disable_rules_for_device(
+        conn, rules_id(conn), seconds, ipaddr=ipaddr, agent=agent, comment=comment
+    )
 
 def get_rules():
     """Returns the rules as a text"""
@@ -184,6 +193,7 @@ def prune_rules(conn):
     )
     conn.commit()
 
+
 def set_body_fan_speed(conn, body: SpeedControl, ipaddr, agent):
     """
     :param conn: SQLIte3 database conneciton
@@ -219,6 +229,9 @@ def set_body_fan_speed(conn, body: SpeedControl, ipaddr, agent):
             current_values=str(current_fan_speed),
             new_value=str(body.fan_speed),
             agent=agent,
+            comment=change_comment(
+                "fan speed", current_fan_speed, body.fan_speed, ae200.FAN_SPEEDS
+            ),
         )
         ae200.set_fan_speed(unit_id, body.fan_speed)
     data = ae200.get_device_info(unit_id)
@@ -272,6 +285,7 @@ def set_body_drive(conn, body: DriveControl, ipaddr, agent):
             current_values=str(current_drive),
             new_value=str(body.drive),
             agent=agent,
+            comment=change_comment("drive", current_drive, body.drive, ae200.DRIVES),
         )
         ae200.set_drive(unit_id, body.drive)
     data = ae200.get_device_info(unit_id)
@@ -319,6 +333,7 @@ def set_body_mode(conn, body: ModeControl, ipaddr, agent):
             current_values=str(current_mode) if current_mode is not None else "",
             new_value=body.mode,
             agent=agent,
+            comment=change_comment("mode", current_mode or "unknown", body.mode),
         )
         ae200.set_mode(unit_id, body.mode)
     data = ae200.get_device_info(unit_id)
@@ -344,6 +359,7 @@ def set_body_set_temp(conn, body: SetTempControl, ipaddr, agent):
 
     data = ae200.get_device_info(unit_id)
     current_set_temp = data.get("SetTemp")
+    current_set_temp_c = db.set_temp_c_from_status(data)
     logger.info(
         "set_body_set_temp body=[%s] ipaddr=%s agent=%s. current_set_temp=%s",
         body,
@@ -352,21 +368,27 @@ def set_body_set_temp(conn, body: SetTempControl, ipaddr, agent):
         current_set_temp,
     )
 
-    # Record change in changelog if the value is actually changing
+    # Record change in changelog if the value is actually changing. The comparison
+    # must be numeric: the AE-200 reports SetTemp as a bare string ("24"), so
+    # comparing it against str() of the float request read 24 -> 24.0 as a change,
+    # logging a spurious row and re-sending a no-op command.
     try:
-        current_value_str = (
-            str(current_set_temp) if current_set_temp is not None else ""
-        )
-        new_value_str = str(body.set_temp_c)
-        if current_value_str != new_value_str:
+        if current_set_temp_c != body.set_temp_c:
             db.insert_changelog(
                 conn,
                 ipaddr=ipaddr,
                 device_id=body.device_id,
                 ae200_device_id=unit_id,
-                current_values=current_value_str,
-                new_value=new_value_str,
+                current_values=(
+                    str(current_set_temp) if current_set_temp is not None else ""
+                ),
+                new_value=str(body.set_temp_c),
                 agent=agent,
+                comment=change_comment(
+                    "set temp",
+                    temp_label(current_set_temp_c),
+                    f"{temp_label(body.set_temp_c)} C",
+                ),
             )
             ae200.set_set_temp(unit_id, body.set_temp_c)
             data = ae200.get_device_info(unit_id)
@@ -400,7 +422,12 @@ def set_body_auto_set_temp(conn, body: AutoSetTempControl, ipaddr, agent):
         current_value_str,
     )
 
-    if current_value_str != new_value_str:
+    # Compare numerically, for the same reason as set_body_set_temp above: these
+    # set points are also reported as bare strings ("19" for a requested 19.0).
+    current_set_temps = ae200.extract_set_temperatures(data)
+    current_heat_c = current_set_temps.get("heat_set_temp_c")
+    current_cool_c = current_set_temps.get("cool_set_temp_c")
+    if (current_heat_c, current_cool_c) != (body.heat_set_temp_c, body.cool_set_temp_c):
         db.insert_changelog(
             conn,
             ipaddr=ipaddr,
@@ -409,6 +436,11 @@ def set_body_auto_set_temp(conn, body: AutoSetTempControl, ipaddr, agent):
             current_values=current_value_str,
             new_value=new_value_str,
             agent=agent,
+            comment=change_comment(
+                "set auto temps",
+                auto_temps_label(current_heat_c, current_cool_c),
+                auto_temps_label(body.heat_set_temp_c, body.cool_set_temp_c),
+            ),
         )
         ae200.set_auto_set_temps(
             unit_id,

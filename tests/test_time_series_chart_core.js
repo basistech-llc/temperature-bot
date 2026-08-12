@@ -3,8 +3,10 @@
  * Run with: node tests/test_time_series_chart_core.js
  */
 const {
+  buildCsvContent,
   buildSeriesAndAxis,
   CHART_GAP_BREAK_SECONDS,
+  checkedVisibleSeries,
   lineDataWithGapBreaks,
   shiftTimeWindow,
   timeWindowFromPercent,
@@ -146,6 +148,77 @@ check(
   { start: 0, end: 149999 },
 );
 check("empty series has no extent", timeExtentForSeries([]), null);
+
+const csvSeriesA = {
+  device_id: 1,
+  name: "Alpha",
+  data: [
+    [100, 20.5],
+    [200, 21],
+  ],
+};
+const csvSeriesB = {
+  device_id: 2,
+  name: "Beta",
+  data: [
+    [200, 30],
+    [300, 31],
+  ],
+};
+const rawTs = (ts) => String(ts);
+
+check(
+  "csv unions timestamps and blanks missing readings",
+  buildCsvContent([csvSeriesA, csvSeriesB], ["Alpha", "Beta"], rawTs),
+  "Time,Alpha,Beta\n100,20.5,\n200,21,30\n300,,31\n",
+);
+check(
+  "csv with no series has only the header",
+  buildCsvContent([], [], rawTs),
+  "Time,\n",
+);
+check(
+  "csv exports zero values, not blanks",
+  buildCsvContent([{ device_id: 3, data: [[100, 0]] }], ["Zero"], rawTs),
+  "Time,Zero\n100,0\n",
+);
+
+check(
+  "csv quotes cells containing commas so columns stay aligned",
+  buildCsvContent(
+    [{ device_id: 4, data: [[100, 5]] }],
+    ["Sensor, with comma"],
+    (ts) => `Sat, Jul 26 ${ts}`,
+  ),
+  'Time,"Sensor, with comma"\n"Sat, Jul 26 100",5\n',
+);
+check(
+  "csv doubles embedded quotes per CSV escaping rules",
+  buildCsvContent([{ device_id: 5, data: [[100, 'say "hi"']] }], ["Q"], rawTs),
+  'Time,Q\n100,"say ""hi"""\n',
+);
+
+check(
+  "visible series keeps only checked sensors with data",
+  checkedVisibleSeries(
+    [{ checked: true }, { checked: false }, { checked: true }],
+    [{ device_id: 1 }, { device_id: 2 }, { device_id: 99 }],
+    new Map([
+      [1, csvSeriesA],
+      [2, csvSeriesB],
+    ]),
+  ),
+  [csvSeriesA],
+);
+check(
+  "visible series ignores checkboxes beyond the sensor list",
+  checkedVisibleSeries(
+    [{ checked: true }, { checked: true }],
+    [{ device_id: 2 }],
+    new Map([[2, csvSeriesB]]),
+  ),
+  [csvSeriesB],
+);
 
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed === 0 ? 0 : 1);

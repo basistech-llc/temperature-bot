@@ -9,16 +9,18 @@ from unittest.mock import patch
 
 from conftest import flask_test_client  # noqa: F401
 from app.main import APP_DIR, application_metadata
+from app.dashboard_views import (
+    air_quality_device_is_active,
+    device_label,
+    device_label_with_icon,
+    device_update_tooltip,
+    table_update_summary,
+)
 from app.routes_web import (
-    _dashboard_air_quality_device_is_active,
-    _dashboard_device_label,
-    _dashboard_device_label_with_icon,
-    _dashboard_device_tooltip,
     _filter_speed_control_devices,
     _format_rules_result,
     _get_hubitat_sensors,
     _rules_forecast_table,
-    _table_update_summary,
 )
 from app import room_config
 from app.version import __version__
@@ -131,9 +133,9 @@ def test_rooms_menu_has_one_plain_link_per_room(flask_test_client):  # noqa: F81
     assert "no-return" not in html
 
 
-def test_dashboard_device_label_uses_stored_status_label():
+def test_device_label_uses_stored_status_label():
     """Index labels must not require a live Hubitat fetch."""
-    label = _dashboard_device_label(
+    label = device_label(
         {
             "device_name": "Lobby Sensor on Somerville Broadway",
             "status": {"label": "Lobby Sensor"},
@@ -143,9 +145,9 @@ def test_dashboard_device_label_uses_stored_status_label():
     assert label == "Lobby Sensor"
 
 
-def test_dashboard_device_label_icons_are_idempotent():
+def test_device_label_icons_are_idempotent():
     assert (
-        _dashboard_device_label_with_icon(
+        device_label_with_icon(
             {
                 "device_name": "ERV 1",
                 "device_label": "ERV 1 ♻️",
@@ -155,7 +157,7 @@ def test_dashboard_device_label_icons_are_idempotent():
         == "ERV 1 ♻️"
     )
     assert (
-        _dashboard_device_label_with_icon(
+        device_label_with_icon(
             {
                 "device_name": "Area 51",
                 "device_label": "Area 51",
@@ -165,7 +167,7 @@ def test_dashboard_device_label_icons_are_idempotent():
         == "Area 51 🌀"
     )
     assert (
-        _dashboard_device_label_with_icon(
+        device_label_with_icon(
             {
                 "device_name": "Unknown monitor",
                 "device_label": "Unknown monitor 📡",
@@ -176,8 +178,8 @@ def test_dashboard_device_label_icons_are_idempotent():
     )
 
 
-def test_dashboard_device_tooltip_uses_device_update_time():
-    tooltip = _dashboard_device_tooltip(
+def test_device_update_tooltip_uses_device_update_time():
+    tooltip = device_update_tooltip(
         {
             "device_name": "Area 51",
             "logtime": 1000,
@@ -204,12 +206,12 @@ def test_dashboard_air_quality_device_expires_after_30_days():
         "duration": 60,
     }
 
-    assert _dashboard_air_quality_device_is_active(current_device, now=1300)
-    assert not _dashboard_air_quality_device_is_active(
+    assert air_quality_device_is_active(current_device, now=1300)
+    assert not air_quality_device_is_active(
         expired_device,
         now=1000 + 60 + 31 * 24 * 60 * 60,
     )
-    assert not _dashboard_air_quality_device_is_active(
+    assert not air_quality_device_is_active(
         {**current_device, "has_speed_control": True},
         now=1300,
     )
@@ -240,7 +242,7 @@ def test_index_does_not_fetch_hubitat_labels_on_render(
 
 
 def test_table_update_summary_uses_oldest_status_end_time():
-    summary = _table_update_summary(
+    summary = table_update_summary(
         [
             {"device_type": "ERV", "logtime": 900, "duration": 1},
             {
@@ -873,13 +875,14 @@ def test_dimmer_non_integer(flask_test_client):  # noqa: F811
 
 @patch("app.routes_api.hubitat.set_dimmer_level", side_effect=OSError("timeout"))
 def test_dimmer_hubitat_error(_mock, flask_test_client):  # noqa: F811
-    """Hubitat failure returns 500."""
+    """Hubitat failure is reported as an upstream failure, not a server bug."""
     resp = flask_test_client.post(
         "/api/v1/hickory/dimmer",
         json={"level": 50},
     )
-    assert resp.status_code == 500
-    assert "error" in resp.get_json()
+    assert resp.status_code == 502
+    assert resp.get_json()["code"] == "upstream_unavailable"
+    assert "timeout" not in resp.get_data(as_text=True)
 
 
 # /api/v1/hickory/wall_light
@@ -938,13 +941,14 @@ def test_wall_light_missing_fields(flask_test_client):  # noqa: F811
 
 @patch("app.routes_api.hubitat.set_switch", side_effect=RuntimeError("hub down"))
 def test_wall_light_hubitat_error(_mock, flask_test_client):  # noqa: F811
-    """Hubitat failure returns 500."""
+    """Hubitat failure is reported as an upstream failure, not a server bug."""
     resp = flask_test_client.post(
         "/api/v1/hickory/wall_light",
         json={"light": "inner", "state": "on"},
     )
-    assert resp.status_code == 500
-    assert "error" in resp.get_json()
+    assert resp.status_code == 502
+    assert resp.get_json()["code"] == "upstream_unavailable"
+    assert "hub down" not in resp.get_data(as_text=True)
 
 
 # /api/v1/hickory/tv
@@ -996,13 +1000,14 @@ def test_tv_missing_direction(flask_test_client):  # noqa: F811
 
 @patch("app.routes_api.hubitat.control_room_tv", side_effect=RuntimeError("not found"))
 def test_tv_hubitat_error(_mock, flask_test_client):  # noqa: F811
-    """Hubitat failure returns 500."""
+    """Hubitat failure is reported as an upstream failure, not a server bug."""
     resp = flask_test_client.post(
         "/api/v1/hickory/tv",
         json={"direction": "up"},
     )
-    assert resp.status_code == 500
-    assert "error" in resp.get_json()
+    assert resp.status_code == 502
+    assert resp.get_json()["code"] == "upstream_unavailable"
+    assert "not found" not in resp.get_data(as_text=True)
 
 
 def test_generic_room_control_routes_resolve_config(flask_test_client):  # noqa: F811

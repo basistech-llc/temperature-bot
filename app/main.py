@@ -88,6 +88,9 @@ def create_app():
     app = Flask(__name__)
     setattr(app, "wsgi_app", ProxyFix(app.wsgi_app, x_for=1, x_proto=1))
     app.config["TEMPLATES_AUTO_RELOAD"] = True
+    # Make flask_pydantic raise instead of writing its own {"validation_error": ...}
+    # body, so app/api_errors.py is the single place that formats API failures.
+    app.config["FLASK_PYDANTIC_VALIDATION_ERROR_RAISE"] = True
 
     # Configure logging
     log_level = os.getenv("LOG_LEVEL", "INFO").upper()

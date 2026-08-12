@@ -11,17 +11,13 @@
 import logging
 import datetime
 import time
-from collections.abc import Callable
-from typing import Any
 from flask import render_template, request, redirect, url_for
 from markupsafe import escape
 
-from .constants import DASHBOARD_AIR_QUALITY_DEVICE_EXPIRATION_SECONDS
 from .device_types import (
     DEVICE_TYPE_ERV,
     DEVICE_TYPE_FCU,
     DEVICE_TYPE_INTERNAL,
-    DEVICE_TYPE_SENSOR,
 )
 from .version import __version__
 from . import db
@@ -29,19 +25,16 @@ from . import db_alerts
 from . import rules_engine
 from . import hubitat
 from . import room_config
-from .display_names import append_display_icon, display_device_name
+from .display_names import display_device_name
+from .dashboard_views import build_dashboard_page
 from .models import (
     DeviceMetadataControl,
-    DeviceStatus,
     Room,
     RoomDashboardSensor,
     RoomDashboardSensorAttributes,
-    RoomMatrixGroup,
-    TableUpdateSummary,
 )
 from .utils.request_utils import parse_device_ids
 from .utils.db_utils import with_db_connection
-from .util import github_style_duration
 from .routes_web_airquality_utils import (
     annotate_staleness,
     format_unix_as_asc,
@@ -50,12 +43,6 @@ from .room_metrics import RoomMetric, select_room_metric_sources
 from .presence import PRESENCE_STALE_SECONDS, get_room_presence
 
 logger = logging.getLogger(__name__)
-
-DASHBOARD_DEVICE_ICONS = {
-    DEVICE_TYPE_ERV: "♻️",
-    DEVICE_TYPE_FCU: "🌀",
-    DEVICE_TYPE_SENSOR: "📡",
-}
 
 # Display metadata for per-metric chart pages. Keyed on the URL-safe metric
 # name (same keys as db.AQ_METRIC_STATUS_KEYS). Radon uses its default Bq/m³
@@ -114,180 +101,6 @@ METRIC_CHART_CONFIG = {
 }
 
 
-def _status_update_timestamp(row: dict[str, Any]) -> int | None:
-    """Return the timestamp when a status row stopped being current."""
-    try:
-        logtime = int(row["logtime"])
-    except (KeyError, TypeError, ValueError):
-        return None
-
-    try:
-        duration_value = row.get("duration", 1)
-        duration = int(1 if duration_value is None else duration_value)
-    except (TypeError, ValueError):
-        duration = 1
-    return logtime + duration
-
-
-def _dashboard_air_quality_device_is_active(device: dict[str, Any], now: int) -> bool:
-    """Return whether a device belongs in the dashboard Air Quality table."""
-    if device.get("has_speed_control") or device.get("temp10x") is None:
-        return False
-    updated_at = _status_update_timestamp(device)
-    if updated_at is None:
-        return False
-    return now - updated_at <= DASHBOARD_AIR_QUALITY_DEVICE_EXPIRATION_SECONDS
-
-
-def _table_update_summary(
-    devices: list[dict[str, Any]],
-    include_device: Callable[[dict[str, Any]], bool],
-    now: int,
-) -> TableUpdateSummary | None:
-    """Summarize the oldest updated timestamp represented in a table."""
-    candidates = [
-        (update_time, _dashboard_device_label(device))
-        for device in devices
-        if include_device(device)
-        for update_time in [_status_update_timestamp(device)]
-        if update_time is not None
-    ]
-    if not candidates:
-        return None
-
-    oldest_update_at, source_device_name = min(candidates, key=lambda item: item[0])
-    oldest_update_datetime = format_unix_as_asc(oldest_update_at) or ""
-    oldest_update_age = github_style_duration(oldest_update_at, now=now)
-    return TableUpdateSummary(
-        oldest_update_at=oldest_update_at,
-        oldest_update_datetime=oldest_update_datetime,
-        oldest_update_age=oldest_update_age,
-        source_device_name=source_device_name,
-        label=(
-            f"(oldest update at {oldest_update_datetime} - "
-            f"{oldest_update_age} ago from {source_device_name})"
-        ),
-    )
-
-
-def _index_table_update_summaries(
-    devices: list[dict[str, Any]], now: int
-) -> dict[str, TableUpdateSummary | None]:
-    """Build update summaries for the index page's three device tables."""
-    return {
-        "erv": _table_update_summary(
-            devices,
-            lambda device: device.get("device_type") == "ERV",
-            now,
-        ),
-        "fcu": _table_update_summary(
-            devices,
-            lambda device: device.get("device_type") == "FCU",
-            now,
-        ),
-        "air_quality": _table_update_summary(
-            devices,
-            lambda device: _dashboard_air_quality_device_is_active(device, now),
-            now,
-        ),
-    }
-
-
-def _room_matrix_groups(
-    devices: list[dict[str, Any]],
-    rooms: list[Room],
-    assigned_room_ids: set[int],
-) -> list[RoomMatrixGroup]:
-    """Group active sensor rows by canonical room, including empty rooms."""
-    fcu_by_room = {
-        device.get("room_id"): device
-        for device in devices
-        if str(device.get("device_type") or "").upper() == DEVICE_TYPE_FCU
-        and device.get("room_id") is not None
-    }
-    groups = {
-        room.room_id: RoomMatrixGroup(
-            room_id=room.room_id,
-            room_name=room.room_name or "Unnamed room",
-            fcu_device_id=(fcu_by_room.get(room.room_id) or {}).get("device_id"),
-            calculated_temp10x=(fcu_by_room.get(room.room_id) or {}).get(
-                "calculated_temp10x"
-            ),
-            calculated_humidity=(fcu_by_room.get(room.room_id) or {}).get(
-                "calculated_humidity"
-            ),
-            can_delete=(
-                room.fcu_device_id is None and room.room_id not in assigned_room_ids
-            ),
-        )
-        for room in rooms
-    }
-    groups[None] = RoomMatrixGroup(room_name="Unassigned")
-    for device in devices:
-        if not device.get("dashboard_air_quality_active") or device.get(
-            "device_type"
-        ) in {DEVICE_TYPE_ERV, DEVICE_TYPE_FCU, DEVICE_TYPE_INTERNAL}:
-            continue
-        room_id = device.get("room_id")
-        groups.setdefault(
-            room_id,
-            RoomMatrixGroup(
-                room_id=room_id,
-                room_name=device.get("room_name") or "Unassigned",
-            ),
-        ).devices.append(DeviceStatus.model_validate(device))
-    for group in groups.values():
-        group.devices.sort(
-            key=lambda device: (
-                (device.display_name or device.device_name).casefold(),
-                device.device_id,
-            )
-        )
-    return sorted(groups.values(), key=lambda group: group.room_name.casefold())
-
-
-def _dashboard_device_label(device: dict[str, Any]) -> str:
-    """Return a dashboard label without doing live network enrichment."""
-    raw_name = device.get("device_name", "")
-    status = device.get("status") or {}
-    stored_label = status.get("label") if isinstance(status, dict) else None
-    return device.get("display_name") or display_device_name(
-        raw_name,
-        hubitat_label=stored_label,
-        source="db",
-    )
-
-
-def _dashboard_device_label_with_icon(device: dict[str, Any]) -> str:
-    """Return the server-rendered label with one device-category marker."""
-    label = str(device.get("device_label") or _dashboard_device_label(device))
-    device_type = str(device.get("device_type") or "").upper()
-    icon = DASHBOARD_DEVICE_ICONS.get(device_type, "")
-    if not icon and device.get("dashboard_air_quality_active"):
-        icon = DASHBOARD_DEVICE_ICONS[DEVICE_TYPE_SENSOR]
-    return append_display_icon(label, icon)
-
-
-def _dashboard_device_tooltip(device: dict[str, Any], now: int) -> str:
-    """Return the Unit-column tooltip for a device row."""
-    raw_device_name = device.get("device_name", "")
-    device_name = raw_device_name if isinstance(raw_device_name, str) else ""
-    update_text = _dashboard_device_update_text(device, now)
-    if not update_text:
-        return device_name
-    return f"{device_name}\nLast updated at {update_text}"
-
-
-def _dashboard_device_update_text(device: dict[str, Any], now: int) -> str:
-    """Return the last-update text shown in device metadata UI."""
-    updated_at = _status_update_timestamp(device)
-    if updated_at is None:
-        return ""
-    updated_datetime = format_unix_as_asc(updated_at) or ""
-    updated_age = github_style_duration(updated_at, now=now)
-    return f"{updated_datetime} - {updated_age} ago"
-
-
 def _rules_forecast_table(conn, hour_now: datetime.datetime) -> list[str]:
     """Build the seven-day forecast with one compiled rules program."""
     aqi_values = (0, 51, 101, 151)
@@ -327,32 +140,18 @@ def _register_core_routes(app):
     @with_db_connection
     def read_index(conn):
         """Main index page"""
-        # Get device data for the template
-        device_data = db.get_device_status(conn)
-
-        # Add current timestamp for temporal links and update-age labels.
-        now = int(time.time())
-
-        for d in device_data:
-            d["device_label"] = _dashboard_device_label(d)
-            d["dashboard_air_quality_active"] = (
-                _dashboard_air_quality_device_is_active(d, now)
-            )
-            d["device_label_with_icon"] = _dashboard_device_label_with_icon(d)
-            d["device_update_text"] = _dashboard_device_update_text(d, now)
-            d["device_update_tooltip"] = _dashboard_device_tooltip(d, now)
-
+        page = build_dashboard_page(
+            db.get_device_status(conn),
+            db.get_rooms(conn),
+            db.get_assigned_room_ids(conn),
+        )
         return render_template(
             "index.html",
             develop=False,
-            devices=device_data,
-            now=now,
-            table_update_summaries=_index_table_update_summaries(device_data, now),
-            room_groups=_room_matrix_groups(
-                device_data,
-                db.get_rooms(conn),
-                db.get_assigned_room_ids(conn),
-            ),
+            devices=page.devices,
+            now=page.now,
+            table_update_summaries=page.table_update_summaries,
+            room_groups=page.room_groups,
             current_page="home",
         )
 
