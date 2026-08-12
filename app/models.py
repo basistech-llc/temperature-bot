@@ -447,7 +447,12 @@ class RoomConfig(BaseModel):
     )
 
     def find_control(self, key: str, kind: RoomControlKind) -> RoomControl | None:
-        """Return the configured control with this key and kind, if any."""
+        """Return the configured control with this key and kind, if any.
+
+        Unlike :meth:`sole_control` this returns controls with no reachable
+        device: they are configured, and a caller naming one deserves to be told
+        that its device is missing rather than that the key does not exist.
+        """
         return next(
             (
                 control

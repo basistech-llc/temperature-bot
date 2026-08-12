@@ -103,3 +103,32 @@ def test_control_attributes_tolerate_junk_entries():
         {"attributes": [{"name": "switch", "currentValue": "on"}, "junk", {"noname": 1}]}
     )
     assert device.attributes.switch == "on"
+
+
+def test_duplicate_attribute_prefers_the_last_reported_value():
+    """A trailing null must not erase a real reading from an earlier duplicate.
+
+    The Hue group driver lists switch twice. Both entries agree today, so
+    last-wins looked harmless, but a null in the later slot would have shown a
+    lit group as unknown.
+    """
+    device = HubitatControlDevice.model_validate(
+        {
+            "attributes": [
+                {"name": "switch", "currentValue": "on"},
+                {"name": "switch", "currentValue": None},
+            ]
+        }
+    )
+    assert device.attributes.switch == "on"
+
+    # A later real value still supersedes an earlier one.
+    superseded = HubitatControlDevice.model_validate(
+        {
+            "attributes": [
+                {"name": "switch", "currentValue": "on"},
+                {"name": "switch", "currentValue": "off"},
+            ]
+        }
+    )
+    assert superseded.attributes.switch == "off"

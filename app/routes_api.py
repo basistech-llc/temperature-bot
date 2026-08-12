@@ -706,13 +706,25 @@ _failed_control_devices: set[str] = set()
 
 
 def _read_control_device(device_id: str) -> HubitatControlDevice | None:
-    """Read one control device's live attributes, or None when unreadable."""
+    """Read one control device's live attributes, or None when unreadable.
+
+    A payload carrying no ``attributes`` key at all is not a device description,
+    so it counts as unreadable rather than as a device that happens to report
+    nothing. An empty attribute list is the latter and is kept: the device
+    answered, we simply learned no state from it.
+    """
     try:
-        device = HubitatControlDevice.model_validate(hubitat.get_device_info(device_id))
+        payload = hubitat.get_device_info(device_id)
+        if not isinstance(payload, dict) or "attributes" not in payload:
+            raise ValueError(f"no attributes in payload: {payload!r:.120}")
+        device = HubitatControlDevice.model_validate(payload)
     except (RuntimeError, OSError, ValueError) as e:
         if device_id not in _failed_control_devices:
             _failed_control_devices.add(device_id)
-            logger.warning("Room device %s status fetch failed: %s", device_id, e)
+            # "Unreadable" covers both a failed request and a payload we could
+            # not make sense of. Saying "fetch failed" for the second would send
+            # someone hunting a network problem that is not there.
+            logger.warning("Room device %s unreadable: %s", device_id, e)
         return None
     if device_id in _failed_control_devices:
         _failed_control_devices.discard(device_id)

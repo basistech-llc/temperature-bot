@@ -63,17 +63,21 @@ class HubitatControlDevice(BaseModel):
         dashboard reported its controls unreadable.
 
         Where a device lists an attribute twice, as the Hue group driver does
-        for ``switch`` and ``colorName``, the last entry wins. Both entries
-        carried the same value in the observed payloads, so this picks an order
-        rather than resolving a real conflict.
+        for ``switch`` and ``colorName``, the last entry that carries a value
+        wins. Preferring the last entry outright would let a trailing null
+        discard a real reading from an earlier one.
         """
         if not isinstance(value, list):
             return value
-        return {
-            entry["name"]: entry.get("currentValue")
-            for entry in value
-            if isinstance(entry, dict) and entry.get("name")
-        }
+        normalized: dict[str, object] = {}
+        for entry in value:
+            if not isinstance(entry, dict) or not entry.get("name"):
+                continue
+            current = entry.get("currentValue")
+            if current is None and entry["name"] in normalized:
+                continue
+            normalized[entry["name"]] = current
+        return normalized
 
 
 FAN_CAPABILITIES = frozenset({"FanControl"})

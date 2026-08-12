@@ -1018,7 +1018,7 @@ def test_unreachable_control_warns_once_per_device(mock_get_device_info, flask_t
     assert second.get_json() == {"controls": []}
     # Both polls read every device; only the first poll reported the failures.
     assert mock_get_device_info.call_count == 16
-    failures = [r for r in caplog.records if "status fetch failed" in r.getMessage()]
+    failures = [r for r in caplog.records if "unreadable" in r.getMessage()]
     assert len(failures) == 8
 
 
@@ -1165,3 +1165,34 @@ def test_hickory_dashboard_uses_decluttered_layout(mock_get_status, flask_test_c
     assert room_controls_pos < first_device_card_pos, (
         "Room Controls must render above the first HVAC device card"
     )
+
+
+@patch("app.routes_api.hubitat.get_device_info", return_value={"id": "260"})
+def test_payload_without_attributes_counts_as_unreadable(_mock, flask_test_client):  # noqa: F811
+    """A 200 body that is not a device description must not read as reachable.
+
+    Reporting it as readable would leave the tile enabled and clickable while
+    the page knows nothing about the device -- the same lie the unavailable
+    state exists to prevent, arriving through a different door. An empty
+    attribute list is deliberately NOT this case: the device answered.
+    """
+    resp = flask_test_client.get("/api/v1/room/broadway/room_status")
+    assert resp.get_json() == {"controls": []}
+
+
+@patch("app.routes_api.hubitat.get_device_info", return_value={"id": "260", "attributes": []})
+def test_device_reporting_no_attributes_is_still_reachable(_mock, flask_test_client):  # noqa: F811
+    """A device that answers but reports no state is reachable, not unavailable.
+
+    Its tile stays enabled and commandable; only the state is unknown. This is
+    the distinction the previous test's payload fails to meet.
+    """
+    states = flask_test_client.get(
+        "/api/v1/room/broadway/room_status"
+    ).get_json()["controls"]
+    assert {state["key"] for state in states} == {
+        "pendant-lights", "spot-lights", "whiteboard-washer",
+        "sidewalk-washer-north", "sidewalk-washer-south",
+        "garage-washer-north", "garage-washer-south", "data-closet-fan",
+    }
+    assert all("switch" not in state for state in states)
