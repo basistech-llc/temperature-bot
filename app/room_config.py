@@ -9,6 +9,13 @@ A ``members`` entry is matched against a room name or against the device name of
 the FCU that owns the room. Prefer the FCU name where one exists: FCU names are
 hardware identity and survive a room rename, while a room with no FCU (Garage,
 Data Closet) can only be named directly.
+
+Every ``device_id`` here is a device id **on hub 10.2.3.51**, the hub configured
+in ``temperature-bot-config.yaml``. Ids are per hub and are not interchangeable:
+the same physical sensor carries different ids on each hub it is meshed onto, so
+an id copied from another hub's dashboard is at best dead and at worst names a
+different device. Read ids from that hub, for example with
+``poetry run python -m app.hubitat --list-devices``.
 """
 
 from .models import RoomConfig, RoomControl, RoomControlKind
@@ -64,9 +71,12 @@ ROOM_CONFIGS: dict[str, RoomConfig] = {
     # room to address. The Garage and Sidewalk switches are just outside the
     # space and are driven from here on purpose.
     #
-    # Every control below is a device on Hubitat hub 10.2.3.52. We only reach
-    # 10.2.3.51 (Maker API app 520), so these tiles read as unavailable until
-    # the devices are exposed there. See doc/hardware-landscape.md.
+    # These ids came originally from the Hubitat dashboard on hub 10.2.3.52 and
+    # were wrong: device ids are per hub, and three of them named unrelated
+    # devices here (.52's 291 "Broadway Pendant Lights" is 291 "Kitchen Counter
+    # Lights" on .51). They are now the ids on 10.2.3.51, the only hub we reach.
+    # Two Broadway TV Cart switches are deliberately absent: they exist only on
+    # .52, and a placeholder id would be the same hazard again.
     "broadway": RoomConfig(
         url="/broadway",
         label="Broadway",
@@ -74,64 +84,52 @@ ROOM_CONFIGS: dict[str, RoomConfig] = {
         fans=["Broadway North", "Broadway South"],
         controls=[
             RoomControl(
-                key="tv-cart-left",
-                kind=RoomControlKind.SWITCH,
-                label="TV Cart Left",
-                device_id="395",
-            ),
-            RoomControl(
-                key="tv-cart-right",
-                kind=RoomControlKind.SWITCH,
-                label="TV Cart Right",
-                device_id="396",
-            ),
-            RoomControl(
                 key="pendant-lights",
                 kind=RoomControlKind.SWITCH,
                 label="Pendant Lights",
-                device_id="291",
+                device_id="260",
             ),
             RoomControl(
                 key="spot-lights",
                 kind=RoomControlKind.SWITCH,
                 label="Spot Lights",
-                device_id="393",
+                device_id="616",
             ),
             RoomControl(
                 key="whiteboard-washer",
                 kind=RoomControlKind.SWITCH,
                 label="Whiteboard Washer",
-                device_id="293",
+                device_id="356",
             ),
             RoomControl(
                 key="sidewalk-washer-north",
                 kind=RoomControlKind.SWITCH,
                 label="Sidewalk Washer North",
-                device_id="294",
+                device_id="354",
             ),
             RoomControl(
                 key="sidewalk-washer-south",
                 kind=RoomControlKind.SWITCH,
                 label="Sidewalk Washer South",
-                device_id="295",
+                device_id="355",
             ),
             RoomControl(
                 key="garage-washer-north",
                 kind=RoomControlKind.SWITCH,
                 label="Garage Washer North",
-                device_id="136",
+                device_id="360",
             ),
             RoomControl(
                 key="garage-washer-south",
                 kind=RoomControlKind.SWITCH,
                 label="Garage Washer South",
-                device_id="297",
+                device_id="361",
             ),
             RoomControl(
                 key="data-closet-fan",
                 kind=RoomControlKind.FAN,
                 label="Data Closet Fan",
-                device_id="137",
+                device_id="359",
             ),
         ],
     ),

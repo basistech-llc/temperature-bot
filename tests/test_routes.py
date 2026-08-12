@@ -906,7 +906,7 @@ def test_switch_endpoint_drives_a_broadway_control(_mock, flask_test_client):  #
         json={"control": "pendant-lights", "state": "on"},
     )
     assert resp.status_code == 200
-    _mock.assert_called_once_with("291", "on")
+    _mock.assert_called_once_with("260", "on")
 
 
 def test_switch_endpoint_rejects_a_control_of_another_kind(flask_test_client):  # noqa: F811
@@ -927,7 +927,7 @@ def test_fan_endpoint_sets_a_named_speed(_mock, flask_test_client):  # noqa: F81
     )
     assert resp.status_code == 200
     assert resp.get_json()["speed"] == "medium"
-    _mock.assert_called_once_with("137", "medium")
+    _mock.assert_called_once_with("359", "medium")
 
 
 @patch("app.routes_api.hubitat.get_device_info")
@@ -1017,9 +1017,9 @@ def test_unreachable_control_warns_once_per_device(mock_get_device_info, flask_t
     assert first.get_json() == {"controls": []}
     assert second.get_json() == {"controls": []}
     # Both polls read every device; only the first poll reported the failures.
-    assert mock_get_device_info.call_count == 20
+    assert mock_get_device_info.call_count == 16
     failures = [r for r in caplog.records if "status fetch failed" in r.getMessage()]
-    assert len(failures) == 10
+    assert len(failures) == 8
 
 
 # /api/v1/hickory/tv
