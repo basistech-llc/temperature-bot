@@ -26,6 +26,7 @@ from . import rules_engine
 from . import room_config
 from .display_names import display_device_name
 from .dashboard_views import build_dashboard_page
+from .util import github_style_duration
 from .models import (
     DeviceMetadataControl,
     Room,
@@ -389,7 +390,15 @@ def _canonical_room_sensors(conn, room_ids: set[int]) -> list[RoomDashboardSenso
                 id=snapshot.device_id,
                 name=snapshot.device_name,
                 display_name=snapshot.display_name or snapshot.device_name,
-                offline=snapshot.device_id not in temperature_by_device,
+                stale_for=(
+                    None
+                    if snapshot.device_id in temperature_by_device
+                    # The reading stops being valid at logtime + duration, so
+                    # that, not logtime, is the moment we last had current data.
+                    else github_style_duration(
+                        snapshot.logtime + snapshot.duration, now=at_time
+                    )
+                ),
                 attributes=RoomDashboardSensorAttributes(
                     temperature=temperature_by_device.get(snapshot.device_id),
                     humidity=(

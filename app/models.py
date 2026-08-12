@@ -1075,12 +1075,20 @@ class RoomDashboardSensorAttributes(BaseModel):
 
 
 class RoomDashboardSensor(BaseModel):
-    """One assigned sensor rendered by a canonical room dashboard."""
+    """One assigned sensor rendered by a canonical room dashboard.
+
+    ``stale_for`` carries the age of the last reading when it is too old to
+    trust, and is ``None`` while the reading is current. It replaces an earlier
+    ``offline`` flag: what we actually know is that we have not heard from the
+    device recently, not that the device is off. The runner or the hub could be
+    the thing that stopped, and saying how long ago lets a reader tell a brief
+    hiccup from a sensor that has been silent for days.
+    """
 
     id: int
     name: str
     display_name: str
-    offline: bool = False
+    stale_for: str | None = None
     attributes: RoomDashboardSensorAttributes
 
 

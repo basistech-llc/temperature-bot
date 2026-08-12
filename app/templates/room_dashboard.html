@@ -524,14 +524,17 @@ body {
   text-align: center;
 }
 
-.sensor-offline {
+.sensor-stale {
   opacity: 0.5;
   border-left-color: #999;
 }
 
-.offline-label {
+/* "No data for 2h" is several times longer than the reading it replaces, so it
+   sizes down and is allowed to wrap rather than overflow a narrow tile. */
+.stale-label {
   color: #999;
-  font-size: 1.1em;
+  font: 600 0.95em sans-serif;
+  line-height: 1.25;
 }
 
 /* Responsive */
@@ -699,12 +702,15 @@ body {
 <div class="sensors-card">
   <div class="sensors-grid">
     {% for sensor in hubitat_sensors %}
-    <div class="sensor-tile{% if sensor.offline %} sensor-offline{% endif %}">
+    <div class="sensor-tile{% if sensor.stale_for %} sensor-stale{% endif %}">
       <div class="sensor-header">
         <div class="sensor-name" title="{{ sensor.name }}">{{ sensor.display_name or sensor.label or sensor.name }}</div>
       </div>
-      {% if sensor.offline %}
-      <div class="sensor-temp offline-label">Offline</div>
+      {% if sensor.stale_for %}
+      {# Say how long we have been without data rather than calling the sensor
+         offline: the runner or the hub may be what stopped, and the duration
+         separates a brief hiccup from a device silent for days. #}
+      <div class="sensor-temp stale-label">No data for {{ sensor.stale_for }}</div>
       {% else %}
       <div class="sensor-temp" id="sensor-{{ sensor.id }}-temp" data-temp-c="{% if sensor.attributes and sensor.attributes.temperature %}{{ sensor.attributes.temperature }}{% endif %}">
         {% if sensor.attributes and sensor.attributes.temperature %}

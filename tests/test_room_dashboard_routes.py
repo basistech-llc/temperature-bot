@@ -2,6 +2,7 @@
 
 import json
 import logging
+import re
 import time
 
 from app import db
@@ -76,7 +77,9 @@ def test_canonical_room_dashboard_tracks_rename_and_assignment(
     conn.commit()
     stale = flask_test_client.get(f"/room/{room.room_id}")
     assert b"Friendly Sensor" in stale.data
-    assert b"Offline" in stale.data
+    # A reading past the freshness cutoff reports its age rather than claiming
+    # the sensor is offline, which is not something this page can know.
+    assert re.search(r"No data for \d+[smhd]", stale.data.decode())
 
     db.update_device_room(conn, sensor_id, other.room_id)
     moved = flask_test_client.get(f"/room/{room.room_id}")
