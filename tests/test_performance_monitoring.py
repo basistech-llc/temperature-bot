@@ -320,6 +320,28 @@ def test_ae200_set_waits_for_and_parses_real_controller_response(monkeypatch):
     assert sample.response_bytes == len(response_xml.encode("utf-8"))
 
 
+def test_ae200_read_classifies_missing_device_data_as_controller_failure(monkeypatch):
+    """A malformed read-back must become a 502-capable controller exception."""
+    response_xml = "<Packet><Command>getResponse</Command><DatabaseManager/></Packet>"
+
+    async def exercise():
+        async def handler(websocket):
+            await websocket.recv()
+            await websocket.send(response_xml)
+
+        async with websockets.serve(
+            handler, "127.0.0.1", 0, subprotocols=["b_xmlproc"]
+        ) as server:
+            port = server.sockets[0].getsockname()[1]
+            controller = ae200.AE200Functions(f"127.0.0.1:{port}")
+            await controller.getDeviceInfoAsync(10)
+
+    monkeypatch.setattr(ae200, "AE200_SIMULATOR", False)
+    monkeypatch.delenv("PYTEST", raising=False)
+    with pytest.raises(ae200.AE200VerificationError, match="omitted Mnet"):
+        asyncio.run(exercise())
+
+
 def test_ae200_set_classifies_unexpected_response_as_controller_failure(monkeypatch):
     response_xml = "<Packet><Command>getResponse</Command></Packet>"
 

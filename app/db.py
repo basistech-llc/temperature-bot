@@ -42,6 +42,7 @@ from .constants import (
     TEST_DB_NAME,
     RULES_MASTER_DEVICE_NAME,
 )
+from .api_errors import Conflict, NotFound
 from .models import (
     AqiSummary,
     AqiRuleObservation,
@@ -722,7 +723,7 @@ def update_device_metadata(
     if not assignments:
         device = get_device(conn, body.device_id)
         if device is None:
-            raise ValueError(f"Unknown device_id: {body.device_id}")
+            raise NotFound(f"Unknown device_id: {body.device_id}")
         return _normalize_device_metadata_row(device)
 
     args.append(body.device_id)
@@ -732,7 +733,7 @@ def update_device_metadata(
         args,
     )
     if c.rowcount == 0:
-        raise ValueError(f"Unknown device_id: {body.device_id}")
+        raise NotFound(f"Unknown device_id: {body.device_id}")
     conn.commit()
     updated = get_device(conn, body.device_id)
     assert updated is not None
@@ -873,6 +874,21 @@ def get_rooms(conn) -> list[Room]:
     return [_room_from_row(row) for row in c.fetchall()]
 
 
+def get_room_fcu_names(conn) -> dict[int, str]:
+    """Return the device name of each room's owning FCU, keyed by room id.
+
+    Resolving room keys one at a time meant a per-room lookup for every
+    candidate; one join answers the whole question. Rooms with no FCU (Garage,
+    Data Closet) are simply absent.
+    """
+    c = conn.cursor()
+    c.execute(
+        "SELECT r.room_id, d.device_name FROM rooms r "
+        "JOIN devices d ON d.device_id = r.fcu_device_id"
+    )
+    return {int(row["room_id"]): str(row["device_name"] or "") for row in c.fetchall()}
+
+
 def get_assigned_room_ids(conn) -> set[int]:
     """Return room ids referenced by any device, including devices without logs."""
     c = conn.cursor()
@@ -949,9 +965,9 @@ def delete_empty_room(conn, room_id: int) -> bool:
         if room is None:
             return False
         if room["fcu_device_id"] is not None:
-            raise ValueError("FCU-owned rooms cannot be deleted")
+            raise Conflict("FCU-owned rooms cannot be deleted")
         if room["has_assigned_devices"]:
-            raise ValueError("Only rooms without assigned devices can be deleted")
+            raise Conflict("Only rooms without assigned devices can be deleted")
 
         # Presence history describes where an observation happened. Preserve the
         # event when its now-empty administrative room is removed.
@@ -970,7 +986,7 @@ def delete_empty_room(conn, room_id: int) -> bool:
             (room_id,),
         )
         if deleted.rowcount != 1:
-            raise ValueError("Only rooms without assigned devices can be deleted")
+            raise Conflict("Only rooms without assigned devices can be deleted")
     return True
 
 
@@ -982,22 +998,22 @@ def update_device_room(conn, device_id: int, room_id: int | None) -> int:
     )
     device = c.fetchone()
     if device is None:
-        raise LookupError(f"Unknown device_id: {device_id}")
+        raise NotFound(f"Unknown device_id: {device_id}")
     if room_id is not None:
         c.execute("SELECT 1 FROM rooms WHERE room_id=?", (room_id,))
         if c.fetchone() is None:
-            raise LookupError(f"Unknown room_id: {room_id}")
+            raise NotFound(f"Unknown room_id: {room_id}")
     device_type = normalize_device_type(device["device_type"])
     if device_type in {DEVICE_TYPE_ERV, DEVICE_TYPE_INTERNAL}:
-        raise ValueError(f"{device_type} devices cannot be assigned to rooms")
+        raise Conflict(f"{device_type} devices cannot be assigned to rooms")
     if device_type == DEVICE_TYPE_FCU:
         c.execute("SELECT room_id FROM rooms WHERE fcu_device_id=?", (device_id,))
         owned_room = c.fetchone()
         if owned_room is None:
-            raise ValueError("An FCU must have an owned room")
+            raise Conflict("An FCU must have an owned room")
         owned_room_id = owned_room["room_id"]
         if room_id != owned_room_id:
-            raise ValueError("An FCU must remain assigned to its owned room")
+            raise Conflict("An FCU must remain assigned to its owned room")
     c.execute("UPDATE devices SET room_id=? WHERE device_id=?", (room_id, device_id))
     conn.commit()
     return device_id
@@ -1678,7 +1694,14 @@ def _float_or_none(value: object) -> float | None:
     return number if math.isfinite(number) else None
 
 
-def _set_temp_c_from_status(status: dict[str, Any] | None) -> float | None:
+def set_temp_c_from_status(status: dict[str, Any] | None) -> float | None:
+    """Return the numeric SetTemp from an AE-200 status dict, if it has one.
+
+    The AE-200 reports SetTemp as a string and not always in a canonical form
+    ("24" and "24.0" both occur), so comparing set points as raw strings reports
+    changes that did not happen. Auto-mode's pair has the same hazard; it goes
+    through ``ae200.extract_set_temperatures``.
+    """
     if not isinstance(status, dict):
         return None
     return _float_or_none(status.get("SetTemp"))
@@ -1703,7 +1726,7 @@ def _latest_set_temp_c_for_device(conn, device_id: int) -> float | None:
         status = json.loads(row["status_json"] or "{}")
     except json.JSONDecodeError:
         return None
-    return _set_temp_c_from_status(status)
+    return set_temp_c_from_status(status)
 
 
 def _round_temp_c(value: float) -> float:
@@ -1797,7 +1820,7 @@ def set_fcu_set_range(
     """Persist one FCU set range and log effective old/new values."""
     fcu = get_device(conn, device_id)
     if fcu is None:
-        raise ValueError(f"Unknown device_id: {device_id}")
+        raise NotFound(f"Unknown device_id: {device_id}")
 
     new_low, new_high = _validated_set_range_values(
         set_range_low_c,
@@ -1956,7 +1979,7 @@ def _latest_temperature_source_rows(conn, fcu_device_id: int, now: int):
 
 def get_fcu_temp_sources(conn, fcu_device_id: int) -> dict[str, Any]:
     if get_device(conn, fcu_device_id) is None:
-        raise ValueError(f"Unknown fcu_device_id: {fcu_device_id}")
+        raise NotFound(f"Unknown fcu_device_id: {fcu_device_id}")
     sources = _latest_temperature_source_rows(conn, fcu_device_id, int(time.time()))
     return json_ready(
         FcuTempSourcesResponse(
@@ -2192,9 +2215,9 @@ def _set_fcu_temp_source_multiplier(
     fcu = get_device(conn, fcu_device_id)
     source = get_device(conn, source_device_id)
     if fcu is None:
-        raise ValueError(f"Unknown fcu_device_id: {fcu_device_id}")
+        raise NotFound(f"Unknown fcu_device_id: {fcu_device_id}")
     if source is None:
-        raise ValueError(f"Unknown source_device_id: {source_device_id}")
+        raise NotFound(f"Unknown source_device_id: {source_device_id}")
 
     c.execute(
         """
@@ -2394,7 +2417,7 @@ def get_fcu_history(conn, fcu_device_id: int) -> FcuHistoryResponse:
         (fcu_device_id, DEVICE_TYPE_FCU),
     ).fetchone()
     if row is None:
-        raise LookupError(f"Unknown FCU device_id: {fcu_device_id}")
+        raise NotFound(f"Unknown FCU device_id: {fcu_device_id}")
 
     inlet = get_temperature_series(conn, [fcu_device_id])
     calculated = get_calculated_temperature_series(conn, [fcu_device_id])
@@ -2716,7 +2739,7 @@ def get_device_status(conn) -> List[Dict[str, Any]]:
         if data["device_id"] in fcu_device_ids:
             set_range = set_ranges.get(data["device_id"]) or default_fcu_set_range(
                 data["device_id"],
-                _set_temp_c_from_status(data.get("status")),
+                set_temp_c_from_status(data.get("status")),
             )
             data["set_range_low_c"] = set_range.set_range_low_c
             data["set_range_high_c"] = set_range.set_range_high_c

@@ -378,7 +378,9 @@ class AE200Functions:
         # result = {}
         node = mnetDetailsResultXML.find("./DatabaseManager/Mnet")
         if node is None:
-            raise ValueError(f"AE-200 response omitted Mnet data for device {deviceId}")
+            raise AE200VerificationError(
+                f"AE-200 response omitted Mnet data for device {deviceId}"
+            )
         return cleanDeviceInfo(node.attrib) if clean else node.attrib
 
     def getDeviceInfo(self, deviceId, clean=True):

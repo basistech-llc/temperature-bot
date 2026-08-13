@@ -41,6 +41,27 @@ function combinedFcuSeries(history) {
   ]);
 }
 
+/**
+ * Series to export as CSV, in the shared { name, data: [[ts, value], ...] }
+ * shape (timestamps in seconds): temperature series with raw °C values, plus
+ * FCU Mode and FCU Fan state as text columns.
+ */
+function fcuCsvSeries(history) {
+  const stateSeries = (field, label) => ({
+    name: label,
+    data: (history.states || [])
+      .filter((state) => state[field] != null)
+      .map((state) => [
+        Number(state.timestamp),
+        String(state[field]).toUpperCase(),
+      ]),
+  });
+  return (history.temperature_series || [])
+    .map((series) => ({ name: series.name, data: series.data }))
+    .concat([stateSeries("mode", "FCU Mode"), stateSeries("fan_speed", "FCU Fan")])
+    .filter((series) => series.data.length > 0);
+}
+
 async function loadFcuHistory(request = fetch) {
   const page = document.getElementById("fcu-history-page");
   const deviceId = Number(page?.dataset.fcuDeviceId);
@@ -64,6 +85,14 @@ async function loadFcuHistory(request = fetch) {
     series: combinedFcuSeries(history),
   });
   window.addEventListener("resize", () => chart.resize());
+  setupCsvDownload(() => {
+    const visibleSeries = fcuCsvSeries(history);
+    return {
+      visibleSeries,
+      names: visibleSeries.map((series) => series.name),
+      filename: `fcu_${deviceId}_history.csv`,
+    };
+  });
   return history;
 }
 
@@ -76,5 +105,5 @@ if (typeof window !== "undefined") {
 }
 
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { categoricalStateData, combinedFcuSeries, FCU_FAN_SPEEDS, FCU_MODES };
+  module.exports = { categoricalStateData, combinedFcuSeries, fcuCsvSeries, FCU_FAN_SPEEDS, FCU_MODES };
 }

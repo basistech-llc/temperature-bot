@@ -217,10 +217,14 @@ not in the repository:
 
 ```text
 AE200_NOTIFICATION_USER=administrator
-AE200_NOTIFICATION_PASSWORD=the-controller-password
+AE200_NOTIFICATION_PASSWORD=theControllerPassword
 # Optional; defaults to 90 days.
 AE200_NOTIFICATION_RETENTION_DAYS=90
 ```
+
+The private AE-200 password encoding accepts alphanumeric passwords only; the
+collector exits with a configuration error rather than sending a password it
+cannot encode.
 
 Install that file as `/etc/temperature-bot-ae200-notifications.env` with mode
 `0600`, copy `etc/temperature-bot-ae200-notifications.service` to systemd, and

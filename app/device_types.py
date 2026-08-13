@@ -2,7 +2,7 @@
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 DEVICE_TYPE_SENSOR = "SENSOR"
 DEVICE_TYPE_FAN = "FAN"
@@ -32,11 +32,17 @@ class HubitatDevice(BaseModel):
 
 
 class HubitatControlAttributes(BaseModel):
-    """Control attributes returned by the Maker API single-device endpoint."""
+    """Control attributes returned by the Maker API single-device endpoint.
+
+    ``speed`` is reported by ``FanControl`` devices and is deliberately untyped:
+    Hubitat drivers publish their own vocabularies (``medium-low``, ``auto``,
+    ``on``), and rejecting an unfamiliar one would lose the whole reading.
+    """
 
     model_config = ConfigDict(extra="ignore")
     level: int | None = Field(default=None, ge=0, le=100)
     switch: Literal["on", "off"] | None = None
+    speed: str | None = None
 
 
 class HubitatControlDevice(BaseModel):
@@ -44,6 +50,34 @@ class HubitatControlDevice(BaseModel):
 
     model_config = ConfigDict(extra="ignore")
     attributes: HubitatControlAttributes = Field(default_factory=HubitatControlAttributes)
+
+    @field_validator("attributes", mode="before")
+    @classmethod
+    def _accept_either_attribute_shape(cls, value):
+        """Normalize the two shapes Maker API uses for ``attributes``.
+
+        ``/devices/all`` returns a mapping of name to value, but
+        ``/devices/<id>`` -- the endpoint room control status reads -- returns a
+        list of ``{name, currentValue, dataType}`` records. Only the mapping was
+        accepted, so every live control read failed validation and every room
+        dashboard reported its controls unreadable.
+
+        Where a device lists an attribute twice, as the Hue group driver does
+        for ``switch`` and ``colorName``, the last entry that carries a value
+        wins. Preferring the last entry outright would let a trailing null
+        discard a real reading from an earlier one.
+        """
+        if not isinstance(value, list):
+            return value
+        normalized: dict[str, object] = {}
+        for entry in value:
+            if not isinstance(entry, dict) or not entry.get("name"):
+                continue
+            current = entry.get("currentValue")
+            if current is None and entry["name"] in normalized:
+                continue
+            normalized[entry["name"]] = current
+        return normalized
 
 
 FAN_CAPABILITIES = frozenset({"FanControl"})

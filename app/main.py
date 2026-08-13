@@ -15,6 +15,7 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 
 from . import ae200
 from . import db
+from . import room_config
 from . import routes_api
 from . import routes_web
 from .performance_routes import performance_routes
@@ -89,6 +90,9 @@ def create_app():
     app = Flask(__name__)
     setattr(app, "wsgi_app", ProxyFix(app.wsgi_app, x_for=1, x_proto=1))
     app.config["TEMPLATES_AUTO_RELOAD"] = True
+    # Make flask_pydantic raise instead of writing its own {"validation_error": ...}
+    # body, so app/api_errors.py is the single place that formats API failures.
+    app.config["FLASK_PYDANTIC_VALIDATION_ERROR_RAISE"] = True
 
     # Configure logging
     log_level = os.getenv("LOG_LEVEL", "INFO").upper()
@@ -101,6 +105,9 @@ def create_app():
     def simulator_context():
         return {
             "ae200_simulator": bool(ae200.AE200_SIMULATOR),
+            "room_dashboards": sorted(
+                room_config.ROOM_CONFIGS.values(), key=lambda config: config.label
+            ),
             **json_ready(application_metadata()),
         }
 

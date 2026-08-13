@@ -288,6 +288,23 @@ function setupMetricEventListeners() {
     });
   }
 
+  // CSV export
+  setupCsvDownload(() => {
+    const checkboxes = document.querySelectorAll(
+      "#checkboxes input[type=checkbox]",
+    );
+    const visibleSeries = checkedVisibleSeries(
+      checkboxes,
+      allSensors,
+      new Map(metricData.map((s) => [s.device_id, s])),
+    );
+    return {
+      visibleSeries,
+      names: visibleSeries.map((s) => s.name),
+      filename: `${metricConfig().metric || "metric"}_data.csv`,
+    };
+  });
+
   // Radon: re-render when the site-wide temperature-unit toggle flips, so the
   // y-axis label and tooltip unit track the Bq/m³ <-> pCi/L preference.
   if (isRadon()) {

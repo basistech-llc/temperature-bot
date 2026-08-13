@@ -1,6 +1,7 @@
 /** Logic tests for selected-axis layout on the air-quality chart. */
 const {
   airQualityAxisLayout,
+  aqiSeriesForCsv,
   selectedLegendState,
 } = require("../app/static/chart_aqi_support.js");
 
@@ -54,6 +55,26 @@ check(
 check(
   "legend event selection overrides the current option",
   selectedLegendState(undefined, { AQI: true }).AQI === true,
+);
+
+const csvData = {
+  pm25: [[100, 12]],
+  aqi: [[100, 40], [200, 42]],
+  o3: [],
+};
+const csvAll = aqiSeriesForCsv(csvData, {});
+check(
+  "csv export includes only series with data",
+  JSON.stringify(csvAll.map((s) => s.name)) === JSON.stringify(["PM2.5", "AQI"]),
+);
+check(
+  "csv export keeps timestamps in seconds",
+  csvAll[1].data[1][0] === 200 && csvAll[1].data[1][1] === 42,
+);
+check(
+  "legend-deselected series are excluded from csv",
+  JSON.stringify(aqiSeriesForCsv(csvData, { "PM2.5": false }).map((s) => s.name)) ===
+    JSON.stringify(["AQI"]),
 );
 
 console.log(`\n${passed} passed, ${failed} failed`);

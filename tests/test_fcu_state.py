@@ -4,17 +4,29 @@ import os
 import json
 import sqlite3
 import time
+from unittest.mock import patch
 
 import pytest
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 
 from conftest import flask_test_client  # noqa: F401  # pylint: disable=unused-import
 
-from app import ae200, db, fcu_control
+from app import ae200, db, fcu_control, rules_engine
 from app.constants import TEST_DB_NAME
-from app.models import ChangelogAction
+from app.models import ChangelogAction, DriveControl, SpeedControl
 
 AE200_UNIT = 10
+
+
+class UnconfirmedCase(BaseModel):
+    """Inputs and expected audit state for one stale controller response."""
+
+    command: str
+    control: DriveControl | SpeedControl
+    status: dict[str, str]
+    field: str
+    value: int
+    action: ChangelogAction
 
 
 @pytest.mark.parametrize(
@@ -63,7 +75,65 @@ def test_fcu_state_endpoint_reports_controller_protocol_failure(
         json={"device_id": 1, "drive": 1, "fan_speed": 4},
     )
     assert response.status_code == 502
-    assert response.json == {"error": "AE-200 did not confirm requested state"}
+    assert response.json == {
+        "error": "AE-200 did not confirm requested state",
+        "code": "upstream_unavailable",
+    }
+
+
+@pytest.mark.parametrize(
+    "case",
+    [
+        UnconfirmedCase(
+            command="set_body_drive",
+            control=DriveControl(device_id=1, drive=0),
+            status={"Drive": "ON", "FanSpeed": "AUTO", "InletTemp": "22.0"},
+            field="drive",
+            value=1,
+            action=ChangelogAction.DRIVE,
+        ),
+        UnconfirmedCase(
+            command="set_body_fan_speed",
+            control=SpeedControl(device_id=1, fan_speed=3),
+            status={"Drive": "ON", "FanSpeed": "LOW", "InletTemp": "22.0"},
+            field="fan_speed",
+            value=1,
+            action=ChangelogAction.FAN_SPEED,
+        ),
+    ],
+)
+def test_fcu_control_rejects_unconfirmed_readback(case, test_database_conn):
+    """A stale read-back is audited and recorded, never manufactured as success."""
+    conn = test_database_conn
+    device_id = db.get_or_create_device_id(conn, f"Unconfirmed {case.action.value}")
+    conn.execute(
+        "UPDATE devices SET ae200_device_id=? WHERE device_id=?",
+        (AE200_UNIT, device_id),
+    )
+    conn.commit()
+    control = case.control.model_copy(update={"device_id": device_id})
+
+    with patch.object(
+        ae200, "get_device_info", return_value=dict(case.status)
+    ), patch.object(ae200, "set_fcu_state"), patch.object(
+        ae200, "get_device_info_after_write", return_value=dict(case.status)
+    ):
+        with pytest.raises(ae200.AE200VerificationError):
+            getattr(rules_engine, case.command)(conn, control, "127.0.0.1", "web")
+
+    row = conn.execute(
+        "SELECT status_json FROM devlog WHERE device_id=? ORDER BY logtime DESC",
+        (device_id,),
+    ).fetchone()
+    assert ae200.extract_drive_and_fan_speed(json.loads(row["status_json"]))[
+        case.field
+    ] == case.value
+    audit = conn.execute(
+        "SELECT action, comment FROM changelog WHERE device_id=?",
+        (device_id,),
+    ).fetchone()
+    assert audit["action"] == case.action.value
+    assert audit["comment"].startswith("not confirmed")
 
 
 def test_set_fcu_state_is_atomic_verified_and_logged_once(flask_test_client):  # noqa: F811

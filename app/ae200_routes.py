@@ -10,11 +10,13 @@ from pydantic import BaseModel, Field
 from websockets.exceptions import WebSocketException
 
 from . import ae200, ae200_command_log, ae200_notifications
+from .api_errors import BadRequest, UpstreamUnavailable, register_error_handlers
 from .models import json_ready
 from .util import get_config
 from .utils.db_utils import with_db_connection
 
 ae200_routes = Blueprint("ae200_diagnostics", __name__)
+register_error_handlers(ae200_routes)
 
 
 class AE200UnitSnapshot(BaseModel):
@@ -45,7 +47,17 @@ def ae200_page():
 def ae200_status():
     """Read the device list and every known current field for each unit."""
     units: list[AE200UnitSnapshot] = []
-    for device in ae200.get_devices():
+    try:
+        devices = ae200.get_devices()
+    except (
+        OSError,
+        RuntimeError,
+        ValueError,
+        ET.ParseError,
+        WebSocketException,
+    ) as error:
+        raise UpstreamUnavailable("AE-200 request failed") from error
+    for device in devices:
         device_id = str(device["id"])
         try:
             status = {
@@ -90,7 +102,7 @@ def ae200_commands(conn):
         limit = int(request.args.get("limit", ae200_command_log.DEFAULT_LIMIT))
         page = ae200_command_log.fetch_recent(conn, limit)
     except ValueError as error:
-        return jsonify({"error": str(error)}), 400
+        raise BadRequest(str(error)) from error
     return jsonify(page.model_dump(mode="json"))
 
 
@@ -102,5 +114,5 @@ def ae200_notification_events(conn):
         limit = int(request.args.get("limit", ae200_notifications.DEFAULT_LIMIT))
         page = ae200_notifications.fetch_recent(conn, limit)
     except ValueError as error:
-        return jsonify({"error": str(error)}), 400
+        raise BadRequest(str(error)) from error
     return jsonify(page.model_dump(mode="json"))

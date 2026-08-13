@@ -48,6 +48,22 @@ def test_ae200_status_isolates_transport_and_xml_errors(
     assert all(unit["error"].endswith(str(error)) for unit in response.json["units"])
 
 
+def test_ae200_status_maps_device_list_failure_to_upstream_error(
+    monkeypatch, flask_test_client
+):  # noqa: F811
+    def fail_device_list():
+        raise WebSocketException("controller unavailable")
+
+    monkeypatch.setattr(ae200, "get_devices", fail_device_list)
+    response = flask_test_client.get("/api/v1/ae200/status")
+
+    assert response.status_code == 502
+    assert response.json == {
+        "error": "AE-200 request failed",
+        "code": "upstream_unavailable",
+    }
+
+
 def test_ae200_command_api_returns_latest_parsed_command(flask_test_client):  # noqa: F811
     ae200.set_fcu_state(10, drive=1, fan_speed=4)
     response = flask_test_client.get("/api/v1/ae200/commands?limit=1")
@@ -60,6 +76,7 @@ def test_ae200_command_api_returns_latest_parsed_command(flask_test_client):  # 
 
     invalid = flask_test_client.get("/api/v1/ae200/commands?limit=0")
     assert invalid.status_code == 400
+    assert invalid.json["code"] == "bad_request"
 
 
 def test_ae200_command_error_is_bounded_and_queryable(test_database_conn):

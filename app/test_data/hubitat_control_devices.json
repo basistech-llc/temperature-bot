@@ -1,0 +1,201 @@
+{
+  "switch": {
+    "id": "260",
+    "name": "Broadway Pendant Lights on Somerville Broadway",
+    "label": "Broadway Pendant Lights",
+    "type": "GE Enbrighten Z-Wave Smart Switch",
+    "attributes": [
+      {
+        "name": "switch",
+        "currentValue": "on",
+        "dataType": "ENUM",
+        "values": [
+          "on",
+          "off"
+        ]
+      },
+      {
+        "name": "pushed",
+        "currentValue": 2,
+        "dataType": "NUMBER"
+      },
+      {
+        "name": "hubMeshDisabled",
+        "currentValue": "false",
+        "dataType": "STRING"
+      },
+      {
+        "name": "doubleTapped",
+        "currentValue": 1,
+        "dataType": "NUMBER"
+      },
+      {
+        "name": "held",
+        "currentValue": 2,
+        "dataType": "NUMBER"
+      },
+      {
+        "name": "released",
+        "currentValue": 2,
+        "dataType": "NUMBER"
+      },
+      {
+        "name": "numberOfButtons",
+        "currentValue": 2,
+        "dataType": "NUMBER"
+      }
+    ]
+  },
+  "fan": {
+    "id": "359",
+    "name": "Data Closet Fan on Somerville Broadway",
+    "label": "Data Closet Fan",
+    "type": "GE Smart Fan Control",
+    "attributes": [
+      {
+        "name": "numberOfButtons",
+        "currentValue": 2,
+        "dataType": "NUMBER"
+      },
+      {
+        "name": "pushed",
+        "currentValue": 1,
+        "dataType": "NUMBER"
+      },
+      {
+        "name": "switch",
+        "currentValue": "on",
+        "dataType": "ENUM",
+        "values": [
+          "on",
+          "off"
+        ]
+      },
+      {
+        "name": "hubMeshDisabled",
+        "currentValue": "false",
+        "dataType": "STRING"
+      },
+      {
+        "name": "doubleTapped",
+        "currentValue": null,
+        "dataType": "NUMBER"
+      },
+      {
+        "name": "level",
+        "currentValue": 98,
+        "dataType": "NUMBER"
+      },
+      {
+        "name": "speed",
+        "currentValue": "high",
+        "dataType": "ENUM",
+        "values": [
+          "low",
+          "medium-low",
+          "medium",
+          "medium-high",
+          "high",
+          "on",
+          "off",
+          "auto"
+        ]
+      },
+      {
+        "name": "supportedFanSpeeds",
+        "currentValue": null,
+        "dataType": "JSON_OBJECT"
+      }
+    ]
+  },
+  "dimmer": {
+    "id": "581",
+    "name": "All Hue lights",
+    "label": "Hickory Dimmable Lights",
+    "type": "hueBridgeGroup",
+    "attributes": [
+      {
+        "name": "saturation",
+        "currentValue": 55,
+        "dataType": "NUMBER"
+      },
+      {
+        "name": "colorName",
+        "currentValue": "Incandescent",
+        "dataType": "STRING"
+      },
+      {
+        "name": "color",
+        "currentValue": null,
+        "dataType": "STRING"
+      },
+      {
+        "name": "RGB",
+        "currentValue": null,
+        "dataType": "STRING"
+      },
+      {
+        "name": "hue",
+        "currentValue": 13,
+        "dataType": "NUMBER"
+      },
+      {
+        "name": "level",
+        "currentValue": 70,
+        "dataType": "NUMBER"
+      },
+      {
+        "name": "lightEffects",
+        "currentValue": "{\"0\":\"None\",\"1\":\"Color Loop\"}",
+        "dataType": "JSON_OBJECT"
+      },
+      {
+        "name": "colorTemperature",
+        "currentValue": 2732,
+        "dataType": "NUMBER"
+      },
+      {
+        "name": "effect",
+        "currentValue": "none",
+        "dataType": "STRING"
+      },
+      {
+        "name": "effectName",
+        "currentValue": null,
+        "dataType": "STRING"
+      },
+      {
+        "name": "switch",
+        "currentValue": "on",
+        "dataType": "ENUM",
+        "values": [
+          "on",
+          "off"
+        ]
+      },
+      {
+        "name": "colorName",
+        "currentValue": "Incandescent",
+        "dataType": "STRING"
+      },
+      {
+        "name": "switch",
+        "currentValue": "on",
+        "dataType": "ENUM",
+        "values": [
+          "on",
+          "off"
+        ]
+      },
+      {
+        "name": "colorMode",
+        "currentValue": "CT",
+        "dataType": "ENUM",
+        "values": [
+          "CT",
+          "RGB"
+        ]
+      }
+    ]
+  }
+}

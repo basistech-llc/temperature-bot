@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pytest
 
+from app import routes_api
 from app.main import app as flask_app
 from app.paths import SCHEMA_FILE_PATH
 
@@ -57,6 +58,21 @@ def db_path(conn):
 def reduce_websockets_logging():
     """Reduce websockets debug logging for tests."""
     logging.getLogger("websockets.client").setLevel(logging.INFO)
+
+
+@pytest.fixture(autouse=True)
+def reset_failed_control_devices():
+    """Clear the warn-once set that room control status reads share.
+
+    ``routes_api`` remembers which control devices it has already warned about
+    so an unreachable hub does not log ten lines every ten-second poll. That set
+    is process-global, so without this a test that drove a device into failure
+    would silently decide whether a later test sees a warning at all.
+    """
+    # pylint: disable=protected-access
+    routes_api._failed_control_devices.clear()
+    yield
+    routes_api._failed_control_devices.clear()
 
 
 ################################################################

@@ -4,21 +4,23 @@ Simple test to check if Flask routes are working
 """
 # pylint: disable=unused-import,too-many-lines
 import datetime
+import logging
 from html import unescape
 from unittest.mock import patch
 
 from conftest import flask_test_client  # noqa: F401
 from app.main import APP_DIR, application_metadata
+from app.dashboard_views import (
+    air_quality_device_is_active,
+    device_label,
+    device_label_with_icon,
+    device_update_tooltip,
+    table_update_summary,
+)
 from app.routes_web import (
-    _dashboard_air_quality_device_is_active,
-    _dashboard_device_label,
-    _dashboard_device_label_with_icon,
-    _dashboard_device_tooltip,
     _filter_speed_control_devices,
     _format_rules_result,
-    _get_hubitat_sensors,
     _rules_forecast_table,
-    _table_update_summary,
 )
 from app import room_config
 from app.version import __version__
@@ -131,9 +133,9 @@ def test_rooms_menu_has_one_plain_link_per_room(flask_test_client):  # noqa: F81
     assert "no-return" not in html
 
 
-def test_dashboard_device_label_uses_stored_status_label():
+def test_device_label_uses_stored_status_label():
     """Index labels must not require a live Hubitat fetch."""
-    label = _dashboard_device_label(
+    label = device_label(
         {
             "device_name": "Lobby Sensor on Somerville Broadway",
             "status": {"label": "Lobby Sensor"},
@@ -143,9 +145,9 @@ def test_dashboard_device_label_uses_stored_status_label():
     assert label == "Lobby Sensor"
 
 
-def test_dashboard_device_label_icons_are_idempotent():
+def test_device_label_icons_are_idempotent():
     assert (
-        _dashboard_device_label_with_icon(
+        device_label_with_icon(
             {
                 "device_name": "ERV 1",
                 "device_label": "ERV 1 ♻️",
@@ -155,7 +157,7 @@ def test_dashboard_device_label_icons_are_idempotent():
         == "ERV 1 ♻️"
     )
     assert (
-        _dashboard_device_label_with_icon(
+        device_label_with_icon(
             {
                 "device_name": "Area 51",
                 "device_label": "Area 51",
@@ -165,7 +167,7 @@ def test_dashboard_device_label_icons_are_idempotent():
         == "Area 51 🌀"
     )
     assert (
-        _dashboard_device_label_with_icon(
+        device_label_with_icon(
             {
                 "device_name": "Unknown monitor",
                 "device_label": "Unknown monitor 📡",
@@ -176,8 +178,8 @@ def test_dashboard_device_label_icons_are_idempotent():
     )
 
 
-def test_dashboard_device_tooltip_uses_device_update_time():
-    tooltip = _dashboard_device_tooltip(
+def test_device_update_tooltip_uses_device_update_time():
+    tooltip = device_update_tooltip(
         {
             "device_name": "Area 51",
             "logtime": 1000,
@@ -204,18 +206,18 @@ def test_dashboard_air_quality_device_expires_after_30_days():
         "duration": 60,
     }
 
-    assert _dashboard_air_quality_device_is_active(current_device, now=1300)
-    assert not _dashboard_air_quality_device_is_active(
+    assert air_quality_device_is_active(current_device, now=1300)
+    assert not air_quality_device_is_active(
         expired_device,
         now=1000 + 60 + 31 * 24 * 60 * 60,
     )
-    assert not _dashboard_air_quality_device_is_active(
+    assert not air_quality_device_is_active(
         {**current_device, "has_speed_control": True},
         now=1300,
     )
 
 
-@patch("app.routes_web.hubitat.get_name_to_label")
+@patch("app.hubitat.get_name_to_label")
 @patch("app.routes_web.time.time", return_value=1300)
 @patch("app.routes_web.db.get_device_status")
 def test_index_does_not_fetch_hubitat_labels_on_render(
@@ -240,7 +242,7 @@ def test_index_does_not_fetch_hubitat_labels_on_render(
 
 
 def test_table_update_summary_uses_oldest_status_end_time():
-    summary = _table_update_summary(
+    summary = table_update_summary(
         [
             {"device_type": "ERV", "logtime": 900, "duration": 1},
             {
@@ -277,7 +279,7 @@ def test_table_update_summary_uses_oldest_status_end_time():
     )
 
 
-@patch("app.routes_web.hubitat.get_name_to_label", return_value={})
+@patch("app.hubitat.get_name_to_label", return_value={})
 @patch("app.routes_web.time.time", return_value=1300)
 @patch("app.routes_web.db.get_device_status")
 def test_index_table_update_summaries_render_at_table_bottom(
@@ -325,7 +327,7 @@ def test_index_table_update_summaries_render_at_table_bottom(
     assert html.count("oldest update at") == 3
 
 
-@patch("app.routes_web.hubitat.get_name_to_label", return_value={})
+@patch("app.hubitat.get_name_to_label", return_value={})
 @patch("app.routes_web.time.time", return_value=1300)
 @patch("app.routes_web.db.get_device_status")
 def test_index_air_quality_table_hides_expired_devices(
@@ -362,7 +364,7 @@ def test_index_air_quality_table_hides_expired_devices(
     assert "from Expired Air" not in html
 
 
-@patch("app.routes_web.hubitat.get_name_to_label", return_value={})
+@patch("app.hubitat.get_name_to_label", return_value={})
 @patch("app.routes_web.db.get_device_status")
 def test_fcu_matrix_has_raw_fcu_temp_and_room_temp_columns(
     mock_get_status, _mock_labels, flask_test_client
@@ -407,7 +409,7 @@ def test_fcu_matrix_has_raw_fcu_temp_and_room_temp_columns(
     assert 'aria-label="Move Auto cool set temperature"' in html
 
 
-@patch("app.routes_web.hubitat.get_name_to_label", return_value={})
+@patch("app.hubitat.get_name_to_label", return_value={})
 @patch("app.routes_web.db.get_device_status")
 def test_fcu_matrix_unit_cell_opens_temperature_source_editor(
     mock_get_status, _mock_labels, flask_test_client
@@ -454,7 +456,7 @@ def test_fcu_matrix_unit_cell_opens_temperature_source_editor(
     assert "room-temp-link" not in html
 
 
-@patch("app.routes_web.hubitat.get_name_to_label", return_value={})
+@patch("app.hubitat.get_name_to_label", return_value={})
 @patch("app.routes_web.time.time", return_value=1300)
 @patch("app.routes_web.db.get_device_status")
 def test_index_device_names_expose_rename_popup_contract(
@@ -682,74 +684,6 @@ def test_filter_speed_control_empty_names():
     assert result == []
 
 
-# -- _get_hubitat_sensors unit tests --
-
-_FAKE_HUBITAT_DEVICES = [
-    {
-        "name": "Hickory Sensor",
-        "label": "Hickory Sensor",
-        "id": "582",
-        "room": "Hickory",
-        "capabilities": ["TemperatureMeasurement", "RelativeHumidityMeasurement"],
-        "attributes": {"temperature": "23.4", "humidity": "24"},
-    },
-    {
-        "name": "Dungeon Cage",
-        "label": "Dungeon Cage",
-        "id": "98",
-        "room": "Dungeon",
-        "capabilities": ["TemperatureMeasurement"],
-        "attributes": {"temperature": "24.6"},
-    },
-    {
-        "name": "Some Light",
-        "label": "Some Light",
-        "id": "999",
-        "room": "Hickory",
-        "capabilities": ["Switch"],
-        "attributes": {"switch": "on"},
-    },
-]
-
-
-@patch("app.routes_web.hubitat.get_all_devices", return_value=_FAKE_HUBITAT_DEVICES)
-def test_get_hubitat_sensors_returns_matching(_mock):
-    """Configured names found in Hubitat are returned."""
-    result = _get_hubitat_sensors(["Hickory Sensor", "Dungeon Cage"])
-    names = [s["name"] for s in result]
-    assert names == ["Hickory Sensor", "Dungeon Cage"]
-    assert all("offline" not in s for s in result)
-
-
-@patch("app.routes_web.hubitat.get_all_devices", return_value=_FAKE_HUBITAT_DEVICES)
-def test_get_hubitat_sensors_offline_placeholder(_mock):
-    """Configured names NOT in Hubitat get an offline placeholder."""
-    result = _get_hubitat_sensors(["Hickory Sensor", "Missing Sensor"])
-    assert len(result) == 2
-    online = result[0]
-    offline = result[1]
-    assert online["name"] == "Hickory Sensor"
-    assert "offline" not in online
-    assert offline["name"] == "Missing Sensor"
-    assert offline["offline"] is True
-
-
-@patch("app.routes_web.hubitat.get_all_devices", return_value=_FAKE_HUBITAT_DEVICES)
-def test_get_hubitat_sensors_skips_non_temperature(_mock):
-    """Devices without TemperatureMeasurement capability are not returned."""
-    result = _get_hubitat_sensors(["Some Light"])
-    assert len(result) == 1
-    assert result[0]["offline"] is True
-
-
-@patch("app.routes_web.hubitat.get_all_devices", side_effect=RuntimeError("unreachable"))
-def test_get_hubitat_sensors_hubitat_unreachable(_mock):
-    """When Hubitat is unreachable, all sensors get offline placeholders."""
-    result = _get_hubitat_sensors(["Hickory Sensor", "Dungeon Cage"])
-    assert len(result) == 2
-    assert all(s["offline"] is True for s in result)
-
-
 # -- Hickory room API endpoint tests --
 
 _FAKE_ALL_DEVICES = [
@@ -778,16 +712,17 @@ _FAKE_ALL_DEVICES = [
 
 @patch("app.routes_api.hubitat.get_device_info")
 def test_room_status_returns_device_states(mock_get_device_info, flask_test_client):  # noqa: F811
-    """Room status returns dimmer level and wall light states."""
+    """Room status reports each readable control keyed by its configured key."""
     devices = {device["id"]: device for device in _FAKE_ALL_DEVICES}
     mock_get_device_info.side_effect = devices.__getitem__
     resp = flask_test_client.get("/api/v1/hickory/room_status")
     assert resp.status_code == 200
-    data = resp.get_json()
-    assert data["dimmer"]["level"] == 75
-    assert data["dimmer"]["switch"] == "on"
-    assert data["wall_inner"]["switch"] == "on"
-    assert data["wall_outer"]["switch"] == "off"
+    assert resp.get_json()["controls"] == [
+        {"key": "main", "kind": "dimmer", "level": 75, "switch": "on"},
+        {"key": "inner", "kind": "switch", "switch": "on"},
+        {"key": "outer", "kind": "switch", "switch": "off"},
+    ]
+    # The TV lift is momentary and has no device to read.
     assert [call.args[0] for call in mock_get_device_info.call_args_list] == [
         "581",
         "454",
@@ -800,10 +735,7 @@ def test_room_status_missing_devices(_mock, flask_test_client):  # noqa: F811
     """When configured devices aren't in Hubitat, they're omitted from response."""
     resp = flask_test_client.get("/api/v1/hickory/room_status")
     assert resp.status_code == 200
-    data = resp.get_json()
-    assert "dimmer" not in data
-    assert "wall_inner" not in data
-    assert "wall_outer" not in data
+    assert resp.get_json() == {"controls": []}
 
 
 @patch("app.routes_api.hubitat.get_device_info")
@@ -818,8 +750,10 @@ def test_room_status_one_device_error_keeps_other_states(mock_get_device_info, f
     resp = flask_test_client.get("/api/v1/hickory/room_status")
     assert resp.status_code == 200
     assert resp.get_json() == {
-        "dimmer": {"level": 75, "switch": "on"},
-        "wall_outer": {"switch": "off"},
+        "controls": [
+            {"key": "main", "kind": "dimmer", "level": 75, "switch": "on"},
+            {"key": "outer", "kind": "switch", "switch": "off"},
+        ]
     }
 
 
@@ -877,13 +811,14 @@ def test_dimmer_non_integer(flask_test_client):  # noqa: F811
 
 @patch("app.routes_api.hubitat.set_dimmer_level", side_effect=OSError("timeout"))
 def test_dimmer_hubitat_error(_mock, flask_test_client):  # noqa: F811
-    """Hubitat failure returns 500."""
+    """Hubitat failure is reported as an upstream failure, not a server bug."""
     resp = flask_test_client.post(
         "/api/v1/hickory/dimmer",
         json={"level": 50},
     )
-    assert resp.status_code == 500
-    assert "error" in resp.get_json()
+    assert resp.status_code == 502
+    assert resp.get_json()["code"] == "upstream_unavailable"
+    assert "timeout" not in resp.get_data(as_text=True)
 
 
 # /api/v1/hickory/wall_light
@@ -897,7 +832,7 @@ def test_wall_light_on(_mock, flask_test_client):  # noqa: F811
     )
     assert resp.status_code == 200
     data = resp.get_json()
-    assert data["light"] == "inner"
+    assert data["control"] == "inner"
     assert data["state"] == "on"
     _mock.assert_called_once_with("454", "on")
 
@@ -913,13 +848,14 @@ def test_wall_light_outer_off(_mock, flask_test_client):  # noqa: F811
     _mock.assert_called_once_with("550", "off")
 
 
-def test_wall_light_invalid_light(flask_test_client):  # noqa: F811
-    """Invalid light name returns 400."""
+def test_wall_light_unknown_control(flask_test_client):  # noqa: F811
+    """An unconfigured control key is a 404, like an unconfigured room."""
     resp = flask_test_client.post(
         "/api/v1/hickory/wall_light",
         json={"light": "ceiling", "state": "on"},
     )
-    assert resp.status_code == 400
+    assert resp.status_code == 404
+    assert resp.get_json()["code"] == "not_found"
 
 
 def test_wall_light_invalid_state(flask_test_client):  # noqa: F811
@@ -942,13 +878,152 @@ def test_wall_light_missing_fields(flask_test_client):  # noqa: F811
 
 @patch("app.routes_api.hubitat.set_switch", side_effect=RuntimeError("hub down"))
 def test_wall_light_hubitat_error(_mock, flask_test_client):  # noqa: F811
-    """Hubitat failure returns 500."""
+    """Hubitat failure is reported as an upstream failure, not a server bug."""
     resp = flask_test_client.post(
         "/api/v1/hickory/wall_light",
         json={"light": "inner", "state": "on"},
     )
-    assert resp.status_code == 500
-    assert "error" in resp.get_json()
+    assert resp.status_code == 502
+    assert resp.get_json()["code"] == "upstream_unavailable"
+    assert "hub down" not in resp.get_data(as_text=True)
+
+
+# /api/v1/room/<room_key>/switch and /fan — the generic control endpoints
+
+@patch("app.routes_api.hubitat.set_switch")
+def test_switch_endpoint_drives_a_configured_control(_mock, flask_test_client):  # noqa: F811
+    """The generic path addresses the same controls as the wall-light alias."""
+    resp = flask_test_client.post(
+        "/api/v1/room/hickory/switch",
+        json={"control": "outer", "state": "off"},
+    )
+    assert resp.status_code == 200
+    assert resp.get_json()["control"] == "outer"
+    _mock.assert_called_once_with("550", "off")
+
+
+@patch("app.routes_api.hubitat.set_switch")
+def test_switch_endpoint_drives_a_broadway_control(_mock, flask_test_client):  # noqa: F811
+    """A room that configures neither a dimmer nor a TV still switches."""
+    resp = flask_test_client.post(
+        "/api/v1/room/broadway/switch",
+        json={"control": "pendant-lights", "state": "on"},
+    )
+    assert resp.status_code == 200
+    _mock.assert_called_once_with("260", "on")
+
+
+def test_switch_endpoint_rejects_a_control_of_another_kind(flask_test_client):  # noqa: F811
+    """A fan is not switchable through the switch endpoint."""
+    resp = flask_test_client.post(
+        "/api/v1/room/broadway/switch",
+        json={"control": "data-closet-fan", "state": "on"},
+    )
+    assert resp.status_code == 404
+
+
+@patch("app.routes_api.hubitat.set_fan_speed")
+def test_fan_endpoint_sets_a_named_speed(_mock, flask_test_client):  # noqa: F811
+    """Fan speeds are sent by name, not as an on/off switch."""
+    resp = flask_test_client.post(
+        "/api/v1/room/broadway/fan",
+        json={"control": "data-closet-fan", "speed": "medium"},
+    )
+    assert resp.status_code == 200
+    assert resp.get_json()["speed"] == "medium"
+    _mock.assert_called_once_with("359", "medium")
+
+
+@patch("app.routes_api.hubitat.get_device_info")
+def test_room_status_reports_fan_speed(mock_get_device_info, flask_test_client):  # noqa: F811
+    """A fan reports its speed; switches in the same room report only on/off."""
+    mock_get_device_info.return_value = {
+        "attributes": {"switch": "on", "speed": "high", "level": 98}
+    }
+    resp = flask_test_client.get("/api/v1/room/broadway/room_status")
+    assert resp.status_code == 200
+    states = {state["key"]: state for state in resp.get_json()["controls"]}
+    assert states["data-closet-fan"] == {
+        "key": "data-closet-fan",
+        "kind": "fan",
+        "switch": "on",
+        "speed": "high",
+    }
+    # A switch carries no level even when the payload has one.
+    assert states["pendant-lights"] == {
+        "key": "pendant-lights",
+        "kind": "switch",
+        "switch": "on",
+    }
+
+
+@patch("app.routes_api.hubitat.get_device_info")
+def test_room_status_passes_absent_attributes_through(mock_get_device_info, flask_test_client):  # noqa: F811
+    """A readable device that omits an attribute must not be given a value.
+
+    Defaulting a missing switch to "off" would show a running fan as stopped,
+    and a missing level as 0 would show a lit dimmer at zero percent. The
+    browser distinguishes absent from off; the API has to preserve that.
+    """
+    mock_get_device_info.return_value = {"attributes": {"speed": "medium"}}
+    states = {
+        state["key"]: state
+        for state in flask_test_client.get(
+            "/api/v1/room/broadway/room_status"
+        ).get_json()["controls"]
+    }
+    assert states["data-closet-fan"] == {
+        "key": "data-closet-fan",
+        "kind": "fan",
+        "speed": "medium",
+    }
+    assert states["pendant-lights"] == {"key": "pendant-lights", "kind": "switch"}
+
+
+@patch("app.routes_api.hubitat.set_dimmer_level")
+def test_dimmer_accepts_the_control_key_the_browser_sends(_mock, flask_test_client):  # noqa: F811
+    """room_dashboard.js addresses dimmers by control key, not by room alone.
+
+    The older tests post the legacy body with no control key, so without this a
+    find_control regression would break every dashboard while the suite stayed
+    green.
+    """
+    resp = flask_test_client.post(
+        "/api/v1/room/hickory/dimmer",
+        json={"control": "main", "level": 40},
+    )
+    assert resp.status_code == 200
+    _mock.assert_called_once_with("581", 40)
+
+
+@patch("app.routes_api.hubitat.control_room_tv")
+def test_tv_accepts_the_control_key_the_browser_sends(_mock, flask_test_client):  # noqa: F811
+    """Same contract check for the TV lift, which the browser also keys."""
+    resp = flask_test_client.post(
+        "/api/v1/room/hickory/tv",
+        json={"control": "tv", "direction": "down"},
+    )
+    assert resp.status_code == 200
+    _mock.assert_called_once_with("down", up_label="TV Up", down_label="TV Down")
+
+
+@patch("app.routes_api.hubitat.get_device_info", side_effect=RuntimeError("unreachable"))
+def test_unreachable_control_warns_once_per_device(mock_get_device_info, flask_test_client, caplog):  # noqa: F811
+    """Ten unreachable controls polled every ten seconds must not flood the log.
+
+    The warn-once set is cleared by an autouse fixture in conftest, so this does
+    not depend on which tests ran before it.
+    """
+    with caplog.at_level(logging.WARNING, logger="app.routes_api"):
+        first = flask_test_client.get("/api/v1/room/broadway/room_status")
+        second = flask_test_client.get("/api/v1/room/broadway/room_status")
+
+    assert first.get_json() == {"controls": []}
+    assert second.get_json() == {"controls": []}
+    # Both polls read every device; only the first poll reported the failures.
+    assert mock_get_device_info.call_count == 16
+    failures = [r for r in caplog.records if "unreadable" in r.getMessage()]
+    assert len(failures) == 8
 
 
 # /api/v1/hickory/tv
@@ -1000,13 +1075,14 @@ def test_tv_missing_direction(flask_test_client):  # noqa: F811
 
 @patch("app.routes_api.hubitat.control_room_tv", side_effect=RuntimeError("not found"))
 def test_tv_hubitat_error(_mock, flask_test_client):  # noqa: F811
-    """Hubitat failure returns 500."""
+    """Hubitat failure is reported as an upstream failure, not a server bug."""
     resp = flask_test_client.post(
         "/api/v1/hickory/tv",
         json={"direction": "up"},
     )
-    assert resp.status_code == 500
-    assert "error" in resp.get_json()
+    assert resp.status_code == 502
+    assert resp.get_json()["code"] == "upstream_unavailable"
+    assert "not found" not in resp.get_data(as_text=True)
 
 
 def test_generic_room_control_routes_resolve_config(flask_test_client):  # noqa: F811
@@ -1093,3 +1169,34 @@ def test_hickory_dashboard_uses_decluttered_layout(mock_get_status, flask_test_c
     assert room_controls_pos < first_device_card_pos, (
         "Room Controls must render above the first HVAC device card"
     )
+
+
+@patch("app.routes_api.hubitat.get_device_info", return_value={"id": "260"})
+def test_payload_without_attributes_counts_as_unreadable(_mock, flask_test_client):  # noqa: F811
+    """A 200 body that is not a device description must not read as reachable.
+
+    Reporting it as readable would leave the tile enabled and clickable while
+    the page knows nothing about the device -- the same lie the unavailable
+    state exists to prevent, arriving through a different door. An empty
+    attribute list is deliberately NOT this case: the device answered.
+    """
+    resp = flask_test_client.get("/api/v1/room/broadway/room_status")
+    assert resp.get_json() == {"controls": []}
+
+
+@patch("app.routes_api.hubitat.get_device_info", return_value={"id": "260", "attributes": []})
+def test_device_reporting_no_attributes_is_still_reachable(_mock, flask_test_client):  # noqa: F811
+    """A device that answers but reports no state is reachable, not unavailable.
+
+    Its tile stays enabled and commandable; only the state is unknown. This is
+    the distinction the previous test's payload fails to meet.
+    """
+    states = flask_test_client.get(
+        "/api/v1/room/broadway/room_status"
+    ).get_json()["controls"]
+    assert {state["key"] for state in states} == {
+        "pendant-lights", "spot-lights", "whiteboard-washer",
+        "sidewalk-washer-north", "sidewalk-washer-south",
+        "garage-washer-north", "garage-washer-south", "data-closet-fan",
+    }
+    assert all("switch" not in state for state in states)
