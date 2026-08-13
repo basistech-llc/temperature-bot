@@ -873,6 +873,21 @@ def get_rooms(conn) -> list[Room]:
     return [_room_from_row(row) for row in c.fetchall()]
 
 
+def get_room_fcu_names(conn) -> dict[int, str]:
+    """Return the device name of each room's owning FCU, keyed by room id.
+
+    Resolving room keys one at a time meant a per-room lookup for every
+    candidate; one join answers the whole question. Rooms with no FCU (Garage,
+    Data Closet) are simply absent.
+    """
+    c = conn.cursor()
+    c.execute(
+        "SELECT r.room_id, d.device_name FROM rooms r "
+        "JOIN devices d ON d.device_id = r.fcu_device_id"
+    )
+    return {int(row["room_id"]): str(row["device_name"] or "") for row in c.fetchall()}
+
+
 def get_assigned_room_ids(conn) -> set[int]:
     """Return room ids referenced by any device, including devices without logs."""
     c = conn.cursor()

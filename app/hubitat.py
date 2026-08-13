@@ -242,6 +242,18 @@ def set_switch(device_id, state):
     return send_device_command(device_id, state)
 
 
+def set_fan_speed(device_id, speed):
+    """Set a Hubitat ``FanControl`` device's speed.
+
+    speed: one of ``off``, ``low``, ``medium``, ``high``
+
+    Sent through ``setSpeed`` rather than on/off so the device keeps reporting a
+    speed. Hubitat drivers accept more speeds than we offer; the narrower set is
+    a UI choice, not a driver limit.
+    """
+    return send_device_command(device_id, "setSpeed", str(speed))
+
+
 def _find_device_by_label(label):
     """Find a device by its Hubitat label. Raises RuntimeError if not found."""
     devices = get_all_devices()

@@ -33,6 +33,8 @@ ERROR_CASES = [
      "validation_error"),
     ("POST", "/api/v1/hickory/tv", {"direction": "sideways"}, 400,
      "validation_error"),
+    ("POST", "/api/v1/room/hickory/fan", {"control": "data-closet-fan",
+     "speed": "turbo"}, 400, "validation_error"),
     ("POST", "/api/v1/rules_master", {}, 400, "validation_error"),
     ("POST", "/api/v1/set_device_disabled_until", {}, 400, "validation_error"),
     # Query-string checks
@@ -48,6 +50,13 @@ ERROR_CASES = [
     ("GET", "/api/v1/presence/history?room_id=999999", None, 404, "not_found"),
     ("GET", "/api/v1/room/nosuchroom/room_status", None, 404, "not_found"),
     ("POST", "/api/v1/room/nosuchroom/dimmer", {"level": 50}, 404, "not_found"),
+    # A control key the room does not configure, like an unknown room, is a 404.
+    ("POST", "/api/v1/room/hickory/switch", {"control": "ceiling", "state": "on"},
+     404, "not_found"),
+    ("POST", "/api/v1/room/hickory/fan", {"control": "extractor", "speed": "high"},
+     404, "not_found"),
+    # Kitchen configures no actuators at all.
+    ("POST", "/api/v1/room/kitchen/dimmer", {"level": 50}, 404, "not_found"),
     ("GET", "/api/v1/fcu_history?fcu_device_id=999999", None, 404, "not_found"),
     ("GET", "/api/v1/fcu_temp_sources?fcu_device_id=999999", None, 404, "not_found"),
     ("POST", "/api/v1/update_device_room", {"device_id": 999999, "room_id": None},

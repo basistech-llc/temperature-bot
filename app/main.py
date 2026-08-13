@@ -15,6 +15,7 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 
 from . import ae200
 from . import db
+from . import room_config
 from . import routes_api
 from . import routes_web
 from .performance_routes import performance_routes
@@ -103,6 +104,9 @@ def create_app():
     def simulator_context():
         return {
             "ae200_simulator": bool(ae200.AE200_SIMULATOR),
+            "room_dashboards": sorted(
+                room_config.ROOM_CONFIGS.values(), key=lambda config: config.label
+            ),
             **json_ready(application_metadata()),
         }
 

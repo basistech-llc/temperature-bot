@@ -37,8 +37,12 @@ Not yet implemented:
   rendering.
 - `/devices` receives `room_id` and `room_name` from `db.get_device_metadata()`
   but does not show or save room assignments.
-- Room dashboard membership is hardcoded by exact device names in
-  `app/room_config.py`, not by `devices.room_id`.
+- Resolved: room dashboard sensor membership comes from `devices.room_id`.
+  `app/room_config.py` names member rooms, not sensors, and a dashboard may
+  span several rooms (Broadway spans four). Membership keys are matched against
+  a room name or an owning FCU name, so renaming a room with no FCU still
+  breaks its membership; the render logs a warning when a key resolves to
+  nothing.
 - Resolved: room control APIs use `/api/v1/room/<room_key>/...`, and
   `room_dashboard.js` derives that key from the rendered dashboard contract.
   Legacy Hickory paths remain compatibility aliases.
@@ -144,33 +148,24 @@ Acceptance criteria:
 
 ### 5. Generalize room dashboards
 
-Keep `/hickory` and `/kitchen` working, but move toward one room dashboard
-renderer addressed by room key or room id.
+Delivered. `/hickory`, `/kitchen`, `/broadway`, and `/room/<room_id>` all render
+through `_render_room_dashboard_with_data()`, sensor membership comes from
+`devices.room_id`, and the Rooms menu is generated from `ROOM_CONFIGS`.
 
-Acceptance criteria:
-
-- A new room dashboard does not require copy-pasting route functions.
-- Dashboard device membership can come from `devices.room_id`, with temporary
-  config overrides only where needed.
-- Existing `/hickory` and `/kitchen` URLs remain compatible.
-- The Rooms menu is generated from configured or database-backed rooms instead
-  of hardcoding two links in `base.html`.
+Remaining: a new dashboard still needs a three-line route function alongside its
+config entry, because the config is keyed by dashboard rather than mounted from
+its own `url` field.
 
 ### 6. Generalize room control APIs
 
-Address #158 by adding generic room-control endpoints, for example
-`/api/v1/room/<location>/room_status`, `/dimmer`, `/wall_light`, and `/tv`, or a
-similar consistent route shape.
+Delivered. Controls are a typed list on `RoomConfig`, addressed by a per-room
+`key`, over `/api/v1/room/<room_key>/{room_status,switch,dimmer,fan,tv}`.
+Unknown rooms and unconfigured control keys both answer 404. The Hickory paths
+and `/wall_light` remain aliases, each with its own Flask endpoint name.
 
-Acceptance criteria:
-
-- Unknown rooms return clear 404-style JSON errors.
-- Rooms without a given control return a clear unsupported-control error.
-- Existing Hickory endpoints either remain as compatibility wrappers or are
-  redirected internally without breaking current clients.
-- `room_dashboard.js` derives endpoint URLs from template data instead of
-  hardcoding Hickory.
-- Control request bodies use Pydantic models instead of ad hoc dictionaries.
+The vocabulary is no longer Hickory's: a control is a `switch`, `dimmer`, `fan`,
+or `tv`, rather than the former fixed `tv_control` / `dimmer_id` /
+`wall_inner_id` / `wall_outer_id` fields.
 
 ### 7. Fix Hickory room status reads
 
