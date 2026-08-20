@@ -75,13 +75,9 @@ ROOM_CONFIGS: dict[str, RoomConfig] = {
     # were wrong: device ids are per hub, and three of them named unrelated
     # devices here (.52's 291 "Broadway Pendant Lights" is 291 "Kitchen Counter
     # Lights" on .51). They are now the ids on 10.2.3.51, the only hub we reach.
-    # The two TV Cart switches still carry no id. They have since been meshed
-    # onto .51 (618 and 619, source "Linked" in /hub2/devicesList), but Maker
-    # API app 520 does not expose them yet, so /devices/618 answers "Device not
-    # found or not authorized" and there is nothing here to address. Naming 618
-    # anyway would render the tiles live and let them fail on click, which is
-    # the hazard these notes exist to avoid. They stay as visibly unavailable
-    # tiles until the two boxes are ticked in app 520.
+    # The two TV Cart switches were the last to arrive: they were meshed onto
+    # .51 as 618 and 619 and then exposed through Maker API 520, so every
+    # control on this dashboard now names a device this hub will answer for.
     "broadway": RoomConfig(
         url="/broadway",
         label="Broadway",
@@ -92,17 +88,13 @@ ROOM_CONFIGS: dict[str, RoomConfig] = {
                 key="tv-cart-left",
                 kind=RoomControlKind.SWITCH,
                 label="TV Cart Left",
-                unavailable_note=(
-                    "Meshed onto 10.2.3.51 as device 618, but not exposed by Maker API 520"
-                ),
+                device_id="618",
             ),
             RoomControl(
                 key="tv-cart-right",
                 kind=RoomControlKind.SWITCH,
                 label="TV Cart Right",
-                unavailable_note=(
-                    "Meshed onto 10.2.3.51 as device 619, but not exposed by Maker API 520"
-                ),
+                device_id="619",
             ),
             RoomControl(
                 key="pendant-lights",

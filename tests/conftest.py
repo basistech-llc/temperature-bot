@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from app import routes_api
+from app import hubitat, routes_api
 from app.main import app as flask_app
 from app.paths import SCHEMA_FILE_PATH
 
@@ -58,6 +58,31 @@ def db_path(conn):
 def reduce_websockets_logging():
     """Reduce websockets debug logging for tests."""
     logging.getLogger("websockets.client").setLevel(logging.INFO)
+
+
+@pytest.fixture(autouse=True)
+def refuse_live_hubitat_commands(monkeypatch):
+    """Fail a test that would actuate real hardware instead of letting it.
+
+    Every Hubitat write funnels through ``send_device_command``, which issues a
+    live HTTP request to the hub named in ``temperature-bot-config.yaml``. Tests
+    that mean to exercise a command path patch the specific writer
+    (``app.routes_api.hubitat.set_switch`` and friends) and never reach here.
+
+    A test that forgets is indistinguishable from a passing test until the
+    control it addresses names a real device. That is not hypothetical: while
+    the Broadway TV Cart controls carried no ``device_id`` they were safe to
+    POST to, and the moment they got their real ids the suite switched on an
+    office outlet. See hvac-bqb -- the Hubitat simulator covers reads only.
+    """
+    def refuse(device_id, command, secondary_value=""):
+        raise AssertionError(
+            f"test tried to send {command!r} to live Hubitat device {device_id}"
+            f"{f' ({secondary_value!r})' if secondary_value else ''}; "
+            "patch the hubitat writer this route calls"
+        )
+
+    monkeypatch.setattr(hubitat, "send_device_command", refuse)
 
 
 @pytest.fixture(autouse=True)
