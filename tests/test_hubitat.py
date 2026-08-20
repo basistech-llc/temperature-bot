@@ -110,3 +110,16 @@ def test_update_from_hubitat_persists_status_json(
     assert conn.execute("SELECT COUNT(*) FROM presence_events").fetchone()[0] == (
         expected_motion_observations
     )
+
+
+def test_live_hubitat_commands_are_refused_from_tests():
+    """The guard that keeps the suite off real hardware must itself be pinned.
+
+    conftest's ``refuse_live_hubitat_commands`` is the only thing standing
+    between an unpatched command test and a real office outlet, and it fails
+    silently if ``send_device_command`` is renamed or the fixture stops
+    applying. Calling through a wrapper rather than the low-level function
+    proves the whole write layer is covered, not just the one name.
+    """
+    with pytest.raises(AssertionError, match="live Hubitat device 618"):
+        hubitat.set_switch("618", "on")
