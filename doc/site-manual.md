@@ -9,6 +9,11 @@ Zigbee are, the difference between pairing, Hub Mesh, and Maker API exposure,
 and why a device on a wall dashboard may be invisible to us. This file explains
 *what is actually installed*, and deliberately does not repeat the concepts.
 
+There is a Word version of this file, `doc/site-manual.docx`, for readers who
+want something printable. **It is generated, not maintained.** After editing
+this file run `make site-manual-docx` to rebuild it; never edit the `.docx`
+directly, because the next rebuild silently discards those edits.
+
 **This is a snapshot, taken 2026-08-20.** Devices get added, renamed, and
 re-meshed without anyone updating a document. Treat the tables here as a
 starting map, not as truth; "Re-running This Survey" at the end gives the

@@ -15,6 +15,8 @@ surface quickly.
   device on each with its id, the hub-mesh id translation map, the installed
   apps, and exactly which 31 devices Maker API app 520 exposes to us. Use it to
   look up a specific device or id; use it before assuming a device is absent.
+  `doc/site-manual.docx` is a generated Word copy of it -- rebuild with
+  `make site-manual-docx` (`bin/render_site_manual.py`), never hand-edit.
 - `AGENTS.md`: maintainer workflow selection, signed commit rules, and
   non-interactive shell command requirements.
 - `CLAUDE.md`: Claude-specific architecture summary and Makefile test examples.
