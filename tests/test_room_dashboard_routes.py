@@ -242,6 +242,10 @@ def test_control_with_no_reachable_device_is_shown_as_unavailable(flask_test_cli
     placeholder device id is worse: ids are per hub, and that is exactly how
     three Broadway controls came to name unrelated devices on the wrong hub.
     An explicit note carries the state with no id at all.
+
+    The carts are meshed onto .51 now (618/619) but Maker API 520 still does
+    not expose them, so they stay unavailable and the note says which step is
+    missing.
     """
     body = flask_test_client.get("/broadway").get_data(as_text=True)
 
@@ -251,7 +255,7 @@ def test_control_with_no_reachable_device_is_shown_as_unavailable(flask_test_cli
     # report a control the API deliberately omits. Counts the rendered class
     # attribute, since the stylesheet also mentions the class.
     assert body.count('class="room-control-tile control-unavailable"') == 2
-    assert "not meshed onto 10.2.3.51" in body
+    assert "not exposed by Maker API 520" in body
 
 
 def test_unreachable_control_cannot_be_commanded(flask_test_client):
