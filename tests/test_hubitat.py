@@ -132,27 +132,58 @@ def test_live_hubitat_commands_are_refused_from_tests():
         hubitat.set_switch("not-a-device-id", "off")
 
 
-def test_simulator_carries_the_switch_ids_the_room_config_addresses(monkeypatch):
+def test_simulator_carries_every_device_the_room_configs_address(monkeypatch):
     """A room control id must be checkable without reaching for the hub.
 
-    Both simulator snapshots held only temperature sensors, so no control id in
+    The simulator snapshot held only temperature sensors, so no control id in
     ``room_config`` had any corroboration in the repo at all -- an id could be
     stale, from the wrong hub, or naming an unrelated device, and nothing here
     would contradict it. That is not theoretical: three Broadway controls
     shipped naming Kitchen and Cedar lights because their ids came off hub
     10.2.3.52.
 
-    The two TV Cart outlets are captured from Maker API app 520 so at least
-    those ids are pinned. Asserting the capability rather than only the id is
-    the point: an id that names something unswitchable fails here.
+    Every configured control is now captured from Maker API app 520. Asserting
+    the capability rather than only the id is the point: an id that names
+    something the control cannot drive fails here, which is exactly the shape
+    of the wrong-hub mistake.
     """
+    required_capability = {
+        RoomControlKind.SWITCH: "Switch",
+        RoomControlKind.DIMMER: "SwitchLevel",
+        RoomControlKind.FAN: "FanControl",
+    }
     monkeypatch.setenv(hubitat.HUBITAT_SIMULATOR_ENV, "1")
     devices = {device["id"]: device for device in hubitat.get_all_devices()}
-    broadway = room_config.ROOM_CONFIGS["broadway"]
 
-    for key in ("tv-cart-left", "tv-cart-right"):
-        control = broadway.find_control(key, RoomControlKind.SWITCH)
-        assert control is not None and control.device_id is not None
-        device = devices[control.device_id]
-        assert "Switch" in device["capabilities"]
-        assert "TV Cart" in device["label"]
+    checked = 0
+    for room_key, config in room_config.ROOM_CONFIGS.items():
+        for control in config.controls:
+            if control.device_id is None:
+                continue
+            where = f"{room_key}/{control.key}"
+            assert control.device_id in devices, f"{where} names an unknown device"
+            device = devices[control.device_id]
+            assert required_capability[control.kind] in device["capabilities"], (
+                f"{where} names {device['label']!r}, which is not a "
+                f"{control.kind.value}"
+            )
+            checked += 1
+    assert checked == 13
+
+
+def test_simulator_can_resolve_the_tv_lift_by_label(monkeypatch):
+    """The TV lift is addressed by label, not id, so ids alone do not cover it.
+
+    ``control_room_tv`` looks its target up in the full device list, which means
+    a renamed switch breaks the lift with no config change to notice. The
+    labels only resolve offline if the simulator carries those devices too.
+    """
+    monkeypatch.setenv(hubitat.HUBITAT_SIMULATOR_ENV, "1")
+    labels = {device["label"] for device in hubitat.get_all_devices()}
+    hickory_tv = room_config.ROOM_CONFIGS["hickory"].find_control(
+        "tv", RoomControlKind.TV
+    )
+
+    assert hickory_tv is not None
+    assert hickory_tv.up_label in labels
+    assert hickory_tv.down_label in labels
