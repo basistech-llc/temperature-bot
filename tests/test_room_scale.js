@@ -339,7 +339,7 @@ function testUnavailableControls() {
     'button.tv-btn[data-control-key="tv"]': [tvButton],
   });
 
-  // Nothing readable: the unreachable-hub case Broadway is in today.
+  // Nothing readable at all, as when the hub is unreachable.
   reconcileControlAvailability(doc, []);
   check("unreadable switch tile is marked unavailable",
     tiles[0].classList.contains("control-unavailable"));

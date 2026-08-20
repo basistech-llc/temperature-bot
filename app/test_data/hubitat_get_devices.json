@@ -878,5 +878,924 @@
         "command": "setParameter"
       }
     ]
+  },
+  {
+    "name": "Broadway TV Cart Left on Somerville Broadway",
+    "label": "Broadway TV Cart Left on Somerville Broadway",
+    "type": "Generic Z-Wave Plus Outlet",
+    "id": "618",
+    "date": "2026-08-20T00:00:00+0000",
+    "model": null,
+    "manufacturer": null,
+    "room": null,
+    "roomId": null,
+    "capabilities": [
+      "Configuration",
+      "Actuator",
+      "Outlet",
+      "Refresh",
+      "Switch"
+    ],
+    "attributes": {
+      "switch": "off",
+      "dataType": "ENUM",
+      "values": [
+        "on",
+        "off"
+      ],
+      "hubMeshDisabled": "false"
+    },
+    "commands": [
+      {
+        "command": "configure"
+      },
+      {
+        "command": "off"
+      },
+      {
+        "command": "on"
+      },
+      {
+        "command": "refresh"
+      }
+    ]
+  },
+  {
+    "name": "Broadway TV Cart Right on Somerville Broadway",
+    "label": "Broadway TV Cart Right on Somerville Broadway",
+    "type": "Generic Z-Wave Plus Outlet",
+    "id": "619",
+    "date": "2026-08-20T00:00:00+0000",
+    "model": null,
+    "manufacturer": null,
+    "room": null,
+    "roomId": null,
+    "capabilities": [
+      "Configuration",
+      "Actuator",
+      "Outlet",
+      "Refresh",
+      "Switch"
+    ],
+    "attributes": {
+      "switch": "off",
+      "dataType": "ENUM",
+      "values": [
+        "on",
+        "off"
+      ],
+      "hubMeshDisabled": "false"
+    },
+    "commands": [
+      {
+        "command": "configure"
+      },
+      {
+        "command": "off"
+      },
+      {
+        "command": "on"
+      },
+      {
+        "command": "refresh"
+      }
+    ]
+  },
+  {
+    "name": "All Hue lights",
+    "label": "Hickory Dimmable Lights",
+    "type": "hueBridgeGroup",
+    "id": "581",
+    "date": "2026-08-20T00:00:00+0000",
+    "model": null,
+    "manufacturer": null,
+    "room": "Hickory",
+    "roomId": 225,
+    "capabilities": [
+      "Actuator",
+      "Refresh",
+      "ColorTemperature",
+      "ColorMode",
+      "ColorControl",
+      "ChangeLevel",
+      "LightEffects",
+      "SwitchLevel",
+      "Light",
+      "Switch"
+    ],
+    "attributes": {
+      "effectName": null,
+      "dataType": "STRING",
+      "values": null,
+      "switch": "on",
+      "colorName": "Incandescent",
+      "colorMode": "CT",
+      "effect": "none",
+      "lightEffects": "{\"0\":\"None\",\"1\":\"Color Loop\"}",
+      "RGB": null,
+      "hue": "13",
+      "level": "70",
+      "colorTemperature": "2732",
+      "saturation": "55",
+      "color": null
+    },
+    "commands": [
+      {
+        "command": "flash"
+      },
+      {
+        "command": "flashOff"
+      },
+      {
+        "command": "flashOnce"
+      },
+      {
+        "command": "off"
+      },
+      {
+        "command": "on"
+      },
+      {
+        "command": "refresh"
+      },
+      {
+        "command": "setColor"
+      },
+      {
+        "command": "setColorTemperature"
+      },
+      {
+        "command": "setEffect"
+      },
+      {
+        "command": "setHue"
+      },
+      {
+        "command": "setLevel"
+      },
+      {
+        "command": "setNextEffect"
+      },
+      {
+        "command": "setPreviousEffect"
+      },
+      {
+        "command": "setSaturation"
+      },
+      {
+        "command": "startLevelChange"
+      },
+      {
+        "command": "stopLevelChange"
+      }
+    ]
+  },
+  {
+    "name": "Hickory Lights - Green Wall Inner",
+    "label": "Green Wall - Inner",
+    "type": "GE Enbrighten Z-Wave Smart Switch",
+    "id": "454",
+    "date": "2026-08-20T00:00:00+0000",
+    "model": null,
+    "manufacturer": null,
+    "room": "Hickory",
+    "roomId": 225,
+    "capabilities": [
+      "Configuration",
+      "Actuator",
+      "Refresh",
+      "HoldableButton",
+      "ReleasableButton",
+      "Switch",
+      "PushableButton",
+      "DoubleTapableButton"
+    ],
+    "attributes": {
+      "doubleTapped": "1",
+      "dataType": "ENUM",
+      "values": [
+        "on",
+        "off"
+      ],
+      "held": "1",
+      "numberOfButtons": "2",
+      "pushed": "1",
+      "released": "1",
+      "switch": "on"
+    },
+    "commands": [
+      {
+        "command": "configure"
+      },
+      {
+        "command": "doubleTap"
+      },
+      {
+        "command": "doubleTap"
+      },
+      {
+        "command": "flash"
+      },
+      {
+        "command": "hold"
+      },
+      {
+        "command": "hold"
+      },
+      {
+        "command": "off"
+      },
+      {
+        "command": "on"
+      },
+      {
+        "command": "push"
+      },
+      {
+        "command": "push"
+      },
+      {
+        "command": "refresh"
+      },
+      {
+        "command": "release"
+      },
+      {
+        "command": "release"
+      }
+    ]
+  },
+  {
+    "name": "Hickory Lights - Green Wall Outer",
+    "label": "Green Wall - Outer",
+    "type": "Minoston MP31ZP Smart Plug",
+    "id": "550",
+    "date": "2026-08-20T00:00:00+0000",
+    "model": null,
+    "manufacturer": null,
+    "room": "Hickory",
+    "roomId": 225,
+    "capabilities": [
+      "Configuration",
+      "Actuator",
+      "VoltageMeasurement",
+      "CurrentMeter",
+      "Refresh",
+      "PowerMeter",
+      "EnergyMeter",
+      "Switch"
+    ],
+    "attributes": {
+      "energy": null,
+      "dataType": "NUMBER",
+      "values": null,
+      "power": null,
+      "switch": "on",
+      "amperage": null,
+      "voltage": null,
+      "frequency": null
+    },
+    "commands": [
+      {
+        "command": "configure"
+      },
+      {
+        "command": "off"
+      },
+      {
+        "command": "on"
+      },
+      {
+        "command": "refresh"
+      }
+    ]
+  },
+  {
+    "name": "Broadway Pendant Lights on Somerville Broadway",
+    "label": "Broadway Pendant Lights",
+    "type": "GE Enbrighten Z-Wave Smart Switch",
+    "id": "260",
+    "date": "2026-08-20T00:00:00+0000",
+    "model": null,
+    "manufacturer": null,
+    "room": "Broadway",
+    "roomId": 132,
+    "capabilities": [
+      "Configuration",
+      "Actuator",
+      "Refresh",
+      "HoldableButton",
+      "ReleasableButton",
+      "Switch",
+      "PushableButton",
+      "DoubleTapableButton"
+    ],
+    "attributes": {
+      "switch": "on",
+      "dataType": "NUMBER",
+      "values": null,
+      "held": "2",
+      "doubleTapped": "1",
+      "hubMeshDisabled": "false",
+      "numberOfButtons": "2",
+      "pushed": "2",
+      "released": "2"
+    },
+    "commands": [
+      {
+        "command": "configure"
+      },
+      {
+        "command": "doubleTap"
+      },
+      {
+        "command": "doubleTap"
+      },
+      {
+        "command": "flash"
+      },
+      {
+        "command": "hold"
+      },
+      {
+        "command": "hold"
+      },
+      {
+        "command": "off"
+      },
+      {
+        "command": "on"
+      },
+      {
+        "command": "push"
+      },
+      {
+        "command": "push"
+      },
+      {
+        "command": "refresh"
+      },
+      {
+        "command": "release"
+      },
+      {
+        "command": "release"
+      }
+    ]
+  },
+  {
+    "name": "Broadway Spot Lights on Somerville Broadway",
+    "label": "Broadway Spot Lights",
+    "type": "Minoston Mini Power Meter Plug",
+    "id": "616",
+    "date": "2026-08-20T00:00:00+0000",
+    "model": null,
+    "manufacturer": null,
+    "room": "Broadway",
+    "roomId": 132,
+    "capabilities": [
+      "Configuration",
+      "Actuator",
+      "VoltageMeasurement",
+      "CurrentMeter",
+      "Refresh",
+      "PowerMeter",
+      "EnergyMeter",
+      "Switch"
+    ],
+    "attributes": {
+      "energy": "43",
+      "dataType": "NUMBER",
+      "values": null,
+      "hubMeshDisabled": "false",
+      "switch": "off",
+      "amperage": "0",
+      "power": "0",
+      "voltage": "118",
+      "frequency": null
+    },
+    "commands": [
+      {
+        "command": "configure"
+      },
+      {
+        "command": "off"
+      },
+      {
+        "command": "on"
+      },
+      {
+        "command": "refresh"
+      }
+    ]
+  },
+  {
+    "name": "Whiteboard Washer on Somerville Broadway",
+    "label": "Whiteboard Washer",
+    "type": "GE Enbrighten Z-Wave Smart Switch",
+    "id": "356",
+    "date": "2026-08-20T00:00:00+0000",
+    "model": null,
+    "manufacturer": null,
+    "room": "Broadway",
+    "roomId": 132,
+    "capabilities": [
+      "Configuration",
+      "Actuator",
+      "Refresh",
+      "HoldableButton",
+      "ReleasableButton",
+      "Switch",
+      "PushableButton",
+      "DoubleTapableButton"
+    ],
+    "attributes": {
+      "switch": "on",
+      "dataType": "NUMBER",
+      "values": null,
+      "held": null,
+      "doubleTapped": null,
+      "hubMeshDisabled": "false",
+      "numberOfButtons": "2",
+      "pushed": null,
+      "released": null
+    },
+    "commands": [
+      {
+        "command": "configure"
+      },
+      {
+        "command": "doubleTap"
+      },
+      {
+        "command": "doubleTap"
+      },
+      {
+        "command": "flash"
+      },
+      {
+        "command": "hold"
+      },
+      {
+        "command": "hold"
+      },
+      {
+        "command": "off"
+      },
+      {
+        "command": "on"
+      },
+      {
+        "command": "push"
+      },
+      {
+        "command": "push"
+      },
+      {
+        "command": "refresh"
+      },
+      {
+        "command": "release"
+      },
+      {
+        "command": "release"
+      }
+    ]
+  },
+  {
+    "name": "Sidewalk Washer North on Somerville Broadway",
+    "label": "Sidewalk Washer North",
+    "type": "GE Enbrighten Z-Wave Smart Switch",
+    "id": "354",
+    "date": "2026-08-20T00:00:00+0000",
+    "model": null,
+    "manufacturer": null,
+    "room": "Broadway",
+    "roomId": 132,
+    "capabilities": [
+      "Configuration",
+      "Actuator",
+      "Refresh",
+      "HoldableButton",
+      "ReleasableButton",
+      "Switch",
+      "PushableButton",
+      "DoubleTapableButton"
+    ],
+    "attributes": {
+      "switch": "on",
+      "dataType": "NUMBER",
+      "values": null,
+      "held": null,
+      "doubleTapped": null,
+      "hubMeshDisabled": "false",
+      "numberOfButtons": "2",
+      "pushed": null,
+      "released": null
+    },
+    "commands": [
+      {
+        "command": "configure"
+      },
+      {
+        "command": "doubleTap"
+      },
+      {
+        "command": "doubleTap"
+      },
+      {
+        "command": "flash"
+      },
+      {
+        "command": "hold"
+      },
+      {
+        "command": "hold"
+      },
+      {
+        "command": "off"
+      },
+      {
+        "command": "on"
+      },
+      {
+        "command": "push"
+      },
+      {
+        "command": "push"
+      },
+      {
+        "command": "refresh"
+      },
+      {
+        "command": "release"
+      },
+      {
+        "command": "release"
+      }
+    ]
+  },
+  {
+    "name": "Sidewalk Washer South on Somerville Broadway",
+    "label": "Sidewalk Washer South",
+    "type": "GE Enbrighten Z-Wave Smart Switch",
+    "id": "355",
+    "date": "2026-08-20T00:00:00+0000",
+    "model": null,
+    "manufacturer": null,
+    "room": "Broadway",
+    "roomId": 132,
+    "capabilities": [
+      "Configuration",
+      "Actuator",
+      "Refresh",
+      "HoldableButton",
+      "ReleasableButton",
+      "Switch",
+      "PushableButton",
+      "DoubleTapableButton"
+    ],
+    "attributes": {
+      "switch": "on",
+      "dataType": "NUMBER",
+      "values": null,
+      "held": null,
+      "doubleTapped": null,
+      "hubMeshDisabled": "false",
+      "numberOfButtons": "2",
+      "pushed": null,
+      "released": null
+    },
+    "commands": [
+      {
+        "command": "configure"
+      },
+      {
+        "command": "doubleTap"
+      },
+      {
+        "command": "doubleTap"
+      },
+      {
+        "command": "flash"
+      },
+      {
+        "command": "hold"
+      },
+      {
+        "command": "hold"
+      },
+      {
+        "command": "off"
+      },
+      {
+        "command": "on"
+      },
+      {
+        "command": "push"
+      },
+      {
+        "command": "push"
+      },
+      {
+        "command": "refresh"
+      },
+      {
+        "command": "release"
+      },
+      {
+        "command": "release"
+      }
+    ]
+  },
+  {
+    "name": "Garage Washer North on Somerville Broadway",
+    "label": "Garage Washer North",
+    "type": "GE Enbrighten Z-Wave Smart Switch",
+    "id": "360",
+    "date": "2026-08-20T00:00:00+0000",
+    "model": null,
+    "manufacturer": null,
+    "room": "Broadway",
+    "roomId": 132,
+    "capabilities": [
+      "Configuration",
+      "Actuator",
+      "Refresh",
+      "HoldableButton",
+      "ReleasableButton",
+      "Switch",
+      "PushableButton",
+      "DoubleTapableButton"
+    ],
+    "attributes": {
+      "switch": "on",
+      "dataType": "NUMBER",
+      "values": null,
+      "held": null,
+      "doubleTapped": null,
+      "hubMeshDisabled": "false",
+      "numberOfButtons": "2",
+      "pushed": "2",
+      "released": null
+    },
+    "commands": [
+      {
+        "command": "configure"
+      },
+      {
+        "command": "doubleTap"
+      },
+      {
+        "command": "doubleTap"
+      },
+      {
+        "command": "flash"
+      },
+      {
+        "command": "hold"
+      },
+      {
+        "command": "hold"
+      },
+      {
+        "command": "off"
+      },
+      {
+        "command": "on"
+      },
+      {
+        "command": "push"
+      },
+      {
+        "command": "push"
+      },
+      {
+        "command": "refresh"
+      },
+      {
+        "command": "release"
+      },
+      {
+        "command": "release"
+      }
+    ]
+  },
+  {
+    "name": "Garage Washer South on Somerville Broadway",
+    "label": "Garage Washer South",
+    "type": "GE Enbrighten Z-Wave Smart Switch",
+    "id": "361",
+    "date": "2026-08-20T00:00:00+0000",
+    "model": null,
+    "manufacturer": null,
+    "room": "Broadway",
+    "roomId": 132,
+    "capabilities": [
+      "Configuration",
+      "Actuator",
+      "Refresh",
+      "HoldableButton",
+      "ReleasableButton",
+      "Switch",
+      "PushableButton",
+      "DoubleTapableButton"
+    ],
+    "attributes": {
+      "switch": "on",
+      "dataType": "NUMBER",
+      "values": null,
+      "held": null,
+      "doubleTapped": null,
+      "hubMeshDisabled": "false",
+      "numberOfButtons": "2",
+      "pushed": "2",
+      "released": null
+    },
+    "commands": [
+      {
+        "command": "configure"
+      },
+      {
+        "command": "doubleTap"
+      },
+      {
+        "command": "doubleTap"
+      },
+      {
+        "command": "flash"
+      },
+      {
+        "command": "hold"
+      },
+      {
+        "command": "hold"
+      },
+      {
+        "command": "off"
+      },
+      {
+        "command": "on"
+      },
+      {
+        "command": "push"
+      },
+      {
+        "command": "push"
+      },
+      {
+        "command": "refresh"
+      },
+      {
+        "command": "release"
+      },
+      {
+        "command": "release"
+      }
+    ]
+  },
+  {
+    "name": "Data Closet Fan on Somerville Broadway",
+    "label": "Data Closet Fan",
+    "type": "GE Smart Fan Control",
+    "id": "359",
+    "date": "2026-08-20T00:00:00+0000",
+    "model": null,
+    "manufacturer": null,
+    "room": "Broadway",
+    "roomId": 132,
+    "capabilities": [
+      "Configuration",
+      "Actuator",
+      "Refresh",
+      "FanControl",
+      "SwitchLevel",
+      "Switch",
+      "PushableButton",
+      "DoubleTapableButton"
+    ],
+    "attributes": {
+      "pushed": "2",
+      "dataType": "ENUM",
+      "values": [
+        "low",
+        "medium-low",
+        "medium",
+        "medium-high",
+        "high",
+        "on",
+        "off",
+        "auto"
+      ],
+      "hubMeshDisabled": "false",
+      "supportedFanSpeeds": null,
+      "level": "0",
+      "numberOfButtons": "2",
+      "switch": "off",
+      "doubleTapped": null,
+      "speed": "off"
+    },
+    "commands": [
+      {
+        "command": "configure"
+      },
+      {
+        "command": "cycleSpeed"
+      },
+      {
+        "command": "doubleTap"
+      },
+      {
+        "command": "off"
+      },
+      {
+        "command": "on"
+      },
+      {
+        "command": "push"
+      },
+      {
+        "command": "refresh"
+      },
+      {
+        "command": "setLevel"
+      },
+      {
+        "command": "setSpeed"
+      },
+      {
+        "command": "setSpeed"
+      }
+    ]
+  },
+  {
+    "name": "Hickory TV Up",
+    "label": "TV Up",
+    "type": "Generic Component Switch",
+    "id": "611",
+    "date": "2026-08-20T00:00:00+0000",
+    "model": null,
+    "manufacturer": null,
+    "room": "Hickory",
+    "roomId": 225,
+    "capabilities": [
+      "Actuator",
+      "Switch",
+      "Refresh"
+    ],
+    "attributes": {
+      "switch": "off",
+      "dataType": "ENUM",
+      "values": [
+        "on",
+        "off"
+      ]
+    },
+    "commands": [
+      {
+        "command": "off"
+      },
+      {
+        "command": "on"
+      },
+      {
+        "command": "refresh"
+      }
+    ]
+  },
+  {
+    "name": "Hickory TV Down",
+    "label": "TV Down",
+    "type": "Generic Component Switch",
+    "id": "612",
+    "date": "2026-08-20T00:00:00+0000",
+    "model": null,
+    "manufacturer": null,
+    "room": "Hickory",
+    "roomId": 225,
+    "capabilities": [
+      "Actuator",
+      "Switch",
+      "Refresh"
+    ],
+    "attributes": {
+      "switch": "off",
+      "dataType": "ENUM",
+      "values": [
+        "on",
+        "off"
+      ]
+    },
+    "commands": [
+      {
+        "command": "off"
+      },
+      {
+        "command": "on"
+      },
+      {
+        "command": "refresh"
+      }
+    ]
   }
 ]

@@ -153,6 +153,11 @@ etc/schema.sql: $(wildcard $(FLYWAY_SQL_DIR)/*.sql)
 schema: ## Regenerate etc/schema.sql from the Flyway migration history
 	$(MAKE) --always-make etc/schema.sql
 
+# doc/site-manual.md is the source of truth; the .docx is generated from it.
+# Run this after editing the manual so the two do not drift apart.
+site-manual-docx: $(REQ) ## Regenerate doc/site-manual.docx from doc/site-manual.md
+	$(PYTHON) bin/render_site_manual.py
+
 # Apply pending Flyway migrations to the existing dev database.
 # Uses -baselineOnMigrate=true so databases already at V1 (but without a
 # flyway_schema_history entry) are baselined automatically before migrating.

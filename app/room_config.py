@@ -14,8 +14,10 @@ Every ``device_id`` here is a device id **on hub 10.2.3.51**, the hub configured
 in ``temperature-bot-config.yaml``. Ids are per hub and are not interchangeable:
 the same physical sensor carries different ids on each hub it is meshed onto, so
 an id copied from another hub's dashboard is at best dead and at worst names a
-different device. Read ids from that hub, for example with
-``poetry run python -m app.hubitat --list-devices``.
+different device. ``doc/hardware-landscape.md`` has the commands for reading
+ids off that hub, and for telling "the hub does not have this device" apart
+from "Maker API does not expose it", which are different problems with
+different fixes.
 """
 
 from .models import RoomConfig, RoomControl, RoomControlKind
@@ -75,10 +77,9 @@ ROOM_CONFIGS: dict[str, RoomConfig] = {
     # were wrong: device ids are per hub, and three of them named unrelated
     # devices here (.52's 291 "Broadway Pendant Lights" is 291 "Kitchen Counter
     # Lights" on .51). They are now the ids on 10.2.3.51, the only hub we reach.
-    # The two TV Cart switches carry no id at all: they exist only on .52, and a
-    # placeholder would be the same hazard again. They stay on the page as
-    # visibly unavailable tiles so the missing hardware is obvious rather than
-    # quietly absent.
+    # The two TV Cart switches were the last to arrive: they were meshed onto
+    # .51 as 618 and 619 and then exposed through Maker API 520, so every
+    # control on this dashboard now names a device this hub will answer for.
     "broadway": RoomConfig(
         url="/broadway",
         label="Broadway",
@@ -89,13 +90,13 @@ ROOM_CONFIGS: dict[str, RoomConfig] = {
                 key="tv-cart-left",
                 kind=RoomControlKind.SWITCH,
                 label="TV Cart Left",
-                unavailable_note="Only on hub 10.2.3.52; not meshed onto 10.2.3.51",
+                device_id="618",
             ),
             RoomControl(
                 key="tv-cart-right",
                 kind=RoomControlKind.SWITCH,
                 label="TV Cart Right",
-                unavailable_note="Only on hub 10.2.3.52; not meshed onto 10.2.3.51",
+                device_id="619",
             ),
             RoomControl(
                 key="pendant-lights",

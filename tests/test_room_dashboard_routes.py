@@ -5,8 +5,8 @@ import logging
 import re
 import time
 
-from app import db
-from app.models import Room
+from app import db, room_config
+from app.models import Room, RoomControl, RoomControlKind
 
 
 def _add_sensor(conn, display_name, room_id, temp10x, humidity=None):
@@ -154,8 +154,13 @@ def test_broadway_renders_its_configured_controls(flask_test_client):
     assert 'data-control-kind="fan"' in body
     assert 'data-control-key="data-closet-fan"' in body
     assert 'data-speed="medium"' in body
-    # Broadway has no TV lift.
+    # Broadway has no TV lift. The TV Carts are switched outlets, not a lift.
     assert 'data-control-kind="tv"' not in body
+    # Every Broadway control now names a device on 10.2.3.51, so no tile is
+    # rendered unavailable. Matches the rendered class attribute, since the
+    # stylesheet mentions the class name too.
+    assert 'data-control-key="tv-cart-left"' in body
+    assert 'class="room-control-tile control-unavailable"' not in body
 
 
 def test_unresolvable_member_room_is_reported(
@@ -235,7 +240,35 @@ def test_kitchen_membership_follows_its_fcu_after_a_rename(
     assert "Lobby Sensor" in body
 
 
-def test_control_with_no_reachable_device_is_shown_as_unavailable(flask_test_client):
+def _add_unavailable_control(monkeypatch, room_key="hickory"):
+    """Give one configured room an extra control that names no device.
+
+    The unavailable state is synthesized rather than borrowed from a real room:
+    Broadway's TV Carts were the live example until they were meshed onto
+    10.2.3.51 and exposed through Maker API 520, and pinning coverage of a
+    mechanism to whichever room happens to be broken this month means the
+    mechanism loses its tests the day someone fixes the hardware.
+    """
+    original = room_config.ROOM_CONFIGS[room_key]
+    patched = original.model_copy(
+        update={
+            "controls": [
+                *original.controls,
+                RoomControl(
+                    key="ghost-lamp",
+                    kind=RoomControlKind.SWITCH,
+                    label="Ghost Lamp",
+                    unavailable_note="Not exposed by Maker API 520",
+                ),
+            ]
+        }
+    )
+    monkeypatch.setitem(room_config.ROOM_CONFIGS, room_key, patched)
+
+
+def test_control_with_no_reachable_device_is_shown_as_unavailable(
+    flask_test_client, monkeypatch
+):
     """A control we cannot reach yet stays visible instead of disappearing.
 
     Dropping it would hide the fact that hardware is missing. Giving it a
@@ -243,22 +276,30 @@ def test_control_with_no_reachable_device_is_shown_as_unavailable(flask_test_cli
     three Broadway controls came to name unrelated devices on the wrong hub.
     An explicit note carries the state with no id at all.
     """
-    body = flask_test_client.get("/broadway").get_data(as_text=True)
+    _add_unavailable_control(monkeypatch)
+    body = flask_test_client.get("/hickory").get_data(as_text=True)
 
-    assert 'data-control-key="tv-cart-left"' in body
-    assert "TV Cart Left" in body
+    assert 'data-control-key="ghost-lamp"' in body
+    assert "Ghost Lamp" in body
     # Rendered unavailable server-side, not left to a poll that will never
     # report a control the API deliberately omits. Counts the rendered class
     # attribute, since the stylesheet also mentions the class.
-    assert body.count('class="room-control-tile control-unavailable"') == 2
-    assert "not meshed onto 10.2.3.51" in body
+    assert body.count('class="room-control-tile control-unavailable"') == 1
+    assert "Not exposed by Maker API 520" in body
 
 
-def test_unreachable_control_cannot_be_commanded(flask_test_client):
-    """The tile is visible, but there is no device behind it to switch."""
+def test_unreachable_control_cannot_be_commanded(flask_test_client, monkeypatch):
+    """The tile is visible, but there is no device behind it to switch.
+
+    The message is asserted, not just the status: an unconfigured control key
+    also answers 404, so a status-only check would pass for the opposite reason
+    if the injected control ever stopped being injected.
+    """
+    _add_unavailable_control(monkeypatch)
     resp = flask_test_client.post(
-        "/api/v1/room/broadway/switch",
-        json={"control": "tv-cart-left", "state": "on"},
+        "/api/v1/room/hickory/switch",
+        json={"control": "ghost-lamp", "state": "on"},
     )
     assert resp.status_code == 404
     assert resp.get_json()["code"] == "not_found"
+    assert "no reachable device" in resp.get_json()["error"]

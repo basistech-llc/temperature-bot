@@ -87,19 +87,20 @@ thereby visible to Temperature Bot.** If it is not ticked in our Maker API app,
 it does not exist as far as this code is concerned — no reading, no command, no
 `devices` row, no error message pointing at the cause.
 
-### There are two hubs
+### There is more than one hub
 
 This is the part that most often surprises people, including agents reading the
-code:
-
-| Hub | Used for | App | Notes |
-| --- | --- | --- | --- |
-| `10.2.3.51` | **Everything Temperature Bot does** | Maker API, app `520` | Configured in `temperature-bot-config.yaml`. |
-| `10.2.3.52` | Hubitat's own wall dashboards | Dashboard, app `449` ("Broadway Controls") and others | We never call this hub. |
+code. There are **four** Hubitat hubs on the office LAN, and Temperature Bot
+talks to exactly one of them: `10.2.3.51`, through Maker API app `520`.
 
 `temperature-bot-config.yaml` has exactly one `hubitat.host` and one
 `hubitat.appId`. **The code cannot reach a second hub.** Supporting one would be
-a change to the configuration model, not just an extra token.
+a change to the configuration model, not just an extra token. Devices on the
+other three reach us only if someone meshes them onto `.51` first.
+
+`doc/site-manual.md` is the census: which hub is which, what is paired to each,
+what every hub's apps do, and the id-by-id mesh map. It is the place to look up
+a specific device; this file stays with the concepts.
 
 **Hub Mesh** shares a device from one hub onto another so both can use it. A
 shared device is a first-class device on the receiving hub — it appears in that
@@ -117,15 +118,20 @@ Lights, and Willow Lights.
 ### Two different questions, and the trap between them
 
 "Is the device **on** hub `.51`?" and "is it **exposed** by Maker API app 520?"
-are different questions with different answers. At the time of writing the hub
-has 118 devices and the app exposes 29 of them. Answering the first with a tool
+are different questions with different answers, and the second set is much the
+smaller — see `doc/site-manual.md` for the current counts and the full exposed
+list. Answering the first with a tool
 that reports the second is a mistake that has already been made here, and it led
 to a request for hardware work that was not needed.
 
-Check exposure — what we can actually read and command:
+Check exposure — what we can actually read and command. Ask Maker API
+directly rather than through `python -m app.hubitat --list-devices`, which
+filters to devices reporting a temperature and so cannot see a switch,
+outlet, or fan at all:
 
 ```bash
-poetry run python -m app.hubitat --list-devices
+curl -s "http://10.2.3.51/apps/api/520/devices/all?access_token=$TOKEN" \
+  | python3 -c 'import json,sys; [print(d["id"], d["label"]) for d in json.load(sys.stdin)]'
 ```
 
 Check presence — everything the hub knows about, meshed devices included:

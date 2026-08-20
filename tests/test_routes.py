@@ -1009,7 +1009,16 @@ def test_unreachable_control_warns_once_per_device(mock_get_device_info, flask_t
 
     The warn-once set is cleared by an autouse fixture in conftest, so this does
     not depend on which tests ran before it.
+
+    The counts come from the config rather than being written out, so adding a
+    Broadway control changes one number in one place.
     """
+    addressable = [
+        c for c in room_config.ROOM_CONFIGS["broadway"].controls if c.device_id
+    ]
+    # Anchored, because deriving both sides from the same config would let a
+    # control that quietly lost its device_id pass unnoticed.
+    assert len(addressable) == 10
     with caplog.at_level(logging.WARNING, logger="app.routes_api"):
         first = flask_test_client.get("/api/v1/room/broadway/room_status")
         second = flask_test_client.get("/api/v1/room/broadway/room_status")
@@ -1017,9 +1026,9 @@ def test_unreachable_control_warns_once_per_device(mock_get_device_info, flask_t
     assert first.get_json() == {"controls": []}
     assert second.get_json() == {"controls": []}
     # Both polls read every device; only the first poll reported the failures.
-    assert mock_get_device_info.call_count == 16
+    assert mock_get_device_info.call_count == 2 * len(addressable)
     failures = [r for r in caplog.records if "unreadable" in r.getMessage()]
-    assert len(failures) == 8
+    assert len(failures) == len(addressable)
 
 
 # /api/v1/hickory/tv
@@ -1191,8 +1200,8 @@ def test_device_reporting_no_attributes_is_still_reachable(_mock, flask_test_cli
         "/api/v1/room/broadway/room_status"
     ).get_json()["controls"]
     assert {state["key"] for state in states} == {
-        "pendant-lights", "spot-lights", "whiteboard-washer",
-        "sidewalk-washer-north", "sidewalk-washer-south",
+        "tv-cart-left", "tv-cart-right", "pendant-lights", "spot-lights",
+        "whiteboard-washer", "sidewalk-washer-north", "sidewalk-washer-south",
         "garage-washer-north", "garage-washer-south", "data-closet-fan",
     }
     assert all("switch" not in state for state in states)
