@@ -1016,6 +1016,9 @@ def test_unreachable_control_warns_once_per_device(mock_get_device_info, flask_t
     addressable = [
         c for c in room_config.ROOM_CONFIGS["broadway"].controls if c.device_id
     ]
+    # Anchored, because deriving both sides from the same config would let a
+    # control that quietly lost its device_id pass unnoticed.
+    assert len(addressable) == 10
     with caplog.at_level(logging.WARNING, logger="app.routes_api"):
         first = flask_test_client.get("/api/v1/room/broadway/room_status")
         second = flask_test_client.get("/api/v1/room/broadway/room_status")

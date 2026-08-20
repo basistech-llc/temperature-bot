@@ -73,7 +73,13 @@ def refuse_live_hubitat_commands(monkeypatch):
     control it addresses names a real device. That is not hypothetical: while
     the Broadway TV Cart controls carried no ``device_id`` they were safe to
     POST to, and the moment they got their real ids the suite switched on an
-    office outlet. See hvac-bqb -- the Hubitat simulator covers reads only.
+    office outlet. See hvac-bqb; ``HUBITAT_SIMULATOR`` does not help, since it
+    is consulted only by ``get_all_devices`` and not by any write.
+
+    This guarantees the write is blocked, not that the reason is easy to see.
+    Reached through an ``/api/v1`` route, the blueprint's catch-all handler
+    turns this into a generic 500 and the message survives only in the log, so
+    a test asserting a 5xx contract on a control route would still pass.
     """
     def refuse(device_id, command, secondary_value=""):
         raise AssertionError(

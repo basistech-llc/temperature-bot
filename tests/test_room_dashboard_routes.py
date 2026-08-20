@@ -289,7 +289,12 @@ def test_control_with_no_reachable_device_is_shown_as_unavailable(
 
 
 def test_unreachable_control_cannot_be_commanded(flask_test_client, monkeypatch):
-    """The tile is visible, but there is no device behind it to switch."""
+    """The tile is visible, but there is no device behind it to switch.
+
+    The message is asserted, not just the status: an unconfigured control key
+    also answers 404, so a status-only check would pass for the opposite reason
+    if the injected control ever stopped being injected.
+    """
     _add_unavailable_control(monkeypatch)
     resp = flask_test_client.post(
         "/api/v1/room/hickory/switch",
@@ -297,3 +302,4 @@ def test_unreachable_control_cannot_be_commanded(flask_test_client, monkeypatch)
     )
     assert resp.status_code == 404
     assert resp.get_json()["code"] == "not_found"
+    assert "no reachable device" in resp.get_json()["error"]

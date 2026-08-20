@@ -118,14 +118,18 @@ Lights, and Willow Lights.
 
 "Is the device **on** hub `.51`?" and "is it **exposed** by Maker API app 520?"
 are different questions with different answers. At the time of writing the hub
-has 118 devices and the app exposes 29 of them. Answering the first with a tool
+has 115 devices and the app exposes 31 of them. Answering the first with a tool
 that reports the second is a mistake that has already been made here, and it led
 to a request for hardware work that was not needed.
 
-Check exposure — what we can actually read and command:
+Check exposure — what we can actually read and command. Ask Maker API
+directly rather than through `python -m app.hubitat --list-devices`, which
+filters to devices reporting a temperature and so cannot see a switch,
+outlet, or fan at all:
 
 ```bash
-poetry run python -m app.hubitat --list-devices
+curl -s "http://10.2.3.51/apps/api/520/devices/all?access_token=$TOKEN" \
+  | python3 -c 'import json,sys; [print(d["id"], d["label"]) for d in json.load(sys.stdin)]'
 ```
 
 Check presence — everything the hub knows about, meshed devices included:

@@ -9,7 +9,8 @@ from unittest.mock import patch
 
 import pytest
 
-from app import hubitat
+from app import hubitat, room_config
+from app.models import RoomControlKind
 from app.paths import ETC_DIR
 from bin import runner
 
@@ -120,6 +121,38 @@ def test_live_hubitat_commands_are_refused_from_tests():
     silently if ``send_device_command`` is renamed or the fixture stops
     applying. Calling through a wrapper rather than the low-level function
     proves the whole write layer is covered, not just the one name.
+
+    The arguments are deliberately harmless. The regression this test detects
+    is precisely the one where the call is not intercepted, so a real device id
+    would make the test perform the write it exists to prevent. Hubitat ids are
+    numeric, so this one can name nothing, and ``off`` could not energize it
+    even if it did.
     """
-    with pytest.raises(AssertionError, match="live Hubitat device 618"):
-        hubitat.set_switch("618", "on")
+    with pytest.raises(AssertionError, match="live Hubitat device not-a-device-id"):
+        hubitat.set_switch("not-a-device-id", "off")
+
+
+def test_simulator_carries_the_switch_ids_the_room_config_addresses(monkeypatch):
+    """A room control id must be checkable without reaching for the hub.
+
+    Both simulator snapshots held only temperature sensors, so no control id in
+    ``room_config`` had any corroboration in the repo at all -- an id could be
+    stale, from the wrong hub, or naming an unrelated device, and nothing here
+    would contradict it. That is not theoretical: three Broadway controls
+    shipped naming Kitchen and Cedar lights because their ids came off hub
+    10.2.3.52.
+
+    The two TV Cart outlets are captured from Maker API app 520 so at least
+    those ids are pinned. Asserting the capability rather than only the id is
+    the point: an id that names something unswitchable fails here.
+    """
+    monkeypatch.setenv(hubitat.HUBITAT_SIMULATOR_ENV, "1")
+    devices = {device["id"]: device for device in hubitat.get_all_devices()}
+    broadway = room_config.ROOM_CONFIGS["broadway"]
+
+    for key in ("tv-cart-left", "tv-cart-right"):
+        control = broadway.find_control(key, RoomControlKind.SWITCH)
+        assert control is not None and control.device_id is not None
+        device = devices[control.device_id]
+        assert "Switch" in device["capabilities"]
+        assert "TV Cart" in device["label"]

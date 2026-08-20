@@ -333,7 +333,10 @@ Run tests and local commands through the Makefile.
   and persistence of Hubitat `status_json`.
 - Route tests cover room-dashboard sensor filtering and Hickory control error
   handling. Those command tests patch Hubitat calls because command execution
-  would otherwise require live hardware.
+  would otherwise require live hardware. An autouse fixture in
+  `tests/conftest.py` now enforces that: it replaces `send_device_command`, the
+  one function every Hubitat write goes through, with a refusal, so a test that
+  forgets to patch fails instead of switching an office outlet.
 
 Useful live diagnostics:
 
@@ -342,12 +345,13 @@ make every-minute
 ```
 
 ```bash
-poetry run python -m app.hubitat --list-devices
-```
-
-```bash
 poetry run python -m app.hubitat --list-temperatures
 ```
+
+`--list-devices` is an alias for the same output despite its name: both filter
+Maker API's response to devices reporting a temperature. Neither can show a
+switch, outlet, or fan. To see everything Maker API exposes, query it directly
+-- see `doc/hardware-landscape.md`.
 
 The app also exposes `/all_devices` and `/api/v1/debug/hubitat_devices` for
 interactive inspection.

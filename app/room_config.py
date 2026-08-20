@@ -14,8 +14,10 @@ Every ``device_id`` here is a device id **on hub 10.2.3.51**, the hub configured
 in ``temperature-bot-config.yaml``. Ids are per hub and are not interchangeable:
 the same physical sensor carries different ids on each hub it is meshed onto, so
 an id copied from another hub's dashboard is at best dead and at worst names a
-different device. Read ids from that hub, for example with
-``poetry run python -m app.hubitat --list-devices``.
+different device. ``doc/hardware-landscape.md`` has the commands for reading
+ids off that hub, and for telling "the hub does not have this device" apart
+from "Maker API does not expose it", which are different problems with
+different fixes.
 """
 
 from .models import RoomConfig, RoomControl, RoomControlKind

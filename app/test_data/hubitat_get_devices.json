@@ -878,5 +878,87 @@
         "command": "setParameter"
       }
     ]
+  },
+  {
+    "name": "Broadway TV Cart Left on Somerville Broadway",
+    "label": "Broadway TV Cart Left on Somerville Broadway",
+    "type": "Generic Z-Wave Plus Outlet",
+    "id": "618",
+    "date": "2026-08-20T00:00:00+0000",
+    "model": null,
+    "manufacturer": null,
+    "room": null,
+    "roomId": null,
+    "capabilities": [
+      "Configuration",
+      "Actuator",
+      "Outlet",
+      "Refresh",
+      "Switch"
+    ],
+    "attributes": {
+      "switch": "off",
+      "dataType": "ENUM",
+      "values": [
+        "on",
+        "off"
+      ],
+      "hubMeshDisabled": "false"
+    },
+    "commands": [
+      {
+        "command": "configure"
+      },
+      {
+        "command": "off"
+      },
+      {
+        "command": "on"
+      },
+      {
+        "command": "refresh"
+      }
+    ]
+  },
+  {
+    "name": "Broadway TV Cart Right on Somerville Broadway",
+    "label": "Broadway TV Cart Right on Somerville Broadway",
+    "type": "Generic Z-Wave Plus Outlet",
+    "id": "619",
+    "date": "2026-08-20T00:00:00+0000",
+    "model": null,
+    "manufacturer": null,
+    "room": null,
+    "roomId": null,
+    "capabilities": [
+      "Configuration",
+      "Actuator",
+      "Outlet",
+      "Refresh",
+      "Switch"
+    ],
+    "attributes": {
+      "switch": "off",
+      "dataType": "ENUM",
+      "values": [
+        "on",
+        "off"
+      ],
+      "hubMeshDisabled": "false"
+    },
+    "commands": [
+      {
+        "command": "configure"
+      },
+      {
+        "command": "off"
+      },
+      {
+        "command": "on"
+      },
+      {
+        "command": "refresh"
+      }
+    ]
   }
 ]
