@@ -7,10 +7,14 @@ surface quickly.
 
 ## Workflow Entrypoints
 
-- `doc/hardware-landscape.md`: what the physical equipment is, the two Hubitat
-  hubs and why only one is reachable, Maker API apps versus dashboards, FCU/ERV
+- `doc/hardware-landscape.md`: what the physical equipment is, why only one of
+  the Hubitat hubs is reachable, Maker API apps versus dashboards, FCU/ERV
   definitions, and how a device becomes a row. Read this before any hardware
   task if you have not seen the building.
+- `doc/site-manual.md`: the census behind that. Which four hubs exist, every
+  device on each with its id, the hub-mesh id translation map, the installed
+  apps, and exactly which 31 devices Maker API app 520 exposes to us. Use it to
+  look up a specific device or id; use it before assuming a device is absent.
 - `AGENTS.md`: maintainer workflow selection, signed commit rules, and
   non-interactive shell command requirements.
 - `CLAUDE.md`: Claude-specific architecture summary and Makefile test examples.
