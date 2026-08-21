@@ -61,7 +61,7 @@ TEMPLATE_DIR := app/templates
 export PLAYWRIGHT_BROWSERS_PATH := .playwright
 
 # Pin tool versions (helps avoid "invisible" cache invalidations)
-POETRY_VERSION ?= 2.1.3
+UV_VERSION     ?= 0.11.26
 RUFF_VERSION   ?= 0.15.15
 
 # Test selection override, e.g.
@@ -91,7 +91,7 @@ help: ## Show this help message
 .venv/pyvenv.cfg:
 	@echo install venv for the development environment
 	echo $$PATH
-	poetry install
+	uv sync --locked
 
 ################################################################
 # Manage the local development database and configuration file.
@@ -220,7 +220,7 @@ local-live-dev: $(REQ) ## Run the web backend locally against live AE-200 hardwa
 	AE200_SIMULATOR= HUBITAT_SIMULATOR= AIRTHINGS_SIMULATOR= $(MAKE) _local-dev-web
 
 _local-dev-web: $(REQ) ## Internal: shared web backend runner for local-dev targets
-	FLASK_DEBUG=True poetry run flask --app app.main:app run --port 8000
+	FLASK_DEBUG=True uv run --locked flask --app app.main:app run --port 8000
 
 live-dev-runner: $(REQ) ## Run the collection agent and rules runner against live hardware
 	LOG_LEVEL=DEBUG $(PYTHON) bin/runner.py
@@ -236,7 +236,7 @@ PYLINT_THRESHOLD := 10.0
 PYLINT_OPTS :=--output-format=parseable --rcfile .pylintrc --fail-under=$(PYLINT_THRESHOLD) --verbose
 
 lint: check ## Run all static analysis checks (alias for check)
-check: $(REQ) ## Run all static analysis checks
+check: $(REQ) dependency-check ## Run all static analysis checks
 	$(MAKE) ruff-check
 	$(MAKE) no-type-ignore
 	$(MAKE) pylint-check
@@ -245,13 +245,31 @@ check: $(REQ) ## Run all static analysis checks
 	$(MAKE) check-types
 	$(MAKE) validate-migrations
 
+dependency-check: ## Verify the uv lockfile and reject legacy dependency tooling
+	uv lock --check
+	@! git grep -n -i 'poe''try' -- ':!.beads/**' ':!lib/ctools/**'
+
+build: dependency-check ## Build the source distribution and wheel
+	uv build --no-sources
+
+build-check: build ## Install the wheel in a clean environment and import the app
+	@build_tmp="$$(mktemp -d)"; \
+	trap 'rm -rf "$$build_tmp"' EXIT; \
+	uv venv --python 3.12 "$$build_tmp/venv"; \
+	uv pip install --python "$$build_tmp/venv/bin/python" dist/*.whl; \
+	cd "$$build_tmp"; \
+	DB_PATH="$$build_tmp/temperature-bot.db" \
+	TEMPERATURE_BOT_CONFIG="$(abspath tests/temperature-bot-config-test.yaml)" \
+	AE200_SIMULATOR=1 HUBITAT_SIMULATOR=1 AIRTHINGS_SIMULATOR=1 AQICN_SIMULATOR=1 \
+	"$$build_tmp/venv/bin/python" -c 'from wsgi import app; assert app.name == "app.main"'
+
 format: $(REQ) ## Auto-fix Python style issues with ruff
-	poetry run ruff check --fix app | etc/ruff-reformat.bash
+	uv run --locked ruff check --fix app | etc/ruff-reformat.bash
 
 pylint: ruff-check pylint-check ## Run ruff and pylint checks
 
 ruff-check: $(REQ) ## Run the ruff linter on app/
-	poetry run ruff check app
+	uv run --locked ruff check app
 
 no-type-ignore: ## Fail if any type-ignore comments exist in source
 	@command -v rg >/dev/null || { echo "Error: ripgrep is required for no-type-ignore"; exit 1; }
@@ -261,13 +279,13 @@ pylint-check: $(REQ) ## Run pylint on app, tests, and top-level modules
 	$(PYTHON) -m pylint $(PYLINT_OPTS) app tests *.py
 
 djlint: $(REQ) ## Lint Jinja2 HTML templates with djlint
-	poetry run djlint $(DJLINT_FLAGS) $(TEMPLATE_DIR)/*.html
+	uv run --locked djlint $(DJLINT_FLAGS) $(TEMPLATE_DIR)/*.html
 
 eslint: $(REQ) ## Run ESLint on frontend JavaScript
 	(cd app/static; make eslint)
 
 check-types: $(REQ) ## Run mypy type checking on app/
-	poetry run mypy app
+	uv run --locked mypy app
 
 ## Dynamic Analysis
 pytest: $(REQ) ## Run the Python test suite with coverage
@@ -299,21 +317,21 @@ test: $(REQ) ## Run both Python and JavaScript test suites
 	exit $$(($$python_exit + $$js_exit))
 
 playwright-install: $(REQ) ## Install the Playwright Chromium browser
-	poetry run playwright install --with-deps chromium
+	uv run --locked playwright install --with-deps chromium
 
 web-screenshots: $(REQ) playwright-install ## Render screenshots of web UI pages
 	$(PYTHON) bin/render_web_ui_pages.py
 
 outdated: $(REQ) ## Report outdated Python and CDN dependencies
-	poetry lock
-	poetry install
+	uv lock --check
+	uv sync --locked
 	@echo "=== Python ==="
-	poetry show --outdated --top-level || true
+	uv tree --outdated --depth 1 || true
 	@echo ""
 	@echo "=== CDN libraries (in templates) ==="
 	bash etc/check-cdn-versions.bash
 
-.PHONY: lint check format pylint ruff-check no-type-ignore pylint-check djlint eslint check-types pytest test-js test playwright-install web-screenshots outdated
+.PHONY: lint check dependency-check build build-check format pylint ruff-check no-type-ignore pylint-check djlint eslint check-types pytest test-js test playwright-install web-screenshots outdated
 
 ################################################################
 ## Cron targets
@@ -346,18 +364,18 @@ monthly-backup: ## Back up the production database with a dated copy
 
 install-either: ## Shared install steps for macOS and Ubuntu
 	pipx ensurepath
-	pipx install poetry==$(POETRY_VERSION)
-	poetry config virtualenvs.in-project true
-	poetry lock
-	poetry install --with dev
-	poetry run playwright install --with-deps # This will be fast if CI restored .playwright
+	@if ! command -v uv >/dev/null 2>&1 || [ "$$(uv --version | awk '{print $$2}')" != "$(UV_VERSION)" ]; then \
+		pipx install --force uv==$(UV_VERSION); \
+	fi
+	uv sync --locked
+	uv run --locked playwright install --with-deps # This will be fast if CI restored .playwright
 
 install-ubuntu: ## Install the development environment on Ubuntu
 	sudo apt install python3-pip pipx ripgrep
 	make install-either
 
 install-macos: ## Install the development environment on macOS
-	@echo Use pipx for the latest poetry
+	@echo Use pipx for the pinned uv version
 	@if ! command -v brew >/dev/null 2>&1; then \
 		echo "Error: Homebrew is not installed. Please install Homebrew from https://brew.sh/ and try again."; \
 		exit 1; \
@@ -370,6 +388,7 @@ clean: ## Remove generated files and the virtual environment
 	rm -rf .venv
 	rm -rf .playwright
 	rm -rf htmlcov
+	rm -rf dist
 	rm -rf var/web-ui-screenshots
 	rm -f coverage.xml
 	rm -f .coverage
@@ -396,7 +415,7 @@ deploy: ## Deploy latest code and run DB migrations on the production server
 	if [ "$$(hostname)" = "$(DEPLOY_HOSTNAME)" ]; then \
 		cd $(DEPLOY_APP_DIR) && \
 		git pull --ff-only && \
-		poetry install && \
+		uv sync --locked --no-dev && \
 		if [ "$(DEPLOY_FLYWAY)" = Y ]; then $(MAKE) deploy-flyway ; fi; \
 	else \
 		echo "Deploy refused: not running on $(DEPLOY_HOSTNAME) (current hostname: $$(hostname))"; \

@@ -98,7 +98,7 @@ flyway \
 `make deploy` is intended to run only on `slg1` by default. It:
 
 1. Pulls the latest code in `/home/air/temperature-bot`.
-2. Installs Poetry dependencies.
+2. Synchronizes production dependencies from `uv.lock`.
 3. Validates already-applied migrations against
    `/var/db/temperature-bot.db`, allowing only migrations that are pending.
 4. Copies the DB to `/var/db/temperature-bot-backups/temperature-bot.<UTC timestamp>.db`.

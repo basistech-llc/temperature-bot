@@ -8,6 +8,8 @@ services. It stores device history in SQLite and serves both web pages and
 ## Development
 
 Use the Makefile for setup, checks, tests, and local runs.
+Python dependencies and the in-project `.venv` are managed by uv from the
+committed `uv.lock` file.
 
 ```bash
 make install-macos      # macOS setup

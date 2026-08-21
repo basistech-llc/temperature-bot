@@ -399,15 +399,15 @@ Relevant issues: #142, #89, #5.
 
 Current state:
 
-- The project uses Poetry 2.1.3 throughout `pyproject.toml`, `poetry.lock`,
-  Makefile targets, and CI.
-- Open issue #129 asks to migrate to `uv`.
+- The project uses uv throughout `pyproject.toml`, `uv.lock`, Makefile targets,
+  CI, deployment tooling, and documentation.
+- `make dependency-check` verifies the lockfile and prevents the retired
+  dependency workflow from being reintroduced.
 
-Recommendation:
+Maintenance:
 
-- Do not make this a prerequisite for rules or map work.
-- If migrated, do it as a single tooling PR that updates Makefile, CI,
-  documentation, and lockfile together.
+- Keep local, CI, and deployment installs locked and update all surfaces
+  together when changing dependency workflow.
 
 Relevant issue: #129.
 
