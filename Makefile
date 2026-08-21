@@ -380,7 +380,7 @@ install-macos: ## Install the development environment on macOS
 		echo "Error: Homebrew is not installed. Please install Homebrew from https://brew.sh/ and try again."; \
 		exit 1; \
 	fi
-	brew install pipx
+	HOMEBREW_NO_AUTO_UPDATE=1 brew install pipx ripgrep
 	make install-either
 
 clean: ## Remove generated files and the virtual environment
