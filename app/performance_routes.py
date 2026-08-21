@@ -44,11 +44,14 @@ def performance_samples(conn):
             ),
         )
     except (ValidationError, ValueError) as error:
-        details = (
-            error.errors(include_context=False)
-            if isinstance(error, ValidationError)
-            else [{"msg": str(error)}]
-        )
+        details: list[dict[str, object]]
+        if isinstance(error, ValidationError):
+            details = [
+                dict(item)
+                for item in error.errors(include_context=False)
+            ]
+        else:
+            details = [{"msg": str(error)}]
         return jsonify(
             {"error": "validation error", "details": details}
         ), 400

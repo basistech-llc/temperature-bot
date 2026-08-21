@@ -34,9 +34,10 @@ FLYWAY_SCHEMA_DUMP := /tmp/temperature-bot-schema-temp.sql
 FLYWAY_VALIDATE_TEMP := /tmp/temperature-bot-flyway-validate.db
 
 # Remote host and paths used by fetch-dev-db (override as needed for your environment)
-FETCH_HOST           ?= air.basistech.net
-FETCH_REMOTE_DB_DIR  ?= /var/db/
-FETCH_REMOTE_CONFIG  ?= /home/air/temperature-bot/temperature-bot-config.yaml
+FETCH_HOST              ?= air.basistech.net
+FETCH_REMOTE_DB         ?= /var/db/temperature-bot.db
+FETCH_REMOTE_BACKUP_DIR ?= /var/db/temperature-bot-backups
+FETCH_REMOTE_CONFIG     ?= /home/air/temperature-bot/temperature-bot-config.yaml
 
 # Deployment defaults. Override only when intentionally targeting a different
 # checked-out installation or database.
@@ -119,14 +120,30 @@ $(DEV_DB):
 	@echo "       Create it with 'make make-dev-db' or fetch it with 'make fetch-dev-db'."
 	@false
 
-# Fetch the dev database and config from the remote host, then print a
-# summary of the database contents.
+# Create and validate a consistent SQLite snapshot on the remote host, fetch
+# that single self-contained file, then validate and atomically install it.
 # NOTE: temperature-bot-config.yaml includes production secrets
 #       until we move to better secret management system
 fetch-dev-db: ## Fetch the dev DB and config from the remote host
 	mkdir -p $(dir $(DEV_DB))
-	rsync --verbose --delete --archive $(FETCH_HOST):$(FETCH_REMOTE_DB_DIR) $(dir $(DEV_DB))
-	rsync --verbose $(FETCH_HOST):$(FETCH_REMOTE_CONFIG) ./temperature-bot-config.yaml
+	@set -eu; \
+	remote_snapshot="$(FETCH_REMOTE_BACKUP_DIR)/fetch-dev-db.$$(date -u +%Y%m%dT%H%M%SZ).$$$$.db"; \
+	local_snapshot="$(DEV_DB).new"; \
+	cleanup() { \
+		rm -f "$$local_snapshot"; \
+		ssh -o BatchMode=yes $(FETCH_HOST) "rm -f '$$remote_snapshot'" >/dev/null 2>&1 || true; \
+	}; \
+	trap cleanup EXIT HUP INT TERM; \
+	ssh -o BatchMode=yes $(FETCH_HOST) \
+		"umask 077; timeout 180 sqlite3 -batch -init /dev/null '$(FETCH_REMOTE_DB)' \"PRAGMA busy_timeout=30000; VACUUM INTO '$$remote_snapshot';\" && test \"\$$(sqlite3 -batch -noheader -init /dev/null -readonly '$$remote_snapshot' 'PRAGMA quick_check;')\" = ok"; \
+	rsync --verbose --archive -e 'ssh -o BatchMode=yes' \
+		"$(FETCH_HOST):$$remote_snapshot" "$$local_snapshot"; \
+	test "$$(sqlite3 -batch -noheader -init /dev/null -readonly "$$local_snapshot" 'PRAGMA quick_check;')" = ok; \
+	mv -f "$$local_snapshot" "$(DEV_DB)"; \
+	ssh -o BatchMode=yes $(FETCH_HOST) "rm -f '$$remote_snapshot'"; \
+	trap - EXIT HUP INT TERM
+	rsync --verbose --archive -e 'ssh -o BatchMode=yes' \
+		$(FETCH_HOST):$(FETCH_REMOTE_CONFIG) ./temperature-bot-config.yaml
 	@ls -l $(dir $(DEV_DB))
 	@echo database contents:
 	echo 'select "devices",count(*) from devices;select "devlog",count(*) from devlog;select "changelog",count(*) from changelog; select "aqi",count(*) from aqi;' | sqlite3 $(DEV_DB)
@@ -237,6 +254,7 @@ ruff-check: $(REQ) ## Run the ruff linter on app/
 	poetry run ruff check app
 
 no-type-ignore: ## Fail if any type-ignore comments exist in source
+	@command -v rg >/dev/null || { echo "Error: ripgrep is required for no-type-ignore"; exit 1; }
 	@! rg -n 'type:\s*ignore|type:ignore' app bin tests *.py
 
 pylint-check: $(REQ) ## Run pylint on app, tests, and top-level modules
@@ -335,7 +353,7 @@ install-either: ## Shared install steps for macOS and Ubuntu
 	poetry run playwright install --with-deps # This will be fast if CI restored .playwright
 
 install-ubuntu: ## Install the development environment on Ubuntu
-	sudo apt install python3-pip pipx
+	sudo apt install python3-pip pipx ripgrep
 	make install-either
 
 install-macos: ## Install the development environment on macOS
