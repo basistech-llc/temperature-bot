@@ -26,6 +26,16 @@ Temperature Bot now tracks SQL schema versions with Flyway.
   metadata used to identify Airthings sensors without relying on display names.
 - `etc/flyway/sql/V15__unique_active_alert.sql` closes older duplicate active
   alert rows and enforces one active lifecycle per device and alert type.
+- `etc/flyway/sql/V16__changelog_action.sql` gives each activity-log row a
+  machine-readable action. It also identifies the duplicate, comment-free Unix
+  timestamps written by the former web control flow as rules suspensions while
+  leaving genuinely ambiguous historical values classified as `legacy`.
+- `etc/flyway/sql/V17__ae200_command_log.sql` stores the latest and historical
+  AE-200 write requests, parsed controller acknowledgements, and failures. Unix
+  times are integer milliseconds; request and response JSON use SQLite `TEXT`
+  storage with `json_valid()` constraints.
+- `etc/flyway/sql/V18__ae200_notifications.sql` stores unsolicited AE-200
+  `notifyRequest` observations without claiming which actor caused the change.
 - `etc/flyway/sql/R__performance_samples.sql` adds integration and network
   timing samples. It is repeatable so it can be deployed before or after the
   independent branch that owns V12-V15; see `doc/performance-monitoring.md`.
@@ -89,10 +99,16 @@ flyway \
 
 1. Pulls the latest code in `/home/air/temperature-bot`.
 2. Installs Poetry dependencies.
-3. Runs `flyway validate` against `/var/db/temperature-bot.db`.
+3. Validates already-applied migrations against
+   `/var/db/temperature-bot.db`, allowing only migrations that are pending.
 4. Copies the DB to `/var/db/temperature-bot-backups/temperature-bot.<UTC timestamp>.db`.
 5. Applies pending migrations with `-baselineOnMigrate=true`.
 6. Runs `flyway validate` again.
+
+The final validation is strict. Allowing `*:pending` is limited to the
+read-only preflight because pending migrations are the normal reason to run a
+deployment; failed, missing, or checksum-mismatched applied migrations still
+stop the deployment before the backup or migration.
 
 Override `DEPLOY_HOSTNAME`, `DEPLOY_APP_DIR`, `DEPLOY_DB`, or
 `DEPLOY_BACKUP_DIR` only
@@ -120,3 +136,22 @@ database for diagnosis, restore the complete pre-migration SQLite backup
 (including its Flyway history), deploy the matching pre-migration application
 revision, validate it, and then resume the runner. Do not attempt to reverse V9
 or V10 with ad hoc `ALTER TABLE` statements.
+
+## Future release promotion
+
+Production deployment should move to a staged release-promotion model. Prepare
+the candidate code in an isolated, versioned release directory; migrate a
+consistent copy of the production database; and run browser, collector, rules,
+and database smoke tests against `air-stage.basistech.net`. Production remains
+on its current checkout and database throughout that verification.
+
+At cutover, quiesce production writers, take a fresh consistent database
+backup, apply the already-tested migrations to that fresh database, and switch
+an application symlink or equivalent release pointer atomically. Restart and
+smoke-test production before resuming writers. Rollback must restore both the
+previous release pointer and its matching database backup.
+
+Do not promote the older staging database itself: production data can change
+while staging is being verified. The candidate code and tested migration
+sequence are promoted, then applied to a fresh production snapshot during the
+short cutover window.

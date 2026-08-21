@@ -271,6 +271,9 @@ test-js: $(REQ) ## Run the JavaScript unit tests
 	node tests/test_room_map.js
 	node tests/test_fcu_history_chart.js
 	node tests/test_performance_monitoring.js
+	node tests/test_outdoor_aqi.js
+	node tests/test_ae200_page.js
+	node tests/test_logs_today.js
 test: $(REQ) ## Run both Python and JavaScript test suites
 	@python_exit=0; js_exit=0; \
 	make pytest || python_exit=$$?; \
@@ -384,11 +387,11 @@ deploy: ## Deploy latest code and run DB migrations on the production server
 
 
 deploy-flyway: ## Back up, migrate, and validate the deployment database
-	flyway validate -url="jdbc:sqlite:$(DEPLOY_DB)" -locations="filesystem:etc/flyway/sql"
+	flyway validate -url="jdbc:sqlite:$(DEPLOY_DB)" -locations="filesystem:$(FLYWAY_SQL_DIR)" -ignoreMigrationPatterns="*:pending"
 	/bin/mkdir -p $(DEPLOY_BACKUP_DIR)
 	/bin/cp -f $(DEPLOY_DB) $(DEPLOY_BACKUP_DIR)/temperature-bot.$$(date -u +%Y%m%dT%H%M%SZ).db
-	flyway migrate -url="jdbc:sqlite:$(DEPLOY_DB)" -locations="filesystem:etc/flyway/sql" -baselineOnMigrate=true
-	flyway validate -url="jdbc:sqlite:$(DEPLOY_DB)" -locations="filesystem:etc/flyway/sql"
+	flyway migrate -url="jdbc:sqlite:$(DEPLOY_DB)" -locations="filesystem:$(FLYWAY_SQL_DIR)" -baselineOnMigrate=true
+	flyway validate -url="jdbc:sqlite:$(DEPLOY_DB)" -locations="filesystem:$(FLYWAY_SQL_DIR)"
 
 
 deploy-stage: ## Refresh the staging database, deploy dev-stage, and restart staging

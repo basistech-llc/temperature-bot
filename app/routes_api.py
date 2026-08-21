@@ -74,6 +74,7 @@ from .models import (
     alert_json_ready,
     json_ready,
 )
+from .fcu_control import FcuStateControl
 
 logger = logging.getLogger(__name__)
 
@@ -112,7 +113,12 @@ def _run_ae200_command(command, conn, body):
         raise BadRequest("Invalid command request") from exc
     except AE200_TRANSPORT_ERRORS as exc:  # pylint: disable=catching-non-exception
         logger.warning("AE-200 request failed: %s", exc)
-        raise UpstreamUnavailable("AE-200 request failed") from exc
+        message = (
+            "AE-200 did not confirm requested state"
+            if isinstance(exc, ae200.AE200VerificationError)
+            else "AE-200 request failed"
+        )
+        raise UpstreamUnavailable(message) from exc
 
 
 def _disable_rules_after_manual_command(conn, device_id: int) -> None:
@@ -186,6 +192,16 @@ def _hubitat_control(what: str):
 @api_v1.route("/version")
 def get_version_json():
     return jsonify({"version": __version__, "sha": git_sha()})
+
+
+@api_v1.route("/set_fcu_state", methods=["POST"])
+@validate()
+@with_db_connection
+def set_fcu_state(conn, body: FcuStateControl):
+    """Set drive/fan fields in one AE-200 request and verify the result."""
+    ret = _run_ae200_command(rules_engine.set_body_fcu_state, conn, body)
+    _disable_rules_after_manual_command(conn, ret["device_id"])
+    return _command_response(ret)
 
 
 @api_v1.route("/set_fan_speed", methods=["POST"])

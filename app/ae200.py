@@ -30,10 +30,15 @@ from websockets.extensions import permessage_deflate
 from websockets.typing import Origin, Subprotocol
 
 from app.util import env_flag_enabled, get_config
-from app import performance_monitoring
+from app import ae200_command_log, performance_monitoring
 
 logger = logging.getLogger(__name__)
 B_XMLPROC_SUBPROTOCOL = Subprotocol("b_xmlproc")
+
+
+class AE200VerificationError(RuntimeError):
+    """The controller read-back did not match a completed write request."""
+
 
 # Fan mapping speeds. Note that there is no 'OFF'
 FAN_SPEED_AUTO = -1
@@ -50,6 +55,7 @@ AE200_HEAT_SET_TEMP_KEY = "SetTemp2"
 AE200_AUTO_MIN_KEY = "AutoMin"
 AE200_AUTO_MAX_KEY = "AutoMax"
 AE200_ALLOWED_SET_MODES = frozenset({"FAN", "COOL", "DRY", "HEAT", "AUTO"})
+AE200_GROUP_KEY = "Group"
 ERROR_SIGN = "ErrorSign"
 FILTER_SIGN = "FilterSign"
 CHECK_WATER = "CheckWater"
@@ -60,6 +66,10 @@ ALERT_LABELS = {
     CHECK_WATER: "water issue",
 }
 AE200_COMMAND_LOCK_PATH = os.getenv("AE200_COMMAND_LOCK_PATH", "/tmp/temperature-bot-ae200.lock")
+AE200_WRITE_SETTLE_SECONDS = float(os.getenv("AE200_WRITE_SETTLE_SECONDS", "0.25"))
+AE200_WRITE_RESPONSE_TIMEOUT_SECONDS = float(
+    os.getenv("AE200_WRITE_RESPONSE_TIMEOUT_SECONDS", "10")
+)
 
 # User-facing fan-speed labels, keyed by speed number. These intentionally
 # mirror the speed-button text rendered in room_dashboard.html / index.html so
@@ -368,7 +378,9 @@ class AE200Functions:
         # result = {}
         node = mnetDetailsResultXML.find("./DatabaseManager/Mnet")
         if node is None:
-            raise ValueError(f"AE-200 response omitted Mnet data for device {deviceId}")
+            raise AE200VerificationError(
+                f"AE-200 response omitted Mnet data for device {deviceId}"
+            )
         return cleanDeviceInfo(node.attrib) if clean else node.attrib
 
     def getDeviceInfo(self, deviceId, clean=True):
@@ -392,7 +404,27 @@ class AE200Functions:
             raise RuntimeError("AE200_SIMULATOR not compatible with AE200Functions")
         attrs = " ".join([f'{key}="{attributes[key]}"' for key in attributes])
         payload = setRequestPayload.format(deviceId=deviceId, attrs=attrs)
-        await self._exchange(payload, sample, receive=False)
+        try:
+            response_xml = await asyncio.wait_for(
+                self._exchange(payload, sample, receive=True),
+                timeout=AE200_WRITE_RESPONSE_TIMEOUT_SECONDS,
+            )
+        except TimeoutError as error:
+            raise AE200VerificationError(
+                "Timed out waiting for AE-200 setResponse"
+            ) from error
+        response_root = ET.fromstring(response_xml)
+        command = response_root.findtext("./Command") or ""
+        if command != "setResponse":
+            raise AE200VerificationError(
+                f"AE-200 returned {command or 'no command'} for setRequest"
+            )
+        node = response_root.find("./DatabaseManager/Mnet")
+        response_attributes = cleanDeviceInfo(node.attrib) if node is not None else {}
+        response_attributes.pop(AE200_GROUP_KEY, None)
+        return ae200_command_log.AE200SetResponse(
+            command=command, response_fields=response_attributes
+        )
 
     def send(self, deviceId, attributes):
         sample = (
@@ -443,33 +475,40 @@ def set_drive(ae200_device, drive_int):
     drive_str = int_to_drive(drive_int)
     logger.info("set_drive(%s,%s,%s)", ae200_device, drive_int, drive_str)
 
-    if AE200_SIMULATOR:
-        simulated_devices[str(ae200_device)]["Drive"] = drive_str
-        return
-
-    d = AE200Functions()
-    d.send(ae200_device, {"Drive": drive_str})
+    _send_command(ae200_device, {AE200_DRIVE_KEY: drive_str})
 
 
 def set_fan_speed(ae200_device, speed):
     fan_speed = FAN_SPEEDS[speed]
     logger.info("set_fan_speed(%s,%s)=%s", ae200_device, speed, fan_speed)
-    if AE200_SIMULATOR:
-        simulated_devices[str(ae200_device)]["FanSpeed"] = fan_speed
-        return
-    d = AE200Functions()
-    d.send(ae200_device, {"FanSpeed": fan_speed})
+    _send_command(ae200_device, {AE200_FAN_SPEED_KEY: fan_speed})
+
+
+def set_fcu_state(ae200_device, *, drive=None, fan_speed=None):
+    """Send drive and fan speed in one AE-200 write request."""
+    attributes = {}
+    if drive is not None:
+        attributes[AE200_DRIVE_KEY] = DRIVES[drive]
+    if fan_speed is not None:
+        attributes[AE200_FAN_SPEED_KEY] = FAN_SPEEDS[fan_speed]
+    if not attributes:
+        raise ValueError("drive or fan_speed is required")
+    logger.info("set_fcu_state(%s,%s)", ae200_device, attributes)
+    _send_command(ae200_device, attributes)
+
+
+def get_device_info_after_write(device):
+    """Read state after the configured AE-200 write-settling interval."""
+    if not AE200_SIMULATOR:
+        time.sleep(AE200_WRITE_SETTLE_SECONDS)
+    return get_device_info(device)
 
 
 def set_set_temp(ae200_device, set_temp_c):
     """Set the unit set temperature in Celsius."""
     logger.info("set_set_temp(%s,%s)", ae200_device, set_temp_c)
-    if AE200_SIMULATOR:
-        simulated_devices[str(ae200_device)]["SetTemp"] = str(set_temp_c)
-        return
-    d = AE200Functions()
     # AE-200 expects SetTemp as a string (e.g. "21.0")
-    d.send(ae200_device, {"SetTemp": str(set_temp_c)})
+    _send_command(ae200_device, {AE200_SET_TEMP_KEY: str(set_temp_c)})
 
 
 def set_auto_set_temps(ae200_device, *, heat_set_temp_c, cool_set_temp_c):
@@ -484,11 +523,7 @@ def set_auto_set_temps(ae200_device, *, heat_set_temp_c, cool_set_temp_c):
         AE200_COOL_SET_TEMP_KEY: str(cool_set_temp_c),
         AE200_HEAT_SET_TEMP_KEY: str(heat_set_temp_c),
     }
-    if AE200_SIMULATOR:
-        simulated_devices[str(ae200_device)].update(payload)
-        return
-    d = AE200Functions()
-    d.send(ae200_device, payload)
+    _send_command(ae200_device, payload)
 
 
 def set_mode(ae200_device, mode):
@@ -496,11 +531,30 @@ def set_mode(ae200_device, mode):
     if mode not in AE200_ALLOWED_SET_MODES:
         raise ValueError(f"Unsupported AE-200 mode: {mode}")
     logger.info("set_mode(%s,%s)", ae200_device, mode)
-    if AE200_SIMULATOR:
-        simulated_devices[str(ae200_device)][AE200_MODE_KEY] = mode
-        return
-    d = AE200Functions()
-    d.send(ae200_device, {AE200_MODE_KEY: mode})
+    _send_command(ae200_device, {AE200_MODE_KEY: mode})
+
+
+def _send_command(ae200_device, attributes):
+    """Send one write and record its high-level AE-200 response."""
+    attributes = {str(key): str(value) for key, value in attributes.items()}
+    record = ae200_command_log.new_record(ae200_device, attributes)
+    try:
+        if AE200_SIMULATOR:
+            simulated_devices[str(ae200_device)].update(attributes)
+            response = ae200_command_log.AE200SetResponse(
+                command="simulated", response_fields=attributes
+            )
+        else:
+            response = AE200Functions().send(ae200_device, attributes)
+        ae200_command_log.mark_response(
+            record, response, simulated=AE200_SIMULATOR
+        )
+        return response
+    except Exception as error:
+        ae200_command_log.mark_error(record, error)
+        raise
+    finally:
+        ae200_command_log.record_best_effort(record)
 
 
 def get_device_info(device):

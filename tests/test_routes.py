@@ -553,7 +553,9 @@ def test_weather_route(flask_test_client):  # noqa: F811
     assert b"Forecast for CALA" in response.data
     assert b"Outdoor Air Quality" in response.data
     assert b'class="aqi-summary-link" href="/chart_aqi"' in response.data
-    assert b'id="aqi-value"' in response.data
+    assert b'id="weather-outdoor-aqi"' in response.data
+    assert b'data-aqi-value>--<' in response.data
+    assert b'/static/outdoor_aqi.js' in response.data
 
 
 def test_room_map_route_uses_canonical_room_api_contract(flask_test_client):  # noqa: F811
@@ -587,7 +589,9 @@ def test_air_quality_route(flask_test_client):  # noqa: F811
     assert b"Outdoor Air Quality" in html
     assert b'class="aqi-summary-link" href="/chart_aqi"' in html
     assert b'href="/chart_aqi" title="View one-week AQI history"' not in html
-    assert b'class="aqi-number">45<' in html
+    assert b'data-aqi-value>45<' in html
+    assert b'id="outdoor-aqi"' in html
+    assert b'/static/outdoor_aqi.js' in html
 
     # Column headings
     for heading in [b"CO2", b"Humidity", b"PM1", b"PM2.5", b"Pressure", b"Radon", b"Temp", b"VOC"]:

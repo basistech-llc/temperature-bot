@@ -29,6 +29,10 @@ surface quickly.
   still untyped.
 - `doc/performance-monitoring.md`: AE-200 request timing, independent network
   probes, storage, charting, deployment, and staging-load experiments.
+- `app/templates/ae200.html`, `app/ae200_routes.py`: Deep Dive AE-200 live
+  status, request-performance chart, and durable command audit.
+- `bin/ae200_notifications.py`, `app/ae200_notifications.py`: authenticated
+  persistent WebSocket collection and storage of unsolicited controller changes.
 - `doc/operations-new-instance.md`: instance inventory, new-deployment runbook,
   Flyway-before-first-start ordering, per-instance deploy overrides, and
   rollback.

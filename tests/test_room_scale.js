@@ -18,6 +18,7 @@ const {
   setControlAvailability,
   createRoomStatusRefresher,
   createStatusRefresher,
+  fcuStateRequestBody,
   requestRoomStatus,
   roomControlEndpoint,
 } = require("../app/static/room_dashboard.js");
@@ -63,6 +64,22 @@ approx("zero width -> 1", computeFitScale(0, 400, 1000, 1000), 1);
 // which is exactly the failure this feature exists to prevent.
 approx("negative avail height -> 1", computeFitScale(800, 400, 1000, -50), 1);
 approx("zero avail width -> 1", computeFitScale(800, 400, 0, 1000), 1);
+
+if (JSON.stringify(fcuStateRequestBody(9, 4)) ===
+    JSON.stringify({ device_id: 9, drive: 1, fan_speed: 4 })) {
+  passed++;
+} else {
+  failed++;
+  console.error("FAIL room dashboard high selection must be one FCU request");
+}
+
+if (JSON.stringify(fcuStateRequestBody(9, 0)) ===
+    JSON.stringify({ device_id: 9, drive: 0 })) {
+  passed++;
+} else {
+  failed++;
+  console.error("FAIL room dashboard off selection must preserve fan speed");
+}
 
 if (roomControlEndpoint("wall_light", "Hickory & East") ===
     "/api/v1/room/Hickory%20%26%20East/wall_light") {

@@ -49,6 +49,7 @@ from .models import (
     AqiWeatherResponse,
     ChangelogResponse,
     ChangelogRow,
+    ChangelogAction,
     DatabaseColumn,
     DatabaseIndex,
     DatabaseSchemaIssue,
@@ -1319,6 +1320,7 @@ def insert_changelog(
     ipaddr: str,
     device_id: int,
     ae200_device_id: int | None,
+    action: ChangelogAction,
     current_values: str = "",
     new_value: str,
     agent: str = "",
@@ -1329,14 +1331,16 @@ def insert_changelog(
     c = conn.cursor()
     c.execute(
         """
-        INSERT INTO changelog (logtime, ipaddr, device_id, unit, current_values, new_value, agent, comment)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO changelog
+            (logtime, ipaddr, device_id, unit, action, current_values, new_value, agent, comment)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             logtime,
             ipaddr,
             device_id,
             ae200_device_id,
+            action.value,
             current_values,
             new_value,
             agent,
@@ -1361,6 +1365,7 @@ def insert_action_rule_failure(
         ipaddr="",
         device_id=device_id,
         ae200_device_id=ae200_device_id,
+        action=ChangelogAction.ACTION_RULE_FAILURE,
         new_value=error_type,
         agent="rules runner",
         comment=f"action-rule failure: {error_message}",
@@ -1434,20 +1439,17 @@ def set_rules_master_enabled(conn, enabled: bool):
         "UPDATE devices set disabled_until=? where device_id=?", (until, device_id)
     )
     # Also record in changelog for audit/history purposes.
-    c.execute(
-        """
-        INSERT INTO changelog (logtime, ipaddr, device_id, current_values, new_value, agent, comment)
-        VALUES (?,?,?,?,?,?,?)
-        """,
-        (
-            now,
-            None,
-            device_id,
-            None,
-            until,
-            "web",
-            "master rules switch " + ("enabled" if enabled else "disabled"),
-        ),
+    insert_changelog(
+        conn,
+        ipaddr="",
+        device_id=device_id,
+        ae200_device_id=None,
+        action=ChangelogAction.RULES_MASTER,
+        current_values="",
+        new_value=str(until),
+        agent="web",
+        comment="master rules switch " + ("enabled" if enabled else "disabled"),
+        commit=False,
     )
     conn.commit()
 
@@ -1474,12 +1476,17 @@ def disable_rules_for_device(
     )
 
     # Write the log entry
-    c.execute(
-        """
-        INSERT INTO changelog (logtime, ipaddr, device_id, current_values, new_value, agent, comment)
-        VALUES (?,?,?,?,?,?,?)
-        """,
-        (now, ipaddr, device_id, current_value, until, agent, comment),
+    insert_changelog(
+        conn,
+        ipaddr=ipaddr or "",
+        device_id=device_id,
+        ae200_device_id=None,
+        action=ChangelogAction.RULES_SUSPENSION,
+        current_values=str(current_value) if current_value is not None else "",
+        new_value=str(until),
+        agent=agent or "",
+        comment=comment or "rules suspension updated",
+        commit=False,
     )
     conn.commit()
 
@@ -1862,6 +1869,7 @@ def set_fcu_set_range(
             ipaddr=ipaddr or "",
             device_id=device_id,
             ae200_device_id=fcu.get("ae200_device_id"),
+            action=ChangelogAction.SET_RANGE,
             current_values=_format_set_range(
                 old_range.set_range_low_c,
                 old_range.set_range_high_c,
@@ -2246,6 +2254,7 @@ def _set_fcu_temp_source_multiplier(
         ipaddr=ipaddr or "",
         device_id=fcu_device_id,
         ae200_device_id=fcu.get("ae200_device_id"),
+        action=ChangelogAction.TEMPERATURE_SOURCE,
         current_values=str(old_multiplier),
         new_value=str(new_multiplier),
         agent=agent or "",
@@ -2763,7 +2772,7 @@ def get_changelog(
     Temporal bounds (start/end) are taken directly from the current request
     via :func:`temporal_quantification`.
     """
-    cmd = """SELECT c.logtime, c.ipaddr, d.device_name as unit, c.current_values, c.new_value, c.agent, c.comment FROM changelog c
+    cmd = """SELECT c.logtime, c.ipaddr, d.device_name as unit, c.action, c.current_values, c.new_value, c.agent, c.comment FROM changelog c
                LEFT JOIN devices d ON c.device_id = d.device_id WHERE 1=1"""
     args: List[Any] = []
 
@@ -2859,9 +2868,16 @@ def get_db_aqi(conn) -> Dict[str, Any]:
 def get_aqi_and_weather_data(conn) -> Dict[str, Any]:
     """Get combined weather and AQI data"""
     aqi_data = get_db_aqi(conn)
+    row = conn.execute("SELECT logtime FROM aqi ORDER BY logtime DESC LIMIT 1").fetchone()
     weather_data = weather.get_weather_data()
     return json_ready(
-        AqiWeatherResponse.model_validate({"aqi": aqi_data, "weather": weather_data})
+        AqiWeatherResponse.model_validate(
+            {
+                "aqi": aqi_data,
+                "aqi_observed_at": row[0] if row else None,
+                "weather": weather_data,
+            }
+        )
     )
 
 def get_all_device_aqi(conn) -> List[Dict[str, Any]]:

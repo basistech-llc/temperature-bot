@@ -1,10 +1,4 @@
-"""The ``set_body_*`` HVAC command path, driven directly against the simulator.
-
-Two properties are covered here. Commanded state must survive a stale hardware
-read-back, and every manual change must describe itself in ``changelog.comment``
-as ``<what changed> <old> -> <new>``, with names substituted for the raw AE-200
-wire codes that drive and fan speed are logged as.
-"""
+"""The ``set_body_*`` HVAC command path, driven against the simulator."""
 
 import json
 import os
@@ -17,6 +11,7 @@ from conftest import flask_test_client  # noqa: F401  # pylint: disable=unused-i
 from app import ae200, db, rules_engine
 from app.models import (
     AutoSetTempControl,
+    ChangelogAction,
     DriveControl,
     SetTempControl,
     SpeedControl,
@@ -58,7 +53,7 @@ def _latest_devlog_status(conn, device_id):
 def _latest_changelog(conn, device_id):
     """Return the most recent changelog row for one device."""
     return conn.execute(
-        "SELECT current_values, new_value, comment FROM changelog "
+        "SELECT action, current_values, new_value, comment FROM changelog "
         "WHERE device_id=? ORDER BY changelog_id DESC LIMIT 1",
         (device_id,),
     ).fetchone()
@@ -70,68 +65,54 @@ def _changelog_count(conn, device_id):
     ).fetchone()["n"]
 
 
-def test_set_body_drive_records_commanded_state_and_names_it(
+def test_set_body_drive_records_verified_state_and_typed_action(
     test_database_conn,
 ):  # noqa: F811
-    """The unit is ON and we command OFF, while the read-back still reports the
-    stale ON (the read-back can race the command).
-
-    Two regressions: the recorded status must be the commanded OFF, or /status
-    reports the stale drive and the UI snaps back to the prior selection; and the
-    changelog must name the states, because its columns hold only wire codes
-    (1 -> 0).
-    """
+    """A confirmed drive command records the controller state and typed audit."""
     conn = test_database_conn
     device_id = _link_device_to_unit(conn, "Drive Command Test")
+    ae200.set_fcu_state(BROADWAY_SOUTH, drive=1, fan_speed=1)
 
-    with patch.object(ae200, "get_device_drive", return_value=1), patch.object(
-        ae200, "set_drive"
-    ) as mock_set_drive, patch.object(
-        ae200, "get_device_info", return_value=dict(FCU_STATUS)
-    ):
-        rules_engine.set_body_drive(
-            conn,
-            DriveControl(device_id=device_id, drive=0),
-            "127.0.0.1",
-            "web",
-        )
-        mock_set_drive.assert_called_once()
+    rules_engine.set_body_drive(
+        conn,
+        DriveControl(device_id=device_id, drive=0),
+        "127.0.0.1",
+        "web",
+    )
 
     assert _latest_devlog_status(conn, device_id)["drive"] == 0
     row = _latest_changelog(conn, device_id)
-    assert (row["current_values"], row["new_value"]) == ("1", "0")
-    assert row["comment"] == "drive ON -> OFF"
+    assert row["action"] == ChangelogAction.DRIVE.value
+    assert (row["current_values"], row["new_value"]) == (
+        "Drive=ON FanSpeed=LOW",
+        "Drive=OFF FanSpeed=LOW",
+    )
+    assert row["comment"] == "confirmed"
 
 
-def test_set_body_fan_speed_records_commanded_speed_and_names_it(
+def test_set_body_fan_speed_records_verified_state_and_typed_action(
     test_database_conn,
 ):  # noqa: F811
-    """The unit is on LOW (1) and we command MID1 (3), while the read-back still
-    reports the stale LOW.
-
-    Same pair of regressions as the drive case: record the commanded speed, and
-    name the speeds the logged wire codes (1 -> 3) stand for.
-    """
+    """A confirmed fan command records the controller state and typed audit."""
     conn = test_database_conn
     device_id = _link_device_to_unit(conn, "Fan Speed Command Test")
+    ae200.set_fcu_state(BROADWAY_SOUTH, drive=1, fan_speed=1)
 
-    with patch.object(ae200, "get_device_fan_speed", return_value=1), patch.object(
-        ae200, "set_fan_speed"
-    ) as mock_set_speed, patch.object(
-        ae200, "get_device_info", return_value=dict(FCU_STATUS)
-    ):
-        rules_engine.set_body_fan_speed(
-            conn,
-            SpeedControl(device_id=device_id, fan_speed=3),
-            "127.0.0.1",
-            "web",
-        )
-        mock_set_speed.assert_called_once()
+    rules_engine.set_body_fan_speed(
+        conn,
+        SpeedControl(device_id=device_id, fan_speed=3),
+        "127.0.0.1",
+        "web",
+    )
 
     assert _latest_devlog_status(conn, device_id)["fan_speed"] == 3
     row = _latest_changelog(conn, device_id)
-    assert (row["current_values"], row["new_value"]) == ("1", "3")
-    assert row["comment"] == "fan speed LOW -> MID1"
+    assert row["action"] == ChangelogAction.FAN_SPEED.value
+    assert (row["current_values"], row["new_value"]) == (
+        "Drive=ON FanSpeed=LOW",
+        "Drive=ON FanSpeed=MID1",
+    )
+    assert row["comment"] == "confirmed"
 
 
 def test_set_temp_comment_describes_the_change(test_database_conn):  # noqa: F811
@@ -153,6 +134,27 @@ def test_set_temp_comment_describes_the_change(test_database_conn):  # noqa: F81
     row = _latest_changelog(conn, device_id)
     assert (row["current_values"], row["new_value"]) == ("24", "21.5")
     assert row["comment"] == "set temp 24 -> 21.5 C"
+
+
+def test_set_temp_propagates_controller_verification_failure(
+    test_database_conn,
+):  # noqa: F811
+    """A failed setResponse must reach the API layer instead of returning success."""
+    conn = test_database_conn
+    device_id = _link_device_to_unit(conn, "Set Temp Failure Test")
+
+    with patch.object(
+        ae200,
+        "set_set_temp",
+        side_effect=ae200.AE200VerificationError("missing setResponse"),
+    ), patch.object(ae200, "get_device_info", return_value=dict(FCU_STATUS)):
+        with pytest.raises(ae200.AE200VerificationError, match="missing setResponse"):
+            rules_engine.set_body_set_temp(
+                conn,
+                SetTempControl(device_id=device_id, set_temp_c=21.5),
+                "127.0.0.1",
+                "web",
+            )
 
 
 def test_auto_temps_comment_names_absent_setpoints(test_database_conn):  # noqa: F811
@@ -227,9 +229,8 @@ def test_non_canonical_setpoint_string_is_not_a_change(
     assert _changelog_count(conn, device_id) == before
 
 
-def test_fan_speed_endpoint_comments_both_rows(flask_test_client):  # noqa: F811
-    """/set_fan_speed writes two changelog rows -- the speed change and the
-    rules-disable it triggers -- and neither may be blank."""
+def test_fan_speed_endpoint_types_and_comments_both_rows(flask_test_client):  # noqa: F811
+    """A fan command and its rules suspension remain distinct audit events."""
     ae200.set_fan_speed(BROADWAY_SOUTH, 1)
 
     conn = sqlite3.connect(os.environ["TEST_DB_NAME"])
@@ -248,20 +249,18 @@ def test_fan_speed_endpoint_comments_both_rows(flask_test_client):  # noqa: F811
     conn = sqlite3.connect(os.environ["TEST_DB_NAME"])
     conn.row_factory = sqlite3.Row
     try:
-        comments = [
-            row["comment"]
-            for row in conn.execute(
-                "SELECT comment FROM changelog WHERE device_id=? "
-                "ORDER BY changelog_id DESC LIMIT 2",
-                (device_id,),
-            ).fetchall()
-        ]
+        rows = conn.execute(
+            "SELECT action, comment FROM changelog WHERE device_id=? "
+            "ORDER BY changelog_id DESC LIMIT 2",
+            (device_id,),
+        ).fetchall()
     finally:
         conn.close()
 
-    assert len(comments) == 2
-    assert any(c.startswith("fan speed ") for c in comments), comments
-    assert any(c.startswith("Rules disabled for ") for c in comments), comments
+    assert [(row["action"], row["comment"]) for row in rows] == [
+        (ChangelogAction.RULES_SUSPENSION.value, "Rules disabled for 180 minutes"),
+        (ChangelogAction.FAN_SPEED.value, "confirmed"),
+    ]
 
 
 def test_disable_rules_endpoint_records_who_and_why(flask_test_client):  # noqa: F811

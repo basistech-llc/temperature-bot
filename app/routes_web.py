@@ -288,6 +288,14 @@ def _register_core_routes(app):
             row["display_name"] = display_device_name(raw_name, source="airthings")
 
         annotate_staleness(airmon)
+        outdoor_aqi = next(
+            (
+                row["status"]["aqi"]
+                for row in airmon
+                if (row.get("status") or {}).get("aqi")
+            ),
+            None,
+        )
 
         # Indoor data timestamp: newest devlog logtime among indoor devices
         indoor_ts = None
@@ -311,6 +319,7 @@ def _register_core_routes(app):
             "air-quality.html",
             current_page="air-quality",
             airmon=airmon,
+            outdoor_aqi=outdoor_aqi,
             indoor_asof=indoor_asof,
             outdoor_asof=outdoor_asof,
         )
