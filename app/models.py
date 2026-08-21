@@ -14,7 +14,6 @@ add CSS annotations and other display-only values. Use ``json_ready()`` at those
 boundaries instead of ``typing.cast`` so the data is actually validated before it
 becomes a mapping.
 """
-
 # pylint: disable=too-many-lines
 
 from enum import StrEnum
@@ -625,6 +624,23 @@ class FcuStateSample(BaseModel):
     fan_speed: str | None = None
 
 
+class ChangelogAction(StrEnum):
+    """Machine-readable operation recorded in one changelog row."""
+
+    LEGACY = "legacy"
+    FAN_SPEED = "fan_speed"
+    DRIVE = "drive"
+    FCU_STATE = "fcu_state"
+    MODE = "mode"
+    SET_TEMPERATURE = "set_temperature"
+    SET_AUTO_TEMPERATURE = "set_auto_temperature"
+    SET_RANGE = "set_range"
+    TEMPERATURE_SOURCE = "temperature_source"
+    RULES_SUSPENSION = "rules_suspension"
+    RULES_MASTER = "rules_master"
+    ACTION_RULE_FAILURE = "action_rule_failure"
+
+
 class FcuHistoryResponse(BaseModel):
     """Combined calculated-room, inlet-temperature, and FCU-state history."""
 
@@ -641,6 +657,7 @@ class ChangelogRow(BaseModel):
     logtime: int | None = None
     ipaddr: str | None = None
     unit: str | None = None
+    action: ChangelogAction = ChangelogAction.LEGACY
     current_values: Any | None = None
     new_value: Any | None = None
     agent: str | None = None
@@ -706,8 +723,8 @@ class AqiWeatherResponse(BaseModel):
     """Combined outdoor AQI and weather payload."""
 
     aqi: AqiSummary
+    aqi_observed_at: int | None = None
     weather: WeatherData | Dict[str, Any]
-
 
 class ControlRequest(BaseModel):
     """Strict base for request bodies that control devices or configuration."""

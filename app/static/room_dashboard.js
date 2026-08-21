@@ -4,13 +4,9 @@ const REFRESH_INTERVAL = 10; // seconds between refreshes
 const FAN_SPEED_AUTO = -1; // Auto speed value
 
 // Optimistic UI: when the user changes a unit we reflect the intended state
-// immediately rather than waiting for a poll. The backend re-reads the AE200
-// right after issuing the command, and on real hardware that read-back can
-// still show the old state, so /status would otherwise stay stale until a
-// later poll settles. We hold the optimistic state until a poll confirms it
-// (the common case, within ~one REFRESH_INTERVAL) or until this backstop
-// elapses — covering a silently-dropped command (up to ~one runner cron cycle)
-// without pinning a wrong state indefinitely. Keyed by device_id.
+// immediately rather than waiting for a poll. The backend verifies the AE-200
+// read-back before returning success. We hold the optimistic state until a poll
+// confirms it or until this backstop elapses. Keyed by device_id.
 const PENDING_RECONCILE_MS = 60000;
 const pendingChanges = {};   // device_id -> {drive, fan_speed, expiresAt}
 const lastDeviceSpeed = {};  // device_id -> last known fan speed (for the "was …" note)
@@ -71,6 +67,26 @@ async function setFanSpeed(device_id, fan_speed) {
         { device_id, fan_speed },
         'Error setting fan speed.'
     );
+}
+
+/** Set drive and fan speed through one verified AE-200 operation. */
+async function setFcuState(deviceId, speed) {
+    return apiCall(
+        '/api/v1/set_fcu_state',
+        fcuStateRequestBody(deviceId, speed),
+        'The AE-200 did not confirm the requested state.'
+    );
+}
+
+function fcuStateRequestBody(deviceId, speed) {
+    const body = {
+        device_id: deviceId,
+        drive: speed === 0 ? 0 : 1,
+    };
+    if (speed !== 0) {
+        body.fan_speed = speed;
+    }
+    return body;
 }
 
 /**
@@ -167,21 +183,9 @@ function handleSpeedButton(button) {
         refreshStatus();
     };
 
-    // Off button: turn off motor
-    if (speed === 0) {
-        setDrive(deviceId, 0)
-            .then(handleSuccess)
-            .catch(handleError);
-    }
-    // Speed buttons: set speed (and turn on motor if it's off)
-    else {
-        Promise.all([
-            setDrive(deviceId, 1),
-            setFanSpeed(deviceId, speed)
-        ])
-            .then(handleSuccess)
-            .catch(handleError);
-    }
+    setFcuState(deviceId, speed)
+        .then(handleSuccess)
+        .catch(handleError);
 }
 
 /**
@@ -984,6 +988,7 @@ if (typeof module !== 'undefined' && module.exports) {
         setControlAvailability,
         createRoomStatusRefresher,
         createStatusRefresher,
+        fcuStateRequestBody,
         refreshRoomStatus,
         requestRoomStatus,
         roomControlEndpoint,

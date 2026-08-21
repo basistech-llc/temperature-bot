@@ -16,6 +16,7 @@ from playwright.sync_api import sync_playwright, expect
 from werkzeug.serving import make_server
 
 from conftest import test_database_conn_with_test_data, skip_on_github  # noqa: F401,F811  # pylint: disable=unused-import
+from app import ae200
 from app.main import app
 
 logger = logging.getLogger(__name__)
@@ -243,6 +244,96 @@ def test_aqi_chart_first_render_and_selected_axis(
                 if axis["name"] != "AQI"
             )
             assert layout["selected"]["AQI"] is True
+            assert not errors
+    finally:
+        server.shutdown()
+        server.server_close()
+        server_thread.join(timeout=2)
+
+
+@pytest.mark.skipif(SKIP_BROWSER_TEST, reason="SKIP_BROWSER_TEST is set")
+def test_fcu_high_uses_one_atomic_control_request(
+    test_database_conn_with_test_data,
+):  # noqa: F811
+    """One High click must not race separate drive and fan-speed requests."""
+    conn, device_id, _ = test_database_conn_with_test_data
+    conn.execute(
+        "UPDATE devices SET device_type='FCU', ae200_device_id=10 WHERE device_id=?",
+        (device_id,),
+    )
+    conn.commit()
+    ae200.set_fcu_state(10, drive=0, fan_speed=1)
+
+    server = make_server("127.0.0.1", 0, app, threaded=True)
+    server_thread = threading.Thread(target=server.serve_forever, daemon=True)
+    server_thread.start()
+    base_url = f"http://127.0.0.1:{server.server_port}"
+
+    try:
+        wait_for_server(f"{base_url}/health", timeout=20)
+        with sync_playwright() as playwright, playwright.chromium.launch(
+            headless=True
+        ) as browser:
+            page = browser.new_page()
+            control_requests = []
+            page.on(
+                "request",
+                lambda request: control_requests.append(urlparse(request.url).path)
+                if urlparse(request.url).path
+                in {
+                    "/api/v1/set_fcu_state",
+                    "/api/v1/set_drive",
+                    "/api/v1/set_fan_speed",
+                }
+                else None,
+            )
+            page.goto(base_url, wait_until="domcontentloaded")
+            high = page.locator(f"#radio-{device_id}-4")
+            expect(high).to_be_visible()
+            with page.expect_response(
+                lambda response: urlparse(response.url).path
+                == "/api/v1/set_fcu_state",
+                timeout=15_000,
+            ) as response_info:
+                high.click()
+
+            assert response_info.value.ok
+            assert control_requests == ["/api/v1/set_fcu_state"]
+            assert ae200.get_device_info(10)["Drive"] == "ON"
+            assert ae200.get_device_info(10)["FanSpeed"] == "HIGH"
+    finally:
+        server.shutdown()
+        server.server_close()
+        server_thread.join(timeout=2)
+
+
+@pytest.mark.skipif(SKIP_BROWSER_TEST, reason="SKIP_BROWSER_TEST is set")
+@skip_on_github
+def test_ae200_diagnostics_first_render_has_live_rows_and_chart(
+    test_database_conn_with_test_data,
+):  # noqa: F811  # pylint: disable=unused-argument
+    """The diagnostics JS must render controller rows without browser errors."""
+    ae200.set_fcu_state(10, drive=1, fan_speed=4)
+    server = make_server("127.0.0.1", 0, app, threaded=True)
+    server_thread = threading.Thread(target=server.serve_forever, daemon=True)
+    server_thread.start()
+    base_url = f"http://127.0.0.1:{server.server_port}"
+    try:
+        wait_for_server(f"{base_url}/health", timeout=20)
+        with sync_playwright() as playwright, playwright.chromium.launch(
+            headless=True
+        ) as browser:
+            page = browser.new_page()
+            errors = []
+            page.on("pageerror", lambda error: errors.append(str(error)))
+            page.goto(f"{base_url}/ae200", wait_until="networkidle")
+            expect(page.locator("#ae200-status-table tbody tr")).to_have_count(
+                len(ae200.get_devices())
+            )
+            expect(page.locator("#ae200-command-table tbody tr").first).to_contain_text(
+                "Drive=ON"
+            )
+            assert page.locator("#ae200-performance-chart canvas").count() == 1
             assert not errors
     finally:
         server.shutdown()

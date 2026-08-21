@@ -23,7 +23,7 @@ CREATE TABLE IF NOT EXISTS changelog (
                     new_value TEXT,
                     agent TEXT,
                     comment TEXT
-                , ipaddr text);
+                , ipaddr text, action TEXT NOT NULL DEFAULT 'legacy');
 CREATE TABLE IF NOT EXISTS aqi (
     logtime INTEGER NOT NULL,
     aqi INTEGER NOT NULL
@@ -116,6 +116,33 @@ CREATE INDEX IF NOT EXISTS idx_alert_events_slack_outbox
 CREATE UNIQUE INDEX IF NOT EXISTS idx_alerts_active
     ON alerts (device_id, alert_type)
     WHERE end_time IS NULL;
+CREATE TABLE IF NOT EXISTS ae200_command_log (
+    command_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    requested_at_ms INTEGER NOT NULL,
+    completed_at_ms INTEGER NOT NULL,
+    instance_id TEXT NOT NULL,
+    client_id TEXT NOT NULL,
+    ae200_device_id TEXT NOT NULL,
+    request_json TEXT NOT NULL CHECK (json_valid(request_json)),
+    outcome TEXT NOT NULL CHECK (outcome IN ('confirmed', 'simulated', 'error')),
+    response_summary TEXT NOT NULL,
+    response_json TEXT CHECK (response_json IS NULL OR json_valid(response_json)),
+    error_type TEXT,
+    error_message TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_ae200_command_log_requested_at
+ON ae200_command_log(requested_at_ms DESC, command_id DESC);
+CREATE TABLE IF NOT EXISTS ae200_notifications (
+    notification_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    observed_at_ms INTEGER NOT NULL,
+    instance_id TEXT NOT NULL,
+    ae200_group_id TEXT,
+    ae200_address TEXT,
+    values_json TEXT NOT NULL CHECK (json_valid(values_json)),
+    CHECK (ae200_group_id IS NOT NULL OR ae200_address IS NOT NULL)
+);
+CREATE INDEX IF NOT EXISTS idx_ae200_notifications_observed_at
+ON ae200_notifications(observed_at_ms DESC, notification_id DESC);
 CREATE TABLE IF NOT EXISTS performance_samples (
     sample_id INTEGER PRIMARY KEY AUTOINCREMENT,
     observed_at_ms INTEGER NOT NULL,

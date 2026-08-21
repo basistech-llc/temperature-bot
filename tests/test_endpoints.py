@@ -1,7 +1,4 @@
-"""
-test Flask endpoints
-"""
-
+"""Test Flask endpoints."""
 import logging
 import sqlite3
 import os
@@ -10,7 +7,8 @@ import time
 from unittest.mock import patch
 
 import pytest
-from conftest import flask_test_client, skip_on_github  # noqa: F401  # pylint: disable=unused-import
+# Pytest discovers the imported fixture even though Python code does not call it.
+from conftest import flask_test_client, skip_on_github  # pylint: disable=unused-import
 from helpers.data_factories import DeviceTestData
 from helpers.mock_helpers import MockHelper
 
@@ -302,8 +300,7 @@ def test_weather_endpoint(
     assert response.status_code == 200
     response_json = response.json
     logging.info(" /weather: %s", response_json)
-    assert "aqi" in response_json
-    assert "weather" in response_json
+    assert {"aqi", "aqi_observed_at", "weather"} <= response_json.keys()
 
 
 @patch("app.weather.get_weather_data")

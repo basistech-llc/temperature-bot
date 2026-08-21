@@ -108,12 +108,34 @@ function series(name, data) {
   };
 }
 
-function renderPerformanceChart() {
-  if (!performanceChart) return;
-  const samples = filteredSamples();
+function buildPerformanceOption(samples) {
   const ae200 = (sample) => sample.sample_type === "ae200_request";
   const icmp = (sample) => sample.sample_type === "icmp_ping";
   const tcp = (sample) => sample.sample_type === "tcp_reject";
+  const ae200Samples = samples.filter(ae200);
+  return {
+    tooltip: { trigger: "axis" },
+    legend: { top: 0 },
+    grid: { top: 80, left: 75, right: 30, bottom: 80 },
+    xAxis: { type: "time" },
+    yAxis: { type: "value", name: "milliseconds", min: 0 },
+    dataZoom: [{ type: "inside" }, { type: "slider" }],
+    series: [
+      series("AE-200 total", points(samples, ae200, "total_ms")),
+      series("AE-200 total p50 (60 samples)", rollingPercentile(ae200Samples, "total_ms", 0.5)),
+      series("AE-200 total p95 (60 samples)", rollingPercentile(ae200Samples, "total_ms", 0.95)),
+      series("AE-200 lock wait", points(samples, ae200, "lock_wait_ms")),
+      series("WebSocket connect", points(samples, ae200, "connect_ms")),
+      series("AE-200 response", points(samples, ae200, "response_ms")),
+      series("ICMP median", points(samples, icmp, "icmp_median_ms")),
+      series("TCP reject", points(samples, tcp, "connect_ms")),
+    ],
+  };
+}
+
+function renderPerformanceChart() {
+  if (!performanceChart) return;
+  const samples = filteredSamples();
   const failures = samples.filter((sample) => !sample.success).length;
   const accepted = samples.filter(
     (sample) => sample.sample_type === "tcp_reject" && sample.outcome === "connected",
@@ -123,35 +145,7 @@ function renderPerformanceChart() {
     `${accepted} unexpected accepted TCP connections` +
     `${performanceTruncated ? "; result limit reached." : "."}`;
 
-  const ae200Samples = samples.filter(ae200);
-
-  performanceChart.setOption(
-    {
-      tooltip: { trigger: "axis" },
-      legend: { top: 0 },
-      grid: { top: 80, left: 75, right: 30, bottom: 80 },
-      xAxis: { type: "time" },
-      yAxis: { type: "value", name: "milliseconds", min: 0 },
-      dataZoom: [{ type: "inside" }, { type: "slider" }],
-      series: [
-        series("AE-200 total", points(samples, ae200, "total_ms")),
-        series(
-          "AE-200 total p50 (60 samples)",
-          rollingPercentile(ae200Samples, "total_ms", 0.5),
-        ),
-        series(
-          "AE-200 total p95 (60 samples)",
-          rollingPercentile(ae200Samples, "total_ms", 0.95),
-        ),
-        series("AE-200 lock wait", points(samples, ae200, "lock_wait_ms")),
-        series("WebSocket connect", points(samples, ae200, "connect_ms")),
-        series("AE-200 response", points(samples, ae200, "response_ms")),
-        series("ICMP median", points(samples, icmp, "icmp_median_ms")),
-        series("TCP reject", points(samples, tcp, "connect_ms")),
-      ],
-    },
-    { notMerge: true },
-  );
+  performanceChart.setOption(buildPerformanceOption(samples), { notMerge: true });
 }
 
 function loadPerformanceSamples() {
@@ -187,8 +181,10 @@ function datesChanged() {
 
 if (typeof document !== "undefined") {
   document.addEventListener("DOMContentLoaded", () => {
+    const chartElement = document.getElementById("performance-chart");
+    if (!chartElement) return;
     performanceChart = echarts.init(
-      document.getElementById("performance-chart"),
+      chartElement,
     );
     document
       .getElementById("performance-day")
@@ -216,5 +212,5 @@ if (typeof document !== "undefined") {
 }
 
 if (typeof module !== "undefined") {
-  module.exports = { percentile, rollingPercentile };
+  module.exports = { buildPerformanceOption, percentile, rollingPercentile };
 }

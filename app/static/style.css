@@ -1757,6 +1757,27 @@ li.pure-menu-item > .rules-master-toggle {
     padding: 0 1em;
 }
 
+.ae200-page {
+  margin: 1rem 5%;
+}
+
+.ae200-page .table-scroll {
+  overflow-x: auto;
+}
+
+.ae200-page pre {
+  max-height: 24rem;
+  min-width: 24rem;
+  overflow: auto;
+  white-space: pre-wrap;
+}
+
+.performance-chart,
+#ae200-performance-chart {
+  height: 32rem;
+  width: 100%;
+}
+
 .performance-filters {
     display: flex;
     flex-wrap: wrap;
