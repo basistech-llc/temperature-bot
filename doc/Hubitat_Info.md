@@ -345,7 +345,7 @@ make every-minute
 ```
 
 ```bash
-poetry run python -m app.hubitat --list-temperatures
+uv run --locked python -m app.hubitat --list-temperatures
 ```
 
 `--list-devices` is an alias for the same output despite its name: both filter

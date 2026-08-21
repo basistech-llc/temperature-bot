@@ -105,10 +105,11 @@ HTTPS clone if the instance only ever pulls.
 make install-ubuntu    # or install-macos
 ```
 
-This installs pipx, Poetry (pinned by `POETRY_VERSION`), and the in-project
-`.venv`. It also runs `playwright install --with-deps`, which pulls Chromium and
-a large apt dependency set — a server instance does not need a browser, so
-consider skipping that step by hand on a host where it matters.
+This installs pipx, uv (pinned by `UV_VERSION`), and the in-project `.venv`
+from the committed lockfile. It also runs `playwright install --with-deps`,
+which pulls Chromium and a large apt dependency set — a server instance does
+not need a browser, so consider skipping that step by hand on a host where it
+matters.
 
 ### 4. Install Flyway
 
@@ -418,7 +419,7 @@ before the migration.
 2. Preserve the failed database for diagnosis; do not overwrite it.
 3. Restore the complete pre-migration backup from `<DEPLOY_BACKUP_DIR>`,
    including its Flyway history.
-4. Check out the matching pre-migration revision and `poetry install`.
+4. Check out the matching pre-migration revision and run `uv sync --locked --no-dev`.
 5. `flyway validate` against the restored database.
 6. Restart the service and the collector.
 

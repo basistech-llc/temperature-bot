@@ -14,6 +14,7 @@ activate
 config.yaml
 coverage.xml
 debug_page*
+dist/
 image/
 node_modules
 secrets.json

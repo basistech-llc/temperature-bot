@@ -13,7 +13,7 @@ SQLite; and exposes server-rendered pages plus `/api/v1/*` JSON endpoints.
 - Flask and Jinja2
 - SQLite for local development and production
 - Flyway for SQL schema migrations
-- Poetry 2.1.3 for Python dependency management
+- uv 0.11.26 for Python dependency management
 - Ruff, Pylint, djlint, ESLint, mypy, pytest, and Playwright
 
 ## Project Structure
@@ -52,7 +52,7 @@ temperature-bot/
 ## Required Workflow
 
 Use the Makefile for setup, checks, tests, and local runs. Do not bypass it
-with direct `poetry run pytest` or ad hoc command sequences unless you are
+with direct `uv run pytest` or ad hoc command sequences unless you are
 debugging a Makefile target itself.
 
 ```bash

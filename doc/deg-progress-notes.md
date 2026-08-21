@@ -88,7 +88,7 @@ open tabs here:
 
 - **Testing**: pytest with `AE200_SIMULATOR=1` environment variable
 - **Linting**: ruff, mypy, pylint configured in `pyproject.toml`
-- **Dependencies**: Poetry-managed (Python 3.12+)
+- **Dependencies**: uv-managed (Python 3.12+)
 
 The system runs continuously: `runner.py` collects data every minute, rules adjust fan speeds based on AQI/time, and the web interface provides monitoring and manual control.
 
@@ -100,7 +100,7 @@ The system runs continuously: `runner.py` collects data every minute, rules adju
    ```bash
    make install-macos  # or install-ubuntu on Linux
    ```
-   This installs Poetry, creates a virtual environment, and installs all dependencies.
+   This installs uv, creates a virtual environment, and installs all dependencies from `uv.lock`.
 
 
 2. **Connect**
