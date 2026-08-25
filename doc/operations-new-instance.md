@@ -3,7 +3,8 @@
 How to bring up a new Temperature Bot deployment — a fresh host, or an
 additional observation instance on the shared BasisTech server. For schema and
 migration mechanics see `doc/sql-migrations.md`; for the AE-200 probe timer see
-`doc/performance-monitoring.md`.
+`doc/performance-monitoring.md`. For the read-only inventory of database paths
+actually installed on `slg1`, see `doc/DATABASES.md`.
 
 Most steps here are manual. `doc/tech-debt.md` and GitHub issues #31, #76, and
 #180 track automating them. The "Not yet automated" section at the end lists

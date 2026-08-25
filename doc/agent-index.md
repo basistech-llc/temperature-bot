@@ -36,6 +36,9 @@ surface quickly.
 - `doc/operations-new-instance.md`: instance inventory, new-deployment runbook,
   Flyway-before-first-start ordering, per-instance deploy overrides, and
   rollback.
+- `doc/DATABASES.md`: live database-to-consumer inventory for `slg1`, including
+  runtime paths, historical copies, backups, symlink aliases, and SQLite safety
+  rules.
 - `doc/rooms-implementation-review.md`: room dashboard debt, open room issues,
   and Hickory/Kitchen dashboard generalization notes.
 - `doc/rooms-implementation-plan.md`: approved FCU-owned room model, grouped
