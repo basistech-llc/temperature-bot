@@ -66,9 +66,9 @@ edge, but shared keys should be centralized instead of repeated inline.
 ## Operations
 
 The periodic runner is `bin/runner.py`; production cron/systemd entries run it
-against `/var/db/temperature-bot.db`. The `make deploy` target is intended for
-the production host only. It pulls code, installs dependencies, validates
-Flyway migrations, backs up the production SQLite DB, applies pending
+against `/var/db/temperature_bot/temperature-bot.db`. The `make deploy` target
+is intended for the production host only. It pulls code, installs dependencies,
+validates Flyway migrations, backs up the production SQLite DB, applies pending
 migrations, and validates again.
 
 To stand up a new instance, or an additional observation instance on the shared

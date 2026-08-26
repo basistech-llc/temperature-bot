@@ -20,10 +20,10 @@ rather than a canonical record, and is marked unverified where it appears.
 
 | Name | Port | Service unit | App dir | Runs as | `DB_PATH` |
 |---|---|---|---|---|---|
-| `air.basistech.net` | 8100 | `air_basistech_net.service` | `/home/air/temperature-bot` | `simsong` | `/var/db/temperature-bot.db` |
-| staging | 8101 | `air-stage_basistech_net.service` | `/home/air-stage/temperature-bot` | `simsong` | `/home/air-stage/var/db/temperature-bot.db` |
-| `slg1.basistech.net` | 8003 | `slg1_basistech_net.service` | `/home/simsong/temperature-bot` | `simsong` | selectable — see below |
-| `deg1.basistech.net` | 8004 | `deg1_basistech_net.service` | `/home/deg/temperature-bot` | `deg` | selectable — see below |
+| `air.basistech.net` | 8100 | `air_basistech_net.service` | `/home/air/temperature-bot` | `temperature_bot` | `/var/db/temperature_bot/temperature-bot.db` |
+| staging | 8101 | `air-stage_basistech_net.service` | `/home/air-stage/temperature-bot` | `temperature_bot` | `/home/air-stage/var/db/temperature-bot.db` |
+| `slg1.basistech.net` | 8003 | `slg1_basistech_net.service` | `/home/simsong/temperature-bot` | `simsong` | `/home/simsong/temperature-bot/var/db/temperature-bot.db` |
+| `deg1.basistech.net` | 8004 | `deg1_basistech_net.service` | `/home/deg/temperature-bot` | `deg` | `/home/deg/var/db/temperature-bot.db` |
 
 Ports, app directories, service accounts, and `DB_PATH` in this table are read
 from the checked-in unit files in `etc/*.service`, which must be copied to
@@ -36,20 +36,19 @@ resource, and CPU and memory pressure from one instance is felt by all of them �
 including production. Deploying to a "test" instance is not free of production
 risk.
 
-`slg1` and `deg1` are parallel developer instances — one playground each, `slg1`
-for Simson and `deg1` for David. They differ only in DNS name, port, service
-account, and home directory. Neither is more authoritative or more "staging"
-than the other, and neither is inherently a sandbox: each selects its database
-through `DB_PATH` in its own unit file, and can point at the live production
-database or at a private copy. See "Choosing which database a developer instance
-uses" below.
+`slg1` and `deg1` are parallel developer instances — one playground each,
+`slg1` for Simson and `deg1` for David. They differ in DNS name, port, service
+account, home directory, and private database path. Neither is more
+authoritative or more "staging" than the other. Do not point either at the live
+production database.
 
 Consequences worth internalizing before touching anything:
 
 - **Read the installed unit before assuming which database an instance is on.**
   `/etc/systemd/system/<unit>` is what runs; the copy in `etc/` is only what was
   last committed, and the two drift. An instance pointed at
-  `/var/db/temperature-bot.db` is another front end on live production data.
+  `/var/db/temperature_bot/temperature-bot.db` is another front end on live
+  production data.
 - **Pointing at production is not read-only.** The web app writes — changelog
   entries, rules-disable timers, device metadata — and SQLite in WAL mode needs
   write access to the database and its directory even to read.
@@ -157,7 +156,7 @@ Or seed from a production snapshot instead, which carries its Flyway history
 with it:
 
 ```bash
-sqlite3 /var/db/temperature-bot.db ".backup '<DB_PATH>'"
+sqlite3 /var/db/temperature_bot/temperature-bot.db ".backup '<DB_PATH>'"
 ```
 
 > **Order matters.** If the Flask app or the runner starts against a missing or
@@ -252,32 +251,31 @@ Then load the site through nginx and confirm the dashboard renders. Watch CPU
 and memory for a few minutes — the shared machine hosts several instances, and
 worker counts are generous.
 
-## Choosing which database a developer instance uses
+## Refreshing a developer instance's private database
 
-`slg1` and `deg1` each select their database with `DB_PATH` in their unit file.
-Switching between the live production database and a private copy is routine:
-production data makes a change realistic, a private copy makes it safe. This
-section is the procedure for both instances — substitute the account, port, and
-unit name from the inventory table.
+`slg1` and `deg1` each use the private database named by `DB_PATH` in their unit
+file. Refresh that copy from a consistent production snapshot when realistic
+data is needed. This procedure applies to both instances; substitute the
+account, port, and unit name from the inventory table.
 
 ### 1. Get a database to point at
 
-Skip this when switching *to* production. To take a private copy, run this on
-the server:
+To take a private copy for `deg1`, run this on the server:
 
 ```bash
-mkdir -p /home/deg/temperature-bot/var/db
-sqlite3 /var/db/temperature-bot.db \
-  ".backup '/home/deg/temperature-bot/var/db/temperature-bot.db'"
+mkdir -p /home/deg/var/db
+sqlite3 /var/db/temperature_bot/temperature-bot.db \
+  ".backup '/home/deg/var/db/temperature-bot.db'"
 ```
 
 `.backup` is the right tool here: production is written every minute, and it
 takes a consistent snapshot where `cp` can capture a torn page.
 
-If reading `/var/db/temperature-bot.db` requires `sudo`, `chown` the copy to the
-service account afterwards. A root-owned copy leaves the instance unable to
-write it, which surfaces as the permission failure described below rather than
-as anything mentioning ownership.
+If reading `/var/db/temperature_bot/temperature-bot.db` requires `sudo`, run the
+snapshot as the target service account or `chown` the copy afterwards. A
+root-owned copy leaves the instance unable to write it, which surfaces as the
+permission failure described below rather than as anything mentioning
+ownership.
 
 `make fetch-dev-db` also produces this layout, but it is built for a developer
 laptop — it rsyncs `air.basistech.net:/var/db/` (the same machine, when run on
@@ -293,8 +291,8 @@ Edit the instance's unit in `etc/` so the change is versioned rather than only
 live, then install it:
 
 ```bash
-# Edit etc/deg1_basistech_net.service so exactly one DB_PATH line is active:
-#   Environment="DB_PATH=/home/deg/temperature-bot/var/db/temperature-bot.db"
+# Verify etc/deg1_basistech_net.service names the private DB_PATH:
+#   Environment="DB_PATH=/home/deg/var/db/temperature-bot.db"
 sudo cp -f etc/deg1_basistech_net.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl restart deg1_basistech_net.service
@@ -385,7 +383,7 @@ at production:
 ```bash
 make DEPLOY_HOSTNAME="$(hostname)" \
      DEPLOY_APP_DIR=/home/deg/temperature-bot \
-     DEPLOY_DB=/home/deg/temperature-bot/var/db/temperature-bot.db \
+     DEPLOY_DB=/home/deg/var/db/temperature-bot.db \
      DEPLOY_BACKUP_DIR=/home/deg/temperature-bot-backups \
      deploy
 ```
@@ -395,11 +393,11 @@ unconditionally pass, so check `DEPLOY_DB` twice before running it. It must name
 the database the instance's *installed* unit actually uses — confirm with
 `systemctl show -p Environment <unit>` rather than reading the copy in `etc/`.
 The path above is the private-copy case. Migrating a database the instance does
-not read accomplishes nothing, and an instance currently pointed at
-`/var/db/temperature-bot.db` would instead have `make deploy` migrate the
-production database, which is human-authorized and human-executed only. A
-dedicated per-instance target with fixed values would be safer, and is listed
-below as missing automation.
+not read accomplishes nothing, and an instance pointed at
+`/var/db/temperature_bot/temperature-bot.db` would instead have `make deploy`
+migrate the production database, which is human-authorized and human-executed
+only. A dedicated per-instance target with fixed values would be safer, and is
+listed below as missing automation.
 
 `make deploy-stage` is the only fully automated non-production path, and its
 account, paths, and service name are hardcoded to `air-stage`.
@@ -447,8 +445,6 @@ Known gaps, so they can be planned rather than rediscovered:
 - **Cron entries** exist only as Makefile comments.
 - **No per-instance deploy targets.** `make deploy` is gated to `slg1` with
   production paths; `make deploy-stage` is hardcoded to `air-stage`.
-- **Inconsistent service accounts and paths** across the checked-in units.
-  Issue #76 proposes a single deploy user.
-- **Backups use `cp`** on a live, continuously written SQLite database, rather
-  than `sqlite3 .backup`. `deploy-stage` does this correctly; `deploy-flyway`
-  does not.
+- **Installed-unit drift.** The checked-in units now separate production,
+  staging, and developer databases, but nothing validates that the installed
+  units match them. Issue #76 tracks the remaining service-account work.

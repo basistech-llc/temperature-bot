@@ -100,8 +100,11 @@ flyway \
 1. Pulls the latest code in `/home/air/temperature-bot`.
 2. Synchronizes production dependencies from `uv.lock`.
 3. Validates already-applied migrations against
-   `/var/db/temperature-bot.db`, allowing only migrations that are pending.
-4. Copies the DB to `/var/db/temperature-bot-backups/temperature-bot.<UTC timestamp>.db`.
+   `/var/db/temperature_bot/temperature-bot.db`, allowing only migrations that
+   are pending.
+4. Creates a consistent SQLite snapshot in
+   `/var/db/temperature-bot-backups/temperature-bot.<UTC timestamp>.db` and
+   validates it with `PRAGMA quick_check`.
 5. Applies pending migrations with `-baselineOnMigrate=true`.
 6. Runs `flyway validate` again.
 
@@ -124,12 +127,12 @@ the staging service, atomically replaces its database, and restarts the service.
 The staging Gunicorn service listens on `127.0.0.1:8101` and never migrates or
 writes through the production database.
 
-The current deploy target does not stop the every-minute writer and uses a
-filesystem copy rather than SQLite's consistent backup API. Until GitHub issues
-tracking those deploy safeguards are resolved, a rooms migration must be
-performed in a maintenance window: stop the cron runner, verify no runner is
-active, create a consistent `sqlite3 ... .backup` snapshot, run the migration
-and smoke checks, and only then restart the runner.
+The current deploy target does not stop the every-minute writer. Its preflight
+snapshot is consistent, but the migration itself still needs a maintenance
+window. Until GitHub issues tracking that deploy safeguard are resolved, a
+rooms migration must be performed in a maintenance window: stop the cron
+runner, verify no runner is active, create a consistent `sqlite3 ... .backup`
+snapshot, run the migration and smoke checks, and only then restart the runner.
 
 To roll back a room migration, stop all writers again, preserve the failed
 database for diagnosis, restore the complete pre-migration SQLite backup
