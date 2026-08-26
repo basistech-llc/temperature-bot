@@ -16,7 +16,7 @@
 # Environment variables:
 # DB_PATH - Environment variable to use for local development.
 #           Uses var/db/temperature-bot.db if not set (note this is a relative path)
-#           For installation, cron & systemd use /var/db/temperature-bot.db
+#           For installation, cron & systemd use /var/db/temperature_bot/temperature-bot.db
 #
 # DEV_DB - your development DB. typically var/db/temperature-bot
 # AE200_SIMULATOR - set to 1 for `make local-dev` -
@@ -35,7 +35,7 @@ FLYWAY_VALIDATE_TEMP := /tmp/temperature-bot-flyway-validate.db
 
 # Remote host and paths used by fetch-dev-db (override as needed for your environment)
 FETCH_HOST              ?= air.basistech.net
-FETCH_REMOTE_DB         ?= /var/db/temperature-bot.db
+FETCH_REMOTE_DB         ?= /var/db/temperature_bot/temperature-bot.db
 FETCH_REMOTE_BACKUP_DIR ?= /var/db/temperature-bot-backups
 FETCH_REMOTE_CONFIG     ?= /home/air/temperature-bot/temperature-bot-config.yaml
 
@@ -44,7 +44,7 @@ FETCH_REMOTE_CONFIG     ?= /home/air/temperature-bot/temperature-bot-config.yaml
 DEPLOY_FLYWAY    ?= Y
 DEPLOY_HOSTNAME   ?= slg1
 DEPLOY_APP_DIR    ?= /home/air/temperature-bot
-DEPLOY_DB         ?= /var/db/temperature-bot.db
+DEPLOY_DB         ?= /var/db/temperature_bot/temperature-bot.db
 DEPLOY_BACKUP_DIR ?= /var/db/temperature-bot-backups
 STAGE_APP_DIR     ?= /home/air-stage/temperature-bot
 STAGE_DB_DIR      ?= /home/air-stage/var/db
@@ -337,11 +337,11 @@ outdated: $(REQ) ## Report outdated Python and CDN dependencies
 ## Cron targets
 ## Here mostly for testing. The actual cron entries are:
 ##
-##  * * * * * cd /home/air/temperature-bot ; DB_PATH=/var/db/temperature-bot.db TEMPERATURE_BOT_INSTANCE=production PERFORMANCE_CLIENT_ID=minute-runner .venv/bin/python -m bin.runner --loglevel INFO >> /home/air/temperature-bot.log 2>&1
+##  * * * * * cd /home/air/temperature-bot ; DB_PATH=/var/db/temperature_bot/temperature-bot.db TEMPERATURE_BOT_INSTANCE=production PERFORMANCE_CLIENT_ID=minute-runner .venv/bin/python -m bin.runner --loglevel INFO >> /home/air/temperature-bot.log 2>&1
 ##
 ##
-## @daily    cd /home/air/temperature-bot ; sleep 15 ; DB_PATH=/var/db/temperature-bot.db .venv/bin/python -m bin.runner --loglevel INFO --daily  >> /home/air/temperature-bot-daily.log 2>&1
-## @hourly   cd /home/air/temperature-bot ; sleep 30 ; DB_PATH=/var/db/temperature-bot.db .venv/bin/python -m bin.runner --loglevel INFO --aqi    >> /home/air/temperature-bot-hourly.log 2>&1
+## @daily    cd /home/air/temperature-bot ; sleep 15 ; DB_PATH=/var/db/temperature_bot/temperature-bot.db .venv/bin/python -m bin.runner --loglevel INFO --daily  >> /home/air/temperature-bot-daily.log 2>&1
+## @hourly   cd /home/air/temperature-bot ; sleep 30 ; DB_PATH=/var/db/temperature_bot/temperature-bot.db .venv/bin/python -m bin.runner --loglevel INFO --aqi    >> /home/air/temperature-bot-hourly.log 2>&1
 ##
 ## Question - should we just have cron do a 'make daily' and 'make every-minute' ?
 
@@ -355,7 +355,7 @@ daily: $(REQ) ## Run the daily data collection runner
 	$(PYTHON) -m bin.runner --daily
 
 monthly-backup: ## Back up the production database with a dated copy
-	sudo cp /var/db/temperature-bot.db /var/db/temperature-bot.backup.$$(date -I).db
+	sudo /bin/cp -f $(DEPLOY_DB) $(DEPLOY_BACKUP_DIR)/temperature-bot.$$(date -I).db
 
 .PHONY: every-minute performance-probe daily monthly-backup
 
