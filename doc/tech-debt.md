@@ -94,7 +94,7 @@ All commands are run through the Makefile.
 | Rules | `make pytest`, deterministic replay, simulator runner tests | Compare legacy and new plans in shadow mode; independently verify Mitsubishi state during a supervised cutover |
 
 Tests must use temporary/Flyway-created databases or a read-only production
-copy. Do not migrate or mutate `var/db/temperature-bot.db` as part of routine
+copy. Do not migrate or mutate `var/db/temperature_bot/temperature-bot.db` as part of routine
 validation.
 
 ### Deployment places and order

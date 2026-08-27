@@ -66,7 +66,7 @@ To validate an existing database manually after it has been baselined or migrate
 ```bash
 flyway \
   -locations=filesystem:etc/flyway/sql \
-  -url=jdbc:sqlite:var/db/temperature-bot.db \
+  -url=jdbc:sqlite:var/db/temperature_bot/temperature-bot.db \
   validate
 ```
 
@@ -77,7 +77,7 @@ Run migrations (use `make migrate-db` for the dev database, or `make deploy` for
 ```bash
 flyway \
   -locations=filesystem:etc/flyway/sql \
-  -url=jdbc:sqlite:var/db/temperature-bot.db \
+  -url=jdbc:sqlite:var/db/temperature_bot/temperature-bot.db \
   -baselineOnMigrate=true \
   migrate
 ```

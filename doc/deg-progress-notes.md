@@ -118,7 +118,7 @@ If it pulls the DB successfully, your connection is good.
    ```bash
    make make-dev-db
    ```
-   Creates a fresh `var/db/temperature-bot.db` from the schema.
+   Creates a fresh `var/db/temperature_bot/temperature-bot.db` from the schema.
 
    Or, and usually preferred, clone the live database
 
@@ -167,14 +167,14 @@ Note: set `AQICN_SIMULATOR=1` to avoid a live AQICN API call.
 
 **Environment Variables**:
 
-- `DB_PATH`: Database file path. The Makefile defaults it to `var/db/temperature-bot.db` via
+- `DB_PATH`: Database file path. The Makefile defaults it to `var/db/temperature_bot/temperature-bot.db` via
   `export DB_PATH ?= ...`, so the `make` targets already have it set. Only set it explicitly to point
   at a *different* DB, or when running the app/flask/python directly (bypassing make).
 - `AE200_SIMULATOR`: Set to `1` to use simulated AE200 devices instead of real hardware
 - `TEMPERATURE_BOT_CONFIG`: Path to config YAML (default: `temperature-bot-config.yaml` in repo root)
 - `LOG_LEVEL`: Logging level (DEBUG, INFO, etc.)
 
-**Note**: For the default DB location, the `DB_PATH=var/db/temperature-bot.db` prefix on `make`
+**Note**: For the default DB location, the `DB_PATH=var/db/temperature_bot/temperature-bot.db` prefix on `make`
 commands is redundant — the Makefile already exports that default (`Makefile:23`). Prefixing it
 anyway is harmless; it just re-sets the same value.
 
@@ -184,10 +184,14 @@ To get a copy of the production database with real data:
 ```bash
 make fetch-dev-db
 ```
-This rsyncs (over Tailscale/SSH) from the server (`air.basistech.net`, aka `slg1.basistech.net`)
-and shows row-count stats. It pulls down **two** things:
-- the database → `var/db/`
+This streams a read-only SQLite dump over Tailscale/SSH from the server
+(`air.basistech.net`, aka `slg1.basistech.net`), applies pending Flyway
+migrations, and shows row-count stats. It pulls down **two** things:
+- the database → `var/db/temperature_bot/temperature-bot.db`
 - `temperature-bot-config.yaml` (with production secrets) → repo root
+
+Before fetching, an existing `var/db/temperature_bot` directory is moved to a
+timestamped directory under `var/db/backups`.
 
 So this single step also covers the "Configure" step above — no separate config copy needed.
 SSH normally uses your key; if prompted for a password, it's in Bitwarden under `slg1.basistech.net`.

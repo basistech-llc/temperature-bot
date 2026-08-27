@@ -36,6 +36,17 @@ is clearly for Codex, such as `Codex AI Assistant` or an address containing
 available, tell the user before committing and ask whether to use the configured
 default signing key or make an unsigned commit.
 
+## Release Notes
+
+Every release must update `doc/RELEASE_NOTES.md` in the same branch or pull
+request as the release. Before changing the version or publishing a release,
+review the commits since the previous release and summarize all meaningful
+user-facing, operational, architectural, dependency, and developer-workflow
+changes. Move the relevant entries from `Unreleased` into a dated version
+section, add the new version and date, and leave an empty `Unreleased` section
+for subsequent work. A release is not complete if its release notes are absent
+or stale.
+
 ## Non-Interactive Shell Commands
 
 **ALWAYS use non-interactive flags** with file operations to avoid hanging on confirmation prompts.
