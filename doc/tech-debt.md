@@ -189,19 +189,19 @@ Current state:
 
 - The checked-in Gunicorn service units omit `--reload`, matching the manually
   corrected live production process.
-- `etc/air_basistech_net.service` still runs as `User=simsong` and `Group=simsong`
-  while using `/home/air/temperature-bot`.
-- `etc/slg1_basistech_net.service` uses `/home/simsong/temperature-bot`.
-- `etc/deg1_basistech_net.service` uses `/home/deg/temperature-bot`.
-- `make deploy` assumes `/home/air/temperature-bot` and `/var/db/temperature-bot.db`,
-  but server files still require manual placement.
+- Checked-in production and staging units run as `temperature_bot`; the `slg1`
+  and `deg1` developer units retain their personal accounts and private
+  databases.
+- `make deploy` assumes `/home/air/temperature-bot` and
+  `/var/db/temperature_bot/temperature-bot.db`, but server files still require
+  manual placement.
 - `doc/deg-progress-notes.md` still contains open questions about syncing nginx
   and systemd files.
 
 Recommended direction:
 
-- Choose one production service account, likely `air`, and make ownership,
-  systemd units, cron/runner setup, and deploy paths match it.
+- Reconcile the installed units and cron entries with the checked-in
+  `temperature_bot` ownership and production database path.
 - Add Makefile targets to install or validate nginx/systemd files non-
   interactively.
 - Document the restart and new-machine procedure in a real operations doc, then
@@ -213,8 +213,8 @@ Relevant issues: #180, #177, #76, #31, #44, #30.
 
 Current state:
 
-- `make deploy` backs up the production SQLite DB before migrations.
-- `make monthly-backup` copies `/var/db/temperature-bot.db`.
+- `make deploy` and `make monthly-backup` create consistent SQLite snapshots
+  with `VACUUM INTO` and validate them with `PRAGMA quick_check`.
 - There is no complete documented backup/restore procedure for the DB plus
   `temperature-bot-config.yaml` and other credentials.
 

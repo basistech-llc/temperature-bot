@@ -4,8 +4,8 @@ Description=Gunicorn instance to serve the Flask application
 After=network.target
 
 [Service]
-User=simsong
-Group=simsong
+User=temperature_bot
+Group=temperature_bot
 WorkingDirectory=/home/air-stage/temperature-bot
 Environment="PATH=/home/air-stage/temperature-bot/.venv/bin"
 Environment="DB_PATH=/home/air-stage/var/db/temperature-bot.db"

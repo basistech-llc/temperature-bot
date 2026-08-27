@@ -182,13 +182,13 @@ Detailed `status_json` fields such as humidity, illuminance, battery, and
 motion are not preserved in compressed rows. This is already called out as tech
 debt in `doc/tech-debt.md`.
 
-Production database backups are whole-SQLite-file backups:
+Production database backups are consistent SQLite snapshots:
 
-- `make deploy` copies `/var/db/temperature-bot.db` to
+- `make deploy` snapshots `/var/db/temperature_bot/temperature-bot.db` to
   `/var/db/temperature-bot-backups/temperature-bot.<UTC timestamp>.db` before
-  migrations.
-- `make monthly-backup` copies `/var/db/temperature-bot.db` to
-  `/var/db/temperature-bot.backup.<date>.db`.
+  migrations and checks the snapshot with `PRAGMA quick_check`.
+- `make monthly-backup` creates and checks the same kind of timestamped snapshot
+  in `/var/db/temperature-bot-backups`.
 
 The code does not archive Hubitat event history separately. A Maker API event
 history URL is defined in `app/hubitat.py`, but it is not used by the runner.
