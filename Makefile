@@ -358,6 +358,7 @@ daily: $(REQ) ## Run the daily data collection runner
 
 monthly-backup: ## Back up the production database with a dated copy
 	@set -eu; \
+	umask 077; \
 	backup="$(DEPLOY_BACKUP_DIR)/temperature-bot.$$(date -u +%Y%m%dT%H%M%SZ).db"; \
 	$(MONTHLY_BACKUP_RUNNER) sqlite3 -batch -init /dev/null -cmd ".timeout 30000" \
 	    "$(DEPLOY_DB)" "VACUUM INTO '$$backup';"; \
@@ -435,6 +436,7 @@ deploy-flyway: ## Back up, migrate, and validate the deployment database
 	flyway validate -url="jdbc:sqlite:$(DEPLOY_DB)" -locations="filesystem:$(FLYWAY_SQL_DIR)" -ignoreMigrationPatterns="*:pending"
 	/bin/mkdir -p $(DEPLOY_BACKUP_DIR)
 	@set -eu; \
+	umask 077; \
 	backup="$(DEPLOY_BACKUP_DIR)/temperature-bot.$$(date -u +%Y%m%dT%H%M%SZ).db"; \
 	sqlite3 -batch -init /dev/null -cmd ".timeout 30000" \
 	    "$(DEPLOY_DB)" "VACUUM INTO '$$backup';"; \
