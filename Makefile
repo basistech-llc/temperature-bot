@@ -41,11 +41,13 @@ FETCH_REMOTE_CONFIG     ?= /home/air/temperature-bot/temperature-bot-config.yaml
 
 # Deployment defaults. Override only when intentionally targeting a different
 # checked-out installation or database.
-DEPLOY_FLYWAY    ?= Y
-DEPLOY_HOSTNAME   ?= slg1
-DEPLOY_APP_DIR    ?= /home/air/temperature-bot
-DEPLOY_DB         ?= /var/db/temperature_bot/temperature-bot.db
-DEPLOY_BACKUP_DIR ?= /var/db/temperature-bot-backups
+DEPLOY_FLYWAY          ?= Y
+DEPLOY_HOSTNAME        ?= slg1
+DEPLOY_APP_DIR         ?= /home/air/temperature-bot
+DEPLOY_DB              ?= /var/db/temperature_bot/temperature-bot.db
+DEPLOY_BACKUP_DIR      ?= /var/db/temperature-bot-backups
+DEPLOY_USER            ?= temperature_bot
+MONTHLY_BACKUP_RUNNER  ?= sudo -u $(DEPLOY_USER)
 STAGE_APP_DIR     ?= /home/air-stage/temperature-bot
 STAGE_DB_DIR      ?= /home/air-stage/var/db
 STAGE_DB          ?= $(STAGE_DB_DIR)/temperature-bot.db
@@ -401,7 +403,14 @@ daily: $(REQ) ## Run the daily data collection runner
 	PERFORMANCE_CLIENT_ID=daily-runner $(PYTHON) -m bin.runner --daily
 
 monthly-backup: ## Back up the production database with a dated copy
-	sudo /bin/cp -f $(DEPLOY_DB) $(DEPLOY_BACKUP_DIR)/temperature-bot.$$(date -I).db
+	@set -eu; \
+	umask 077; \
+	backup="$(DEPLOY_BACKUP_DIR)/temperature-bot.$$(date -u +%Y%m%dT%H%M%SZ).db"; \
+	$(MONTHLY_BACKUP_RUNNER) sqlite3 -batch -init /dev/null -cmd ".timeout 30000" \
+	    "$(DEPLOY_DB)" "VACUUM INTO '$$backup';"; \
+	test "$$($(MONTHLY_BACKUP_RUNNER) sqlite3 -batch -noheader -init /dev/null -readonly "$$backup" \
+	    "PRAGMA quick_check;")" = ok; \
+	echo "Created $$backup"
 
 .PHONY: every-minute hourly performance-probe daily monthly-backup
 
@@ -473,7 +482,14 @@ deploy: ## Deploy latest code and run DB migrations on the production server
 deploy-flyway: ## Back up, migrate, and validate the deployment database
 	flyway validate -url="jdbc:sqlite:$(DEPLOY_DB)" -locations="filesystem:$(FLYWAY_SQL_DIR)" -ignoreMigrationPatterns="*:pending"
 	/bin/mkdir -p $(DEPLOY_BACKUP_DIR)
-	/bin/cp -f $(DEPLOY_DB) $(DEPLOY_BACKUP_DIR)/temperature-bot.$$(date -u +%Y%m%dT%H%M%SZ).db
+	@set -eu; \
+	umask 077; \
+	backup="$(DEPLOY_BACKUP_DIR)/temperature-bot.$$(date -u +%Y%m%dT%H%M%SZ).db"; \
+	sqlite3 -batch -init /dev/null -cmd ".timeout 30000" \
+	    "$(DEPLOY_DB)" "VACUUM INTO '$$backup';"; \
+	test "$$(sqlite3 -batch -noheader -init /dev/null -readonly "$$backup" \
+	    "PRAGMA quick_check;")" = ok; \
+	echo "Created $$backup"
 	flyway migrate -url="jdbc:sqlite:$(DEPLOY_DB)" -locations="filesystem:$(FLYWAY_SQL_DIR)" -baselineOnMigrate=true
 	flyway validate -url="jdbc:sqlite:$(DEPLOY_DB)" -locations="filesystem:$(FLYWAY_SQL_DIR)"
 

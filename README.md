@@ -70,10 +70,9 @@ defined by checked-in systemd oneshot services and timers that run it against
 `/var/db/temperature_bot/temperature-bot.db`. See
 `doc/systemd-scheduled-jobs.md` for installation, observation, and deployment
 quiescence. The units are not installed by this repository change. The `make
-deploy` target is intended for the production host only. It pulls code,
-installs dependencies, validates
-Flyway migrations, backs up the production SQLite DB, applies pending
-migrations, and validates again.
+deploy` target is intended for the production host only. It pulls code, installs
+dependencies, validates Flyway migrations, backs up the production SQLite DB,
+applies pending migrations, and validates again.
 
 `doc/DEPLOYMENT_PACKAGE.md` defines the ZIP artifact containing the wheel,
 locked runtime requirements, Flyway migrations, systemd units, installer, and

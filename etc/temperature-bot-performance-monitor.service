@@ -6,11 +6,11 @@ Wants=network-online.target
 
 [Service]
 Type=oneshot
-User=simsong
-Group=simsong
+User=temperature_bot
+Group=temperature_bot
 WorkingDirectory=/home/air/temperature-bot
 Environment="PATH=/home/air/temperature-bot/.venv/bin:/usr/bin:/bin"
-Environment="DB_PATH=/var/db/temperature-bot.db"
+Environment="DB_PATH=/var/db/temperature_bot/temperature-bot.db"
 Environment="TEMPERATURE_BOT_INSTANCE=production"
 Environment="PERFORMANCE_CLIENT_ID=network-probe"
 ExecStart=/home/air/temperature-bot/.venv/bin/python -m bin.performance_monitor --once

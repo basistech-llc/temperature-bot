@@ -78,8 +78,8 @@ make PYTEST_ARGS=tests/test_db.py::test_function_name pytest
 - Validate migrations with `make validate-migrations`.
 - Apply local pending migrations with `make migrate-db`.
 - Production deploy is `make deploy` on the production host. It validates
-  Flyway state, backs up `/var/db/temperature-bot.db`, migrates, and validates
-  again.
+  Flyway state, creates and checks a consistent SQLite snapshot of
+  `/var/db/temperature_bot/temperature-bot.db`, migrates, and validates again.
 
 When adding schema:
 

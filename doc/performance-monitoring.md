@@ -81,7 +81,7 @@ The probe is a separate short-lived process, intended to run once per minute:
 
 ```cron
 * * * * * cd /home/air/temperature-bot && \
-  DB_PATH=/var/db/temperature-bot.db \
+  DB_PATH=/var/db/temperature_bot/temperature-bot.db \
   TEMPERATURE_BOT_INSTANCE=production \
   PERFORMANCE_CLIENT_ID=network-probe \
   .venv/bin/python -m bin.performance_monitor --once \
