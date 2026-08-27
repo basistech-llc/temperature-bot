@@ -153,7 +153,7 @@ def install_package(
     )
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("package", type=Path)
     parser.add_argument("--checksum", type=Path)
@@ -165,7 +165,7 @@ def main() -> None:
     parser.add_argument("--skip-venv", action="store_true")
     parser.add_argument("--activate", action="store_true")
     parser.add_argument("--systemd-dir", type=Path)
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     sidecar = args.checksum or args.package.with_suffix(args.package.suffix + ".sha256")
     if sidecar.exists():

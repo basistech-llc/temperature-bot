@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import stat
 import zipfile
 from datetime import datetime, timezone
@@ -12,6 +13,7 @@ from pydantic import ValidationError
 
 from app.deployment_package import (
     MANIFEST_PATH,
+    DeploymentManifest,
     PackageIdentity,
     PayloadSource,
     build_package,
@@ -19,7 +21,8 @@ from app.deployment_package import (
     verify_outer_checksum,
     verify_package,
 )
-from bin.install_deployment_package import install_package
+from bin.build_deployment_package import collect_payloads
+from bin.install_deployment_package import install_package, main as installer_main
 
 
 def _source(root: Path, relative: str, data: bytes) -> Path:
@@ -94,6 +97,31 @@ def test_build_verify_and_safe_extract_round_trip(tmp_path):
     assert stat.S_IMODE((destination / "installer/install.py").stat().st_mode) == 0o755
 
 
+def test_builder_collects_complete_migrations_units_and_configuration(tmp_path):
+    wheel = _source(tmp_path, "temperature_bot-1.2.3-py3-none-any.whl", b"wheel")
+    requirements = _source(tmp_path, "runtime.txt", b"pydantic==2.0\n")
+    payloads = collect_payloads(requirements, wheel)
+    paths = {payload.path for payload in payloads}
+
+    assert "configuration/temperature-bot.env.example" in paths
+    assert "documentation/DEPLOYMENT_PACKAGE.md" in paths
+    assert "installer/install_deployment_package.py" in paths
+    assert len([payload for payload in payloads if payload.role == "migration"]) == 19
+    units = [payload for payload in payloads if payload.role == "systemd"]
+    assert len(units) == 6
+    assert all(Path(payload.path).suffix in {".service", ".timer"} for payload in units)
+
+
+def test_installer_verify_only_cli_emits_valid_manifest(tmp_path, capsys):
+    package = _package(tmp_path)
+
+    installer_main([str(package), "--require-checksum", "--verify-only"])
+
+    manifest = DeploymentManifest.model_validate(json.loads(capsys.readouterr().out))
+    assert manifest.version == "1.2.3"
+    assert manifest.systemd_units == ["systemd/minute.service"]
+
+
 def test_installer_stages_atomically_and_activates_relative_symlink(tmp_path):
     package = _package(tmp_path)
     root = tmp_path / "opt/temperature-bot"
@@ -143,6 +171,8 @@ def test_verifier_rejects_unlisted_member(tmp_path):
     with zipfile.ZipFile(package, "a") as archive:
         archive.writestr("unexpected.txt", "not in manifest")
 
+    with pytest.raises(ValueError, match="outer SHA-256 mismatch"):
+        verify_outer_checksum(package)
     with pytest.raises(ValueError, match="inventory mismatch"):
         verify_package(package)
 

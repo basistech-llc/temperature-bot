@@ -24,7 +24,7 @@ def _git(*args: str) -> str:
     return result.stdout.strip()
 
 
-def _payloads(requirements: Path, wheel: Path) -> list[PayloadSource]:
+def collect_payloads(requirements: Path, wheel: Path) -> list[PayloadSource]:
     payloads = [
         PayloadSource(source=wheel, path=f"wheel/{wheel.name}", role="wheel"),
         PayloadSource(
@@ -107,7 +107,7 @@ def main() -> None:
         flyway_version=args.flyway_version,
     )
     output = args.output_dir / f"temperature-bot-deployment-{version}-{commit[:12]}.zip"
-    build_package(output, identity, _payloads(args.requirements, wheels[0]))
+    build_package(output, identity, collect_payloads(args.requirements, wheels[0]))
     print(output)
 
 
