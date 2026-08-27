@@ -65,11 +65,20 @@ edge, but shared keys should be centralized instead of repeated inline.
 
 ## Operations
 
-The periodic runner is `bin/runner.py`; production cron/systemd entries run it
-against `/var/db/temperature-bot.db`. The `make deploy` target is intended for
-the production host only. It pulls code, installs dependencies, validates
+The periodic runner is `bin/runner.py`; canonical production scheduling is now
+defined by checked-in systemd oneshot services and timers that run it against
+`/var/db/temperature_bot/temperature-bot.db`. See
+`doc/systemd-scheduled-jobs.md` for installation, observation, and deployment
+quiescence. The units are not installed by this repository change. The `make
+deploy` target is intended for the production host only. It pulls code,
+installs dependencies, validates
 Flyway migrations, backs up the production SQLite DB, applies pending
 migrations, and validates again.
+
+`doc/DEPLOYMENT_PACKAGE.md` defines the ZIP artifact containing the wheel,
+locked runtime requirements, Flyway migrations, systemd units, installer, and
+manifest. Pull requests build and install this package in a disposable root;
+their Actions artifacts expire after five days and are not production releases.
 
 To stand up a new instance, or an additional observation instance on the shared
 server, follow `doc/operations-new-instance.md`.

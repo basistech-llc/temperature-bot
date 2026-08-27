@@ -1,0 +1,160 @@
+"""Substantive deployment ZIP integrity and installation tests."""
+
+from __future__ import annotations
+
+import stat
+import zipfile
+from datetime import datetime, timezone
+from pathlib import Path
+
+import pytest
+from pydantic import ValidationError
+
+from app.deployment_package import (
+    MANIFEST_PATH,
+    PackageIdentity,
+    PayloadSource,
+    build_package,
+    extract_verified_package,
+    verify_outer_checksum,
+    verify_package,
+)
+from bin.install_deployment_package import install_package
+
+
+def _source(root: Path, relative: str, data: bytes) -> Path:
+    path = root / relative
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(data)
+    return path
+
+
+def _package(tmp_path: Path) -> Path:
+    source = tmp_path / "source"
+    payloads = [
+        PayloadSource(
+            source=_source(source, "app.whl", b"wheel"),
+            path="wheel/temperature_bot-1.2.3-py3-none-any.whl",
+            role="wheel",
+        ),
+        PayloadSource(
+            source=_source(source, "runtime.txt", b"pydantic==2.0\n"),
+            path="requirements/runtime.txt",
+            role="requirements",
+        ),
+        PayloadSource(
+            source=_source(source, "V1.sql", b"SELECT 1;\n"),
+            path="migrations/V1.sql",
+            role="migration",
+        ),
+        PayloadSource(
+            source=_source(source, "minute.service", b"[Service]\nType=oneshot\n"),
+            path="systemd/minute.service",
+            role="systemd",
+        ),
+        PayloadSource(
+            source=_source(source, "runtime.env.example", b"LOG_LEVEL=INFO\n"),
+            path="configuration/runtime.env.example",
+            role="configuration",
+        ),
+        PayloadSource(
+            source=_source(source, "install.py", b"#!/usr/bin/env python3\n"),
+            path="installer/install.py",
+            role="installer",
+            mode=0o755,
+        ),
+    ]
+    package = tmp_path / "temperature-bot.zip"
+    build_package(
+        package,
+        PackageIdentity(
+            version="1.2.3",
+            commit="a" * 40,
+            built_at=datetime(2026, 8, 26, tzinfo=timezone.utc),
+            requires_python=">=3.12",
+            flyway_version="12.8.1",
+        ),
+        payloads,
+    )
+    return package
+
+
+def test_build_verify_and_safe_extract_round_trip(tmp_path):
+    package = _package(tmp_path)
+    verify_outer_checksum(package)
+    manifest = verify_package(package)
+
+    assert manifest.version == "1.2.3"
+    assert manifest.migrations == ["migrations/V1.sql"]
+    assert manifest.systemd_units == ["systemd/minute.service"]
+
+    destination = tmp_path / "extracted"
+    extract_verified_package(package, destination)
+    assert (destination / "migrations/V1.sql").read_text() == "SELECT 1;\n"
+    assert stat.S_IMODE((destination / "installer/install.py").stat().st_mode) == 0o755
+
+
+def test_installer_stages_atomically_and_activates_relative_symlink(tmp_path):
+    package = _package(tmp_path)
+    root = tmp_path / "opt/temperature-bot"
+    systemd_dir = tmp_path / "etc/systemd/system"
+
+    result = install_package(
+        package,
+        root,
+        create_venv=False,
+        activate=True,
+        systemd_dir=systemd_dir,
+    )
+
+    assert result.release_directory == root / "releases/1.2.3-aaaaaaaaaaaa"
+    assert (root / "current").readlink() == Path("releases/1.2.3-aaaaaaaaaaaa")
+    assert (systemd_dir / "minute.service").read_text() == "[Service]\nType=oneshot\n"
+    assert not (systemd_dir / "runtime.env.example").exists()
+    assert not list((root / "releases").glob("*.staging.*"))
+
+
+def test_installer_revalidates_existing_immutable_payload(tmp_path):
+    package = _package(tmp_path)
+    root = tmp_path / "opt/temperature-bot"
+    result = install_package(package, root, create_venv=False)
+    (result.release_directory / "migrations/V1.sql").write_text("SELECT 2;\n")
+
+    with pytest.raises(ValueError, match="installed release SHA-256 mismatch"):
+        install_package(package, root, create_venv=False)
+
+
+def test_verifier_rejects_payload_changed_after_manifest(tmp_path):
+    package = _package(tmp_path)
+    tampered = tmp_path / "tampered.zip"
+    with zipfile.ZipFile(package) as source, zipfile.ZipFile(tampered, "w") as target:
+        for info in source.infolist():
+            data = source.read(info.filename)
+            if info.filename.endswith("V1.sql"):
+                data = b"SELECT 2;\n"
+            target.writestr(info, data)
+
+    with pytest.raises(ValueError, match="SHA-256 mismatch"):
+        verify_package(tampered)
+
+
+def test_verifier_rejects_unlisted_member(tmp_path):
+    package = _package(tmp_path)
+    with zipfile.ZipFile(package, "a") as archive:
+        archive.writestr("unexpected.txt", "not in manifest")
+
+    with pytest.raises(ValueError, match="inventory mismatch"):
+        verify_package(package)
+
+
+@pytest.mark.parametrize("path", ["/absolute", "../escape", "a/../escape", r"a\b"])
+def test_payload_rejects_unsafe_member_paths(tmp_path, path):
+    source = _source(tmp_path, "payload", b"data")
+    with pytest.raises(ValidationError, match="unsafe deployment package path"):
+        PayloadSource(source=source, path=path, role="metadata")
+
+
+def test_manifest_is_first_for_fast_inspection(tmp_path):
+    package = _package(tmp_path)
+    with zipfile.ZipFile(package) as archive:
+        assert archive.namelist()[0] == MANIFEST_PATH

@@ -1,0 +1,11 @@
+[Unit]
+Description=Run the Temperature Bot daily maintenance job
+
+[Timer]
+OnCalendar=*-*-* 00:00:15
+AccuracySec=1s
+Persistent=true
+Unit=temperature-bot-daily.service
+
+[Install]
+WantedBy=timers.target
