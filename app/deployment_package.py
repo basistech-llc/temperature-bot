@@ -14,7 +14,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 MANIFEST_PATH = "manifest.json"
-PACKAGE_FORMAT_VERSION = 1
+PACKAGE_FORMAT_VERSION: Literal[1] = 1
 PackageRole = Literal[
     "wheel",
     "requirements",
