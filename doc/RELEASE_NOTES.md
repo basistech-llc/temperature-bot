@@ -20,6 +20,7 @@ change they completed.
 - Reworked `make fetch-dev-db` to preserve the previous local database
   directory, stream a non-privileged read-only SQLite dump into
   `var/db/temperature_bot`, apply Flyway migrations, and report each operation.
+- Excluded required `.tmp` branch worktrees from Python test discovery.
 
 ## 0.11.0 - 2026-08-20
 

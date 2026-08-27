@@ -1,0 +1,20 @@
+[Unit]
+Description=Collect Temperature Bot device data and run rules
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=temperature_bot
+Group=temperature_bot
+WorkingDirectory=/opt/temperature-bot/current
+EnvironmentFile=/etc/temperature-bot/runtime.env
+Environment=PERFORMANCE_CLIENT_ID=minute-runner
+RuntimeDirectory=temperature-bot
+RuntimeDirectoryMode=0750
+RuntimeDirectoryPreserve=yes
+UMask=0027
+ExecStart=/usr/bin/flock --exclusive --wait 50 /run/temperature-bot/writer.lock /opt/temperature-bot/current/venv/bin/python -m bin.runner --loglevel ${LOG_LEVEL}
+TimeoutStartSec=5min
+TimeoutStopSec=30s
+NoNewPrivileges=yes

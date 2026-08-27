@@ -66,6 +66,11 @@ export PLAYWRIGHT_BROWSERS_PATH := .playwright
 # Pin tool versions (helps avoid "invisible" cache invalidations)
 UV_VERSION     ?= 0.11.26
 RUFF_VERSION   ?= 0.15.15
+FLYWAY_VERSION ?= 12.8.1
+
+DEPLOYMENT_BUILD_DIR    := build/deployment-package
+DEPLOYMENT_REQUIREMENTS := $(DEPLOYMENT_BUILD_DIR)/runtime.txt
+SYSTEMD_SCHEDULED_DIR  := etc/systemd
 
 # Test selection override, e.g.
 #   make PYTEST_ARGS=tests/test_db.py::test_name pytest
@@ -297,6 +302,51 @@ build-check: build ## Install the wheel in a clean environment and import the ap
 	AE200_SIMULATOR=1 HUBITAT_SIMULATOR=1 AIRTHINGS_SIMULATOR=1 AQICN_SIMULATOR=1 \
 	"$$build_tmp/venv/bin/python" -c 'from wsgi import app; assert app.name == "app.main"'
 
+$(DEPLOYMENT_REQUIREMENTS): uv.lock pyproject.toml | $(REQ)
+	mkdir -p $(DEPLOYMENT_BUILD_DIR)
+	uv export --quiet --locked --no-dev --no-editable --no-emit-project \
+	    --output-file $(DEPLOYMENT_REQUIREMENTS)
+
+deployment-package: build $(DEPLOYMENT_REQUIREMENTS) ## Build the deployment ZIP and SHA-256 sidecar
+	$(PYTHON) -m bin.build_deployment_package \
+	    --requirements $(DEPLOYMENT_REQUIREMENTS) \
+	    --output-dir dist \
+	    --flyway-version $(FLYWAY_VERSION)
+
+deployment-package-verify: deployment-package ## Verify the deployment ZIP inventory and hashes
+	@package="$$(ls -1t dist/temperature-bot-deployment-*.zip | head -1)"; \
+	$(PYTHON) -m bin.install_deployment_package \
+	    "$$package" --require-checksum --verify-only >/dev/null; \
+	echo "Verified $$package"
+
+deployment-package-check: deployment-package ## Install the package into a disposable immutable root
+	@package="$$(ls -1t dist/temperature-bot-deployment-*.zip | head -1)"; \
+	install_tmp="$$(mktemp -d)"; \
+	trap 'rm -rf "$$install_tmp"' EXIT; \
+	$(PYTHON) -m bin.install_deployment_package \
+	    "$$package" --require-checksum \
+	    --root "$$install_tmp/opt/temperature-bot" \
+	    --systemd-dir "$$install_tmp/etc/systemd/system" \
+	    --activate >/dev/null; \
+	test -L "$$install_tmp/opt/temperature-bot/current"; \
+	test -x "$$install_tmp/opt/temperature-bot/current/venv/bin/python"; \
+	test -f "$$install_tmp/etc/systemd/system/temperature-bot-minute.timer"; \
+	echo "Installed and activated $$package in a disposable root"
+
+systemd-verify: ## Validate packaged scheduled-job units on Linux
+	@command -v systemd-analyze >/dev/null || \
+	    { echo "systemd-analyze is required for systemd-verify"; exit 1; }
+	systemd-analyze verify \
+	    $(wildcard $(SYSTEMD_SCHEDULED_DIR)/*.service) \
+	    $(wildcard $(SYSTEMD_SCHEDULED_DIR)/*.timer)
+	@if command -v rg >/dev/null; then \
+		! rg -n 'User=(simsong|deg|root)|Group=(simsong|deg|root)|/home/' \
+		    $(SYSTEMD_SCHEDULED_DIR); \
+	else \
+		! grep -ERn 'User=(simsong|deg|root)|Group=(simsong|deg|root)|/home/' \
+		    $(SYSTEMD_SCHEDULED_DIR); \
+	fi
+
 format: $(REQ) ## Auto-fix Python style issues with ruff
 	uv run --locked ruff check --fix app | etc/ruff-reformat.bash
 
@@ -365,28 +415,24 @@ outdated: $(REQ) ## Report outdated Python and CDN dependencies
 	@echo "=== CDN libraries (in templates) ==="
 	bash etc/check-cdn-versions.bash
 
-.PHONY: lint check dependency-check build build-check format pylint ruff-check no-type-ignore pylint-check djlint eslint check-types pytest test-js test playwright-install web-screenshots outdated
+.PHONY: lint check dependency-check build build-check deployment-package deployment-package-verify deployment-package-check systemd-verify format pylint ruff-check no-type-ignore pylint-check djlint eslint check-types pytest test-js test playwright-install web-screenshots outdated
 
 ################################################################
-## Cron targets
-## Here mostly for testing. The actual cron entries are:
-##
-##  * * * * * cd /home/air/temperature-bot ; DB_PATH=/var/db/temperature_bot/temperature-bot.db TEMPERATURE_BOT_INSTANCE=production PERFORMANCE_CLIENT_ID=minute-runner .venv/bin/python -m bin.runner --loglevel INFO >> /home/air/temperature-bot.log 2>&1
-##
-##
-## @daily    cd /home/air/temperature-bot ; sleep 15 ; DB_PATH=/var/db/temperature_bot/temperature-bot.db .venv/bin/python -m bin.runner --loglevel INFO --daily  >> /home/air/temperature-bot-daily.log 2>&1
-## @hourly   cd /home/air/temperature-bot ; sleep 30 ; DB_PATH=/var/db/temperature_bot/temperature-bot.db .venv/bin/python -m bin.runner --loglevel INFO --aqi    >> /home/air/temperature-bot-hourly.log 2>&1
-##
-## Question - should we just have cron do a 'make daily' and 'make every-minute' ?
+## Scheduled runner targets
+## Production uses the checked-in systemd oneshot services and timers described
+## in doc/systemd-scheduled-jobs.md. These targets remain useful for manual runs.
 
 every-minute: $(REQ) ## Run the per-minute data collection runner
 	PERFORMANCE_CLIENT_ID=minute-runner $(PYTHON) -m bin.runner
+
+hourly: $(REQ) ## Run the hourly AQI collection runner
+	PERFORMANCE_CLIENT_ID=hourly-runner $(PYTHON) -m bin.runner --aqi
 
 performance-probe: $(REQ) ## Record one AE-200 DNS, ICMP, and TCP-reject probe
 	PERFORMANCE_CLIENT_ID=network-probe $(PYTHON) -m bin.performance_monitor --once
 
 daily: $(REQ) ## Run the daily data collection runner
-	$(PYTHON) -m bin.runner --daily
+	PERFORMANCE_CLIENT_ID=daily-runner $(PYTHON) -m bin.runner --daily
 
 monthly-backup: ## Back up the production database with a dated copy
 	@set -eu; \
@@ -398,7 +444,7 @@ monthly-backup: ## Back up the production database with a dated copy
 	    "PRAGMA quick_check;")" = ok; \
 	echo "Created $$backup"
 
-.PHONY: every-minute performance-probe daily monthly-backup
+.PHONY: every-minute hourly performance-probe daily monthly-backup
 
 ################################################################
 ## Installation targets
@@ -430,6 +476,7 @@ clean: ## Remove generated files and the virtual environment
 	rm -rf .playwright
 	rm -rf htmlcov
 	rm -rf dist
+	rm -rf build
 	rm -rf var/web-ui-screenshots
 	rm -f coverage.xml
 	rm -f .coverage
