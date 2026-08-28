@@ -129,3 +129,44 @@ jobs:
           verbose: true
           files: ./coverage.xml
           token: ${{ secrets.CODECOV_TOKEN }}
+
+  deployment-package:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    env:
+      UV_VERSION: '0.11.26'
+      FLYWAY_VERSION: '12.8.1'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          submodules: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v10.0.1
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Build and install deployment package in a disposable root
+        run: make deployment-package-check
+
+      - name: Verify systemd units
+        run: make systemd-verify
+
+      - name: Upload ephemeral deployment package
+        uses: actions/upload-artifact@v7
+        with:
+          name: temperature-bot-deployment-pr-${{ github.event.pull_request.number }}-${{ github.sha }}
+          path: |
+            dist/temperature-bot-deployment-*.zip
+            dist/temperature-bot-deployment-*.zip.sha256
+          if-no-files-found: error
+          retention-days: 5
+          compression-level: 0
