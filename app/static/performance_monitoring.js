@@ -124,7 +124,6 @@ function buildPerformanceOption(samples) {
       series("AE-200 total", points(samples, ae200, "total_ms")),
       series("AE-200 total p50 (60 samples)", rollingPercentile(ae200Samples, "total_ms", 0.5)),
       series("AE-200 total p95 (60 samples)", rollingPercentile(ae200Samples, "total_ms", 0.95)),
-      series("AE-200 lock wait", points(samples, ae200, "lock_wait_ms")),
       series("WebSocket connect", points(samples, ae200, "connect_ms")),
       series("AE-200 response", points(samples, ae200, "response_ms")),
       series("ICMP median", points(samples, icmp, "icmp_median_ms")),

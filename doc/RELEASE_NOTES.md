@@ -21,8 +21,9 @@ change they completed.
   directory, stream a non-privileged read-only SQLite dump into
   `var/db/temperature_bot`, apply Flyway migrations, and report each operation.
 - Excluded required `.tmp` branch worktrees from Python test discovery.
-- Fixed AE-200 commands across production and developer service accounts by
-  making the host-wide advisory lock reusable without write permission.
+- Removed unnecessary in-process and host-wide AE-200 command locks. Each
+  request already uses an independent WebSocket, and Mitsubishi documents
+  concurrent controller clients.
 
 ## 0.11.0 - 2026-08-20
 
