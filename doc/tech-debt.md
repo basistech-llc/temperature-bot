@@ -94,7 +94,7 @@ All commands are run through the Makefile.
 | Rules | `make pytest`, deterministic replay, simulator runner tests | Compare legacy and new plans in shadow mode; independently verify Mitsubishi state during a supervised cutover |
 
 Tests must use temporary/Flyway-created databases or a read-only production
-copy. Do not migrate or mutate `var/db/temperature-bot.db` as part of routine
+copy. Do not migrate or mutate `var/db/temperature_bot/temperature-bot.db` as part of routine
 validation.
 
 ### Deployment places and order
@@ -187,22 +187,21 @@ plan.
 
 Current state:
 
-- The checked-in Gunicorn service units now omit `--reload`, matching the
-  manually corrected live production process. A repository test prevents the
-  reloader from being reintroduced into those units.
-- `etc/air_basistech_net.service` still runs as `User=simsong` and `Group=simsong`
-  while using `/home/air/temperature-bot`.
-- `etc/slg1_basistech_net.service` uses `/home/simsong/temperature-bot`.
-- `etc/deg1_basistech_net.service` uses `/home/deg/temperature-bot`.
-- `make deploy` assumes `/home/air/temperature-bot` and `/var/db/temperature-bot.db`,
-  but server files still require manual placement.
+- The checked-in Gunicorn service units omit `--reload`, matching the manually
+  corrected live production process.
+- Checked-in production and staging units run as `temperature_bot`; the `slg1`
+  and `deg1` developer units retain their personal accounts and private
+  databases.
+- `make deploy` assumes `/home/air/temperature-bot` and
+  `/var/db/temperature_bot/temperature-bot.db`, but server files still require
+  manual placement.
 - `doc/deg-progress-notes.md` still contains open questions about syncing nginx
   and systemd files.
 
 Recommended direction:
 
-- Choose one production service account, likely `air`, and make ownership,
-  systemd units, cron/runner setup, and deploy paths match it.
+- Reconcile the installed units and cron entries with the checked-in
+  `temperature_bot` ownership and production database path.
 - Add Makefile targets to install or validate nginx/systemd files non-
   interactively.
 - Document the restart and new-machine procedure in a real operations doc, then
@@ -214,8 +213,8 @@ Relevant issues: #180, #177, #76, #31, #44, #30.
 
 Current state:
 
-- `make deploy` backs up the production SQLite DB before migrations.
-- `make monthly-backup` copies `/var/db/temperature-bot.db`.
+- `make deploy` and `make monthly-backup` create consistent SQLite snapshots
+  with `VACUUM INTO` and validate them with `PRAGMA quick_check`.
 - There is no complete documented backup/restore procedure for the DB plus
   `temperature-bot-config.yaml` and other credentials.
 
@@ -400,15 +399,15 @@ Relevant issues: #142, #89, #5.
 
 Current state:
 
-- The project uses Poetry 2.1.3 throughout `pyproject.toml`, `poetry.lock`,
-  Makefile targets, and CI.
-- Open issue #129 asks to migrate to `uv`.
+- The project uses uv throughout `pyproject.toml`, `uv.lock`, Makefile targets,
+  CI, deployment tooling, and documentation.
+- `make dependency-check` verifies the lockfile and prevents the retired
+  dependency workflow from being reintroduced.
 
-Recommendation:
+Maintenance:
 
-- Do not make this a prerequisite for rules or map work.
-- If migrated, do it as a single tooling PR that updates Makefile, CI,
-  documentation, and lockfile together.
+- Keep local, CI, and deployment installs locked and update all surfaces
+  together when changing dependency workflow.
 
 Relevant issue: #129.
 

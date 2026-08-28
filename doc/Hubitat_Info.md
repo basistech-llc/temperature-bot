@@ -4,6 +4,11 @@ This document describes how Temperature Bot talks to Hubitat, what must be set
 up on the Hubitat side, how sensors are discovered, and how Hubitat readings
 are stored.
 
+If you do not already know what a Hubitat hub or a Maker API app is, read
+`doc/hardware-landscape.md` first. It also documents the two-hub topology: this
+document describes hub `10.2.3.51` and Maker API app `520`, which is the only
+Hubitat installation Temperature Bot can reach.
+
 ## Source Map
 
 - `app/hubitat.py`: Hubitat Maker API client, simulator support, and device
@@ -11,8 +16,8 @@ are stored.
 - `bin/runner.py`: minute runner that polls Hubitat and writes readings.
 - `app/db.py`: device creation, current status, time-series queries, and log
   compression.
-- `app/room_config.py`: current static room-dashboard Hubitat sensor lists and
-  Hickory control device ids.
+- `app/room_config.py`: room-dashboard membership and actuator configuration.
+  Sensor membership is canonical; the actuator devices are configured here.
 - `app/routes_api.py`: JSON API routes for status, charts, debug views, rooms,
   and Hickory Hubitat controls.
 - `app/routes_web.py`: room-dashboard rendering and Hubitat sensor filtering.
@@ -42,13 +47,16 @@ successful collection. Temperature Bot re-enumerates the Maker API
 should be picked up on the next scan. Production cron normally runs that scan
 once per minute.
 
-Room dashboards are different: the current `/kitchen` and `/hickory`
-dashboards still use exact static sensor names in `app/room_config.py`. A newly
-logged Hubitat sensor will appear in the database and chart/status APIs, but it
-will not appear on those room dashboards until its exact Hubitat `name` is added
-to the room's `RoomConfig.sensors` list. The database has `rooms` and
-`devices.room_id`, plus `/api/v1/update_device_room`, but the room dashboards
-do not currently use that metadata for Hubitat sensor selection.
+Room dashboards select sensors canonically: `_canonical_room_sensors()` reads
+`devices.room_id`, so a newly logged Hubitat sensor appears on a room dashboard
+as soon as it is assigned to that room. Assign it by dragging its row in the
+main-page Air Quality matrix, or through `/api/v1/update_device_room`. No code
+or configuration change is required, and no sensor names are listed in
+`app/room_config.py`.
+
+Actuators are the exception. Which switches, dimmers, and lifts a dashboard
+offers is deliberate presentation configuration, so it stays in
+`app/room_config.py` rather than being derived from room membership.
 
 ## Configuration And Authentication
 
@@ -174,13 +182,13 @@ Detailed `status_json` fields such as humidity, illuminance, battery, and
 motion are not preserved in compressed rows. This is already called out as tech
 debt in `doc/tech-debt.md`.
 
-Production database backups are whole-SQLite-file backups:
+Production database backups are consistent SQLite snapshots:
 
-- `make deploy` copies `/var/db/temperature-bot.db` to
+- `make deploy` snapshots `/var/db/temperature_bot/temperature-bot.db` to
   `/var/db/temperature-bot-backups/temperature-bot.<UTC timestamp>.db` before
-  migrations.
-- `make monthly-backup` copies `/var/db/temperature-bot.db` to
-  `/var/db/temperature-bot.backup.<date>.db`.
+  migrations and checks the snapshot with `PRAGMA quick_check`.
+- `make monthly-backup` creates and checks the same kind of timestamped snapshot
+  in `/var/db/temperature-bot-backups`.
 
 The code does not archive Hubitat event history separately. A Maker API event
 history URL is defined in `app/hubitat.py`, but it is not used by the runner.
@@ -196,8 +204,9 @@ Hubitat data reaches the app through several paths:
 - `/api/v1/debug/hubitat_devices`: live Maker API device names and payloads.
 - `/all_devices`: web debug page that compares database, Hubitat, and AE-200
   devices through debug APIs.
-- `/kitchen` and `/hickory`: room dashboards that fetch live Hubitat sensor
-  payloads and filter by `app/room_config.py`.
+- `/kitchen`, `/hickory`, `/broadway`, and `/room/<room_id>`: room dashboards
+  whose sensor tiles come from canonical `devices.room_id` membership and whose
+  actuator tiles come from `app/room_config.py`.
 
 Temperature chart and lighting chart display names prefer the current Hubitat
 `label` when Hubitat is reachable, then apply the shared display-name helper.
@@ -210,6 +219,7 @@ The source contains these Hubitat control helpers:
 - `hubitat.send_device_command(device_id, command, secondary_value="")`
 - `hubitat.set_dimmer_level(device_id, level)`
 - `hubitat.set_switch(device_id, state)`
+- `hubitat.set_fan_speed(device_id, speed)`
 - `hubitat.control_hickory_tv(direction)`
 
 They use Maker API command URLs:
@@ -218,17 +228,35 @@ They use Maker API command URLs:
 GET /apps/api/{appId}/devices/{device_id}/{command}/{secondary_value}?access_token={access_token}
 ```
 
-Current app routes expose configured room controls:
+Current app routes expose configured room controls. Each body addresses one
+control by the `key` given to it in `app/room_config.py`:
 
-- `POST /api/v1/room/<room_key>/dimmer` with integer `level` from 0 to 100.
-- `POST /api/v1/room/<room_key>/wall_light` with `light` of `inner` or `outer`, and
-  `state` of `on` or `off`.
+- `POST /api/v1/room/<room_key>/switch` with `control` and `state` of `on` or
+  `off`.
+- `POST /api/v1/room/<room_key>/dimmer` with integer `level` from 0 to 100, and
+  `control` when the room has more than one dimmer.
+- `POST /api/v1/room/<room_key>/fan` with `control` and `speed` of `off`, `low`,
+  `medium`, or `high`.
 - `POST /api/v1/room/<room_key>/tv` with `direction` of `up` or `down`.
-- `GET /api/v1/room/<room_key>/room_status` for current control states.
+- `GET /api/v1/room/<room_key>/room_status` returns `{"controls": [...]}`, one
+  entry per readable control. Each carries `key` and `kind`, plus whichever of
+  `switch`, `level` (dimmers), and `speed` (fans) the device actually reported.
+  A TV lift is momentary and reports no state, so it never appears; a control
+  whose device could not be read is omitted rather than guessed at; and an
+  attribute the device omitted is absent rather than defaulted, so a running fan
+  that reports no `switch` is never published as off.
+
+A control key the room does not configure is a 404, the same answer an unknown
+room gets.
 
 Device ids and TV component labels are configured per room in
 `app/room_config.py`. The helper sends `on` to the selected TV component
-switch. The old `/api/v1/hickory/...` paths remain compatibility aliases.
+switch.
+
+`/api/v1/room/<room_key>/wall_light` is an alias of `/switch` that spells the
+control key `light`, and the `/api/v1/hickory/...` paths remain compatibility
+aliases. Each alias is registered under its own Flask endpoint name; sharing one
+endpoint made Werkzeug 308-redirect the generic URL to the Hickory-specific one.
 
 Simulator mode only simulates `get_all_devices()`. Command helpers still build
 Maker API command URLs and are not safe to assume simulated.
@@ -249,8 +277,51 @@ Maker API command URLs and are not safe to assume simulated.
 - device command execution.
 
 The runner currently uses only the all-devices URL for collection. The web/API
-control code uses all-devices reads and command execution. The dashboard dump
-and per-device helper functions are available for diagnostics and future work.
+control code uses per-device reads for room control status and the all-devices
+read elsewhere, plus command execution. The dashboard dump and the remaining
+per-device helpers are available for diagnostics and future work.
+
+### The two attribute shapes
+
+The two read endpoints disagree about `attributes`, and the difference is easy
+to miss because both are valid JSON describing the same device:
+
+```text
+GET /devices/all       "attributes": {"switch": "on", "level": "70", ...}
+GET /devices/<id>      "attributes": [{"name": "switch", "currentValue": "on",
+                                       "dataType": "ENUM"}, ...]
+```
+
+`HubitatControlDevice` accepts both and normalizes the list into the mapping.
+Before it did, every room control status read failed model validation, so the
+Hickory tiles reported their controls unreadable in production and each failure
+logged a large warning.
+
+Two quirks the captured fixtures in `app/test_data/hubitat_control_devices.json`
+pin down:
+
+- A `FanControl` device publishes a wider speed vocabulary than the four speeds
+  we command — `low`, `medium-low`, `medium`, `medium-high`, `high`, `on`,
+  `off`, `auto`. This is why the speed we report is an untyped string.
+- The `hueBridgeGroup` driver lists `switch` and `colorName` twice. The last
+  entry wins; both carried the same value when observed.
+
+Attributes a device does not report are absent, not defaulted. A fan with no
+`switch` attribute must not be published as off.
+
+### Hub endpoints outside Maker API
+
+Maker API only ever describes the devices it has been told to expose. To see
+what the hub itself knows, including Hub Mesh devices shared from another hub,
+read the hub UI's own JSON. These need no access token and are read-only:
+
+```text
+GET http://10.2.3.51/hub2/devicesList     every device, with source Linked/System/User
+GET http://10.2.3.51/apps/api/520/rooms   Hubitat's own rooms, which we do not use
+```
+
+The first is the right tool for "is this device on the hub at all", a question
+the Maker API device list cannot answer.
 
 ## Tests And Local Development
 
@@ -262,7 +333,10 @@ Run tests and local commands through the Makefile.
   and persistence of Hubitat `status_json`.
 - Route tests cover room-dashboard sensor filtering and Hickory control error
   handling. Those command tests patch Hubitat calls because command execution
-  would otherwise require live hardware.
+  would otherwise require live hardware. An autouse fixture in
+  `tests/conftest.py` now enforces that: it replaces `send_device_command`, the
+  one function every Hubitat write goes through, with a refusal, so a test that
+  forgets to patch fails instead of switching an office outlet.
 
 Useful live diagnostics:
 
@@ -271,12 +345,13 @@ make every-minute
 ```
 
 ```bash
-poetry run python -m app.hubitat --list-devices
+uv run --locked python -m app.hubitat --list-temperatures
 ```
 
-```bash
-poetry run python -m app.hubitat --list-temperatures
-```
+`--list-devices` is an alias for the same output despite its name: both filter
+Maker API's response to devices reporting a temperature. Neither can show a
+switch, outlet, or fan. To see everything Maker API exposes, query it directly
+-- see `doc/hardware-landscape.md`.
 
 The app also exposes `/all_devices` and `/api/v1/debug/hubitat_devices` for
 interactive inspection.
@@ -290,7 +365,7 @@ Temperature Bot creates the `devices` row and starts writing `devlog` rows.
 Because the runner enumerates `/devices/all` every scan, no Temperature Bot
 restart or local database edit is needed for normal logging.
 
-They are not automatically added to the current room-dashboard sensor tiles.
-Add the exact Hubitat `name` to `app/room_config.py` for the relevant room until
-the room dashboards are changed to use `devices.room_id` or another metadata
-driven assignment path.
+They do not appear on a room dashboard until they are assigned to a room, because
+dashboard sensor tiles come from `devices.room_id`. A new sensor starts
+Unassigned; drag it onto a room in the main-page Air Quality matrix, and it
+appears on that room's dashboard immediately. No code change is involved.

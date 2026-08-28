@@ -6,6 +6,7 @@ import logging
 import sqlite3
 import time
 import xml.etree.ElementTree as ET
+from contextlib import contextmanager
 
 from flask import Blueprint, request, jsonify
 from flask_pydantic import validate
@@ -13,6 +14,14 @@ from pydantic import TypeAdapter, ValidationError
 from websockets.exceptions import WebSocketException
 
 from . import constants
+from .api_errors import (
+    ApiError,
+    BadRequest,
+    Conflict,
+    NotFound,
+    UpstreamUnavailable,
+    register_error_handlers,
+)
 from .version import __version__, git_sha
 from . import db
 from . import db_alerts
@@ -27,7 +36,11 @@ from .utils.request_utils import parse_device_ids
 from .utils.db_utils import with_db_connection
 
 from .models import (
+    ActiveAlert,
+    AlertHistoryEntry,
     AutoSetTempControl,
+    DeviceDisableUntilControl,
+    DisableRulesQuery,
     CommandResponse,
     DeviceMetadataControl,
     DeviceRoomControl,
@@ -44,26 +57,36 @@ from .models import (
     RoomPatch,
     PresenceHistoryResponse,
     RoomPresenceResponse,
+    RoomConfig,
+    RoomControl,
+    RoomControlKind,
+    RoomControlState,
     RoomControlStatus,
-    RoomDimmerState,
-    RoomSwitchState,
+    RoomDimmerControl,
+    RoomFanControl,
+    RoomSwitchControl,
+    RoomTvControl,
+    RulesMasterControl,
     SetTempControl,
     SpeedControl,
     TemperatureSeriesResponse,
+    TimeSeriesResponse,
+    alert_json_ready,
     json_ready,
 )
+from .fcu_control import FcuStateControl
 
 logger = logging.getLogger(__name__)
 
 # Create API blueprint
 api_v1 = Blueprint("api_v1", __name__)
+register_error_handlers(api_v1)
 FCU_TEMP_SOURCE_BATCH_ADAPTER = TypeAdapter(FcuTempSourceBatchControl)
 
-
-def _validation_error_response(error: ValidationError):
-    return jsonify(
-        {"error": "validation error", "details": error.errors(include_context=False)}
-    ), 400
+# Transport-level failures from the AE-200 WebSocket/Modbus adapter. These mean
+# the hub could not be reached or answered unintelligibly, not that the request
+# was wrong.
+AE200_TRANSPORT_ERRORS = (ET.ParseError, OSError, RuntimeError, WebSocketException)
 
 
 def _rules_disabled_comment() -> str:
@@ -71,19 +94,114 @@ def _rules_disabled_comment() -> str:
     return f"Rules disabled for {minutes:g} minutes"
 
 
-def _command_error_response(error: ValueError):
-    logger.info("Command request rejected: %s", error)
-    return jsonify({"error": "Invalid command request"}), 400
+def _run_ae200_command(command, conn, body):
+    """Run one ``rules_engine`` command, mapping its failures to API errors.
+
+    The client-facing messages are deliberately generic: raw exception text from
+    this path can name devices and hub addresses, and tests assert that such
+    text does not reach the response body.
+    """
+    try:
+        return command(conn, body, request.remote_addr, "web")
+    except ValueError as exc:
+        if isinstance(exc, ApiError):
+            # Conflict subclasses ValueError so that non-route callers catching
+            # the builtin keep working. Re-raise it here rather than flattening
+            # an already-classified 409 into a generic 400.
+            raise
+        logger.info("Command request rejected: %s", exc)
+        raise BadRequest("Invalid command request") from exc
+    except AE200_TRANSPORT_ERRORS as exc:  # pylint: disable=catching-non-exception
+        logger.warning("AE-200 request failed: %s", exc)
+        message = (
+            "AE-200 did not confirm requested state"
+            if isinstance(exc, ae200.AE200VerificationError)
+            else "AE-200 request failed"
+        )
+        raise UpstreamUnavailable(message) from exc
 
 
-def _ae200_error_response(error):
-    logger.warning("AE-200 request failed: %s", error)
-    return jsonify({"error": "AE-200 request failed"}), 502
+def _disable_rules_after_manual_command(conn, device_id: int) -> None:
+    """Pause automation for a device an operator just commanded by hand."""
+    db.disable_rules_for_device(
+        conn,
+        device_id=device_id,
+        seconds=constants.RULES_DISABLE_SECONDS,
+        ipaddr=request.remote_addr,
+        agent=request.headers.get("User-Agent"),
+        comment=_rules_disabled_comment(),
+    )
+
+
+def _command_response(ret: dict):
+    """Serialize a successful command result."""
+    return jsonify(json_ready(CommandResponse.model_validate({"status": "ok", **ret})))
+
+
+@contextmanager
+def _domain_errors():
+    """Translate the remaining untyped database failures into API errors.
+
+    ``db`` raises :class:`NotFound` and :class:`Conflict` directly for missing
+    entities and state conflicts, and those pass straight through to the
+    blueprint handler. What is left is genuine input validation (an unusable set
+    range, a missing required field), which is a 400, plus SQLite uniqueness
+    violations, which are a 409.
+
+    ``Conflict`` subclasses ``ValueError`` so non-route callers catching the
+    builtin keep working, which makes the ordering here load-bearing: catching
+    ``ValueError`` without letting an ``ApiError`` through first would report an
+    already-classified 409 as a generic 400.
+    """
+    try:
+        yield
+    except sqlite3.IntegrityError as e:
+        raise Conflict(str(e)) from e
+    except ValidationError as e:
+        # A row we just read failed one of OUR OWN models: a server-side data
+        # problem, not a caller mistake. Answer 500 with the detail in the log.
+        # Merely re-raising is not enough -- the blueprint's client-validation
+        # handler would turn it into a 400 that blames the caller and echoes
+        # raw pydantic text. This arm must precede the ValueError one below,
+        # because ValidationError subclasses ValueError.
+        logger.exception("Database row failed model validation on %s", request.path)
+        raise ApiError() from e
+    except ValueError as e:
+        if isinstance(e, ApiError):
+            # Already classified further down; keep its status rather than
+            # flattening a 409 Conflict into a generic 400.
+            raise
+        raise BadRequest(str(e)) from e
+
+
+@contextmanager
+def _hubitat_control(what: str):
+    """Map Hubitat actuator failures to one upstream error.
+
+    These previously answered 500 with the raw exception text. They are
+    integration transport failures like the AE-200 ones, so they now answer 502
+    with a generic message and log the detail instead.
+    """
+    try:
+        yield
+    except (RuntimeError, OSError) as e:
+        logger.warning("%s control failed: %s", what, e)
+        raise UpstreamUnavailable(f"{what} control failed") from e
 
 
 @api_v1.route("/version")
 def get_version_json():
     return jsonify({"version": __version__, "sha": git_sha()})
+
+
+@api_v1.route("/set_fcu_state", methods=["POST"])
+@validate()
+@with_db_connection
+def set_fcu_state(conn, body: FcuStateControl):
+    """Set drive/fan fields in one AE-200 request and verify the result."""
+    ret = _run_ae200_command(rules_engine.set_body_fcu_state, conn, body)
+    _disable_rules_after_manual_command(conn, ret["device_id"])
+    return _command_response(ret)
 
 
 @api_v1.route("/set_fan_speed", methods=["POST"])
@@ -93,20 +211,9 @@ def set_fan_speed(conn, body: SpeedControl):
     """Sets the speed, records the speed in the changelog,
     and then updates the database, so status is always up-to-date"""
     logger.debug("/set_fan_speed: body=[%s]", body)
-    try:
-        ret = rules_engine.set_body_fan_speed(conn, body, request.remote_addr, "web")
-    except ValueError as exc:
-        return _command_error_response(exc)
-    except (ET.ParseError, OSError, RuntimeError, WebSocketException) as exc:
-        return _ae200_error_response(exc)
-    db.disable_rules_for_device(
-        conn,
-        device_id=ret["device_id"],
-        seconds=constants.RULES_DISABLE_SECONDS,
-        ipaddr=request.remote_addr,
-        agent=request.headers.get("User-Agent"),
-    )
-    return jsonify(json_ready(CommandResponse.model_validate({"status": "ok", **ret})))
+    ret = _run_ae200_command(rules_engine.set_body_fan_speed, conn, body)
+    _disable_rules_after_manual_command(conn, ret["device_id"])
+    return _command_response(ret)
 
 
 @api_v1.route("/set_drive", methods=["POST"])
@@ -115,22 +222,9 @@ def set_fan_speed(conn, body: SpeedControl):
 def set_drive(conn, body: DriveControl):
     """Sets the speed, records the speed in the changelog, and then updates the database, so status is always up-to-date"""
     logger.debug("/set_drive: body=[%s]", body)
-    try:
-        ret = rules_engine.set_body_drive(conn, body, request.remote_addr, "web")
-    except ValueError as exc:
-        return _command_error_response(exc)
-    except (ET.ParseError, OSError, RuntimeError, WebSocketException) as exc:
-        return _ae200_error_response(exc)
-    device_id = ret["device_id"]
-    db.disable_rules_for_device(
-        conn,
-        device_id=device_id,
-        seconds=constants.RULES_DISABLE_SECONDS,
-        ipaddr=request.remote_addr,
-        agent=request.headers.get("User-Agent"),
-        comment=_rules_disabled_comment(),
-    )
-    return jsonify(json_ready(CommandResponse.model_validate({"status": "ok", **ret})))
+    ret = _run_ae200_command(rules_engine.set_body_drive, conn, body)
+    _disable_rules_after_manual_command(conn, ret["device_id"])
+    return _command_response(ret)
 
 
 @api_v1.route("/set_mode", methods=["POST"])
@@ -139,21 +233,9 @@ def set_drive(conn, body: DriveControl):
 def set_mode(conn, body: ModeControl):
     """Set an AE-200 operation mode and record the commanded state."""
     logger.debug("/set_mode: body=[%s]", body)
-    try:
-        ret = rules_engine.set_body_mode(conn, body, request.remote_addr, "web")
-    except ValueError as exc:
-        return _command_error_response(exc)
-    except (ET.ParseError, OSError, RuntimeError, WebSocketException) as exc:
-        return _ae200_error_response(exc)
-    db.disable_rules_for_device(
-        conn,
-        device_id=ret["device_id"],
-        seconds=constants.RULES_DISABLE_SECONDS,
-        ipaddr=request.remote_addr,
-        agent=request.headers.get("User-Agent"),
-        comment=_rules_disabled_comment(),
-    )
-    return jsonify(json_ready(CommandResponse.model_validate({"status": "ok", **ret})))
+    ret = _run_ae200_command(rules_engine.set_body_mode, conn, body)
+    _disable_rules_after_manual_command(conn, ret["device_id"])
+    return _command_response(ret)
 
 
 @api_v1.route("/set_temp", methods=["POST"])
@@ -166,13 +248,9 @@ def set_temp(conn, body: SetTempControl):
     for converting from Fahrenheit if needed.
     """
     logger.debug("/set_temp: body=[%s]", body)
-    try:
-        ret = rules_engine.set_body_set_temp(conn, body, request.remote_addr, "web")
-    except ValueError as exc:
-        return _command_error_response(exc)
-    except (ET.ParseError, OSError, RuntimeError, WebSocketException) as exc:
-        return _ae200_error_response(exc)
-    return jsonify(json_ready(CommandResponse.model_validate({"status": "ok", **ret})))
+    return _command_response(
+        _run_ae200_command(rules_engine.set_body_set_temp, conn, body)
+    )
 
 
 @api_v1.route("/set_auto_temp", methods=["POST"])
@@ -181,18 +259,9 @@ def set_temp(conn, body: SetTempControl):
 def set_auto_temp(conn, body: AutoSetTempControl):
     """Set AE-200 Auto Heat/Cool setpoints for a unit."""
     logger.debug("/set_auto_temp: body=[%s]", body)
-    try:
-        ret = rules_engine.set_body_auto_set_temp(
-            conn,
-            body,
-            request.remote_addr,
-            "web",
-        )
-    except ValueError as exc:
-        return _command_error_response(exc)
-    except (ET.ParseError, OSError, RuntimeError, WebSocketException) as exc:
-        return _ae200_error_response(exc)
-    return jsonify(json_ready(CommandResponse.model_validate({"status": "ok", **ret})))
+    return _command_response(
+        _run_ae200_command(rules_engine.set_body_auto_set_temp, conn, body)
+    )
 
 
 @api_v1.route("/set_range", methods=["POST"])
@@ -200,7 +269,9 @@ def set_auto_temp(conn, body: AutoSetTempControl):
 @with_db_connection
 def set_range(conn, body: SetRangeControl):
     """Persist the FCU set range in Celsius."""
-    try:
+    # db raises NotFound for an unknown device; a plain ValueError here is a
+    # range-validation failure.
+    with _domain_errors():
         response = db.set_fcu_set_range(
             conn,
             device_id=body.device_id,
@@ -209,9 +280,6 @@ def set_range(conn, body: SetRangeControl):
             ipaddr=request.remote_addr,
             agent=request.headers.get("User-Agent"),
         )
-    except ValueError as e:
-        status_code = 404 if str(e).startswith("Unknown") else 400
-        return jsonify({"error": str(e)}), status_code
     return jsonify(response)
 
 
@@ -249,15 +317,9 @@ def update_device(conn, device_id: int):
     payload = request.get_json(silent=True) or {}
     allowed_fields = {"display_name", "device_type", "rules_enabled", "notes"}
     update_fields = allowed_fields.intersection(payload)
-    try:
-        body = DeviceMetadataControl.model_validate(
-            {**payload, "device_id": device_id}
-        )
+    body = DeviceMetadataControl.model_validate({**payload, "device_id": device_id})
+    with _domain_errors():
         device = db.update_device_metadata(conn, body, fields=update_fields)
-    except ValidationError as e:
-        return _validation_error_response(e)
-    except ValueError as e:
-        return jsonify({"error": str(e)}), 404
     return jsonify(device)
 
 
@@ -276,7 +338,7 @@ def get_temperature(conn):
     mode = request.args.get("mode", "raw")
     device_ids = parse_device_ids()
     if device_ids is None and request.args.get("device_ids"):
-        return jsonify({"error": "Invalid device_ids format"}), 400
+        raise BadRequest("Invalid device_ids format")
     if mode == "raw":
         series = db.get_temperature_series(conn, device_ids)
         boundary_device_ids = device_ids
@@ -285,7 +347,7 @@ def get_temperature(conn):
             conn, device_ids
         )
     else:
-        return jsonify({"error": "mode must be 'raw' or 'calculated'"}), 400
+        raise BadRequest("mode must be 'raw' or 'calculated'")
     has_earlier_data, has_later_data = db.temperature_data_availability(
         conn,
         boundary_device_ids,
@@ -322,11 +384,8 @@ def get_fcu_history(conn):
     """Return time-aligned calculated room, inlet, mode, and fan history."""
     fcu_device_id = request.args.get("fcu_device_id", type=int)
     if fcu_device_id is None:
-        return jsonify({"error": "fcu_device_id is required"}), 400
-    try:
-        history = db.get_fcu_history(conn, fcu_device_id)
-    except LookupError as error:
-        return jsonify({"error": str(error)}), 404
+        raise BadRequest("fcu_device_id is required")
+    history = db.get_fcu_history(conn, fcu_device_id)
     return jsonify(json_ready(FcuHistoryResponse.model_validate(history)))
 
 
@@ -343,7 +402,7 @@ def get_lighting(conn):
     """Get lighting (illuminance) series data"""
     device_ids = parse_device_ids()
     if device_ids is None and request.args.get("device_ids"):
-        return jsonify({"error": "Invalid device_ids format"}), 400
+        raise BadRequest("Invalid device_ids format")
     series = db.get_lighting_series(conn, device_ids)
     # Use centralized helper for series display names, preferring Hubitat label
     # when available and applying display-only transforms.
@@ -356,7 +415,7 @@ def get_lighting(conn):
             hubitat_label=hub_label,
             source="hubitat",
         )
-    return jsonify({"series": series})
+    return jsonify(json_ready(TimeSeriesResponse.model_validate({"series": series})))
 
 
 @api_v1.route("/metric")
@@ -366,10 +425,10 @@ def get_metric(conn):
     metric = request.args.get("metric", "")
     status_key = db.AQ_METRIC_STATUS_KEYS.get(metric)
     if status_key is None:
-        return jsonify({"error": f"Unknown metric: {metric!r}"}), 400
+        raise BadRequest(f"Unknown metric: {metric!r}")
     device_ids = parse_device_ids()
     if device_ids is None and request.args.get("device_ids"):
-        return jsonify({"error": "Invalid device_ids format"}), 400
+        raise BadRequest("Invalid device_ids format")
     series = db.get_device_metric_series(conn, status_key, device_ids)
     name_to_label = hubitat.get_name_to_label()
     for s in series:
@@ -380,7 +439,7 @@ def get_metric(conn):
             hubitat_label=hub_label,
             source="airthings",
         )
-    return jsonify({"series": series})
+    return jsonify(json_ready(TimeSeriesResponse.model_validate({"series": series})))
 
 
 @api_v1.route("/logs")
@@ -397,38 +456,33 @@ def get_logs(conn):
 
 
 @api_v1.route("/disable-rules")
+@validate()
 @with_db_connection
-def disable_rules(conn):
+def disable_rules(conn, query: DisableRulesQuery):
     """Disable rules for a specified number of seconds"""
-    seconds = request.args.get("seconds", type=int)
+    seconds = query.seconds
     logging.debug("/disable-rules seconds=%s", seconds)
-    if seconds is None:
-        return jsonify({"error": "seconds parameter is required"}), 400
-
-    rules_engine.disable_all_rules(conn, seconds)
+    rules_engine.disable_all_rules(
+        conn,
+        seconds,
+        ipaddr=request.remote_addr,
+        agent=request.headers.get("User-Agent"),
+    )
     return jsonify({"status": "success", "seconds": seconds})
 
 
 @api_v1.route("/set_device_disabled_until", methods=["POST"])
+@validate()
 @with_db_connection
-def set_device_disabled_until(conn):
+def set_device_disabled_until(conn, body: DeviceDisableUntilControl):
     """Set the per-device rules disable timer to an absolute epoch timestamp.
 
-    Body: {"device_id": int, "disabled_until": int}
-    A disabled_until <= now re-enables rules for the device (stored as 0).
+    A ``disabled_until`` at or before now re-enables rules for the device
+    (stored as 0).
     """
-    payload = request.get_json(silent=True) or {}
-    try:
-        device_id = int(payload["device_id"])
-        disabled_until = int(payload["disabled_until"])
-    except (KeyError, ValueError, TypeError):
-        return (
-            jsonify({"error": "device_id and disabled_until (int) are required"}),
-            400,
-        )
-
+    device_id = body.device_id
     now = int(time.time())
-    seconds = max(0, disabled_until - now)
+    seconds = max(0, body.disabled_until - now)
     db.disable_rules_for_device(
         conn,
         device_id=device_id,
@@ -453,18 +507,9 @@ def rooms(conn):
     if request.method == "GET":
         return jsonify(json_ready(RoomListResponse(rooms=db.get_rooms(conn))))
 
-    try:
-        body = RoomCreate.model_validate(request.get_json(silent=True) or {})
-        room = db.create_room(
-            conn,
-            Room(room_name=body.room_name, map=body.map),
-        )
-    except ValidationError as e:
-        return _validation_error_response(e)
-    except ValueError as e:
-        return jsonify({"error": str(e)}), 400
-    except sqlite3.IntegrityError as e:
-        return jsonify({"error": str(e)}), 409
+    body = RoomCreate.model_validate(request.get_json(silent=True) or {})
+    with _domain_errors():
+        room = db.create_room(conn, Room(room_name=body.room_name, map=body.map))
     return jsonify(json_ready(room)), 201
 
 
@@ -474,7 +519,7 @@ def room_detail(conn, room_id: int):
     """Return one room."""
     room = db.get_room(conn, room_id)
     if room is None:
-        return jsonify({"error": "room not found"}), 404
+        raise NotFound("room not found")
     return jsonify(json_ready(room))
 
 
@@ -499,7 +544,7 @@ def room_presence_history(conn):
     room_id = request.args.get("room_id", type=int)
     since = request.args.get("since", type=int)
     if room_id is not None and db.get_room(conn, room_id) is None:
-        return jsonify({"error": "room not found"}), 404
+        raise NotFound("room not found")
     return jsonify(
         json_ready(
             PresenceHistoryResponse(
@@ -513,22 +558,16 @@ def room_presence_history(conn):
 @with_db_connection
 def update_room(conn, room_id: int):
     """Update one room."""
-    try:
-        body = RoomPatch.model_validate(request.get_json(silent=True) or {})
-        update = Room(room_id=room_id)
-        if "room_name" in body.model_fields_set:
-            update.room_name = body.room_name
-        if "map" in body.model_fields_set:
-            update.map = body.map
+    body = RoomPatch.model_validate(request.get_json(silent=True) or {})
+    update = Room(room_id=room_id)
+    if "room_name" in body.model_fields_set:
+        update.room_name = body.room_name
+    if "map" in body.model_fields_set:
+        update.map = body.map
+    with _domain_errors():
         room = db.update_room(conn, update)
-    except ValidationError as e:
-        return _validation_error_response(e)
-    except ValueError as e:
-        return jsonify({"error": str(e)}), 400
-    except sqlite3.IntegrityError as e:
-        return jsonify({"error": str(e)}), 409
     if room is None:
-        return jsonify({"error": "room not found"}), 404
+        raise NotFound("room not found")
     return jsonify(json_ready(room))
 
 
@@ -536,12 +575,10 @@ def update_room(conn, room_id: int):
 @with_db_connection
 def delete_room(conn, room_id: int):
     """Delete a room only when it has no FCU owner or assigned devices."""
-    try:
+    with _domain_errors():
         deleted = db.delete_empty_room(conn, room_id)
-    except ValueError as e:
-        return jsonify({"error": str(e)}), 409
     if not deleted:
-        return jsonify({"error": "room not found"}), 404
+        raise NotFound("room not found")
     return "", 204
 
 
@@ -550,12 +587,8 @@ def delete_room(conn, room_id: int):
 @with_db_connection
 def update_device_room(conn, body: DeviceRoomControl):
     """Assign a device to a room, or clear the assignment with room_id=null."""
-    try:
+    with _domain_errors():
         device_id = db.update_device_room(conn, body.device_id, body.room_id)
-    except LookupError as e:
-        return jsonify({"error": str(e)}), 404
-    except ValueError as e:
-        return jsonify({"error": str(e)}), 409
     return jsonify(json_ready(CommandResponse(device_id=device_id)))
 
 
@@ -565,11 +598,8 @@ def get_fcu_temp_sources(conn):
     """Return all temperature-reporting source candidates for one FCU."""
     fcu_device_id = request.args.get("fcu_device_id", type=int)
     if fcu_device_id is None:
-        return jsonify({"error": "fcu_device_id is required"}), 400
-    try:
-        return jsonify(db.get_fcu_temp_sources(conn, fcu_device_id))
-    except ValueError as e:
-        return jsonify({"error": str(e)}), 404
+        raise BadRequest("fcu_device_id is required")
+    return jsonify(db.get_fcu_temp_sources(conn, fcu_device_id))
 
 
 @api_v1.route("/fcu_temp_source", methods=["POST"])
@@ -577,27 +607,22 @@ def get_fcu_temp_sources(conn):
 def set_fcu_temp_source(conn):
     """Persist one or more FCU temperature-source multipliers atomically."""
     payload = request.get_json(silent=True)
-    try:
-        if isinstance(payload, list):
-            updates = FCU_TEMP_SOURCE_BATCH_ADAPTER.validate_python(payload)
-        else:
-            updates = [FcuTempSourceControl.model_validate(payload or {})]
-    except ValidationError as e:
-        return _validation_error_response(e)
+    if isinstance(payload, list):
+        updates = FCU_TEMP_SOURCE_BATCH_ADAPTER.validate_python(payload)
+    else:
+        updates = [FcuTempSourceControl.model_validate(payload or {})]
 
     fcu_device_ids = {update.fcu_device_id for update in updates}
     if len(fcu_device_ids) > 1:
-        return jsonify({"error": "all updates must use the same fcu_device_id"}), 400
+        raise BadRequest("all updates must use the same fcu_device_id")
 
-    try:
+    with _domain_errors():
         response = db.set_fcu_temp_source_multipliers(
             conn,
             updates=updates,
             ipaddr=request.remote_addr,
             agent=request.headers.get("User-Agent"),
         )
-    except ValueError as e:
-        return jsonify({"error": str(e)}), 404
     return jsonify(response)
 
 
@@ -614,13 +639,10 @@ def rules_master(conn):
         enabled = db.get_rules_master_enabled(conn)
         return jsonify({"enabled": enabled})
 
-    # POST
-    payload = request.get_json(silent=True) or {}
-
-    if "enabled" not in payload:
-        return jsonify({"error": "Missing 'enabled' field"}), 400
-
-    enabled = bool(payload["enabled"])
+    # POST. Validated by hand rather than with @validate() because the same
+    # view serves GET, which has no body to validate.
+    body = RulesMasterControl.model_validate(request.get_json(silent=True) or {})
+    enabled = body.enabled
     db.set_rules_master_enabled(conn, enabled)
     logger.info("Master rules switch set to enabled=%s", enabled)
     return jsonify({"enabled": enabled})
@@ -633,7 +655,9 @@ def alerts_active(conn):
     device_id = request.args.get("device_id", type=int)
     include_details = request.args.get("include_details", "false").lower() == "true"
     alerts = db_alerts.get_active_alerts(conn, device_id, include_details)
-    return jsonify(alerts)
+    return jsonify(
+        [alert_json_ready(ActiveAlert.model_validate(alert)) for alert in alerts]
+    )
 
 
 @api_v1.route("/alerts/history")
@@ -644,7 +668,9 @@ def alerts_history(conn):
     limit = request.args.get("limit", type=int, default=100)
     include_details = request.args.get("include_details", "false").lower() == "true"
     alerts = db_alerts.get_alert_history(conn, device_id, limit, include_details)
-    return jsonify(alerts)
+    return jsonify(
+        [alert_json_ready(AlertHistoryEntry.model_validate(alert)) for alert in alerts]
+    )
 
 
 @api_v1.route("/update_note", methods=["POST"])
@@ -658,112 +684,182 @@ def update_note(conn, body: NoteControl):
     return jsonify(json_ready(CommandResponse(device_id=device_id)))
 
 
-@api_v1.route("/hickory/room_status", defaults={"room_key": "hickory"})
+def _require_room_config(room_key: str) -> RoomConfig:
+    """Return the dashboard configuration for a room key, or raise 404."""
+    config = room_config.find_room_config(room_key.casefold())
+    if config is None:
+        raise NotFound("Unknown room control configuration")
+    return config
+
+
+def _require_control(
+    config: RoomConfig, key: str | None, kind: RoomControlKind
+) -> RoomControl:
+    """Return one configured control, or raise 404 naming what was not found.
+
+    A body may omit the control key when the room offers exactly one control of
+    that kind, which is the shape the wall-mounted dashboards have always sent.
+    """
+    if key is None:
+        control = config.sole_control(kind)
+        if control is None:
+            raise NotFound(f"No {kind} configured")
+    else:
+        control = config.find_control(key, kind)
+        if control is None:
+            raise NotFound(f"No {kind} control {key!r} configured")
+    if control.unavailable_note:
+        # Rendered on the page so the gap is visible, but there is no device to
+        # command, so a request for one is as much a 404 as an unknown key.
+        raise NotFound(f"Control {control.key!r} has no reachable device")
+    return control
+
+
+# Hubitat devices that are configured but unreachable would otherwise log once
+# per control per poll, which at a ten-second refresh buries everything else.
+# Warn on the transition into failure and again on recovery, not in between.
+_failed_control_devices: set[str] = set()
+
+
+def _read_control_device(device_id: str) -> HubitatControlDevice | None:
+    """Read one control device's live attributes, or None when unreadable.
+
+    A payload carrying no ``attributes`` key at all is not a device description,
+    so it counts as unreadable rather than as a device that happens to report
+    nothing. An empty attribute list is the latter and is kept: the device
+    answered, we simply learned no state from it.
+    """
+    try:
+        payload = hubitat.get_device_info(device_id)
+        if not isinstance(payload, dict) or "attributes" not in payload:
+            raise ValueError(f"no attributes in payload: {payload!r:.120}")
+        device = HubitatControlDevice.model_validate(payload)
+    except (RuntimeError, OSError, ValueError) as e:
+        if device_id not in _failed_control_devices:
+            _failed_control_devices.add(device_id)
+            # "Unreadable" covers both a failed request and a payload we could
+            # not make sense of. Saying "fetch failed" for the second would send
+            # someone hunting a network problem that is not there.
+            logger.warning("Room device %s unreadable: %s", device_id, e)
+        return None
+    if device_id in _failed_control_devices:
+        _failed_control_devices.discard(device_id)
+        logger.info("Room device %s status fetch recovered", device_id)
+    return device
+
+
+@api_v1.route(
+    "/hickory/room_status",
+    defaults={"room_key": "hickory"},
+    endpoint="hickory_room_status",
+)
 @api_v1.route("/room/<room_key>/room_status")
 def room_control_status(room_key: str):
-    """Return current state of one configured room's control devices."""
-    config = room_config.find_room_config(room_key.casefold())
-    if config is None:
-        return jsonify({"error": "Unknown room control configuration"}), 404
-    result = RoomControlStatus()
+    """Return current state of one configured room's control devices.
 
-    def read_device(device_id: str | None) -> HubitatControlDevice | None:
-        if device_id is None:
-            return None
-        try:
-            return HubitatControlDevice.model_validate(hubitat.get_device_info(device_id))
-        except (RuntimeError, OSError, ValueError) as e:
-            logger.warning("Room device %s status fetch failed: %s", device_id, e)
-            return None
-
-    if dimmer := read_device(config.dimmer_id):
-        result.dimmer = RoomDimmerState(
-            level=dimmer.attributes.level or 0,
-            switch=dimmer.attributes.switch or "off",
+    TV lifts are momentary and report no state, so they are absent here; so is
+    any control whose device could not be read.
+    """
+    config = _require_room_config(room_key)
+    states = []
+    for control in config.controls:
+        if control.device_id is None:
+            continue
+        device = _read_control_device(control.device_id)
+        if device is None:
+            continue
+        states.append(
+            RoomControlState(
+                key=control.key,
+                kind=control.kind,
+                # Pass attributes through as reported. An absent attribute is
+                # reported absent rather than defaulted, so the page never shows
+                # a running fan as off or a lit dimmer at zero.
+                switch=device.attributes.switch,
+                level=(
+                    device.attributes.level
+                    if control.kind is RoomControlKind.DIMMER
+                    else None
+                ),
+                speed=(
+                    device.attributes.speed
+                    if control.kind is RoomControlKind.FAN
+                    else None
+                ),
+            )
         )
-    if wall_inner := read_device(config.wall_inner_id):
-        result.wall_inner = RoomSwitchState(
-            switch=wall_inner.attributes.switch or "off"
-        )
-    if wall_outer := read_device(config.wall_outer_id):
-        result.wall_outer = RoomSwitchState(
-            switch=wall_outer.attributes.switch or "off"
-        )
-    return jsonify(json_ready(result))
+    return jsonify(json_ready(RoomControlStatus(controls=states)))
 
 
-@api_v1.route("/hickory/dimmer", methods=["POST"], defaults={"room_key": "hickory"})
+@api_v1.route(
+    "/hickory/dimmer",
+    methods=["POST"],
+    defaults={"room_key": "hickory"},
+    endpoint="hickory_dimmer",
+)
 @api_v1.route("/room/<room_key>/dimmer", methods=["POST"])
-def room_dimmer(room_key: str):
+@validate()
+def room_dimmer(room_key: str, body: RoomDimmerControl):
     """Set a configured room's light dimmer level (0-100)."""
-    config = room_config.find_room_config(room_key.casefold())
-    if config is None:
-        return jsonify({"error": "Unknown room control configuration"}), 404
-    device_id = config.dimmer_id
-    if not device_id:
-        return jsonify({"error": "No dimmer configured"}), 404
-    payload = request.get_json(silent=True) or {}
-    level = payload.get("level")
-    if level is None or not isinstance(level, int) or not 0 <= level <= 100:
-        return jsonify({"error": "level must be an integer 0-100"}), 400
-    try:
-        hubitat.set_dimmer_level(device_id, level)
-        return jsonify(json_ready(CommandResponse(level=level)))
-    except (RuntimeError, OSError) as e:
-        logger.warning("Dimmer control failed: %s", e)
-        return jsonify({"error": str(e)}), 500
+    config = _require_room_config(room_key)
+    control = _require_control(config, body.control, RoomControlKind.DIMMER)
+    with _hubitat_control("Dimmer"):
+        hubitat.set_dimmer_level(control.device_id, body.level)
+    return jsonify(json_ready(CommandResponse(level=body.level)))
 
 
-@api_v1.route("/hickory/wall_light", methods=["POST"], defaults={"room_key": "hickory"})
+@api_v1.route(
+    "/hickory/wall_light",
+    methods=["POST"],
+    defaults={"room_key": "hickory"},
+    endpoint="hickory_wall_light",
+)
 @api_v1.route("/room/<room_key>/wall_light", methods=["POST"])
-def room_wall_light(room_key: str):
-    """Toggle a configured room's wall light on or off."""
-    config = room_config.find_room_config(room_key.casefold())
-    if config is None:
-        return jsonify({"error": "Unknown room control configuration"}), 404
-    payload = request.get_json(silent=True) or {}
-    light = payload.get("light")
-    state = payload.get("state")
+@api_v1.route("/room/<room_key>/switch", methods=["POST"])
+@validate()
+def room_switch(room_key: str, body: RoomSwitchControl):
+    """Switch one configured room control on or off.
 
-    id_map = {"inner": config.wall_inner_id, "outer": config.wall_outer_id}
-    if not isinstance(light, str):
-        return jsonify({"error": "light must be 'inner' or 'outer'"}), 400
-    device_id = id_map.get(light)
-    if not device_id:
-        return jsonify({"error": "light must be 'inner' or 'outer'"}), 400
-    if not isinstance(state, str) or state not in ("on", "off"):
-        return jsonify({"error": "state must be 'on' or 'off'"}), 400
-    try:
-        hubitat.set_switch(device_id, state)
-        return jsonify(json_ready(CommandResponse(light=light, state=state)))
-    except (RuntimeError, OSError) as e:
-        logger.warning("Wall light control failed: %s", e)
-        return jsonify({"error": str(e)}), 500
+    Reachable as ``/switch`` and, for the wall lights it was introduced for, as
+    ``/wall_light`` with the control key spelled ``light``.
+    """
+    config = _require_room_config(room_key)
+    control = _require_control(config, body.control, RoomControlKind.SWITCH)
+    with _hubitat_control("Switch"):
+        hubitat.set_switch(control.device_id, body.state)
+    return jsonify(json_ready(CommandResponse(control=control.key, state=body.state)))
 
 
-@api_v1.route("/hickory/tv", methods=["POST"], defaults={"room_key": "hickory"})
+@api_v1.route("/room/<room_key>/fan", methods=["POST"])
+@validate()
+def room_fan(room_key: str, body: RoomFanControl):
+    """Set a configured room fan's speed."""
+    config = _require_room_config(room_key)
+    control = _require_control(config, body.control, RoomControlKind.FAN)
+    with _hubitat_control("Fan"):
+        hubitat.set_fan_speed(control.device_id, body.speed)
+    return jsonify(json_ready(CommandResponse(speed=body.speed)))
+
+
+@api_v1.route(
+    "/hickory/tv",
+    methods=["POST"],
+    defaults={"room_key": "hickory"},
+    endpoint="hickory_tv",
+)
 @api_v1.route("/room/<room_key>/tv", methods=["POST"])
-def room_tv(room_key: str):
+@validate()
+def room_tv(room_key: str, body: RoomTvControl):
     """Control a configured room's TV lift (up/down)."""
-    config = room_config.find_room_config(room_key.casefold())
-    if config is None:
-        return jsonify({"error": "Unknown room control configuration"}), 404
-    if not config.tv_up_label or not config.tv_down_label:
-        return jsonify({"error": "No TV configured"}), 404
-    payload = request.get_json(silent=True) or {}
-    direction = payload.get("direction")
-    if direction not in ("up", "down"):
-        return jsonify({"error": "direction must be 'up' or 'down'"}), 400
-    try:
+    config = _require_room_config(room_key)
+    control = _require_control(config, body.control, RoomControlKind.TV)
+    with _hubitat_control("TV"):
         hubitat.control_room_tv(
-            direction,
-            up_label=config.tv_up_label,
-            down_label=config.tv_down_label,
+            body.direction,
+            up_label=control.up_label,
+            down_label=control.down_label,
         )
-        return jsonify(json_ready(CommandResponse(direction=direction)))
-    except (RuntimeError, OSError) as e:
-        logger.warning("TV control failed: %s", e)
-        return jsonify({"error": str(e)}), 500
+    return jsonify(json_ready(CommandResponse(direction=body.direction)))
 
 
 @api_v1.route("/debug/db_devices")
@@ -784,7 +880,7 @@ def debug_db_devices(conn):
         return jsonify({"names": device_names, "data": device_data})
     except (ValueError, RuntimeError, OSError) as e:
         logger.warning("Failed to fetch all devices: %s", e)
-        return jsonify({"error": str(e)}), 500
+        raise UpstreamUnavailable("Device lookup failed") from e
 
 
 @api_v1.route("/debug/hubitat_devices")
@@ -801,7 +897,7 @@ def debug_hubitat_devices():
         return jsonify({"names": device_names, "data": hubitat_devices})
     except (ValueError, RuntimeError, OSError) as e:
         logger.warning("Failed to fetch Hubitat devices: %s", e)
-        return jsonify({"error": str(e)}), 500
+        raise UpstreamUnavailable("Hubitat request failed") from e
 
 
 @api_v1.route("/debug/ae200_devices")
@@ -831,6 +927,8 @@ def debug_ae200_devices():
             {"names": device_names, "devices": ae200_devices, "details": ae200_details}
         )
     except ValueError as e:
-        return _command_error_response(e)
-    except (ET.ParseError, OSError, RuntimeError, WebSocketException) as e:
-        return _ae200_error_response(e)
+        logger.info("Command request rejected: %s", e)
+        raise BadRequest("Invalid command request") from e
+    except AE200_TRANSPORT_ERRORS as e:  # pylint: disable=catching-non-exception
+        logger.warning("AE-200 request failed: %s", e)
+        raise UpstreamUnavailable("AE-200 request failed") from e

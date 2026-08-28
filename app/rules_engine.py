@@ -3,41 +3,77 @@ Run the rules engine.
 
 The RULES_ENGINE is a special device which, if disabled, disables all rules.
 Each individual rule can also be disabled.
-Rules are executed with exec(get_rules()) in rules_results.
-We loop for every device
+Rules are compiled once and the typed entry points loop over every device.
 
 """
+
+# pylint: disable=too-many-lines
 
 import datetime
 import types
 import time
 import logging
 from pathlib import Path
+from collections.abc import Callable
+import requests
 
 
+from .changelog_comments import auto_temps_label, change_comment, temp_label
 from .constants import RULES_ENGINE_DEVICE_NAME
 from .device_types import DEVICE_TYPE_INTERNAL
 from .paths import BIN_DIR
 from . import db
+from . import db_alerts
 from . import presence
 from . import ae200
+from . import slack
+
 from .models import (
     AutoSetTempControl,
+    ChangelogAction,
     SpeedControl,
     DriveControl,
     ModeControl,
     SetTempControl,
     Device,
+    AlertEventNotification,
+    AlertEventRecord,
+    AlertEventType,
+    AlertRecord,
+    AlertRuleDevice,
+    AlertRuleEvaluation,
+    AlertRuleResult,
+    AlertRuleState,
+    CompiledRules,
     RuleResult,
 )
+from .fcu_control import FcuStateControl
 
 logger = logging.getLogger(__name__)
 
 RULES_DEVICE_NAME = RULES_ENGINE_DEVICE_NAME
 RULES_PATH = Path(BIN_DIR) / "rules.py"
 
-RULES_DISABLED_MESSAGE = "Master rules switch is OFF; skipping all rules execution"
+RULES_DISABLED_MESSAGE = "Master rules switch is OFF; skipping HVAC rule execution"
 RULES_TIME_SUSPENDED_MESSAGE = "all rules disabled (time-limited suspension)"
+
+ALERT_REPEAT_FIRST_HOUR_SECONDS = 5 * 60
+ALERT_REPEAT_FIRST_DAY_SECONDS = 60 * 60
+ALERT_REPEAT_LATER_SECONDS = 4 * 60 * 60
+ALERT_FIRST_HOUR_SECONDS = 60 * 60
+ALERT_FIRST_DAY_SECONDS = 24 * 60 * 60
+ALERT_DELIVERY_RETRY_INITIAL_SECONDS = 60
+ALERT_DELIVERY_RETRY_MAX_SECONDS = 60 * 60
+ALERT_DELIVERY_MAX_ATTEMPTS = 24
+ALERT_DELIVERY_OUTBOX_BATCH_SIZE = 100
+DEFAULT_ALERT_RULE_HISTORY_SECONDS = 10 * 60
+ACTION_RULE_AQI_MAX_AGE_SECONDS = 2 * 60 * 60
+AQI_MISSING_MESSAGE = "Cannot run HVAC rules: no outdoor AQI observation is available"
+AQI_STALE_MESSAGE = "Cannot run HVAC rules: outdoor AQI observation is stale"
+AQI_FUTURE_MESSAGE = "Cannot run HVAC rules: outdoor AQI observation is in the future"
+
+AlertNotifier = Callable[[str], str | None]
+AlertRuleFunction = Callable[[AlertRuleDevice, datetime.datetime], object]
 
 
 def get_room_presence(conn, room_id: int, *, when: int | None = None):
@@ -104,16 +140,52 @@ def all_rules_disabled_until(conn) -> int:
     logger.info("all rules disabled until %s", until)
     return until if until else 0
 
-def disable_all_rules(conn, seconds: int):
-    """Enter a database engtry to disable the rules for a period of seconds.
-    :param seconds: how long to disable rules for
+def disable_all_rules(conn, seconds: int, ipaddr=None, agent=None):
+    """Disable every rule for `seconds` (0 re-enables immediately).
+
+    Takes ipaddr/agent so the audit row records who did it, like every other
+    manual control path.
     """
     logger.info("disable_all_rules(%s)", seconds)
-    db.disable_rules_for_device(conn, rules_id(conn), seconds)
+    if seconds:
+        comment = f"all rules disabled for {seconds / 60:g} minutes"
+    else:
+        comment = "all rules re-enabled"
+    db.disable_rules_for_device(
+        conn, rules_id(conn), seconds, ipaddr=ipaddr, agent=agent, comment=comment
+    )
 
 def get_rules():
     """Returns the rules as a text"""
     return RULES_PATH.read_text(encoding="utf-8")
+
+
+def compile_rules() -> CompiledRules:
+    """Execute ``rules.py`` once and return its typed entry points."""
+    virtual_module = types.ModuleType("ephemeral_rule_namespace")
+    virtual_module.__file__ = str(RULES_PATH)
+    virtual_module.__dict__["__builtins__"] = __builtins__
+    try:
+        exec(get_rules(), virtual_module.__dict__)  # pylint: disable=exec-used
+    except Exception:  # pylint: disable=broad-except
+        logger.exception("Failed to compile rules from %s", RULES_PATH)
+        return CompiledRules(compile_error=True)
+
+    action_rule = getattr(virtual_module, "run_rules_for_device", None)
+    alert_rule = getattr(virtual_module, "run_alert_rules_for_device", None)
+    history_seconds = getattr(
+        virtual_module,
+        "ALERT_RULE_HISTORY_SECONDS",
+        DEFAULT_ALERT_RULE_HISTORY_SECONDS,
+    )
+    if not isinstance(history_seconds, int) or history_seconds <= 0:
+        logger.error("ALERT_RULE_HISTORY_SECONDS must be a positive integer")
+        history_seconds = None
+    return CompiledRules(
+        action_rule=action_rule if isinstance(action_rule, types.FunctionType) else None,
+        alert_rule=alert_rule if isinstance(alert_rule, types.FunctionType) else None,
+        alert_history_seconds=history_seconds,
+    )
 
 def prune_rules(conn):
     """If the rule's disabling has expired, enable it."""
@@ -125,109 +197,127 @@ def prune_rules(conn):
     )
     conn.commit()
 
+
 def set_body_fan_speed(conn, body: SpeedControl, ipaddr, agent):
-    """
-    :param conn: SQLIte3 database conneciton
-    :param body: Unit to set, and new speed
-    :param ipaddr: Who requested the change
-    :param agent: What requested the change.
-    """
-
-    unit_id = db.get_ae200_unit(conn, body.device_id)
-
-    # Get the current speed of the unit
-    current_fan_speed = ae200.get_device_fan_speed(unit_id)
-    if current_fan_speed == body.fan_speed:
-        logger.info(
-            "set_body_fan_speed body=[%s] ipaddr=%s agent=%s. Speed will not change",
-            body,
-            ipaddr,
-            agent,
-        )
-    else:
-        logger.info(
-            "set_body_fan_speed body=[%s] ipaddr=%s agent=%s. Speed changed. current_fan_speed=%s",
-            body,
-            ipaddr,
-            agent,
-            current_fan_speed,
-        )
-        db.insert_changelog(
-            conn,
-            ipaddr=ipaddr,
-            device_id=body.device_id,
-            ae200_device_id=unit_id,
-            current_values=str(current_fan_speed),
-            new_value=str(body.fan_speed),
-            agent=agent,
-        )
-        ae200.set_fan_speed(unit_id, body.fan_speed)
-    data = ae200.get_device_info(unit_id)
-    # The hardware may not yet reflect the FanSpeed we just sent (the read-back
-    # can race the command), so record the commanded value rather than a
-    # possibly stale reading. The next runner poll reconciles with hardware.
-    data["FanSpeed"] = ae200.FAN_SPEEDS[body.fan_speed]
-    temp = data.get("InletTemp", None)
-    db.insert_devlog_entry(conn, device_id=body.device_id, temp=temp, statusdict=data)
-    return {
-        "unit": unit_id,
-        "temp": temp,
-        "device_id": body.device_id,
-        "speed": body.fan_speed,
-    }
+    """Set and verify one fan-speed-only command."""
+    return set_body_fcu_state(
+        conn,
+        FcuStateControl(device_id=body.device_id, fan_speed=body.fan_speed),
+        ipaddr,
+        agent,
+    )
 
 
 def set_body_drive(conn, body: DriveControl, ipaddr, agent):
-    """
-    :param conn: SQLIte3 database conneciton
-    :param body: Unit to set, and new drive
-    :param ipaddr: Who requested the change
-    :param agent: What requested the change.
-    """
-    logger.debug("==== set_body_drive body=%s", body)
+    """Set and verify one drive-only command."""
+    return set_body_fcu_state(
+        conn,
+        FcuStateControl(device_id=body.device_id, drive=body.drive),
+        ipaddr,
+        agent,
+    )
 
+
+def _fcu_state_text(drive: str, fan_speed: str) -> str:
+    return f"Drive={drive} FanSpeed={fan_speed}"
+
+
+def _fcu_state_action(body: FcuStateControl) -> ChangelogAction:
+    if body.drive is not None and body.fan_speed is not None:
+        return ChangelogAction.FCU_STATE
+    if body.drive is not None:
+        return ChangelogAction.DRIVE
+    return ChangelogAction.FAN_SPEED
+
+
+def set_body_fcu_state(conn, body: FcuStateControl, ipaddr, agent):
+    """Atomically set requested FCU fields and persist only verified state."""
     unit_id = db.get_ae200_unit(conn, body.device_id)
+    before = ae200.get_device_info(unit_id)
+    current_drive = before[ae200.AE200_DRIVE_KEY]
+    current_speed = before[ae200.AE200_FAN_SPEED_KEY]
+    requested_drive = (
+        ae200.DRIVES[body.drive] if body.drive is not None else current_drive
+    )
+    requested_speed = (
+        ae200.FAN_SPEEDS[body.fan_speed]
+        if body.fan_speed is not None
+        else current_speed
+    )
+    old_value = _fcu_state_text(current_drive, current_speed)
+    new_value = _fcu_state_text(requested_drive, requested_speed)
+    action = _fcu_state_action(body)
 
-    # Get the current speed of the unit
-    current_drive = ae200.get_device_drive(unit_id)
-    if current_drive == body.drive:
-        logger.info(
-            "set_body_drive body=[%s] ipaddr=%s agent=%s. Drive will not change",
-            body,
-            ipaddr,
-            agent,
-        )
+    if old_value == new_value:
+        verified = before
     else:
-        logger.info(
-            "set_body_drive body=[%s] ipaddr=%s agent=%s. Drive changed. current_drive=%s",
-            body,
-            ipaddr,
-            agent,
-            current_drive,
-        )
+        try:
+            ae200.set_fcu_state(
+                unit_id,
+                drive=body.drive,
+                fan_speed=body.fan_speed,
+            )
+            verified = ae200.get_device_info_after_write(unit_id)
+        except Exception as error:  # pylint: disable=broad-except
+            db.insert_changelog(
+                conn,
+                ipaddr=ipaddr,
+                device_id=body.device_id,
+                ae200_device_id=unit_id,
+                action=action,
+                current_values=old_value,
+                new_value=new_value,
+                agent=agent,
+                comment=f"command failed: {type(error).__name__}",
+            )
+            raise
+
+        actual_drive = verified.get(ae200.AE200_DRIVE_KEY)
+        actual_speed = verified.get(ae200.AE200_FAN_SPEED_KEY)
+        confirmed = actual_drive == requested_drive and actual_speed == requested_speed
         db.insert_changelog(
             conn,
             ipaddr=ipaddr,
             device_id=body.device_id,
             ae200_device_id=unit_id,
-            current_values=str(current_drive),
-            new_value=str(body.drive),
+            action=action,
+            current_values=old_value,
+            new_value=new_value,
             agent=agent,
+            comment=(
+                "confirmed"
+                if confirmed
+                else "not confirmed; actual="
+                + _fcu_state_text(str(actual_drive), str(actual_speed))
+            ),
         )
-        ae200.set_drive(unit_id, body.drive)
-    data = ae200.get_device_info(unit_id)
-    # The hardware may not yet reflect the Drive we just sent (the read-back can
-    # race the command), so record the commanded value rather than a possibly
-    # stale reading. Otherwise /status can report the old drive and the UI snaps
-    # back to the prior state. The next runner poll reconciles with hardware.
-    data["Drive"] = ae200.int_to_drive(body.drive)
-    temp = data.get("InletTemp", None)
-    db.insert_devlog_entry(conn, device_id=body.device_id, temp=temp, statusdict=data)
+        if not confirmed:
+            temp = verified.get("InletTemp")
+            db.insert_devlog_entry(
+                conn,
+                device_id=body.device_id,
+                temp=temp,
+                statusdict=verified,
+            )
+            raise ae200.AE200VerificationError(
+                f"AE-200 did not confirm {new_value}; "
+                f"reported {_fcu_state_text(str(actual_drive), str(actual_speed))}"
+            )
+
+    temp = verified.get("InletTemp")
+    db.insert_devlog_entry(
+        conn,
+        device_id=body.device_id,
+        temp=temp,
+        statusdict=verified,
+    )
     return {
         "unit": unit_id,
         "temp": temp,
         "device_id": body.device_id,
-        "drive": body.drive,
+        "drive": ae200.DRIVE_NAMES[verified[ae200.AE200_DRIVE_KEY]],
+        "speed": ae200.FAN_SPEED_NAMES[verified[ae200.AE200_FAN_SPEED_KEY]],
+        "verified": True,
     }
 
 
@@ -257,9 +347,11 @@ def set_body_mode(conn, body: ModeControl, ipaddr, agent):
             ipaddr=ipaddr,
             device_id=body.device_id,
             ae200_device_id=unit_id,
+            action=ChangelogAction.MODE,
             current_values=str(current_mode) if current_mode is not None else "",
             new_value=body.mode,
             agent=agent,
+            comment=change_comment("mode", current_mode or "unknown", body.mode),
         )
         ae200.set_mode(unit_id, body.mode)
     data = ae200.get_device_info(unit_id)
@@ -285,6 +377,7 @@ def set_body_set_temp(conn, body: SetTempControl, ipaddr, agent):
 
     data = ae200.get_device_info(unit_id)
     current_set_temp = data.get("SetTemp")
+    current_set_temp_c = db.set_temp_c_from_status(data)
     logger.info(
         "set_body_set_temp body=[%s] ipaddr=%s agent=%s. current_set_temp=%s",
         body,
@@ -293,26 +386,30 @@ def set_body_set_temp(conn, body: SetTempControl, ipaddr, agent):
         current_set_temp,
     )
 
-    # Record change in changelog if the value is actually changing
-    try:
-        current_value_str = (
-            str(current_set_temp) if current_set_temp is not None else ""
+    # Record change in changelog if the value is actually changing. The comparison
+    # must be numeric: the AE-200 reports SetTemp as a bare string ("24"), so
+    # comparing it against str() of the float request read 24 -> 24.0 as a change,
+    # logging a spurious row and re-sending a no-op command.
+    if current_set_temp_c != body.set_temp_c:
+        db.insert_changelog(
+            conn,
+            ipaddr=ipaddr,
+            device_id=body.device_id,
+            ae200_device_id=unit_id,
+            action=ChangelogAction.SET_TEMPERATURE,
+            current_values=(
+                str(current_set_temp) if current_set_temp is not None else ""
+            ),
+            new_value=str(body.set_temp_c),
+            agent=agent,
+            comment=change_comment(
+                "set temp",
+                temp_label(current_set_temp_c),
+                f"{temp_label(body.set_temp_c)} C",
+            ),
         )
-        new_value_str = str(body.set_temp_c)
-        if current_value_str != new_value_str:
-            db.insert_changelog(
-                conn,
-                ipaddr=ipaddr,
-                device_id=body.device_id,
-                ae200_device_id=unit_id,
-                current_values=current_value_str,
-                new_value=new_value_str,
-                agent=agent,
-            )
-            ae200.set_set_temp(unit_id, body.set_temp_c)
-            data = ae200.get_device_info(unit_id)
-    except (OSError, ValueError, RuntimeError) as exc:  # pragma: no cover - defensive
-        logger.exception("Error while setting set temperature: %s", exc)
+        ae200.set_set_temp(unit_id, body.set_temp_c)
+        data = ae200.get_device_info(unit_id)
 
     temp = data.get("InletTemp", None)
     db.insert_devlog_entry(conn, device_id=body.device_id, temp=temp, statusdict=data)
@@ -341,15 +438,26 @@ def set_body_auto_set_temp(conn, body: AutoSetTempControl, ipaddr, agent):
         current_value_str,
     )
 
-    if current_value_str != new_value_str:
+    # Compare numerically, for the same reason as set_body_set_temp above: these
+    # set points are also reported as bare strings ("19" for a requested 19.0).
+    current_set_temps = ae200.extract_set_temperatures(data)
+    current_heat_c = current_set_temps.get("heat_set_temp_c")
+    current_cool_c = current_set_temps.get("cool_set_temp_c")
+    if (current_heat_c, current_cool_c) != (body.heat_set_temp_c, body.cool_set_temp_c):
         db.insert_changelog(
             conn,
             ipaddr=ipaddr,
             device_id=body.device_id,
             ae200_device_id=unit_id,
+            action=ChangelogAction.SET_AUTO_TEMPERATURE,
             current_values=current_value_str,
             new_value=new_value_str,
             agent=agent,
+            comment=change_comment(
+                "set auto temps",
+                auto_temps_label(current_heat_c, current_cool_c),
+                auto_temps_label(body.heat_set_temp_c, body.cool_set_temp_c),
+            ),
         )
         ae200.set_auto_set_temps(
             unit_id,
@@ -371,28 +479,21 @@ def set_body_auto_set_temp(conn, body: AutoSetTempControl, ipaddr, agent):
     }
 
 
-def _temperature_context(conn):
-    """Returns the temperature for all devices"""
-    status = db.get_device_status(conn)
-    effective_by_id = {}
-    raw_by_id = {}
-    for device in status:
-        raw = device.get("temp10x")
-        calculated = device.get("calculated_temp10x")
-        if raw is not None:
-            raw_by_id[device["device_id"]] = raw / 10
-        if calculated is not None:
-            effective_by_id[device["device_id"]] = calculated / 10
-        elif raw is not None:
-            effective_by_id[device["device_id"]] = raw / 10
-
-    def get_temp(device_id):
-        return effective_by_id.get(device_id)
-
-    def get_fcu_temp(device_id):
-        return raw_by_id.get(device_id)
-
-    return {"get_temp": get_temp, "get_fcu_temp": get_fcu_temp}
+def _rule_device(devdict) -> Device:
+    """Build the typed device context shared by action-rule entry points."""
+    raw = devdict.get("temp10x")
+    effective = devdict.get("calculated_temp10x")
+    if effective is None:
+        effective = raw
+    return Device(
+        erv=db.is_erv_device(devdict),
+        name=devdict["device_name"],
+        device_id=devdict["device_id"],
+        device_type=devdict.get("device_type"),
+        rules_enabled=devdict.get("rules_enabled", True),
+        temperature_c=effective / 10 if effective is not None else None,
+        fcu_temperature_c=raw / 10 if raw is not None else None,
+    )
 
 
 def _rule_datetime(when=None):
@@ -419,62 +520,383 @@ def _require_rule_result(result) -> RuleResult:
 
 
 def _commit_rule_result(conn, dev: Device, result: RuleResult):
-    if result.drive is not None:
-        set_body_drive(
-            conn,
-            DriveControl(device_id=dev.device_id, drive=ae200.DRIVE_NAMES[result.drive]),
-            "n/a",
-            "rule",
-        )
-    if result.fan_speed is not None:
-        set_body_fan_speed(
-            conn,
-            SpeedControl(
-                device_id=dev.device_id,
-                fan_speed=ae200.FAN_SPEED_NAMES[result.fan_speed],
+    if result.drive is None and result.fan_speed is None:
+        return
+    set_body_fcu_state(
+        conn,
+        FcuStateControl(
+            device_id=dev.device_id,
+            drive=(
+                ae200.DRIVE_NAMES[result.drive]
+                if result.drive is not None
+                else None
             ),
-            "n/a",
-            "rule",
+            fan_speed=(
+                ae200.FAN_SPEED_NAMES[result.fan_speed]
+                if result.fan_speed is not None
+                else None
+            ),
+        ),
+        "n/a",
+        "rule",
+    )
+
+
+def _record_action_rule_failure(conn, devdict, error: Exception, *, commit: bool):
+    device_id = devdict["device_id"]
+    error_name = type(error).__name__
+    message = f"Device {device_id} action-rule failure: {error_name}: {error}"
+    logger.exception("Device %s action-rule failure: %s: %s", device_id, error_name, error)
+    if commit:
+        try:
+            db.insert_action_rule_failure(
+                conn,
+                device_id=device_id,
+                ae200_device_id=devdict.get("ae200_device_id"),
+                error_type=error_name,
+                error_message=str(error),
+            )
+        except Exception:  # pylint: disable=broad-except
+            logger.exception("Could not audit action-rule failure for device %s", device_id)
+    return message
+
+
+def next_alert_notification_at(first_notification_time: int, last_event_time: int) -> int:
+    """Return the next reminder boundary for the requested escalating cadence."""
+    first_hour_end = first_notification_time + ALERT_FIRST_HOUR_SECONDS
+    first_day_end = first_notification_time + ALERT_FIRST_DAY_SECONDS
+    if last_event_time < first_hour_end:
+        return min(
+            last_event_time + ALERT_REPEAT_FIRST_HOUR_SECONDS,
+            first_hour_end,
+        )
+    if last_event_time < first_day_end:
+        return min(
+            last_event_time + ALERT_REPEAT_FIRST_DAY_SECONDS,
+            first_day_end,
+        )
+    return last_event_time + ALERT_REPEAT_LATER_SECONDS
+
+
+def _require_alert_rule_results(results) -> list[AlertRuleResult]:
+    if results is None:
+        return []
+    if not isinstance(results, (list, tuple)):
+        raise TypeError(
+            "run_alert_rules_for_device returned "
+            f"{type(results).__name__}, expected a list"
+        )
+    return [
+        result
+        if isinstance(result, AlertRuleResult)
+        else AlertRuleResult.model_validate(result)
+        for result in results
+    ]
+
+
+def _invoke_alert_rule(
+    rule_function: AlertRuleFunction,
+    device: AlertRuleDevice,
+    now: datetime.datetime,
+) -> object:
+    return rule_function(device, now)
+
+
+def _deliver_alert_event(
+    conn,
+    notification: AlertEventNotification,
+    notifier: AlertNotifier,
+) -> None:
+    event = db_alerts.create_alert_event(
+        conn,
+        alert_id=notification.alert_id,
+        event_time=notification.event_time,
+        event_type=notification.event_type,
+        message=notification.message,
+    )
+    conn.commit()
+    logger.warning("Alert %s: %s", notification.event_type.value, notification.message)
+    _attempt_alert_event_delivery(
+        conn,
+        event,
+        attempted_at=notification.event_time,
+        notifier=notifier,
+    )
+
+
+def _alert_delivery_retry_seconds(
+    attempt_number: int, error: Exception | None = None
+) -> int:
+    """Return capped exponential backoff, extended by Slack Retry-After."""
+    exponent = min(max(0, attempt_number - 1), 16)
+    delay: int = min(
+        ALERT_DELIVERY_RETRY_INITIAL_SECONDS * (2**exponent),
+        ALERT_DELIVERY_RETRY_MAX_SECONDS,
+    )
+    if isinstance(error, requests.exceptions.HTTPError) and error.response is not None:
+        retry_after = error.response.headers.get("Retry-After")
+        try:
+            if retry_after:
+                retry_after_seconds = int(str(retry_after))
+                delay = max(delay, retry_after_seconds)
+        except (TypeError, ValueError):
+            logger.warning("Ignoring invalid Slack Retry-After value %r", retry_after)
+    return delay
+
+
+def _attempt_alert_event_delivery(
+    conn,
+    event: AlertEventRecord,
+    *,
+    attempted_at: int,
+    notifier: AlertNotifier,
+) -> bool:
+    """Claim and attempt one outbox event, recording a durable outcome."""
+    attempt_number = event.slack_attempt_count + 1
+    provisional_retry_at = attempted_at + _alert_delivery_retry_seconds(attempt_number)
+    if not db_alerts.claim_alert_event_delivery(
+        conn,
+        event.alert_event_id,
+        attempted_at=attempted_at,
+        retry_at=provisional_retry_at,
+    ):
+        return False
+    try:
+        message_ts = notifier(event.message)
+        if not message_ts:
+            raise RuntimeError("Slack did not return a message timestamp")
+    except Exception as error:  # pylint: disable=broad-except
+        logger.exception("Failed to deliver alert event %s to Slack", event.alert_event_id)
+        terminal = attempt_number >= ALERT_DELIVERY_MAX_ATTEMPTS
+        retry_at = None
+        if not terminal:
+            retry_at = attempted_at + _alert_delivery_retry_seconds(
+                attempt_number, error
+            )
+        db_alerts.mark_alert_event_failed(
+            conn,
+            event.alert_event_id,
+            error=str(error),
+            retry_at=retry_at,
+            terminal=terminal,
+        )
+        return False
+    db_alerts.mark_alert_event_sent(
+        conn,
+        event.alert_event_id,
+        message_ts=message_ts,
+    )
+    return True
+
+
+def _deliver_due_alert_events(conn, *, now: int, notifier: AlertNotifier) -> None:
+    """Drain one bounded batch of due pending and failed outbox events."""
+    for event in db_alerts.get_due_alert_events(
+        conn,
+        now=now,
+        limit=ALERT_DELIVERY_OUTBOX_BATCH_SIZE,
+    ):
+        _attempt_alert_event_delivery(
+            conn,
+            event,
+            attempted_at=now,
+            notifier=notifier,
         )
 
 
-def rules_results(conn, when=None, aqi=50):
+def _remind_active_alert(
+    conn,
+    active_alert: AlertRecord,
+    evaluation: AlertRuleEvaluation,
+    *,
+    notifier: AlertNotifier,
+) -> str | None:
+    result = evaluation.result
+    now = evaluation.now
+    indeterminate = result.state == AlertRuleState.INDETERMINATE
+    qualifier = "indeterminate " if indeterminate else ""
+    summary = (
+        f"Device {evaluation.device_id} reminded {qualifier}{result.alert_type}"
+    )
+    event_window = db_alerts.get_alert_event_window(conn, active_alert.alert_id)
+    reminder_due = event_window is None or now >= next_alert_notification_at(
+        event_window.first_event_time, event_window.last_event_time
+    )
+    if not reminder_due:
+        return None
+    if not evaluation.commit:
+        return summary.replace(" reminded ", " would remind ")
+    _deliver_alert_event(
+        conn,
+        AlertEventNotification(
+            alert_id=active_alert.alert_id,
+            event_time=now,
+            event_type=AlertEventType.REMINDER,
+            message=result.message,
+        ),
+        notifier=notifier,
+    )
+    return summary
+
+
+def _apply_active_alert_result(
+    conn,
+    active_alert: AlertRecord | None,
+    evaluation: AlertRuleEvaluation,
+    notifier: AlertNotifier,
+) -> str | None:
+    device_id = evaluation.device_id
+    result = evaluation.result
+    if active_alert is None:
+        if not evaluation.commit:
+            return f"Device {device_id} would trigger {result.alert_type}"
+        creation = db_alerts.get_or_create_active_alert_record(
+            conn,
+            device_id=device_id,
+            alert_type=result.alert_type,
+            start_time=result.started_at or evaluation.now,
+        )
+        active_alert = creation.alert
+        if not creation.created:
+            return _remind_active_alert(conn, active_alert, evaluation, notifier=notifier)
+        _deliver_alert_event(
+            conn,
+            AlertEventNotification(
+                alert_id=active_alert.alert_id,
+                event_time=evaluation.now,
+                event_type=AlertEventType.TRIGGERED,
+                message=result.message,
+            ),
+            notifier=notifier,
+        )
+        return f"Device {device_id} triggered {result.alert_type}"
+    return _remind_active_alert(conn, active_alert, evaluation, notifier=notifier)
+
+
+def _apply_inactive_alert_result(
+    conn,
+    active_alert: AlertRecord | None,
+    evaluation: AlertRuleEvaluation,
+    notifier: AlertNotifier,
+) -> str | None:
+    if active_alert is None:
+        return None
+    device_id = evaluation.device_id
+    result = evaluation.result
+    if not evaluation.commit:
+        return f"Device {device_id} would resolve {result.alert_type}"
+    db_alerts.resolve_alert_record(conn, active_alert.alert_id, end_time=evaluation.now)
+    _deliver_alert_event(
+        conn,
+        AlertEventNotification(
+            alert_id=active_alert.alert_id,
+            event_time=evaluation.now,
+            event_type=AlertEventType.RESOLVED,
+            message=result.resolved_message,
+        ),
+        notifier=notifier,
+    )
+    return f"Device {device_id} resolved {result.alert_type}"
+
+
+def _apply_alert_rule_result(
+    conn,
+    evaluation: AlertRuleEvaluation,
+    notifier: AlertNotifier,
+) -> str | None:
+    result = evaluation.result
+    active_alert = db_alerts.get_active_alert_record(
+        conn, evaluation.device_id, result.alert_type
+    )
+    if result.state == AlertRuleState.ACTIVE:
+        return _apply_active_alert_result(conn, active_alert, evaluation, notifier)
+    if result.state == AlertRuleState.INACTIVE:
+        return _apply_inactive_alert_result(conn, active_alert, evaluation, notifier)
+    if active_alert is None:
+        return None
+    return _remind_active_alert(conn, active_alert, evaluation, notifier=notifier)
+
+
+def apply_alert_evaluation(
+    conn,
+    evaluation: AlertRuleEvaluation,
+    *,
+    notifier: AlertNotifier | None = None,
+) -> str | None:
+    """Apply one typed alert observation through the shared lifecycle."""
+    return _apply_alert_rule_result(conn, evaluation, notifier or slack.post)
+
+
+def run_alert_rules(
+    conn,
+    when=None,
+    *,
+    commit: bool = False,
+    notifier: AlertNotifier | None = None,
+    compiled_rules: CompiledRules | None = None,
+) -> str:
+    """Evaluate monitoring-only rules regardless of the HVAC master switch."""
+    now = _rule_datetime(when)
+    now_ts = int(now.timestamp())
+    deliver = notifier or slack.post
+    if commit:
+        _deliver_due_alert_events(conn, now=now_ts, notifier=deliver)
+    program = compiled_rules if compiled_rules is not None else compile_rules()
+    if program.compile_error:
+        return "Cannot compile alert rules"
+
+    rule_function = program.alert_rule
+    if rule_function is None:
+        logger.warning("No run_alert_rules_for_device function in %s", RULES_PATH)
+        return "No alert rules"
+
+    history_seconds = program.alert_history_seconds
+    if history_seconds is None:
+        return "Invalid alert-rule history"
+
+    results: list[str] = []
+    for device in db_alerts.get_alert_rule_devices(
+        conn, now=now_ts, history_seconds=history_seconds
+    ):
+        try:
+            alert_results = _require_alert_rule_results(
+                _invoke_alert_rule(rule_function, device, now)
+            )
+            for alert_result in alert_results:
+                summary = apply_alert_evaluation(
+                    conn,
+                    AlertRuleEvaluation(
+                        device_id=device.device_id,
+                        result=alert_result,
+                        now=now_ts,
+                        commit=commit,
+                    ),
+                    notifier=deliver,
+                )
+                if summary:
+                    results.append(summary)
+        except Exception:  # pylint: disable=broad-except
+            logger.exception("Failed alert-rule evaluation for device %s", device.device_id)
+    return "\n".join(results)
+
+
+def rules_results(
+    conn, when=None, aqi=50, *, compiled_rules: CompiledRules | None = None
+):
     """Reports what would happen if the rules were run at `when` with a specific AQI"""
     logger.debug("when=%s", when)
 
-    results = []
-    temps = _temperature_context(conn)
-
-    def set_drive_verbose(device_id, value):
-        results.append(f"Device {device_id} drive set to {value}")
-
-    def set_fan_speed_verbose(device_id, value):
-        results.append(f"Device {device_id} speed set to {value}")
-
-    rule_namespace = {**db.devices_to_device_id(conn), **get_time_dict(when)}
-    rule_namespace.update({
-        "AQI": aqi,
-        "set_drive": set_drive_verbose,
-        "set_fan_speed": set_fan_speed_verbose,
-        "get_temp": temps["get_temp"],
-        "get_fcu_temp": temps["get_fcu_temp"],
-    })
-
-    exec(get_rules(), rule_namespace, rule_namespace)  # pylint: disable=exec-used
-
-    run_rules_for_device = rule_namespace.get("run_rules_for_device")
+    results: list[str] = []
+    program = compiled_rules if compiled_rules is not None else compile_rules()
+    if program.compile_error:
+        return "Cannot compile rules"
+    run_rules_for_device = program.action_rule
     if run_rules_for_device is not None:
         now = _rule_datetime(when)
         for devdict in db.get_device_status(conn):
             if not devdict.get("rules_enabled", True):
                 continue
-            dev = Device(
-                erv=db.is_erv_device(devdict),
-                name=devdict["device_name"],
-                device_id=devdict["device_id"],
-                device_type=devdict.get("device_type"),
-                rules_enabled=devdict.get("rules_enabled", True),
-            )
+            dev = _rule_device(devdict)
             res = run_rules_for_device(dev, now, aqi)
             if res is None:
                 continue
@@ -503,7 +925,25 @@ def _clear_expired_device_rule_suspensions(conn):
             )
 
 
-def run_all_rules(conn, when=None, commit=False):
+def _fresh_action_rule_aqi(conn, now: datetime.datetime) -> tuple[int | None, str | None]:
+    """Return a fresh AQI value or the reason action rules must stop."""
+    observation = db.get_last_aqi(conn)
+    if observation is None:
+        logger.warning(AQI_MISSING_MESSAGE)
+        return None, AQI_MISSING_MESSAGE
+    age = int(now.timestamp()) - observation.observed_at
+    if age < 0:
+        logger.warning("%s: observed_at=%s", AQI_FUTURE_MESSAGE, observation.observed_at)
+        return None, AQI_FUTURE_MESSAGE
+    if age > ACTION_RULE_AQI_MAX_AGE_SECONDS:
+        logger.warning("%s: age=%ss", AQI_STALE_MESSAGE, age)
+        return None, AQI_STALE_MESSAGE
+    return observation.value, None
+
+
+def run_all_rules(
+    conn, when=None, commit=False, *, compiled_rules: CompiledRules | None = None
+):
     """Run the rules and return a text description of what changed.
 
     Does not execute commands if all rules are disabled or if rules for the
@@ -520,32 +960,24 @@ def run_all_rules(conn, when=None, commit=False):
         logger.info(RULES_TIME_SUSPENDED_MESSAGE)
         return RULES_TIME_SUSPENDED_MESSAGE
 
+    now = _rule_datetime(when)
+    aqi, aqi_error = _fresh_action_rule_aqi(conn, now)
+    if aqi_error:
+        return aqi_error
+
     # Get controllable devices from status rows so derived flags are available.
     rule_devices = db.get_device_status(conn)
 
-    # Compile the rules_runner
-    virtual_module = types.ModuleType("ephemeral_rule_namespace")
-    virtual_module.__file__ = str(RULES_PATH)
-    virtual_module.__dict__["__builtins__"] = __builtins__
-
-    try:
-        # Execute the compiled code exclusively within the virtual module's dictionary
-        exec(get_rules(), virtual_module.__dict__)  # pylint: disable=exec-used
-
-        # Extract and invoke the target function
-        if not hasattr(virtual_module, "run_rules_for_device"):
-            logger.error(
-                "Target function 'run_rules_for_device' not found in %s", RULES_PATH
-            )
-            return "Cannot run rules"
-        run_rules_for_device = getattr(virtual_module, "run_rules_for_device")
-    except Exception:  # pylint: disable=broad-except
-        logger.exception("Failed to compile rules from %s", RULES_PATH)
+    program = compiled_rules if compiled_rules is not None else compile_rules()
+    if program.compile_error:
         return "Cannot compile rules"
+    run_rules_for_device = program.action_rule
+    if run_rules_for_device is None:
+        logger.error("Target function 'run_rules_for_device' not found in %s", RULES_PATH)
+        return "Cannot run rules"
 
     # Now run the rules for every device
-    now = _rule_datetime(when)
-    aqi = db.get_last_aqi(conn)
+    assert aqi is not None
     rules_res = []
     rules_res.append(f"Rules starting at {now}. commit={commit}")
 
@@ -561,25 +993,28 @@ def run_all_rules(conn, when=None, commit=False):
                 f"(currently {now.timestamp()})"
             )
             continue
-        dev = Device(
-            erv=db.is_erv_device(devdict),
-            name=devdict["device_name"],
-            device_id=devdict["device_id"],
-            device_type=devdict.get("device_type"),
-            rules_enabled=devdict.get("rules_enabled", True),
-        )
-        res = run_rules_for_device(dev, now, aqi)
-        if res is not None:
-            res = _require_rule_result(res)
-            if commit:
-                _commit_rule_result(conn, dev, res)
-            _append_rule_result(rules_res, dev.device_id, res)
+        dev = _rule_device(devdict)
+        try:
+            res = run_rules_for_device(dev, now, aqi)
+            if res is not None:
+                res = _require_rule_result(res)
+                if commit:
+                    _commit_rule_result(conn, dev, res)
+                _append_rule_result(rules_res, dev.device_id, res)
+        except Exception as error:  # pylint: disable=broad-except
+            rules_res.append(
+                _record_action_rule_failure(conn, devdict, error, commit=commit)
+            )
 
     if commit:
         _clear_expired_device_rule_suspensions(conn)
     return "\n".join(rules_res)
 
 
-def run_rules(conn, when=None, commit=False):
+def run_rules(
+    conn, when=None, commit=False, *, compiled_rules: CompiledRules | None = None
+):
     """Backward-compatible entrypoint used by the runner."""
-    return run_all_rules(conn, when=when, commit=commit)
+    return run_all_rules(
+        conn, when=when, commit=commit, compiled_rules=compiled_rules
+    )

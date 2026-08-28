@@ -4,6 +4,7 @@ const assert = require("assert");
 const {
   categoricalStateData,
   combinedFcuSeries,
+  fcuCsvSeries,
   FCU_FAN_SPEEDS,
   FCU_MODES,
 } = require("../app/static/fcu_history_chart.js");
@@ -34,6 +35,20 @@ assert.deepStrictEqual(
 assert.deepStrictEqual(
   categoricalStateData(history.states, "fan_speed", FCU_FAN_SPEEDS),
   [[100000, 1], [200000, 4]],
+);
+
+const csvSeries = fcuCsvSeries(history);
+assert.deepStrictEqual(csvSeries.map((item) => item.name), [
+  "Hickory - FCU inlet",
+  "Hickory - Room Temp",
+  "FCU Mode",
+  "FCU Fan",
+]);
+assert.deepStrictEqual(csvSeries[0].data, [[100, 20], [200, 21]]);
+assert.deepStrictEqual(csvSeries[2].data, [[100, "COOL"], [200, "HEAT"]]);
+assert.deepStrictEqual(
+  fcuCsvSeries({ states: [{ timestamp: 100, mode: "cool", fan_speed: null }] }),
+  [{ name: "FCU Mode", data: [[100, "COOL"]] }],
 );
 
 console.log("fcu_history_chart tests passed");

@@ -85,7 +85,10 @@ def test_room_identity_move_rename_and_staleness_reach_all_consumers(
     assert re.search(
         rf'id="room-summary-temp-{room_id}"[^>]*>--', stale_page
     )
-    assert b"Offline" in flask_test_client.get(f"/room/{room_id}").data
+    # Says how long we have been without data, not that the sensor is off:
+    # the runner or the hub may be what stopped.
+    stale_room = flask_test_client.get(f"/room/{room_id}").data.decode()
+    assert re.search(r"No data for \d+[smhd]", stale_room)
     stale_presence = flask_test_client.get("/api/v1/presence").json["rooms"]
     assert next(room for room in stale_presence if room["room_id"] == room_id)[
         "state"

@@ -250,6 +250,23 @@ function setupLightingEventListeners() {
       updateLightingChart();
     });
   }
+
+  // CSV export
+  setupCsvDownload(() => {
+    const checkboxes = document.querySelectorAll(
+      "#checkboxes input[type=checkbox]",
+    );
+    const visibleSeries = checkedVisibleSeries(
+      checkboxes,
+      allSensors,
+      new Map(lightingData.map((s) => [s.device_id, s])),
+    );
+    return {
+      visibleSeries,
+      names: visibleSeries.map((s) => s.name),
+      filename: "lighting_data.csv",
+    };
+  });
 }
 
 function reloadLightingData() {

@@ -23,40 +23,35 @@ jobs:
       AIRTHINGS_SIMULATOR: 1
       AQICN_TOKEN: ${{ secrets.AQICN_TOKEN }}
       AIRNOW_API_KEY: ${{ secrets.AIRNOW_API_KEY }}
-      POETRY_VERSION: '2.1.3'
+      UV_VERSION: '0.11.26'
       RUFF_VERSION: '0.15.15'
       FLYWAY_VERSION: '12.8.1'
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           submodules: true
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
-          cache: 'pip'
-          cache-dependency-path: |
-            poetry.lock
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v10.0.1
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+          cache-dependency-glob: uv.lock
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
-          node-version: '20'
-
-      # Cache the project venv (created by Poetry in-project)
-      - name: Cache .venv
-        uses: actions/cache@v4
-        with:
-          path: .venv
-          key: venv-${{ runner.os }}-${{ matrix.python-version }}-${{ hashFiles('poetry.lock') }}
-          restore-keys: |
-            venv-${{ runner.os }}-${{ matrix.python-version }}-
+          node-version: '24'
 
       # (Optional) cache ruff’s cache
       - name: Cache ruff cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.cache/ruff
           key: ruff-${{ runner.os }}-${{ hashFiles('.ruff*', 'pyproject.toml') }}
@@ -65,10 +60,10 @@ jobs:
 
       # Use a repo-local Playwright cache to make cross-OS paths easy
       - name: Cache Playwright browsers
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: .playwright
-          key: pw-${{ runner.os }}-${{ hashFiles('poetry.lock') }}
+          key: pw-${{ runner.os }}-${{ hashFiles('uv.lock') }}
           restore-keys: |
             pw-${{ runner.os }}-
 
@@ -118,6 +113,10 @@ jobs:
         run: |
           make check
 
+      - name: Build and verify wheel
+        run: |
+          make build-check
+
       - name: Test with coverage
         run: |
           make test
@@ -130,3 +129,44 @@ jobs:
           verbose: true
           files: ./coverage.xml
           token: ${{ secrets.CODECOV_TOKEN }}
+
+  deployment-package:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    env:
+      UV_VERSION: '0.11.26'
+      FLYWAY_VERSION: '12.8.1'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          submodules: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v10.0.1
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Build and install deployment package in a disposable root
+        run: make deployment-package-check
+
+      - name: Verify systemd units
+        run: make systemd-verify
+
+      - name: Upload ephemeral deployment package
+        uses: actions/upload-artifact@v7
+        with:
+          name: temperature-bot-deployment-pr-${{ github.event.pull_request.number }}-${{ github.sha }}
+          path: |
+            dist/temperature-bot-deployment-*.zip
+            dist/temperature-bot-deployment-*.zip.sha256
+          if-no-files-found: error
+          retention-days: 5
+          compression-level: 0

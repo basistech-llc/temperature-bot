@@ -332,15 +332,14 @@ def test_temperature_rules_context_prefers_calculated_fcu_temp(
         rules_engine,
         "get_rules",
         lambda: (
-            "if get_temp(BROADWAY_SOUTH) == 23.0:\n"
-            "    set_fan_speed(BROADWAY_SOUTH, 3)\n"
+            "from app.models import RuleResult\n"
+            "def run_rules_for_device(device, now, aqi):\n"
+            "    if device.name == 'Broadway South' and device.temperature_c == 23.0:\n"
+            "        return RuleResult(fan_speed='MID1')\n"
         ),
     )
 
-    assert (
-        rules_engine.rules_results(conn, when=now)
-        == f"Device {fcu_id} speed set to 3"
-    )
+    assert rules_engine.rules_results(conn, when=now) == f"Device {fcu_id} speed set to MID1"
 
 
 def test_temperature_rules_context_exposes_raw_fcu_temp(
@@ -377,16 +376,15 @@ def test_temperature_rules_context_exposes_raw_fcu_temp(
         rules_engine,
         "get_rules",
         lambda: (
-            "if get_temp(RULE_RAW_FCU) == 23.0 and "
-            "get_fcu_temp(RULE_RAW_FCU) == 20.0:\n"
-            "    set_fan_speed(RULE_RAW_FCU, 2)\n"
+            "from app.models import RuleResult\n"
+            "def run_rules_for_device(device, now, aqi):\n"
+            "    if device.name == 'Rule Raw FCU' and "
+            "device.temperature_c == 23.0 and device.fcu_temperature_c == 20.0:\n"
+            "        return RuleResult(fan_speed='MID2')\n"
         ),
     )
 
-    assert (
-        rules_engine.rules_results(conn, when=now)
-        == f"Device {fcu_id} speed set to 2"
-    )
+    assert rules_engine.rules_results(conn, when=now) == f"Device {fcu_id} speed set to MID2"
 
 
 def _connect_test_db():
@@ -483,7 +481,8 @@ def test_room_omits_none_values_and_updates_only_supplied_fields(flask_test_clie
         json={"room_name": "Bad Color", "map": {"color": "blue"}},
     )
     assert invalid_create_response.status_code == 400
-    assert invalid_create_response.json["error"] == "validation error"
+    assert invalid_create_response.json["code"] == "validation_error"
+    assert "map.color" in invalid_create_response.json["error"]
     assert isinstance(invalid_create_response.json["details"], list)
 
     invalid_patch_response = flask_test_client.patch(
@@ -491,7 +490,8 @@ def test_room_omits_none_values_and_updates_only_supplied_fields(flask_test_clie
         json={"map": {"color": "blue"}},
     )
     assert invalid_patch_response.status_code == 400
-    assert invalid_patch_response.json["error"] == "validation error"
+    assert invalid_patch_response.json["code"] == "validation_error"
+    assert "map.color" in invalid_patch_response.json["error"]
     assert isinstance(invalid_patch_response.json["details"], list)
 
     missing_name_response = flask_test_client.post(
@@ -499,7 +499,8 @@ def test_room_omits_none_values_and_updates_only_supplied_fields(flask_test_clie
         json={"map": {"color": "#abcdef"}},
     )
     assert missing_name_response.status_code == 400
-    assert missing_name_response.json["error"] == "validation error"
+    assert missing_name_response.json["code"] == "validation_error"
+    assert "room_name" in missing_name_response.json["error"]
 
 
 def test_fcu_temp_source_api_persists_multiplier_and_logs_old_new_values(

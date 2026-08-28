@@ -1,0 +1,20 @@
+### /etc/systemd/system/air-stage_basistech_net.service ###
+[Unit]
+Description=Gunicorn instance to serve the Flask application
+After=network.target
+
+[Service]
+User=temperature_bot
+Group=temperature_bot
+WorkingDirectory=/home/air-stage/temperature-bot
+Environment="PATH=/home/air-stage/temperature-bot/.venv/bin"
+Environment="DB_PATH=/home/air-stage/var/db/temperature-bot.db"
+Environment="TEMPERATURE_BOT_INSTANCE=staging"
+Environment="PERFORMANCE_CLIENT_ID=web"
+ExecStart=/bin/bash -c 'gunicorn app.main:app --bind 127.0.0.1:8101 --workers $((2 * $(/usr/bin/nproc) + 1))'
+Restart=always
+RestartSec=2
+
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,33 @@
+{% extends 'base.html' %}
+{% block title %} Performance Monitoring {% endblock %}
+{% block head %}
+{% if dist %}
+  <script src="https://cdn.jsdelivr.net/npm/echarts@{{ echarts_version }}"></script>
+{% else %}
+  <script src="/static/echarts@5"></script>
+{% endif %}
+<script src="/static/performance_monitoring.js"></script>
+{% endblock %}
+{% block body %}
+<main class="performance-monitoring-page">
+  <h1>Performance Monitoring</h1>
+  <p>AE-200 application timing and independent DNS, ICMP, and TCP-reject probes.</p>
+  <div id="performance-controls">
+    <div class="temporal-buttons">
+      <button id="performance-day">day</button>
+      <button id="performance-week">week</button>
+      <button id="performance-month">month</button>
+      <label>Start <input type="date" id="performance-start"></label>
+      <label>End <input type="date" id="performance-end"></label>
+    </div>
+    <div class="performance-filters">
+      <label>Instance <select id="performance-instance"><option value="">all</option></select></label>
+      <label>Client <select id="performance-client"><option value="">all</option></select></label>
+      <label>Type <select id="performance-type"><option value="">all</option></select></label>
+      <label>Operation <select id="performance-operation"><option value="">all</option></select></label>
+    </div>
+  </div>
+  <p id="performance-summary" role="status"></p>
+  <div id="performance-chart" aria-label="Performance latency time series"></div>
+</main>
+{% endblock %}

@@ -310,7 +310,35 @@ function applyRoomMetrics(roomId, temp10x, humidity) {
 }
 
 function closeRoomRenameDialog() {
-  document.getElementById("room-rename-dialog")?.classList.add("hidden");
+  const dialog = document.getElementById("room-rename-dialog");
+  if (!dialog) return;
+  setRoomRenameSaving(dialog, false);
+  dialog.classList.add("hidden");
+}
+
+function roomRenameIsSaving(dialog) {
+  return dialog?.dataset.saving === "true";
+}
+
+function setRoomRenameSaving(dialog, saving) {
+  if (!dialog) return;
+  if (saving) {
+    dialog.dataset.saving = "true";
+    dialog.setAttribute("aria-busy", "true");
+  } else {
+    delete dialog.dataset.saving;
+    dialog.removeAttribute("aria-busy");
+  }
+  dialog.querySelectorAll("input, button").forEach((control) => {
+    control.disabled = saving;
+  });
+}
+
+function cancelRoomRenameDialog() {
+  const dialog = document.getElementById("room-rename-dialog");
+  if (!dialog || roomRenameIsSaving(dialog)) return false;
+  closeRoomRenameDialog();
+  return true;
 }
 
 function openRoomRenameDialog(button) {
@@ -320,6 +348,7 @@ function openRoomRenameDialog(button) {
   if (!dialog || !input) return;
   dialog.dataset.roomId = button.dataset.roomId;
   dialog.dataset.roomName = button.dataset.roomName || button.textContent.trim();
+  setRoomRenameSaving(dialog, false);
   input.value = button.dataset.roomName || button.textContent.trim();
   dialog.querySelector("[data-role='message']").textContent = "";
   dialog
@@ -334,28 +363,51 @@ function openRoomRenameDialog(button) {
 }
 
 async function renameRoom(dialog) {
+  if (roomRenameIsSaving(dialog)) return false;
   const roomId = roomIdFromValue(dialog.dataset.roomId);
   const input = document.getElementById("room-rename-name");
   const message = dialog.querySelector("[data-role='message']");
   const roomName = String(input?.value || "").trim();
   if (roomId === null || !roomName) {
     message.textContent = "Room name is required.";
-    return;
+    return false;
   }
+  setRoomRenameSaving(dialog, true);
+  message.textContent = "Saving…";
+  let data;
   try {
-    const data = await persistRoomName(roomId, roomName);
-    const savedRoomName = data.room_name || roomName;
+    data = await persistRoomName(roomId, roomName);
+  } catch (error) {
+    message.textContent = error.message || "Unable to rename room.";
+    setRoomRenameSaving(dialog, false);
+    input?.focus();
+    return false;
+  }
+
+  const savedRoomName = data.room_name || roomName;
+  let presentationFailed = false;
+  try {
     applyMatrixRoomName(roomId, savedRoomName);
     document
       .querySelectorAll(`.fcu-temp-sources-trigger[data-room-id="${roomId}"]`)
       .forEach((trigger) => {
         trigger.dataset.roomName = savedRoomName;
       });
-    closeRoomRenameDialog();
-    showRoomMatrixMessage(`Renamed room to ${data.room_name || roomName}.`);
   } catch (error) {
-    message.textContent = error.message || "Unable to rename room.";
+    presentationFailed = true;
+    console.error("Room rename was saved, but the page update failed:", error);
   }
+  closeRoomRenameDialog();
+  if (presentationFailed) {
+    if (typeof window !== "undefined") window.location.reload();
+    return true;
+  }
+  try {
+    showRoomMatrixMessage(`Renamed room to ${savedRoomName}.`);
+  } catch (error) {
+    console.error("Room rename was saved, but the confirmation failed:", error);
+  }
+  return true;
 }
 
 function closeRoomCreateDialog() {
@@ -476,7 +528,7 @@ function setupRoomRename() {
   });
   dialog?.querySelector("[data-action='cancel-room-rename']")?.addEventListener(
     "click",
-    closeRoomRenameDialog,
+    cancelRoomRenameDialog,
   );
   dialog?.querySelector("[data-action='request-room-delete']")?.addEventListener(
     "click",
@@ -508,6 +560,9 @@ function setupRoomRename() {
   deleteDialog
     ?.querySelector("[data-action='cancel-room-delete']")
     ?.addEventListener("click", closeRoomDeleteDialog);
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") cancelRoomRenameDialog();
+  });
 }
 
 function setupRoomDragging() {
@@ -600,6 +655,7 @@ if (typeof window !== "undefined") {
 if (typeof module !== "undefined" && module.exports) {
   module.exports = {
     compareSensors,
+    cancelRoomRenameDialog,
     deviceRoomRequest,
     longPressTriggered,
     openRoomDeleteDialog,
@@ -608,6 +664,8 @@ if (typeof module !== "undefined" && module.exports) {
     persistRoomName,
     persistSensorRoom,
     restoreSensorPosition,
+    renameRoom,
+    roomRenameIsSaving,
     roomRenameKeyTriggered,
     roomHumidityText,
     roomDeleteCountdown,

@@ -13,7 +13,7 @@ SQLite; and exposes server-rendered pages plus `/api/v1/*` JSON endpoints.
 - Flask and Jinja2
 - SQLite for local development and production
 - Flyway for SQL schema migrations
-- Poetry 2.1.3 for Python dependency management
+- uv 0.11.26 for Python dependency management
 - Ruff, Pylint, djlint, ESLint, mypy, pytest, and Playwright
 
 ## Project Structure
@@ -52,7 +52,7 @@ temperature-bot/
 ## Required Workflow
 
 Use the Makefile for setup, checks, tests, and local runs. Do not bypass it
-with direct `poetry run pytest` or ad hoc command sequences unless you are
+with direct `uv run pytest` or ad hoc command sequences unless you are
 debugging a Makefile target itself.
 
 ```bash
@@ -78,8 +78,8 @@ make PYTEST_ARGS=tests/test_db.py::test_function_name pytest
 - Validate migrations with `make validate-migrations`.
 - Apply local pending migrations with `make migrate-db`.
 - Production deploy is `make deploy` on the production host. It validates
-  Flyway state, backs up `/var/db/temperature-bot.db`, migrates, and validates
-  again.
+  Flyway state, creates and checks a consistent SQLite snapshot of
+  `/var/db/temperature_bot/temperature-bot.db`, migrates, and validates again.
 
 When adding schema:
 
@@ -166,7 +166,10 @@ tracking, creating, updating, or closing work.
 David may still use Beads as a personal/local working queue. Beads entries are
 not authoritative project records. Do not create, close, or rely on Beads issues
 for project tracking unless the user explicitly asks for local Beads
-housekeeping; for that narrow case, read `doc/agent-workflow-david.md`.
+housekeeping; for that narrow case, read `doc/agent-workflow-david.md`. When
+multiple developers share the Beads queue (branch/PR flow, `bd dolt`
+push/pull, JSONL conflict handling), follow
+`doc/beads-multi-dev-workflow.md`.
 
 `.beads/` is intentionally kept in the Git repo so agents can read and review
 David's local or historical queue. Keep `.beads/issues.jsonl`, metadata, and

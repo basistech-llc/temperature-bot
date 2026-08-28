@@ -1,4 +1,4 @@
-### /etc/systemd/system/basistech_air.service ###
+### /etc/systemd/system/slg1_basistech_net.service ###
 [Unit]
 Description=Gunicorn instance to serve the Flask application
 After=network.target
@@ -8,7 +8,7 @@ User=simsong
 Group=simsong
 WorkingDirectory=/home/simsong/temperature-bot
 Environment="PATH=/home/simsong/temperature-bot/.venv/bin"
-Environment="DB_PATH=/var/db/temperature-bot.db"
+Environment="DB_PATH=/home/simsong/temperature-bot/var/db/temperature-bot.db"
 Environment="LOG_LEVEL=DEBUG"
 ExecStart=/bin/bash -c 'LOG_LEVEL=DEBUG gunicorn app.main:app --log-level debug --bind 127.0.0.1:8003 --workers $((2 * $(/usr/bin/nproc) + 1)) --access-logfile /home/simsong/access.log --error-logfile /home/simsong/error.log'
 Restart=always

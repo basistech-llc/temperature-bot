@@ -161,6 +161,85 @@ This distinction matters in the UI:
 - Fan-speed `AUTO` means the unit chooses fan speed automatically.
 - Operation mode `AUTO` means automatic heating/cooling changeover.
 
+## AE-200 Schedules
+
+The Mitsubishi manuals document five weekly schedules, five annual patterns,
+and a current-day schedule. They also document a per-group operation that makes
+the controller's scheduled events available or unavailable. Remote-controller
+schedules are separate and are not necessarily disabled by that operation.
+
+TemperatureBot's current private `b_xmlproc` status request reads only the
+per-unit `Schedule`, `ScheduleAvail`, `TimerItem`, and `Hold` attributes. A
+read-only production query on July 18, 2026 confirmed that these flags are
+reported per unit. The current request does not retrieve the schedule events,
+times, weekly patterns, annual assignments, or current-day definitions.
+
+Do not infer a writable schedule-definition API from these status flags. Do not
+send `Schedule` or `Hold` changes until their exact protocol values and effects
+have been verified on a non-production controller or by capturing the AE-200
+web interface's request. Until then TemperatureBot cannot safely display all
+schedule contents or disable AE-200 scheduling programmatically.
+
+The minute collector already preserves the raw schedule flags and other AE-200
+state in `devlog.status_json`. A future autonomous-change audit should compare
+successive collected control fields and add explicit observed-change records;
+it must not present an observation as a TemperatureBot command.
+
+Reverse engineering in the
+[`kenkeiter/ae200py`](https://github.com/kenkeiter/ae200py/blob/main/doc/protocol.md)
+project documents the WebSocket message types used by firmware 7.98. A
+successful `setRequest` produces a `setResponse`; TemperatureBot parses and
+audits that acknowledgement. The separately deployed
+`bin.ae200_notifications` collector maintains an authenticated WebSocket and
+stores unsolicited `notifyRequest` changes with explicit observed provenance.
+The protocol does not say which actor caused a notification, so the application
+does not label these events as autonomous or correlate them to commands. The
+reverse-engineered protocol still lists schedule definition read/write as
+unknown: notifications expose changes, not the weekly schedule program.
+
+A second read-only production snapshot on July 19, 2026 found `Schedule=ON` on
+all 12 units, while `ScheduleAvail` was mixed. `Hold=ON` appeared on Broadway
+South and both ERVs. This confirms that the fields describe meaningful current
+per-unit state, but it does not reveal event times or prove which subsystem made
+a particular state change.
+
+The Deep Dive **AE-200** page shows the current per-unit status fields, including
+the schedule flags, one day of existing request-performance samples, and the 50
+most recent commands with their controller-level response. It also shows the 50
+most recent unsolicited controller notifications. Its status polling is read-only
+and occurs once per minute while the page is open.
+
+## Notification Collector Deployment
+
+The collector authenticates in-band using the same password-obfuscation scheme
+as the AE-200 web interface. Put credentials in a root-readable environment file,
+not in the repository:
+
+```text
+AE200_NOTIFICATION_USER=administrator
+AE200_NOTIFICATION_PASSWORD=theControllerPassword
+# Optional; defaults to 90 days.
+AE200_NOTIFICATION_RETENTION_DAYS=90
+```
+
+The private AE-200 password encoding accepts alphanumeric passwords only; the
+collector exits with a configuration error rather than sending a password it
+cannot encode.
+
+Install that file as `/etc/temperature-bot-ae200-notifications.env` with mode
+`0600`, copy `etc/temperature-bot-ae200-notifications.service` to systemd, and
+enable it after Flyway V18 is applied. An empty password is supported for
+controllers configured without a password. On authentication or network failure,
+the process reconnects with exponential backoff capped at 60 seconds.
+
+Each `<Mnet>` in a notification becomes one `ae200_notifications` row. A row
+contains the observation time, collector instance, group or address, and only
+the fields that changed. The database intentionally has no `origin` or
+`autonomous` column because the packet provides neither fact. The collector
+removes observations older than the configured retention period after its first
+event and then at most once per hour, keeping the audit table bounded even when
+the controller emits frequent temperature changes.
+
 ## Guideline for Future Changes
 
 Do not add a mode to the FCU dropdown merely because the AE-200 can report it.

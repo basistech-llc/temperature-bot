@@ -1,0 +1,26 @@
+{% macro outdoor_aqi_widget(aqi=None, asof=None, widget_id='outdoor-aqi') -%}
+<section class="outdoor-aqi-widget" id="{{ widget_id }}">
+  <h2>Outdoor Air Quality</h2>
+  <table class="pure-table data-table">
+    <thead>
+      <tr>
+        <th class="column-unit" scope="col" title="Outdoor sensor source">Unit</th>
+        <th scope="col" title="Outdoor Air Quality Index"><a class="aqi-summary-link" href="/chart_aqi">AQI</a></th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="cell-unit">Outdoor Air Quality</td>
+        <td class="aqi-cell">
+          <a class="aqi-summary-link" href="/chart_aqi">
+            <span>AQI</span>
+            <span class="aqi-number" data-aqi-value>{{ "{:.0f}".format(aqi.value) if aqi else '--' }}</span>
+            <span class="aqi-pill-table" data-aqi-name data-aqi-color="{{ aqi.color if aqi else '' }}">{{ aqi.name if aqi else '' }}</span>
+          </a>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+  <div class="last-refresh-inline" data-aqi-asof{% if not asof %} hidden{% endif %}>{{ 'Data as of: ' ~ asof if asof else '' }}</div>
+</section>
+{%- endmacro %}

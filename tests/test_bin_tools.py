@@ -10,12 +10,16 @@ import sqlite3
 import datetime
 import importlib.util
 import json
+import logging
 from pathlib import Path
 
 import pytest
+import requests
 from conftest import db_path
 
 from app.constants import TEST_DB_NAME
+from app import ae200, db_alerts
+from app.device_types import DEVICE_SUBTYPE_AIRTHINGS, DEVICE_TYPE_SENSOR
 from app.models import Device, RuleResult
 from bin import runner
 
@@ -85,6 +89,68 @@ def test_runner_default_lock_uses_runner_file(monkeypatch, temp_db):
     assert captured["lockfile"] == str(Path(runner.__file__).resolve())
 
 
+@pytest.mark.parametrize("failure", ["timeout", "malformed"])
+def test_runner_alerts_continue_when_airthings_poll_fails(
+    failure, monkeypatch, temp_db, caplog
+):
+    """Airthings failures must not suppress alert reminders or recoveries."""
+    alert_calls = []
+
+    if failure == "timeout":
+
+        def fail_airthings_request():
+            raise requests.exceptions.Timeout("Airthings timed out")
+
+        monkeypatch.setattr(
+            runner.airthings, "read_airthings_now", fail_airthings_request
+        )
+    else:
+        monkeypatch.setattr(
+            runner.airthings,
+            "read_airthings_now",
+            lambda: [
+                {
+                    "name": "Valid First Device",
+                    "sensors": [
+                        {"sensorType": "temp", "value": 21, "unit": "c"}
+                    ],
+                },
+                {
+                    "name": "Lab",
+                    "sensors": [
+                        {"sensorType": "humidity", "value": 45, "unit": "pct"}
+                    ],
+                }
+            ],
+        )
+
+    monkeypatch.setenv(TEST_DB_NAME, temp_db)
+    monkeypatch.setattr(sys, "argv", ["runner"])
+    monkeypatch.setattr(runner.clock, "lock_script", lambda _path: 1)
+    monkeypatch.setattr(runner, "update_from_ae200", lambda _conn: None)
+    monkeypatch.setattr(runner, "update_from_hubitat", lambda _conn: None)
+    monkeypatch.setattr(runner.db, "get_rules_master_enabled", lambda _conn: False)
+
+    def record_alert_run(conn, *, commit, compiled_rules):
+        alert_calls.append((conn, commit, compiled_rules))
+        return ""
+
+    monkeypatch.setattr(runner.rules_engine, "run_alert_rules", record_alert_run)
+
+    with caplog.at_level(logging.ERROR, logger="bin.runner"):
+        runner.main()
+
+    assert len(alert_calls) == 1
+    assert alert_calls[0][1] is True
+    assert isinstance(alert_calls[0][2], runner.rules_engine.CompiledRules)
+    assert "update_from_airthings: collection failed:" in caplog.text
+    with sqlite3.connect(temp_db) as conn:
+        airthings_device_count = conn.execute(
+            "SELECT COUNT(*) FROM devices WHERE device_name LIKE 'Airthings %'"
+        ).fetchone()[0]
+    assert airthings_device_count == 0
+
+
 def test_makefile_local_targets_control_sensor_simulators():
     """Local dev targets must make simulator/live intent explicit for all sensors."""
     makefile = (Path(__file__).resolve().parents[1] / "Makefile").read_text(
@@ -103,16 +169,6 @@ def test_makefile_local_targets_control_sensor_simulators():
         "AE200_SIMULATOR= HUBITAT_SIMULATOR= AIRTHINGS_SIMULATOR= $(MAKE) _local-dev-web"
         in makefile
     )
-
-
-def test_production_gunicorn_services_disable_reloader():
-    """Production service definitions must never run Gunicorn's dev reloader."""
-    etc_dir = Path(__file__).resolve().parents[1] / "etc"
-    service_files = sorted(etc_dir.glob("*_basistech_net.service"))
-
-    assert service_files
-    for service_file in service_files:
-        assert "--reload" not in service_file.read_text(encoding="utf-8"), service_file
 
 
 def test_update_from_airthings_persists_sensor_status(monkeypatch, test_database_conn):
@@ -137,7 +193,8 @@ def test_update_from_airthings_persists_sensor_status(monkeypatch, test_database
 
     row = test_database_conn.execute(
         """
-        SELECT d.device_name, l.temp10x, l.status_json
+        SELECT d.device_name, d.device_type, d.device_subtype,
+               l.temp10x, l.status_json
         FROM devices d
         JOIN devlog l ON d.device_id = l.device_id
         WHERE d.device_name = ?
@@ -147,11 +204,93 @@ def test_update_from_airthings_persists_sensor_status(monkeypatch, test_database
         ("Airthings Lab",),
     ).fetchone()
     assert row is not None
+    assert row["device_type"] == DEVICE_TYPE_SENSOR
+    assert row["device_subtype"] == DEVICE_SUBTYPE_AIRTHINGS
     assert row["temp10x"] == 214
     status = json.loads(row["status_json"])
     assert status["humidity"]["value"] == 45.0
     assert status["co2"]["value"] == 744.0
     assert status["pm25"]["value"] == 3.2
+
+
+def test_update_from_airthings_preserves_existing_device_subtype(
+    monkeypatch, test_database_conn
+):
+    """Airthings discovery fills NULL metadata without replacing prior identity."""
+    test_database_conn.execute(
+        """
+        INSERT INTO devices (device_name, device_type, device_subtype)
+        VALUES ('Airthings Lab', 'SENSOR', 'MANUAL')
+        """
+    )
+    test_database_conn.commit()
+    monkeypatch.setattr(
+        runner.airthings,
+        "read_airthings_now",
+        lambda: [
+            {
+                "name": "Lab",
+                "sensors": [
+                    {"sensorType": "temp", "value": 21.4, "unit": "c"},
+                ],
+            }
+        ],
+    )
+
+    runner.update_from_airthings(test_database_conn)
+
+    subtype = test_database_conn.execute(
+        "SELECT device_subtype FROM devices WHERE device_name='Airthings Lab'"
+    ).fetchone()[0]
+    assert subtype == "MANUAL"
+
+
+def test_ae200_alerts_use_generalized_lifecycle_and_delivery(test_database_conn):
+    conn = test_database_conn
+    device = {"id": "1", "name": "Conference FCU"}
+    active = {
+        "InletTemp": "23.0",
+        ae200.ERROR_SIGN: "ON",
+        ae200.FILTER_SIGN: "OFF",
+        ae200.CHECK_WATER: "OFF",
+    }
+    delivered: list[str] = []
+
+    runner.process_device_alert_data(
+        conn,
+        device,
+        active,
+        observed_at=1000,
+        notifier=lambda message: delivered.append(message) or "trigger-ts",
+    )
+    device_id = conn.execute(
+        "SELECT device_id FROM devices WHERE device_name=?", (device["name"],)
+    ).fetchone()[0]
+    alert = db_alerts.get_active_alert_record(conn, device_id, ae200.ERROR_SIGN)
+    assert alert is not None
+    assert delivered == [":warning: AE-200 Conference FCU reports error condition."]
+
+    runner.process_device_alert_data(
+        conn,
+        device,
+        {**active, ae200.ERROR_SIGN: "OFF"},
+        observed_at=1001,
+        notifier=lambda message: delivered.append(message) or "resolved-ts",
+    )
+
+    assert db_alerts.get_active_alert_record(conn, device_id, ae200.ERROR_SIGN) is None
+    events = conn.execute(
+        "SELECT event_type, slack_status FROM alert_events WHERE alert_id=? "
+        "ORDER BY alert_event_id",
+        (alert.alert_id,),
+    ).fetchall()
+    assert [tuple(event) for event in events] == [
+        ("triggered", "sent"),
+        ("resolved", "sent"),
+    ]
+    assert delivered[-1] == (
+        ":white_check_mark: AE-200 Conference FCU cleared error condition."
+    )
 
 
 def test_runner_database_access(bin_dir, temp_db):

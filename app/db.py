@@ -42,11 +42,14 @@ from .constants import (
     TEST_DB_NAME,
     RULES_MASTER_DEVICE_NAME,
 )
+from .api_errors import Conflict, NotFound
 from .models import (
     AqiSummary,
+    AqiRuleObservation,
     AqiWeatherResponse,
     ChangelogResponse,
     ChangelogRow,
+    ChangelogAction,
     DatabaseColumn,
     DatabaseIndex,
     DatabaseSchemaIssue,
@@ -124,6 +127,7 @@ LATEST_DEVICE_STATUS_SQL = """
         d.device_name,
         d.display_name,
         d.device_type,
+        d.device_subtype,
         d.rules_enabled,
         d.aqi_mon,
         d.ae200_device_id,
@@ -500,33 +504,83 @@ def setup_database(conn, schema_file):
 ## Device management
 
 
+def _cached_discovered_device_id(
+    cursor,
+    device_name: str,
+    device_type: str | None,
+    device_subtype: str | None,
+) -> int | None:
+    """Fill nullable discovery metadata and return a cached device id."""
+    device_id = DEVICE_MAP.get(device_name)
+    if device_id is None:
+        return None
+    if not device_type and not device_subtype:
+        return device_id
+    cursor.execute("SAVEPOINT cached_discovery_metadata")
+    try:
+        if device_type:
+            cursor.execute(
+                "UPDATE devices SET device_type=? "
+                "WHERE device_id=? AND device_type IS NULL",
+                (device_type, device_id),
+            )
+        if device_subtype:
+            cursor.execute(
+                "UPDATE devices SET device_subtype=? "
+                "WHERE device_id=? AND device_subtype IS NULL",
+                (device_subtype, device_id),
+            )
+        if device_type == DEVICE_TYPE_FCU:
+            _ensure_fcu_room(cursor, device_id)
+        cursor.execute("RELEASE SAVEPOINT cached_discovery_metadata")
+    except (sqlite3.Error, ValueError):
+        cursor.execute("ROLLBACK TO SAVEPOINT cached_discovery_metadata")
+        cursor.execute("RELEASE SAVEPOINT cached_discovery_metadata")
+        raise
+    return device_id
+
+
 def get_or_create_device_id(
-    conn, device_name, use_cache=True, *, device_type: str | None = None
+    conn,
+    device_name,
+    use_cache=True,
+    *,
+    device_type: str | None = None,
+    device_subtype: str | None = None,
 ):
     """
     Retrieves the ID for a given device name. If the device name does not exist
     in the devices table, it inserts it and returns the newly generated ID.
+    Discovery-provided type and subtype values fill only unset metadata.
     Don't use the cache when testing
     """
     cursor = conn.cursor()
+    normalized_type = normalize_device_type(device_type)
+    normalized_subtype = normalize_device_subtype(device_subtype)
 
     if "PYTEST" in os.environ:
         use_cache = False
 
-    if use_cache and (device_name in DEVICE_MAP) and device_type is None:
+    device_id = (
+        _cached_discovered_device_id(
+            cursor, device_name, normalized_type, normalized_subtype
+        )
+        if use_cache
+        else None
+    )
+    if device_id is not None:
         logger.debug(
             "get_or_create_device_id DEVICE_MAP[%s]=%s",
             device_name,
-            DEVICE_MAP[device_name],
+            device_id,
         )
-        return DEVICE_MAP[device_name]
+        return device_id
 
     try:
         logger.debug("INSERT OR IGNORE device_name=%s", device_name)
         cursor.execute(
             "INSERT OR IGNORE INTO devices (device_name) VALUES (?);", (device_name,)
         )
-        normalized_type = normalize_device_type(device_type)
         if normalized_type:
             cursor.execute(
                 """
@@ -534,6 +588,14 @@ def get_or_create_device_id(
                 WHERE device_name=? AND device_type IS NULL
                 """,
                 (normalized_type, device_name),
+            )
+        if normalized_subtype:
+            cursor.execute(
+                """
+                UPDATE devices SET device_subtype=?
+                WHERE device_name=? AND device_subtype IS NULL
+                """,
+                (normalized_subtype, device_name),
             )
         cursor.execute("SELECT * FROM devices WHERE device_name = ?;", (device_name,))
         result = cursor.fetchone()
@@ -593,6 +655,11 @@ def normalize_device_type(device_type: object) -> str | None:
     return normalized or None
 
 
+def normalize_device_subtype(device_subtype: object) -> str | None:
+    """Normalize integration-assigned subtype metadata."""
+    return normalize_device_type(device_subtype)
+
+
 def infer_device_type(devdict: dict[str, Any]) -> str | None:
     configured = normalize_device_type(devdict.get("device_type"))
     if configured:
@@ -611,7 +678,7 @@ def get_device_metadata(conn) -> list[dict[str, Any]]:
     c.execute(
         """
         SELECT d.device_id, d.device_name, d.display_name, d.device_type,
-               d.rules_enabled, d.ae200_device_id, d.disabled_until,
+               d.device_subtype, d.rules_enabled, d.ae200_device_id, d.disabled_until,
                d.notes, d.aqi_mon, d.room_id, r.room_name
         FROM devices d
         LEFT JOIN rooms r ON d.room_id = r.room_id
@@ -656,7 +723,7 @@ def update_device_metadata(
     if not assignments:
         device = get_device(conn, body.device_id)
         if device is None:
-            raise ValueError(f"Unknown device_id: {body.device_id}")
+            raise NotFound(f"Unknown device_id: {body.device_id}")
         return _normalize_device_metadata_row(device)
 
     args.append(body.device_id)
@@ -666,7 +733,7 @@ def update_device_metadata(
         args,
     )
     if c.rowcount == 0:
-        raise ValueError(f"Unknown device_id: {body.device_id}")
+        raise NotFound(f"Unknown device_id: {body.device_id}")
     conn.commit()
     updated = get_device(conn, body.device_id)
     assert updated is not None
@@ -807,6 +874,21 @@ def get_rooms(conn) -> list[Room]:
     return [_room_from_row(row) for row in c.fetchall()]
 
 
+def get_room_fcu_names(conn) -> dict[int, str]:
+    """Return the device name of each room's owning FCU, keyed by room id.
+
+    Resolving room keys one at a time meant a per-room lookup for every
+    candidate; one join answers the whole question. Rooms with no FCU (Garage,
+    Data Closet) are simply absent.
+    """
+    c = conn.cursor()
+    c.execute(
+        "SELECT r.room_id, d.device_name FROM rooms r "
+        "JOIN devices d ON d.device_id = r.fcu_device_id"
+    )
+    return {int(row["room_id"]): str(row["device_name"] or "") for row in c.fetchall()}
+
+
 def get_assigned_room_ids(conn) -> set[int]:
     """Return room ids referenced by any device, including devices without logs."""
     c = conn.cursor()
@@ -883,9 +965,9 @@ def delete_empty_room(conn, room_id: int) -> bool:
         if room is None:
             return False
         if room["fcu_device_id"] is not None:
-            raise ValueError("FCU-owned rooms cannot be deleted")
+            raise Conflict("FCU-owned rooms cannot be deleted")
         if room["has_assigned_devices"]:
-            raise ValueError("Only rooms without assigned devices can be deleted")
+            raise Conflict("Only rooms without assigned devices can be deleted")
 
         # Presence history describes where an observation happened. Preserve the
         # event when its now-empty administrative room is removed.
@@ -904,7 +986,7 @@ def delete_empty_room(conn, room_id: int) -> bool:
             (room_id,),
         )
         if deleted.rowcount != 1:
-            raise ValueError("Only rooms without assigned devices can be deleted")
+            raise Conflict("Only rooms without assigned devices can be deleted")
     return True
 
 
@@ -916,22 +998,22 @@ def update_device_room(conn, device_id: int, room_id: int | None) -> int:
     )
     device = c.fetchone()
     if device is None:
-        raise LookupError(f"Unknown device_id: {device_id}")
+        raise NotFound(f"Unknown device_id: {device_id}")
     if room_id is not None:
         c.execute("SELECT 1 FROM rooms WHERE room_id=?", (room_id,))
         if c.fetchone() is None:
-            raise LookupError(f"Unknown room_id: {room_id}")
+            raise NotFound(f"Unknown room_id: {room_id}")
     device_type = normalize_device_type(device["device_type"])
     if device_type in {DEVICE_TYPE_ERV, DEVICE_TYPE_INTERNAL}:
-        raise ValueError(f"{device_type} devices cannot be assigned to rooms")
+        raise Conflict(f"{device_type} devices cannot be assigned to rooms")
     if device_type == DEVICE_TYPE_FCU:
         c.execute("SELECT room_id FROM rooms WHERE fcu_device_id=?", (device_id,))
         owned_room = c.fetchone()
         if owned_room is None:
-            raise ValueError("An FCU must have an owned room")
+            raise Conflict("An FCU must have an owned room")
         owned_room_id = owned_room["room_id"]
         if room_id != owned_room_id:
-            raise ValueError("An FCU must remain assigned to its owned room")
+            raise Conflict("An FCU must remain assigned to its owned room")
     c.execute("UPDATE devices SET room_id=? WHERE device_id=?", (room_id, device_id))
     conn.commit()
     return device_id
@@ -1238,6 +1320,7 @@ def insert_changelog(
     ipaddr: str,
     device_id: int,
     ae200_device_id: int | None,
+    action: ChangelogAction,
     current_values: str = "",
     new_value: str,
     agent: str = "",
@@ -1248,14 +1331,16 @@ def insert_changelog(
     c = conn.cursor()
     c.execute(
         """
-        INSERT INTO changelog (logtime, ipaddr, device_id, unit, current_values, new_value, agent, comment)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO changelog
+            (logtime, ipaddr, device_id, unit, action, current_values, new_value, agent, comment)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             logtime,
             ipaddr,
             device_id,
             ae200_device_id,
+            action.value,
             current_values,
             new_value,
             agent,
@@ -1264,6 +1349,27 @@ def insert_changelog(
     )
     if commit:
         conn.commit()
+
+
+def insert_action_rule_failure(
+    conn,
+    *,
+    device_id: int,
+    ae200_device_id: int | None,
+    error_type: str,
+    error_message: str,
+):
+    """Persist one action-rule exception in the existing change audit log."""
+    insert_changelog(
+        conn,
+        ipaddr="",
+        device_id=device_id,
+        ae200_device_id=ae200_device_id,
+        action=ChangelogAction.ACTION_RULE_FAILURE,
+        new_value=error_type,
+        agent="rules runner",
+        comment=f"action-rule failure: {error_message}",
+    )
 
 
 def update_devlog_map(conn, device_name: str, ae200_device_id: int):
@@ -1333,20 +1439,17 @@ def set_rules_master_enabled(conn, enabled: bool):
         "UPDATE devices set disabled_until=? where device_id=?", (until, device_id)
     )
     # Also record in changelog for audit/history purposes.
-    c.execute(
-        """
-        INSERT INTO changelog (logtime, ipaddr, device_id, current_values, new_value, agent, comment)
-        VALUES (?,?,?,?,?,?,?)
-        """,
-        (
-            now,
-            None,
-            device_id,
-            None,
-            until,
-            "web",
-            "master rules switch " + ("enabled" if enabled else "disabled"),
-        ),
+    insert_changelog(
+        conn,
+        ipaddr="",
+        device_id=device_id,
+        ae200_device_id=None,
+        action=ChangelogAction.RULES_MASTER,
+        current_values="",
+        new_value=str(until),
+        agent="web",
+        comment="master rules switch " + ("enabled" if enabled else "disabled"),
+        commit=False,
     )
     conn.commit()
 
@@ -1373,12 +1476,17 @@ def disable_rules_for_device(
     )
 
     # Write the log entry
-    c.execute(
-        """
-        INSERT INTO changelog (logtime, ipaddr, device_id, current_values, new_value, agent, comment)
-        VALUES (?,?,?,?,?,?,?)
-        """,
-        (now, ipaddr, device_id, current_value, until, agent, comment),
+    insert_changelog(
+        conn,
+        ipaddr=ipaddr or "",
+        device_id=device_id,
+        ae200_device_id=None,
+        action=ChangelogAction.RULES_SUSPENSION,
+        current_values=str(current_value) if current_value is not None else "",
+        new_value=str(until),
+        agent=agent or "",
+        comment=comment or "rules suspension updated",
+        commit=False,
     )
     conn.commit()
 
@@ -1532,16 +1640,17 @@ def temporal_quantification(cmd, args):
 
 ################################################################
 ## AQI
-def get_last_aqi(conn):
+def get_last_aqi(conn) -> AqiRuleObservation | None:
+    """Return the latest timestamped AQI observation without inventing a value."""
     c = conn.cursor()
-    c.execute("select aqi from aqi order by logtime DESC limit 1")
+    c.execute("SELECT aqi, logtime FROM aqi ORDER BY logtime DESC LIMIT 1")
     row = c.fetchone()
     if row is None:
-        logger.warning("No AQI data available; defaulting to 50")
-        return 50
-    aqi = row[0]
-    logger.debug("last_aqi=%s", aqi)
-    return aqi
+        logger.debug("No AQI data available")
+        return None
+    observation = AqiRuleObservation(value=row["aqi"], observed_at=row["logtime"])
+    logger.debug("last_aqi=%s observed_at=%s", observation.value, observation.observed_at)
+    return observation
 
 
 def get_aqi_series(conn):
@@ -1585,7 +1694,14 @@ def _float_or_none(value: object) -> float | None:
     return number if math.isfinite(number) else None
 
 
-def _set_temp_c_from_status(status: dict[str, Any] | None) -> float | None:
+def set_temp_c_from_status(status: dict[str, Any] | None) -> float | None:
+    """Return the numeric SetTemp from an AE-200 status dict, if it has one.
+
+    The AE-200 reports SetTemp as a string and not always in a canonical form
+    ("24" and "24.0" both occur), so comparing set points as raw strings reports
+    changes that did not happen. Auto-mode's pair has the same hazard; it goes
+    through ``ae200.extract_set_temperatures``.
+    """
     if not isinstance(status, dict):
         return None
     return _float_or_none(status.get("SetTemp"))
@@ -1610,7 +1726,7 @@ def _latest_set_temp_c_for_device(conn, device_id: int) -> float | None:
         status = json.loads(row["status_json"] or "{}")
     except json.JSONDecodeError:
         return None
-    return _set_temp_c_from_status(status)
+    return set_temp_c_from_status(status)
 
 
 def _round_temp_c(value: float) -> float:
@@ -1704,7 +1820,7 @@ def set_fcu_set_range(
     """Persist one FCU set range and log effective old/new values."""
     fcu = get_device(conn, device_id)
     if fcu is None:
-        raise ValueError(f"Unknown device_id: {device_id}")
+        raise NotFound(f"Unknown device_id: {device_id}")
 
     new_low, new_high = _validated_set_range_values(
         set_range_low_c,
@@ -1753,6 +1869,7 @@ def set_fcu_set_range(
             ipaddr=ipaddr or "",
             device_id=device_id,
             ae200_device_id=fcu.get("ae200_device_id"),
+            action=ChangelogAction.SET_RANGE,
             current_values=_format_set_range(
                 old_range.set_range_low_c,
                 old_range.set_range_high_c,
@@ -1862,7 +1979,7 @@ def _latest_temperature_source_rows(conn, fcu_device_id: int, now: int):
 
 def get_fcu_temp_sources(conn, fcu_device_id: int) -> dict[str, Any]:
     if get_device(conn, fcu_device_id) is None:
-        raise ValueError(f"Unknown fcu_device_id: {fcu_device_id}")
+        raise NotFound(f"Unknown fcu_device_id: {fcu_device_id}")
     sources = _latest_temperature_source_rows(conn, fcu_device_id, int(time.time()))
     return json_ready(
         FcuTempSourcesResponse(
@@ -2098,9 +2215,9 @@ def _set_fcu_temp_source_multiplier(
     fcu = get_device(conn, fcu_device_id)
     source = get_device(conn, source_device_id)
     if fcu is None:
-        raise ValueError(f"Unknown fcu_device_id: {fcu_device_id}")
+        raise NotFound(f"Unknown fcu_device_id: {fcu_device_id}")
     if source is None:
-        raise ValueError(f"Unknown source_device_id: {source_device_id}")
+        raise NotFound(f"Unknown source_device_id: {source_device_id}")
 
     c.execute(
         """
@@ -2137,6 +2254,7 @@ def _set_fcu_temp_source_multiplier(
         ipaddr=ipaddr or "",
         device_id=fcu_device_id,
         ae200_device_id=fcu.get("ae200_device_id"),
+        action=ChangelogAction.TEMPERATURE_SOURCE,
         current_values=str(old_multiplier),
         new_value=str(new_multiplier),
         agent=agent or "",
@@ -2299,7 +2417,7 @@ def get_fcu_history(conn, fcu_device_id: int) -> FcuHistoryResponse:
         (fcu_device_id, DEVICE_TYPE_FCU),
     ).fetchone()
     if row is None:
-        raise LookupError(f"Unknown FCU device_id: {fcu_device_id}")
+        raise NotFound(f"Unknown FCU device_id: {fcu_device_id}")
 
     inlet = get_temperature_series(conn, [fcu_device_id])
     calculated = get_calculated_temperature_series(conn, [fcu_device_id])
@@ -2621,7 +2739,7 @@ def get_device_status(conn) -> List[Dict[str, Any]]:
         if data["device_id"] in fcu_device_ids:
             set_range = set_ranges.get(data["device_id"]) or default_fcu_set_range(
                 data["device_id"],
-                _set_temp_c_from_status(data.get("status")),
+                set_temp_c_from_status(data.get("status")),
             )
             data["set_range_low_c"] = set_range.set_range_low_c
             data["set_range_high_c"] = set_range.set_range_high_c
@@ -2654,7 +2772,7 @@ def get_changelog(
     Temporal bounds (start/end) are taken directly from the current request
     via :func:`temporal_quantification`.
     """
-    cmd = """SELECT c.logtime, c.ipaddr, d.device_name as unit, c.current_values, c.new_value, c.agent, c.comment FROM changelog c
+    cmd = """SELECT c.logtime, c.ipaddr, d.device_name as unit, c.action, c.current_values, c.new_value, c.agent, c.comment FROM changelog c
                LEFT JOIN devices d ON c.device_id = d.device_id WHERE 1=1"""
     args: List[Any] = []
 
@@ -2750,9 +2868,16 @@ def get_db_aqi(conn) -> Dict[str, Any]:
 def get_aqi_and_weather_data(conn) -> Dict[str, Any]:
     """Get combined weather and AQI data"""
     aqi_data = get_db_aqi(conn)
+    row = conn.execute("SELECT logtime FROM aqi ORDER BY logtime DESC LIMIT 1").fetchone()
     weather_data = weather.get_weather_data()
     return json_ready(
-        AqiWeatherResponse.model_validate({"aqi": aqi_data, "weather": weather_data})
+        AqiWeatherResponse.model_validate(
+            {
+                "aqi": aqi_data,
+                "aqi_observed_at": row[0] if row else None,
+                "weather": weather_data,
+            }
+        )
     )
 
 def get_all_device_aqi(conn) -> List[Dict[str, Any]]:

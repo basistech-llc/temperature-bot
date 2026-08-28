@@ -14,10 +14,19 @@ add CSS annotations and other display-only values. Use ``json_ready()`` at those
 boundaries instead of ``typing.cast`` so the data is actually validated before it
 becomes a mapping.
 """
+# pylint: disable=too-many-lines
 
 from enum import StrEnum
+from collections.abc import Callable
 from typing import Annotated, Any, Dict, Iterable, Literal
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    AliasChoices,
+    BaseModel,
+    ConfigDict,
+    Field,
+    field_validator,
+    model_validator,
+)
 
 from . import ae200
 
@@ -42,6 +51,12 @@ class Device(BaseModel):
     name: str = Field(description="the name of the device")
     device_type: str | None = Field(default=None, description="Configured device type.")
     rules_enabled: bool = Field(default=True, description="Whether rules may act.")
+    temperature_c: float | None = Field(
+        default=None, description="Effective calculated-or-raw temperature."
+    )
+    fcu_temperature_c: float | None = Field(
+        default=None, description="Raw device inlet temperature."
+    )
 
 class RuleResult(BaseModel):
     """Results passed back to Rules Engine"""
@@ -61,6 +76,17 @@ class RuleResult(BaseModel):
     def normalize_drive(cls, value):
         """Allow rules to use ON/OFF names or legacy drive codes."""
         return _rule_name(value, ae200.DRIVES, ae200.DRIVE_NAMES, "drive")
+
+
+class CompiledRules(BaseModel):
+    """One execution of ``rules.py`` shared by all rule entry points."""
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    action_rule: Callable[..., object] | None = None
+    alert_rule: Callable[..., object] | None = None
+    alert_history_seconds: int | None = None
+    compile_error: bool = False
 
 
 def _rule_code(value, names_to_codes: dict[str, int], field_name: str):
@@ -146,21 +172,309 @@ class StatusPayload(BaseModel):
     model_config = ConfigDict(extra="allow")
 
 
+class AirthingsSensorReading(BaseModel):
+    """One sensor value returned by the Airthings consumer API."""
+
+    model_config = ConfigDict(extra="ignore", populate_by_name=True)
+
+    sensor_type: str = Field(alias="sensorType", min_length=1)
+    value: float
+    unit: str = Field(min_length=1)
+
+
+class AirthingsDeviceReading(BaseModel):
+    """Validated Airthings device payload ready for database persistence."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    name: str = Field(min_length=1)
+    sensors: list[AirthingsSensorReading] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_sensor_types(self):
+        sensor_types = [sensor.sensor_type for sensor in self.sensors]
+        if len(sensor_types) != len(set(sensor_types)):
+            raise ValueError("sensorType values must be unique per device")
+        if "temp" not in sensor_types:
+            raise ValueError("temp sensor is required")
+        return self
+
+    def status_payload(self) -> dict[str, dict[str, float | str]]:
+        """Return the vendor-keyed status structure stored in ``devlog``."""
+        return {
+            sensor.sensor_type: sensor.model_dump(include={"value", "unit"})
+            for sensor in self.sensors
+        }
+
+    def temperature(self) -> float:
+        """Return the required temperature sensor value."""
+        return next(
+            sensor.value for sensor in self.sensors if sensor.sensor_type == "temp"
+        )
+
+
+class AlertEventType(StrEnum):
+    """Lifecycle events emitted for a persistent alert."""
+
+    TRIGGERED = "triggered"
+    REMINDER = "reminder"
+    RESOLVED = "resolved"
+
+
+class AlertDeliveryStatus(StrEnum):
+    """Slack delivery state for one alert event."""
+
+    PENDING = "pending"
+    SENT = "sent"
+    FAILED = "failed"
+
+
+class AlertRuleState(StrEnum):
+    """Three-state result of evaluating one alert condition."""
+
+    ACTIVE = "active"
+    INACTIVE = "inactive"
+    INDETERMINATE = "indeterminate"
+
+
+class AlertRuleDevice(BaseModel):
+    """Latest device observation and exact-value run supplied to alert rules."""
+
+    device_id: int
+    name: str
+    device_type: str | None = None
+    device_subtype: str | None = None
+    status: StatusPayload | None = None
+    unchanged_since: int | None = None
+    observed_through: int | None = None
+    unchanged_for_seconds: int | None = None
+    reading_age_seconds: int | None = None
+    input_error: str | None = None
+
+
+class AlertRuleResult(BaseModel):
+    """Condition state returned by ``run_alert_rules_for_device``."""
+
+    alert_type: str = Field(min_length=1)
+    state: AlertRuleState
+    started_at: int | None = None
+    message: str = Field(min_length=1)
+    resolved_message: str = Field(min_length=1)
+
+
+class AlertRuleEvaluation(BaseModel):
+    """One alert-rule result plus execution state."""
+
+    device_id: int
+    result: AlertRuleResult
+    now: int
+    commit: bool
+
+
+class AlertEventNotification(BaseModel):
+    """Event content passed from alert state handling to delivery."""
+
+    alert_id: int
+    event_time: int
+    event_type: AlertEventType
+    message: str
+
+
+class AlertEventWindow(BaseModel):
+    """Oldest and newest persisted notifications for one alert."""
+
+    first_event_time: int
+    last_event_time: int
+
+
+class AlertRecord(BaseModel):
+    """Persistent active-alert state."""
+
+    alert_id: int
+    device_id: int
+    alert_type: str
+    alert_value: str
+    start_time: int
+    end_time: int | None = None
+
+
+class ActiveAlertCreation(BaseModel):
+    """Result of atomically creating or finding one active alert."""
+
+    alert: AlertRecord
+    created: bool
+
+
+class AlertEventRecord(BaseModel):
+    """One logged alert notification or recovery event."""
+
+    alert_event_id: int
+    alert_id: int
+    event_time: int
+    event_type: AlertEventType
+    message: str
+    slack_status: AlertDeliveryStatus
+    slack_message_ts: str | None = None
+    slack_error: str | None = None
+    slack_attempt_count: int = Field(default=0, ge=0)
+    slack_last_attempt_time: int | None = None
+    slack_next_attempt_time: int | None = None
+    slack_terminal: bool = False
+
+
+class ActiveAlert(BaseModel):
+    """One unresolved alert as returned by ``/api/v1/alerts/active``."""
+
+    alert_id: int
+    device_name: str
+    alert_type: str
+    alert_value: str
+    start_time: int
+    age: int
+    details: Dict[str, Any] | None = Field(
+        default=None,
+        description="Device status at alert time; present only when requested.",
+    )
+
+
+class AlertHistoryEntry(BaseModel):
+    """One alert as returned by ``/api/v1/alerts/history``.
+
+    ``end_time`` and ``duration`` are null while an alert is still active, so
+    they are serialized as explicit nulls rather than omitted.
+    """
+
+    alert_id: int
+    device_name: str
+    alert_type: str
+    alert_value: str
+    start_time: int
+    end_time: int | None = None
+    duration: int | None = None
+    details: Dict[str, Any] | None = Field(
+        default=None,
+        description="Device status at alert time; present only when requested.",
+    )
+
+
+class RoomControlKind(StrEnum):
+    """How one configured room actuator is driven and rendered."""
+
+    SWITCH = "switch"
+    DIMMER = "dimmer"
+    FAN = "fan"
+    TV = "tv"
+
+
+class RoomControl(BaseModel):
+    """One actuator offered by a room dashboard.
+
+    ``key`` is the room-stable identifier used in control request bodies and in
+    the rendered DOM. It is chosen by configuration rather than derived from the
+    Hubitat device id, so a device can be replaced without changing the API.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    key: str = Field(min_length=1, description="Room-stable control identifier.")
+    kind: RoomControlKind = Field(description="How the control is driven.")
+    label: str = Field(min_length=1, description="Caption shown on the tile.")
+    device_id: str | None = Field(
+        default=None, description="Hubitat device id; unused by TV lifts."
+    )
+    up_label: str | None = Field(default=None, description="TV-up component label.")
+    down_label: str | None = Field(default=None, description="TV-down component label.")
+    unavailable_note: str | None = Field(
+        default=None,
+        description=(
+            "Why this control has no reachable device. Set it to render the "
+            "tile permanently unavailable instead of omitting the control."
+        ),
+    )
+
+    @model_validator(mode="after")
+    def _check_addressing(self) -> "RoomControl":
+        """Require whichever addressing the control kind actually uses.
+
+        A TV lift is driven through two Hubitat component switches addressed by
+        label; every other kind is driven by device id.
+
+        A control with an ``unavailable_note`` is exempt and must carry no
+        device id. That combination is how a control we cannot reach yet stays
+        visible on the page: the alternative, a placeholder id, is how three of
+        these came to name unrelated devices on the wrong hub.
+        """
+        if self.unavailable_note:
+            if self.device_id:
+                raise ValueError(
+                    f"control {self.key!r} has both a device_id and an unavailable_note"
+                )
+            return self
+        if self.kind is RoomControlKind.TV:
+            if not (self.up_label and self.down_label):
+                raise ValueError(f"TV control {self.key!r} needs up_label and down_label")
+        elif not self.device_id:
+            raise ValueError(f"{self.kind} control {self.key!r} needs a device_id")
+        return self
+
+
 class RoomConfig(BaseModel):
-    """Static dashboard configuration for one room."""
+    """Static dashboard configuration for one room dashboard.
+
+    Sensor tiles are never configured here; they come from canonical
+    ``devices.room_id`` membership. ``members`` selects which rooms' sensors the
+    dashboard shows, and the remaining fields are deliberate presentation
+    choices about which actuators to offer.
+    """
 
     model_config = ConfigDict(frozen=True)
 
     url: str = Field(description="Dashboard route for the room.")
+    label: str = Field(default="", description="Name shown in the Rooms menu.")
+    members: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Member room keys, each matched against a room name or the device "
+            "name of the FCU that owns the room. Empty means the dashboard "
+            "shows only the room it was addressed by."
+        ),
+    )
     ervs: list[str] = Field(default_factory=list, description="AE-200 ERV names.")
     fans: list[str] = Field(default_factory=list, description="AE-200 fan names.")
-    sensors: list[str] = Field(default_factory=list, description="Hubitat sensor names.")
-    tv_control: bool = Field(default=False, description="Whether to render TV controls.")
-    tv_up_label: str | None = Field(default=None, description="Hubitat TV-up label.")
-    tv_down_label: str | None = Field(default=None, description="Hubitat TV-down label.")
-    dimmer_id: str | None = Field(default=None, description="Hubitat dimmer device id.")
-    wall_inner_id: str | None = Field(default=None, description="Inner wall light device id.")
-    wall_outer_id: str | None = Field(default=None, description="Outer wall light device id.")
+    controls: list[RoomControl] = Field(
+        default_factory=list, description="Hubitat actuators offered by the dashboard."
+    )
+
+    def find_control(self, key: str, kind: RoomControlKind) -> RoomControl | None:
+        """Return the configured control with this key and kind, if any.
+
+        Unlike :meth:`sole_control` this returns controls with no reachable
+        device: they are configured, and a caller naming one deserves to be told
+        that its device is missing rather than that the key does not exist.
+        """
+        return next(
+            (
+                control
+                for control in self.controls
+                if control.key == key and control.kind is kind
+            ),
+            None,
+        )
+
+    def sole_control(self, kind: RoomControlKind) -> RoomControl | None:
+        """Return the only control of a kind, for bodies that omit ``control``.
+
+        Rooms with a single dimmer predate per-control addressing, so their
+        request bodies carry no control key. Controls with no reachable device
+        do not count towards being the only one: Broadway has two unavailable
+        switches, which must not make a third switch ambiguous or absent.
+        """
+        matches = [
+            control
+            for control in self.controls
+            if control.kind is kind and not control.unavailable_note
+        ]
+        return matches[0] if len(matches) == 1 else None
 
 
 class MapPoint(BaseModel):
@@ -287,6 +601,12 @@ class TimeSeries(BaseModel):
     )
 
 
+class TimeSeriesResponse(BaseModel):
+    """Chart series for endpoints that return series without window flags."""
+
+    series: list[TimeSeries] = Field(default_factory=list)
+
+
 class TemperatureSeriesResponse(BaseModel):
     """Temperature chart data and availability outside the requested window."""
 
@@ -302,6 +622,23 @@ class FcuStateSample(BaseModel):
     mode: str | None = None
     drive: str | None = None
     fan_speed: str | None = None
+
+
+class ChangelogAction(StrEnum):
+    """Machine-readable operation recorded in one changelog row."""
+
+    LEGACY = "legacy"
+    FAN_SPEED = "fan_speed"
+    DRIVE = "drive"
+    FCU_STATE = "fcu_state"
+    MODE = "mode"
+    SET_TEMPERATURE = "set_temperature"
+    SET_AUTO_TEMPERATURE = "set_auto_temperature"
+    SET_RANGE = "set_range"
+    TEMPERATURE_SOURCE = "temperature_source"
+    RULES_SUSPENSION = "rules_suspension"
+    RULES_MASTER = "rules_master"
+    ACTION_RULE_FAILURE = "action_rule_failure"
 
 
 class FcuHistoryResponse(BaseModel):
@@ -320,6 +657,7 @@ class ChangelogRow(BaseModel):
     logtime: int | None = None
     ipaddr: str | None = None
     unit: str | None = None
+    action: ChangelogAction = ChangelogAction.LEGACY
     current_values: Any | None = None
     new_value: Any | None = None
     agent: str | None = None
@@ -374,12 +712,19 @@ class AqiSummary(BaseModel):
     color: str = Field(description="Display hex color for the AQI category.")
 
 
+class AqiRuleObservation(BaseModel):
+    """Outdoor AQI value and source timestamp used by HVAC action rules."""
+
+    value: int
+    observed_at: int
+
+
 class AqiWeatherResponse(BaseModel):
     """Combined outdoor AQI and weather payload."""
 
     aqi: AqiSummary
+    aqi_observed_at: int | None = None
     weather: WeatherData | Dict[str, Any]
-
 
 class ControlRequest(BaseModel):
     """Strict base for request bodies that control devices or configuration."""
@@ -521,6 +866,86 @@ class DeviceRoomControl(ControlRequest):
     room_id: int | None = Field(description="Room id, or null to clear assignment.")
 
 
+class RoomDimmerControl(ControlRequest):
+    """Request body for setting a room light dimmer level.
+
+    ``control`` may be omitted by a room offering exactly one dimmer, which is
+    the shape the Hickory dashboard has always sent.
+    """
+
+    level: int = Field(ge=0, le=100, description="Dimmer level as a percentage.")
+    control: str | None = Field(default=None, description="Configured control key.")
+
+
+class RoomSwitchControl(ControlRequest):
+    """Request body for switching one configured room switch on or off.
+
+    The control key is accepted as ``light`` as well as ``control``: the wall
+    lights this endpoint was built for send the former, and widening the field
+    rather than adding a second endpoint keeps one handler for both.
+    """
+
+    control: str = Field(
+        min_length=1,
+        validation_alias=AliasChoices("control", "light"),
+        serialization_alias="control",
+        description="Configured control key.",
+    )
+    state: Literal["on", "off"] = Field(description="Requested switch state.")
+
+
+class RoomFanSpeed(StrEnum):
+    """Speeds a Hubitat ``FanControl`` device is commanded to."""
+
+    OFF = "off"
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+
+
+class RoomFanControl(ControlRequest):
+    """Request body for setting a configured room fan's speed."""
+
+    control: str = Field(min_length=1, description="Configured control key.")
+    speed: RoomFanSpeed = Field(description="Requested fan speed.")
+
+
+class RoomTvControl(ControlRequest):
+    """Request body for driving a room TV lift."""
+
+    direction: Literal["up", "down"] = Field(description="Requested lift direction.")
+    control: str | None = Field(default=None, description="Configured control key.")
+
+
+class DeviceDisableUntilControl(ControlRequest):
+    """Request body for the per-device rules disable timer.
+
+    ``disabled_until`` is an absolute Unix timestamp; a value at or before now
+    re-enables rules for the device.
+    """
+
+    device_id: int = Field(description="Local device id from the devices table.")
+    disabled_until: int = Field(description="Unix timestamp to disable rules until.")
+
+
+class RulesMasterControl(ControlRequest):
+    """Request body for the global master rules switch."""
+
+    enabled: bool = Field(description="Whether the rules engine may act at all.")
+
+
+class DisableRulesQuery(BaseModel):
+    """Query string for the global timed rules disable.
+
+    Unlike the request bodies above, this deliberately does *not* forbid extra
+    fields. Query strings collect incidental parameters -- cache-busters,
+    hand-edited URLs, values added by proxies -- and every other GET endpoint
+    reads ``request.args`` and ignores what it does not recognize.
+    """
+
+    seconds: int = Field(description="How long to disable all rules, in seconds.")
+
+
 class FcuTempSourceControl(ControlRequest):
     """Request body for one FCU temperature source multiplier."""
 
@@ -566,8 +991,11 @@ class CommandResponse(BaseModel):
     status: str = "ok"
     device_id: int | None = None
     level: int | None = None
-    light: str | None = None
+    control: str | None = None
     state: str | None = None
+    # Two subsystems answer with a speed: the AE-200 numbers its fan speeds,
+    # while a Hubitat FanControl device names them.
+    speed: int | str | None = None
     direction: str | None = None
 
 
@@ -594,6 +1022,10 @@ class DeviceStatus(BaseModel):
     device_type: str | None = Field(
         default=None,
         description="Configured or inferred device type.",
+    )
+    device_subtype: str | None = Field(
+        default=None,
+        description="Integration-assigned device subtype, such as AIRTHINGS.",
     )
     log_id: int | None = Field(default=None, description="Latest devlog row id.")
     logtime: int | None = Field(default=None, description="Unix timestamp for the row.")
@@ -681,18 +1113,6 @@ class DeviceStatus(BaseModel):
     )
 
 
-class RoomMatrixGroup(BaseModel):
-    """One room section in the main-page sensor matrix."""
-
-    room_id: int | None = None
-    room_name: str
-    fcu_device_id: int | None = None
-    calculated_temp10x: int | None = None
-    calculated_humidity: float | None = None
-    can_delete: bool = False
-    devices: list[DeviceStatus] = Field(default_factory=list)
-
-
 class RoomDashboardSensorAttributes(BaseModel):
     """Fresh canonical metrics rendered on a room sensor tile."""
 
@@ -701,12 +1121,20 @@ class RoomDashboardSensorAttributes(BaseModel):
 
 
 class RoomDashboardSensor(BaseModel):
-    """One assigned sensor rendered by a canonical room dashboard."""
+    """One assigned sensor rendered by a canonical room dashboard.
+
+    ``stale_for`` carries the age of the last reading when it is too old to
+    trust, and is ``None`` while the reading is current. It replaces an earlier
+    ``offline`` flag: what we actually know is that we have not heard from the
+    device recently, not that the device is off. The runner or the hub could be
+    the thing that stopped, and saying how long ago lets a reader tell a brief
+    hiccup from a sensor that has been silent for days.
+    """
 
     id: int
     name: str
     display_name: str
-    offline: bool = False
+    stale_for: str | None = None
     attributes: RoomDashboardSensorAttributes
 
 
@@ -748,40 +1176,37 @@ class RoomPresenceResponse(BaseModel):
     rooms: list[RoomPresence]
 
 
-class RoomSwitchState(BaseModel):
-    """Current state of one room switch."""
+class RoomControlState(BaseModel):
+    """Current state of one configured room actuator.
 
-    switch: Literal["on", "off"]
+    Only the fields a kind actually has are populated: ``level`` for dimmers,
+    ``speed`` for fans. Unreadable devices are omitted from the response rather
+    than reported with a guessed state.
 
+    Every field is optional for the same reason the whole control is omitted
+    when unreadable: a device that answers without an attribute has not told us
+    that attribute's value. Defaulting a missing ``switch`` to ``off`` would
+    show a running fan as stopped, and a missing ``level`` as ``0`` would show a
+    lit dimmer at zero percent.
+    """
 
-class RoomDimmerState(RoomSwitchState):
-    """Current level and switch state of one room dimmer."""
-
-    level: int = Field(ge=0, le=100)
+    key: str
+    kind: RoomControlKind
+    switch: Literal["on", "off"] | None = None
+    level: int | None = Field(default=None, ge=0, le=100)
+    speed: str | None = None
 
 
 class RoomControlStatus(BaseModel):
-    """Available actuator states for a room dashboard."""
+    """Readable actuator states for a room dashboard."""
 
-    dimmer: RoomDimmerState | None = None
-    wall_inner: RoomSwitchState | None = None
-    wall_outer: RoomSwitchState | None = None
+    controls: list[RoomControlState] = Field(default_factory=list)
 
 
 class PresenceHistoryResponse(BaseModel):
     """Presence observations retained with their room-at-observation identity."""
 
     events: list[PresenceEvent]
-
-
-class TableUpdateSummary(BaseModel):
-    """Oldest timestamp represented by the data currently shown in a table."""
-
-    oldest_update_at: int
-    oldest_update_datetime: str
-    oldest_update_age: str
-    source_device_name: str | None = None
-    label: str
 
 
 def json_ready(model: BaseModel) -> Dict[str, Any]:
@@ -796,3 +1221,17 @@ def json_ready(model: BaseModel) -> Dict[str, Any]:
 def json_ready_list(models: Iterable[BaseModel]) -> list[Dict[str, Any]]:
     """Dump validated models to JSON-ready mappings."""
     return [json_ready(model) for model in models]
+
+
+def alert_json_ready(model: BaseModel) -> Dict[str, Any]:
+    """Dump one alert row, keeping nulls but omitting an absent ``details``.
+
+    Alert rows mix two conventions that ``json_ready``'s ``exclude_none`` cannot
+    express together: the scalar columns are always present and may be null (an
+    active alert has no ``end_time``), while ``details`` appears only when the
+    caller passed ``include_details``.
+    """
+    data = model.model_dump(mode="json", by_alias=True)
+    if data.get("details") is None:
+        data.pop("details", None)
+    return data

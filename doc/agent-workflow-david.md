@@ -2,7 +2,9 @@
 
 GitHub Issues are the canonical tracker for durable project work in this repo.
 Use `doc/agent-workflow-simson.md` for project issue tracking, including work
-driven by David.
+driven by David. For sharing the Beads queue across multiple developers
+(branch/PR flow, `bd dolt` push/pull, JSONL conflict handling), see
+`doc/beads-multi-dev-workflow.md`.
 
 David may still use **bd (Beads)** as a personal/local working queue. Beads
 entries are not authoritative project records. Only use `bd` when the user
@@ -20,12 +22,19 @@ tracked Beads files, or treat their presence as accidental.
 ## Quick Reference
 
 ```bash
+bd dolt pull            # Refresh queue state FIRST — stale state double-claims
 bd ready                # Find available work
 bd show <id>            # View issue details
 bd update <id> --claim  # Claim work atomically
-bd close <id>           # Complete work
-bd dolt push            # Push beads data to remote
+bd close <id>           # Complete work — humans only; see the warning below
+bd dolt push            # Push beads data to remote — needs user authority
 ```
+
+> **Agents: do not close beads, and do not push.** The `bd close` and
+> `bd dolt push` lines above are for David working by hand. Whenever code lands
+> via branch -> PR, closing happens at merge — see
+> `doc/beads-multi-dev-workflow.md`, "Rules for agents", which overrides the
+> close/sync steps in this file.
 
 ## Why bd?
 
@@ -56,7 +65,8 @@ bd update <id> --claim --json
 bd update bd-42 --priority 1 --json
 ```
 
-**Complete work:**
+**Complete work** (David, or an agent he explicitly tells to close — otherwise
+closing is merge-time, see the warning above):
 
 ```bash
 bd close bd-42 --reason "Completed" --json
@@ -90,10 +100,10 @@ Use this workflow only when the user explicitly asks for local Beads work:
    dedicated issue when this item can complete before a broader umbrella.
 5. **Local-only follow-up?** Create a linked Beads issue:
    - `bd create "Found bug" --description="Details about what was found" -p 1 --deps discovered-from:<parent-id>`
-6. **Complete tracked item**: after acceptance criteria pass, record commit and
-   test evidence on the referenced GitHub issue, close that issue, then run
-   `bd close <id> --reason "Done"`. Do not close a Beads item while its
-   canonical GitHub issue still has unfinished scope; split the issue first.
+6. **Report the item as ready to close** — do not close it yourself. If the work
+   is landing via branch -> PR, it closes at merge
+   (`bin/beads_pr_sweep.py --close`). For a purely local item with no PR, David
+   runs `bd close <id> --reason "Done"`, or explicitly tells you to.
 
 ## Quality
 
@@ -128,8 +138,9 @@ bd automatically syncs via Dolt:
 - Cross-link Beads ids to GitHub issues when migrating durable work.
 - Every durable Beads item has exactly one `external_ref` in `gh-N` form, and
   its GitHub issue names the Beads id.
-- Completing a durable Beads item includes closing its dedicated GitHub issue
-  with evidence in the same session.
+- Before a durable Beads item closes, its dedicated GitHub issue must contain
+  commit and test evidence and have no unfinished scope. Agents leave closure
+  to the merge-time sweep or to an explicit instruction from David.
 
 ## Session Completion
 
@@ -137,7 +148,8 @@ When ending a work session, complete ALL steps below:
 
 1. **File issues for remaining work** - create issues for anything needing follow-up
 2. **Run quality gates** (if code changed) - tests, linters, builds
-3. **Update issue status** - close finished work, update in-progress items
+3. **Update issue status** - keep in-progress items current. Agents: leave
+   finished-but-unmerged work `in_progress` and report it; do not close
 4. **Sync** - only when the active instructions grant that authority:
    ```bash
    git pull --rebase

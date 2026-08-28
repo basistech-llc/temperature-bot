@@ -352,8 +352,7 @@ versioned multiplier history table before changing the chart semantics.
 
 ## Rules
 
-Rules should use `get_temp(device_id)` for effective temperature. It returns the
-calculated FCU temperature when available, otherwise the raw `temp10x` value.
-
-Use `get_fcu_temp(device_id)` only when a rule specifically needs the raw FCU
+Typed action rules receive `Device.temperature_c`, which contains the calculated
+FCU temperature when available and otherwise the raw device temperature. Use
+`Device.fcu_temperature_c` only when a rule specifically needs the raw FCU
 inlet/device temperature.

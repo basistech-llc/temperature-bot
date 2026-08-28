@@ -12,7 +12,10 @@ tracking, creating, updating, or closing work.
 David may still use Beads as a personal/local working queue. Beads entries are
 not authoritative project records. Do not create, close, or rely on Beads issues
 for project tracking unless the user explicitly asks for local Beads
-housekeeping; for that narrow case, read `doc/agent-workflow-david.md`.
+housekeeping; for that narrow case, read `doc/agent-workflow-david.md`. When
+multiple developers share the Beads queue (branch/PR flow, `bd dolt`
+push/pull, JSONL conflict handling), follow
+`doc/beads-multi-dev-workflow.md`.
 
 `.beads/` is intentionally kept in the Git repo so agents can read and review
 David's local or historical queue. Keep `.beads/issues.jsonl`, metadata, and
@@ -33,23 +36,38 @@ is clearly for Codex, such as `Codex AI Assistant` or an address containing
 available, tell the user before committing and ask whether to use the configured
 default signing key or make an unsigned commit.
 
+## Release Notes
+
+Every release must update `doc/RELEASE_NOTES.md` in the same branch or pull
+request as the release. Before changing the version or publishing a release,
+review the commits since the previous release and summarize all meaningful
+user-facing, operational, architectural, dependency, and developer-workflow
+changes. Move the relevant entries from `Unreleased` into a dated version
+section, add the new version and date, and leave an empty `Unreleased` section
+for subsequent work. A release is not complete if its release notes are absent
+or stale.
+
 ## Non-Interactive Shell Commands
 
 **ALWAYS use non-interactive flags** with file operations to avoid hanging on confirmation prompts.
 
 Shell commands like `cp`, `mv`, and `rm` may be aliased to include `-i` (interactive) mode on some systems, causing the agent to hang indefinitely waiting for y/n input.
 
-**Use these forms instead:**
-```bash
-# Force overwrite without prompting
-cp -f source dest           # NOT: cp source dest
-mv -f source dest           # NOT: mv source dest
-rm -f file                  # NOT: rm file
+**Bypass the alias; do not try to out-flag it.** `cp -f` does *not* suppress the
+prompt on macOS — only `mv -f` and `rm -f` do.
 
-# For recursive operations
-rm -rf directory            # NOT: rm -r directory
-cp -rf source dest          # NOT: cp -r source dest
+```bash
+command cp source dest      # NOT: cp -f source dest  (still prompts on macOS)
+command cp -r source dest
+mv -f source dest
+rm -rf directory
 ```
+
+`/bin/cp` and `\cp` work too. If a command does hang at a `(y/n [n])` prompt, do
+not answer it: kill the process, then check whether it half-completed.
+
+Why `cp` differs, where the aliases come from, and how to verify both:
+`doc/shell-gotchas.md`.
 
 **Other commands that may prompt:**
 - `scp` - use `-o BatchMode=yes` for non-interactive

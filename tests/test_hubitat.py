@@ -9,7 +9,8 @@ from unittest.mock import patch
 
 import pytest
 
-from app import hubitat
+from app import hubitat, room_config
+from app.models import RoomControlKind
 from app.paths import ETC_DIR
 from bin import runner
 
@@ -110,3 +111,79 @@ def test_update_from_hubitat_persists_status_json(
     assert conn.execute("SELECT COUNT(*) FROM presence_events").fetchone()[0] == (
         expected_motion_observations
     )
+
+
+def test_live_hubitat_commands_are_refused_from_tests():
+    """The guard that keeps the suite off real hardware must itself be pinned.
+
+    conftest's ``refuse_live_hubitat_commands`` is the only thing standing
+    between an unpatched command test and a real office outlet, and it fails
+    silently if ``send_device_command`` is renamed or the fixture stops
+    applying. Calling through a wrapper rather than the low-level function
+    proves the whole write layer is covered, not just the one name.
+
+    The arguments are deliberately harmless. The regression this test detects
+    is precisely the one where the call is not intercepted, so a real device id
+    would make the test perform the write it exists to prevent. Hubitat ids are
+    numeric, so this one can name nothing, and ``off`` could not energize it
+    even if it did.
+    """
+    with pytest.raises(AssertionError, match="live Hubitat device not-a-device-id"):
+        hubitat.set_switch("not-a-device-id", "off")
+
+
+def test_simulator_carries_every_device_the_room_configs_address(monkeypatch):
+    """A room control id must be checkable without reaching for the hub.
+
+    The simulator snapshot held only temperature sensors, so no control id in
+    ``room_config`` had any corroboration in the repo at all -- an id could be
+    stale, from the wrong hub, or naming an unrelated device, and nothing here
+    would contradict it. That is not theoretical: three Broadway controls
+    shipped naming Kitchen and Cedar lights because their ids came off hub
+    10.2.3.52.
+
+    Every configured control is now captured from Maker API app 520. Asserting
+    the capability rather than only the id is the point: an id that names
+    something the control cannot drive fails here, which is exactly the shape
+    of the wrong-hub mistake.
+    """
+    required_capability = {
+        RoomControlKind.SWITCH: "Switch",
+        RoomControlKind.DIMMER: "SwitchLevel",
+        RoomControlKind.FAN: "FanControl",
+    }
+    monkeypatch.setenv(hubitat.HUBITAT_SIMULATOR_ENV, "1")
+    devices = {device["id"]: device for device in hubitat.get_all_devices()}
+
+    checked = 0
+    for room_key, config in room_config.ROOM_CONFIGS.items():
+        for control in config.controls:
+            if control.device_id is None:
+                continue
+            where = f"{room_key}/{control.key}"
+            assert control.device_id in devices, f"{where} names an unknown device"
+            device = devices[control.device_id]
+            assert required_capability[control.kind] in device["capabilities"], (
+                f"{where} names {device['label']!r}, which is not a "
+                f"{control.kind.value}"
+            )
+            checked += 1
+    assert checked == 13
+
+
+def test_simulator_can_resolve_the_tv_lift_by_label(monkeypatch):
+    """The TV lift is addressed by label, not id, so ids alone do not cover it.
+
+    ``control_room_tv`` looks its target up in the full device list, which means
+    a renamed switch breaks the lift with no config change to notice. The
+    labels only resolve offline if the simulator carries those devices too.
+    """
+    monkeypatch.setenv(hubitat.HUBITAT_SIMULATOR_ENV, "1")
+    labels = {device["label"] for device in hubitat.get_all_devices()}
+    hickory_tv = room_config.ROOM_CONFIGS["hickory"].find_control(
+        "tv", RoomControlKind.TV
+    )
+
+    assert hickory_tv is not None
+    assert hickory_tv.up_label in labels
+    assert hickory_tv.down_label in labels

@@ -656,6 +656,25 @@ td.cell-notes {
     font-size: 0.9em;
 }
 
+.aqi-summary-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    color: inherit;
+    cursor: pointer;
+    text-decoration: none;
+}
+
+.aqi-summary-link:hover {
+    text-decoration: underline;
+    text-underline-offset: 0.12em;
+}
+
+.aqi-summary-link:focus-visible {
+    outline: 2px solid #3b82f6;
+    outline-offset: 2px;
+}
+
 /* Utility: hide element; JS toggles by adding/removing this class */
 .hidden {
     display: none !important;
@@ -921,6 +940,11 @@ table.rules-table th  {
 .device-rename-actions {
     display: flex;
     justify-content: flex-end;
+}
+
+.device-rename-message {
+    min-height: 1.2rem;
+    color: #b42318;
 }
 
 .fcu-temp-sources-popup {
@@ -1721,6 +1745,44 @@ li.pure-menu-item > .rules-master-toggle {
     height: 620px;
     width: 100%;
     margin-top: 16px;
+}
+
+#performance-chart {
+    height: 620px;
+    width: 100%;
+    margin-top: 16px;
+}
+
+.performance-monitoring-page {
+    padding: 0 1em;
+}
+
+.ae200-page {
+  margin: 1rem 5%;
+}
+
+.ae200-page .table-scroll {
+  overflow-x: auto;
+}
+
+.ae200-page pre {
+  max-height: 24rem;
+  min-width: 24rem;
+  overflow: auto;
+  white-space: pre-wrap;
+}
+
+.performance-chart,
+#ae200-performance-chart {
+  height: 32rem;
+  width: 100%;
+}
+
+.performance-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75em;
+    margin-top: 0.75em;
 }
 
 /* About page */

@@ -11,9 +11,11 @@
 .playwright
 __pycache__/
 activate
+build/
 config.yaml
 coverage.xml
 debug_page*
+dist/
 image/
 node_modules
 secrets.json
@@ -32,3 +34,4 @@ devices*.json
 x.json
 slack-token
 var/
+.tmp

@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% from '_outdoor_aqi.html' import outdoor_aqi_widget %}
 {% block title %} Air Quality {% endblock %}
 
 {% block body %}
@@ -73,49 +74,10 @@ Poor: &gt;2000.">VOC<br><small>ppb</small></th>
         <div class="last-refresh-inline">Data as of: {{ indoor_asof }}</div>
       {% endif %}
 
-      <h2>Outdoor Air Quality</h2>
-
-      <table class="pure-table data-table">
-        <thead>
-          <tr>
-            <th class="column-unit" scope="col" title="Outdoor sensor source">Unit</th>
-            <th scope="col" title="Outdoor Air Quality Index">AQI</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for row in airmon %}
-            {% if row.status and row.status.aqi %}
-            {% set stale_cls = ' temp-stale' if row.is_stale else '' %}
-            {% set stale_title = 'Last updated: ' ~ row.age ~ ' ago' if row.age else '' %}
-            <tr>
-              <td class="cell-unit">{{ row.display_name or row.device_name }}</td>
-              <td class="aqi-cell{{ stale_cls }}" title="{{ stale_title }}">
-                <span class="aqi-pill-table" data-aqi-color="{{ row.status.aqi.color }}">
-                  {{ row.status.aqi.name }}: {{ fmt(row.status.aqi.value) }}
-                </span>
-              </td>
-            </tr>
-            {% endif %}
-          {% endfor %}
-        </tbody>
-      </table>
-
-      {% if outdoor_asof %}
-        <div class="last-refresh-inline">Data as of: {{ outdoor_asof }}</div>
-      {% endif %}
+      {{ outdoor_aqi_widget(outdoor_aqi, outdoor_asof) }}
     </div>
   </div>
 </div>
 
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-    document.querySelectorAll('.aqi-pill-table[data-aqi-color]').forEach(function(pill) {
-        var color = pill.getAttribute('data-aqi-color');
-        if (color) {
-            pill.style.backgroundColor = color;
-            pill.style.color = '#fff';
-        }
-    });
-});
-</script>
+<script src="/static/outdoor_aqi.js"></script>
 {% endblock %}

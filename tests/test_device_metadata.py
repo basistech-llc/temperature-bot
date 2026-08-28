@@ -5,6 +5,8 @@ import sqlite3
 
 from conftest import flask_test_client  # noqa: F401  # pylint: disable=unused-import
 
+from app import db
+
 
 def _first_device_id() -> int:
     test_db_path = os.environ.get("TEST_DB_NAME")
@@ -89,6 +91,48 @@ def test_device_metadata_empty_patch_preserves_fields(flask_test_client):  # noq
     assert row["device_type"] == "ERV"
     assert row["rules_enabled"] == 0
     assert row["notes"] == "keep this note"
+
+
+def test_fcu_display_name_and_room_name_are_independent(
+    flask_test_client, test_database_conn_with_test_data
+):  # noqa: F811
+    """FCU labels and room names must remain separate persisted properties."""
+    conn, _, _ = test_database_conn_with_test_data
+    device_id = db.get_or_create_device_id(
+        conn, "Independent FCU", device_type="FCU"
+    )
+    room_id = conn.execute(
+        "SELECT room_id FROM devices WHERE device_id=?", (device_id,)
+    ).fetchone()[0]
+    original_room_name = conn.execute(
+        "SELECT room_name FROM rooms WHERE room_id=?", (room_id,)
+    ).fetchone()[0]
+
+    device_response = flask_test_client.patch(
+        f"/api/v1/devices/{device_id}", json={"display_name": "Independent Unit"}
+    )
+    assert device_response.status_code == 200
+    assert conn.execute(
+        "SELECT room_name FROM rooms WHERE room_id=?", (room_id,)
+    ).fetchone()[0] == original_room_name
+
+    room_response = flask_test_client.patch(
+        f"/api/v1/rooms/{room_id}", json={"room_name": "Independent Room"}
+    )
+    assert room_response.status_code == 200
+    row = conn.execute(
+        """
+        SELECT devices.display_name, rooms.room_name
+        FROM devices
+        JOIN rooms ON rooms.room_id=devices.room_id
+        WHERE devices.device_id=?
+        """,
+        (device_id,),
+    ).fetchone()
+    assert dict(row) == {
+        "display_name": "Independent Unit",
+        "room_name": "Independent Room",
+    }
 
 
 def test_devices_route(flask_test_client):  # noqa: F811
