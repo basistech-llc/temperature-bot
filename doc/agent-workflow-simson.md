@@ -35,3 +35,9 @@ If a Beads id is mentioned in source notes or a user request:
 4. Do not update Beads unless the user explicitly asks for local Beads
    housekeeping. When Beads work is explicitly in scope and multiple
    developers share the queue, follow `beads-multi-dev-workflow.md`.
+5. When Beads work is explicitly in scope, give the item exactly one
+   `external_ref` in `gh-N` form. Prefer a dedicated issue when the Beads item
+   can complete independently; mention broader umbrella issues in prose.
+6. Before a durable Beads item closes, add commit and test evidence to its
+   GitHub issue and split out any unfinished scope. Agents leave Beads closure
+   to the merge-time sweep or to an explicit instruction from David.
