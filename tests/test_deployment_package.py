@@ -103,13 +103,47 @@ def test_builder_collects_complete_migrations_units_and_configuration(tmp_path):
     payloads = collect_payloads(requirements, wheel)
     paths = {payload.path for payload in payloads}
 
+    repo_root = Path(__file__).resolve().parents[1]
+    expected_migrations = {
+        f"migrations/{path.name}" for path in (repo_root / "etc/flyway/sql").glob("*.sql")
+    }
+    expected_units = {
+        f"systemd/{path.name}"
+        for path in (repo_root / "etc/systemd").iterdir()
+        if path.is_file() and path.suffix in {".service", ".timer"}
+    }
+
     assert "configuration/temperature-bot.env.example" in paths
     assert "documentation/DEPLOYMENT_PACKAGE.md" in paths
     assert "installer/install_deployment_package.py" in paths
-    assert len([payload for payload in payloads if payload.role == "migration"]) == 19
-    units = [payload for payload in payloads if payload.role == "systemd"]
-    assert len(units) == 6
-    assert all(Path(payload.path).suffix in {".service", ".timer"} for payload in units)
+    assert {payload.path for payload in payloads if payload.role == "migration"} == (
+        expected_migrations
+    )
+    assert {payload.path for payload in payloads if payload.role == "systemd"} == expected_units
+
+
+def test_builder_rejects_reserved_manifest_payload(tmp_path):
+    package = tmp_path / "temperature-bot.zip"
+    payloads = [
+        PayloadSource(
+            source=_source(tmp_path, "manifest-source.json", b"{}"),
+            path=MANIFEST_PATH,
+            role="metadata",
+        )
+    ]
+
+    with pytest.raises(ValueError, match="payload path is reserved: manifest.json"):
+        build_package(
+            package,
+            PackageIdentity(
+                version="1.2.3",
+                commit="a" * 40,
+                built_at=datetime(2026, 8, 26, tzinfo=timezone.utc),
+                requires_python=">=3.12",
+                flyway_version="12.8.1",
+            ),
+            payloads,
+        )
 
 
 def test_installer_verify_only_cli_emits_valid_manifest(tmp_path, capsys):

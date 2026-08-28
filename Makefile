@@ -130,7 +130,8 @@ $(DEV_DB):
 
 # Back up the local database directory, stream a read-only dump from the remote
 # host into a new database, and apply any pending Flyway migrations. The
-# immutable URI prevents SQLite from trying to create remote WAL sidecars.
+# A read-only URI includes committed WAL contents without modifying the remote
+# database. Timeouts bound lock waits, connection setup, and dead SSH sessions.
 # NOTE: temperature-bot-config.yaml includes production secrets
 #       until we move to better secret management system
 fetch-dev-db: SHELL := /bin/bash
@@ -167,8 +168,10 @@ fetch-dev-db: ## Fetch the dev DB and config from the remote host
 	mkdir -p "$$db_dir"; \
 	echo "Streaming a read-only SQLite dump from $(FETCH_HOST):$(FETCH_REMOTE_DB)"; \
 	echo "Importing the dump into $$db"; \
-	ssh -o BatchMode=yes $(FETCH_HOST) \
-		"sqlite3 -batch -init /dev/null 'file:$(FETCH_REMOTE_DB)?immutable=1' .dump" \
+	ssh -o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=15 \
+		-o ServerAliveCountMax=4 $(FETCH_HOST) \
+		"timeout 180 sqlite3 -batch -init /dev/null -cmd 'PRAGMA busy_timeout=30000;' \
+		'file:$(FETCH_REMOTE_DB)?mode=ro' .dump" \
 		| sqlite3 -batch -init /dev/null "$$db"; \
 	echo "Checking SQLite integrity"; \
 	test "$$(sqlite3 -batch -noheader -init /dev/null -readonly "$$db" 'PRAGMA quick_check;')" = ok; \
