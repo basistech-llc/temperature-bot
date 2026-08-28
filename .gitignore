@@ -34,3 +34,4 @@ devices*.json
 x.json
 slack-token
 var/
+.tmp

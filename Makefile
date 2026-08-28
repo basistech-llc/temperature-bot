@@ -8,6 +8,7 @@
 #    make check   - static analysis
 #    make test    - dynamic analysis
 #    make make-dev-db  - creates a local database via Flyway migrations
+#    make fetch-dev-db - refreshes var/db/temperature_bot from production and migrates it
 #    make migrate-db   - applies pending Flyway migrations to the existing local DB
 #    make local-dev - Runs the web backend locally with simulator
 #    make local-live-dev - Runs the web backend locally against live AE-200
@@ -15,15 +16,16 @@
 #
 # Environment variables:
 # DB_PATH - Environment variable to use for local development.
-#           Uses var/db/temperature-bot.db if not set (note this is a relative path)
+#           Uses var/db/temperature_bot/temperature-bot.db if not set.
 #           For installation, cron & systemd use /var/db/temperature_bot/temperature-bot.db
 #
-# DEV_DB - your development DB. typically var/db/temperature-bot
+# DEV_DB - your development DB. typically var/db/temperature_bot/temperature-bot.db
 # AE200_SIMULATOR - set to 1 for `make local-dev` -
 
 
-export DB_PATH ?= var/db/temperature-bot.db
-export DEV_DB  ?= var/db/temperature-bot.db
+export DB_PATH ?= var/db/temperature_bot/temperature-bot.db
+export DEV_DB  ?= $(DB_PATH)
+DEV_DB_BACKUP_DIR ?= var/db/backups
 
 # Flyway migration SQL directory
 FLYWAY_SQL_DIR := etc/flyway/sql
@@ -34,10 +36,9 @@ FLYWAY_SCHEMA_DUMP := /tmp/temperature-bot-schema-temp.sql
 FLYWAY_VALIDATE_TEMP := /tmp/temperature-bot-flyway-validate.db
 
 # Remote host and paths used by fetch-dev-db (override as needed for your environment)
-FETCH_HOST              ?= air.basistech.net
-FETCH_REMOTE_DB         ?= /var/db/temperature_bot/temperature-bot.db
-FETCH_REMOTE_BACKUP_DIR ?= /var/db/temperature-bot-backups
-FETCH_REMOTE_CONFIG     ?= /home/air/temperature-bot/temperature-bot-config.yaml
+FETCH_HOST           ?= air.basistech.net
+FETCH_REMOTE_DB      ?= /var/db/temperature_bot/temperature-bot.db
+FETCH_REMOTE_CONFIG  ?= /home/air/temperature-bot/temperature-bot-config.yaml
 
 # Deployment defaults. Override only when intentionally targeting a different
 # checked-out installation or database.
@@ -127,33 +128,67 @@ $(DEV_DB):
 	@echo "       Create it with 'make make-dev-db' or fetch it with 'make fetch-dev-db'."
 	@false
 
-# Create and validate a consistent SQLite snapshot on the remote host, fetch
-# that single self-contained file, then validate and atomically install it.
+# Back up the local database directory, stream a read-only dump from the remote
+# host into a new database, and apply any pending Flyway migrations. A
+# read-only URI includes committed WAL contents without modifying the remote
+# database. Timeouts bound lock waits, connection setup, and dead SSH sessions.
 # NOTE: temperature-bot-config.yaml includes production secrets
 #       until we move to better secret management system
+fetch-dev-db: SHELL := /bin/bash
 fetch-dev-db: ## Fetch the dev DB and config from the remote host
-	mkdir -p $(dir $(DEV_DB))
-	@set -eu; \
-	remote_snapshot="$(FETCH_REMOTE_BACKUP_DIR)/fetch-dev-db.$$(date -u +%Y%m%dT%H%M%SZ).$$$$.db"; \
-	local_snapshot="$(DEV_DB).new"; \
-	cleanup() { \
-		rm -f "$$local_snapshot"; \
-		ssh -o BatchMode=yes $(FETCH_HOST) "rm -f '$$remote_snapshot'" >/dev/null 2>&1 || true; \
+	@set -euo pipefail; \
+	db='$(DEV_DB)'; \
+	db_dir="$$(dirname "$$db")"; \
+	case "$$db_dir" in ''|.|/) echo "ERROR: unsafe DEV_DB directory: $$db_dir" >&2; exit 1;; esac; \
+	backup_dir=; \
+	echo "Preparing to refresh $$db from $(FETCH_HOST):$(FETCH_REMOTE_DB)"; \
+	echo "Ensuring the backup directory exists: $(DEV_DB_BACKUP_DIR)"; \
+	mkdir -p '$(DEV_DB_BACKUP_DIR)'; \
+	if test -d "$$db_dir"; then \
+		backup_dir='$(DEV_DB_BACKUP_DIR)'/"$$(basename "$$db_dir").$$(date -u +%Y%m%dT%H%M%SZ)"; \
+		test ! -e "$$backup_dir"; \
+		echo "Moving the existing database directory $$db_dir to $$backup_dir"; \
+		mv -f "$$db_dir" "$$backup_dir"; \
+	else \
+		echo "No existing database directory to back up: $$db_dir"; \
+	fi; \
+	restore() { \
+		status=$$?; \
+		trap - EXIT; \
+		echo "Fetch failed; removing the incomplete database directory $$db_dir" >&2; \
+		/bin/rm -rf "$$db_dir"; \
+		if test -n "$$backup_dir"; then \
+			echo "Restoring the previous database directory from $$backup_dir" >&2; \
+			mv -f "$$backup_dir" "$$db_dir"; \
+		fi; \
+		exit $$status; \
 	}; \
-	trap cleanup EXIT HUP INT TERM; \
-	ssh -o BatchMode=yes $(FETCH_HOST) \
-		"umask 077; timeout 180 sqlite3 -batch -init /dev/null '$(FETCH_REMOTE_DB)' \"PRAGMA busy_timeout=30000; VACUUM INTO '$$remote_snapshot';\" && test \"\$$(sqlite3 -batch -noheader -init /dev/null -readonly '$$remote_snapshot' 'PRAGMA quick_check;')\" = ok"; \
+	trap restore EXIT; \
+	echo "Creating the new database directory: $$db_dir"; \
+	mkdir -p "$$db_dir"; \
+	echo "Streaming a read-only SQLite dump from $(FETCH_HOST):$(FETCH_REMOTE_DB)"; \
+	echo "Importing the dump into $$db"; \
+	ssh -o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=15 \
+		-o ServerAliveCountMax=4 $(FETCH_HOST) \
+		"timeout 180 sqlite3 -batch -init /dev/null -cmd 'PRAGMA busy_timeout=30000;' \
+		'file:$(FETCH_REMOTE_DB)?mode=ro' .dump" \
+		| sqlite3 -batch -init /dev/null "$$db"; \
+	echo "Checking SQLite integrity"; \
+	test "$$(sqlite3 -batch -noheader -init /dev/null -readonly "$$db" 'PRAGMA quick_check;')" = ok; \
+	echo "Checking that the imported database contains the devices table"; \
+	sqlite3 -batch -init /dev/null -readonly "$$db" 'SELECT count(*) FROM devices;' >/dev/null; \
+	echo "Applying pending Flyway migrations"; \
+	DEV_DB="$$db" $(MAKE) migrate-db; \
+	echo "Fetching $(FETCH_HOST):$(FETCH_REMOTE_CONFIG) into ./temperature-bot-config.yaml"; \
 	rsync --verbose --archive -e 'ssh -o BatchMode=yes' \
-		"$(FETCH_HOST):$$remote_snapshot" "$$local_snapshot"; \
-	test "$$(sqlite3 -batch -noheader -init /dev/null -readonly "$$local_snapshot" 'PRAGMA quick_check;')" = ok; \
-	mv -f "$$local_snapshot" "$(DEV_DB)"; \
-	ssh -o BatchMode=yes $(FETCH_HOST) "rm -f '$$remote_snapshot'"; \
-	trap - EXIT HUP INT TERM
-	rsync --verbose --archive -e 'ssh -o BatchMode=yes' \
-		$(FETCH_HOST):$(FETCH_REMOTE_CONFIG) ./temperature-bot-config.yaml
-	@ls -l $(dir $(DEV_DB))
-	@echo database contents:
-	echo 'select "devices",count(*) from devices;select "devlog",count(*) from devlog;select "changelog",count(*) from changelog; select "aqi",count(*) from aqi;' | sqlite3 $(DEV_DB)
+		$(FETCH_HOST):$(FETCH_REMOTE_CONFIG) ./temperature-bot-config.yaml; \
+	echo "Files in $$(dirname "$$db"):"; \
+	ls -l "$$(dirname "$$db")"; \
+	echo "Database row counts:"; \
+	sqlite3 "$$db" "select 'devices',count(*) from devices;select 'devlog',count(*) from devlog;select 'changelog',count(*) from changelog;select 'aqi',count(*) from aqi;"; \
+	trap - EXIT; \
+	test -z "$$backup_dir" || echo "Previous database directory retained at $$backup_dir"; \
+	echo "Database refresh, migration, and config fetch completed successfully: $$db"
 
 # Build the etc/schema.sql file by applying all Flyway migrations to a fresh
 # temp database and dumping the resulting schema. This keeps schema.sql in sync
@@ -254,7 +289,7 @@ check: $(REQ) dependency-check ## Run all static analysis checks
 
 dependency-check: ## Verify the uv lockfile and reject legacy dependency tooling
 	uv lock --check
-	@! git grep -n -i 'poe''try' -- ':!.beads/**' ':!lib/ctools/**'
+	@! git grep -n -i 'poe''try' -- ':!.beads/**' ':!lib/ctools/**' ':!doc/RELEASE_NOTES.md'
 
 build: dependency-check ## Build the source distribution and wheel
 	uv build --no-sources

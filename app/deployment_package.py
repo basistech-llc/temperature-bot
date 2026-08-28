@@ -163,6 +163,8 @@ def build_package(
 ) -> DeploymentManifest:
     """Create an atomic ZIP and outer SHA-256 sidecar."""
     paths = [payload.path for payload in payloads]
+    if MANIFEST_PATH in paths:
+        raise ValueError(f"deployment payload path is reserved: {MANIFEST_PATH}")
     if len(paths) != len(set(paths)):
         raise ValueError("deployment payload contains duplicate paths")
 

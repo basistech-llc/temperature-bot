@@ -186,7 +186,7 @@ routes unless its remaining acceptance criteria are completed separately.
 
 Each implementation bead includes substantive SQLite, Flask-client, or pure
 JavaScript logic tests. Tests run through Makefile targets and must not modify
-`var/db/temperature-bot.db`.
+`var/db/temperature_bot/temperature-bot.db`.
 
 ## Issue Audit
 

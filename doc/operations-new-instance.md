@@ -277,10 +277,12 @@ root-owned copy leaves the instance unable to write it, which surfaces as the
 permission failure described below rather than as anything mentioning
 ownership.
 
-`make fetch-dev-db` also produces this layout, but it is built for a developer
-laptop — it rsyncs `air.basistech.net:/var/db/` (the same machine, when run on
-the server) and passes `--delete`, so it will remove anything else living in the
-target directory. Prefer `.backup` on the server itself.
+`make fetch-dev-db` produces the checkout-local developer layout at
+`var/db/temperature_bot/temperature-bot.db`. Before fetching, it moves an
+existing `var/db/temperature_bot` directory to a timestamped directory under
+`var/db/backups`. It then streams a read-only SQLite dump over SSH into the new
+database and applies pending Flyway migrations. Prefer `.backup` when making a
+server-side instance copy.
 
 A copy is a fork, not a view: it stops receiving new readings the moment it is
 made, and nothing written through it reaches production.
