@@ -23,6 +23,8 @@ change they completed.
 - Excluded required `.tmp` branch worktrees from Python test discovery.
 - Fixed AE-200 commands across production and developer service accounts by
   making the host-wide advisory lock reusable without write permission.
+- Moved the AE-200 command lock from `/tmp` to a root-provisioned
+  `/run/lock/temperature-bot` file carried by deployment packages.
 
 ## 0.11.0 - 2026-08-20
 

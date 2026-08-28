@@ -65,7 +65,9 @@ ALERT_LABELS = {
     FILTER_SIGN: "filter warning",
     CHECK_WATER: "water issue",
 }
-AE200_COMMAND_LOCK_PATH = os.getenv("AE200_COMMAND_LOCK_PATH", "/tmp/temperature-bot-ae200.lock")
+AE200_COMMAND_LOCK_PATH = os.getenv(
+    "AE200_COMMAND_LOCK_PATH", "/run/lock/temperature-bot/ae200.lock"
+)
 AE200_COMMAND_LOCK_MODE = 0o444
 AE200_WRITE_SETTLE_SECONDS = float(os.getenv("AE200_WRITE_SETTLE_SECONDS", "0.25"))
 AE200_WRITE_RESPONSE_TIMEOUT_SECONDS = float(

@@ -16,6 +16,11 @@ The three services use `/run/temperature-bot/writer.lock` so differently named
 jobs cannot write concurrently. systemd also prevents a second instance of one
 oneshot service while it is active.
 
+Every process that communicates with the AE-200 separately shares
+`/run/lock/temperature-bot/ae200.lock`. `systemd-tmpfiles` creates that
+root-owned, read-only file at boot so service-account changes cannot strand a
+private lock under `/tmp`.
+
 ## Install
 
 The deployment package owns the canonical unit bytes. Before the complete
@@ -25,8 +30,11 @@ upgrade transaction exists, installation remains an explicit human operation:
 sudo install -d -m 0750 -o root -g temperature_bot /etc/temperature-bot
 sudo install -m 0640 -o root -g temperature_bot \
   etc/systemd/temperature-bot.env.example /etc/temperature-bot/runtime.env
+sudo install -m 0644 etc/tmpfiles.d/temperature-bot.conf /etc/tmpfiles.d/
 sudo install -m 0644 etc/systemd/*.service etc/systemd/*.timer \
   /etc/systemd/system/
+sudo systemd-tmpfiles --create /etc/tmpfiles.d/temperature-bot.conf
+test "$(stat -c '%U:%G %a' /run/lock/temperature-bot/ae200.lock)" = "root:root 444"
 sudo systemd-analyze verify \
   /etc/systemd/system/temperature-bot-{minute,hourly,daily}.{service,timer}
 sudo systemctl daemon-reload
@@ -39,6 +47,8 @@ sudo systemctl enable --now \
 Review `/etc/temperature-bot/runtime.env` before enabling anything. The
 production database is `/var/db/temperature_bot/temperature-bot.db`; old
 documentation and commented crontabs may name the retired hyphenated directory.
+The AE-200 lock must pass the ownership and mode check above before any web or
+scheduled service starts.
 Do not enable the timers until the production web service and database
 ownership issues in #76 and #218 have been resolved and verified.
 

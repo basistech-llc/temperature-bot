@@ -57,6 +57,7 @@ systemd/temperature-bot-hourly.service
 systemd/temperature-bot-hourly.timer
 systemd/temperature-bot-daily.service
 systemd/temperature-bot-daily.timer
+configuration/tmpfiles.d/temperature-bot.conf
 installer/install_deployment_package.py
 documentation/DEPLOYMENT_PACKAGE.md
 metadata/VERSION
@@ -76,11 +77,12 @@ must refuse dirty input; local and ephemeral PR packages retain the flag for
 diagnosis.
 
 The example environment file is configuration documentation and is never
-copied to the systemd unit directory. Systemd `.service` and `.timer` files are
-payload, not trusted instructions merely because they are in a ZIP. The
-deployment transaction verifies the package before copying units, runs
-`systemd-analyze verify`, preserves the previously installed units, and
-restores them on pre-commit rollback.
+copied to the systemd unit directory. The tmpfiles policy is installed
+separately from `configuration/tmpfiles.d/`. Systemd `.service`, `.timer`, and
+tmpfiles configuration files are payload, not trusted instructions merely
+because they are in a ZIP. The deployment transaction verifies the package
+before copying integration files, validates them, preserves the previously
+installed versions, and restores them on pre-commit rollback.
 
 ## Build and inspect
 
@@ -115,9 +117,11 @@ uv run --locked python -m bin.install_deployment_package \
 By default it verifies and stages
 `/opt/temperature-bot/releases/<version>-<commit>/` but does not change
 `current`, copy systemd units, migrate a database, or restart anything.
-`--activate` and `--systemd-dir` are explicit primitives used by tests and by
-the future transaction after its safety gates pass; they are not a complete
-production upgrade command.
+`--activate`, `--systemd-dir`, and `--tmpfiles-dir` are explicit primitives
+used by tests and by the future transaction after its safety gates pass; they
+are not a complete production upgrade command. Installing a tmpfiles policy
+does not create its runtime paths immediately; activation must run
+`systemd-tmpfiles --create` before starting services.
 
 An existing trusted release environment runs the installer. First-host
 bootstrap remains an operations procedure under #44. A package may carry a
@@ -150,9 +154,10 @@ machine. It must record every transition and be safely restartable.
 7. **Migrate** — use the candidate package's complete migration directory and
    manifest-pinned Flyway version. Validate, migrate, validate again, and record
    before/after schema versions.
-8. **Prepare activation** — back up installed systemd units, copy candidate
-   units atomically, run `systemd-analyze verify`, execute `daemon-reload`, and
-   atomically point `current` at the candidate.
+8. **Prepare activation** — back up installed systemd and tmpfiles
+   configuration, copy candidate integration files atomically, run
+   `systemd-tmpfiles --create` and `systemd-analyze verify`, execute
+   `daemon-reload`, and atomically point `current` at the candidate.
 9. **Prove health** — start only the web candidate, then run bounded loopback
    and public health/root/API checks. Scheduled writers remain stopped.
 10. **Commit** — after health succeeds, start the writer timers and verify their

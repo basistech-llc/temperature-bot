@@ -74,6 +74,14 @@ def collect_payloads(requirements: Path, wheel: Path) -> list[PayloadSource]:
                     role="systemd" if is_unit else "configuration",
                 )
             )
+    for config in sorted((REPO_ROOT / "etc/tmpfiles.d").glob("*.conf")):
+        payloads.append(
+            PayloadSource(
+                source=config,
+                path=f"configuration/tmpfiles.d/{config.name}",
+                role="configuration",
+            )
+        )
     return payloads
 
 

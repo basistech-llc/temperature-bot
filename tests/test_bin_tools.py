@@ -157,10 +157,7 @@ def test_makefile_local_targets_control_sensor_simulators():
         encoding="utf-8"
     )
 
-    assert (
-        "export AE200_SIMULATOR=1 HUBITAT_SIMULATOR=1 AIRTHINGS_SIMULATOR=1"
-        in makefile
-    )
+    assert "AE200_SIMULATOR=1 HUBITAT_SIMULATOR=1 AIRTHINGS_SIMULATOR=1" in makefile
     assert (
         "AE200_SIMULATOR= HUBITAT_SIMULATOR= AIRTHINGS_SIMULATOR= $(MAKE) every-minute"
         in makefile
@@ -169,6 +166,7 @@ def test_makefile_local_targets_control_sensor_simulators():
         "AE200_SIMULATOR= HUBITAT_SIMULATOR= AIRTHINGS_SIMULATOR= $(MAKE) _local-dev-web"
         in makefile
     )
+    assert makefile.count("AE200_COMMAND_LOCK_PATH=$(LOCAL_AE200_LOCK)") == 4
 
 
 def test_update_from_airthings_persists_sensor_status(monkeypatch, test_database_conn):

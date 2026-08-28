@@ -61,6 +61,15 @@ def _package(tmp_path: Path) -> Path:
             role="configuration",
         ),
         PayloadSource(
+            source=_source(
+                source,
+                "temperature-bot.conf",
+                b"f /run/lock/temperature-bot/ae200.lock 0444 root root - -\n",
+            ),
+            path="configuration/tmpfiles.d/temperature-bot.conf",
+            role="configuration",
+        ),
+        PayloadSource(
             source=_source(source, "install.py", b"#!/usr/bin/env python3\n"),
             path="installer/install.py",
             role="installer",
@@ -112,6 +121,10 @@ def test_builder_collects_complete_migrations_units_and_configuration(tmp_path):
         for path in (repo_root / "etc/systemd").iterdir()
         if path.is_file() and path.suffix in {".service", ".timer"}
     }
+    expected_tmpfiles = {
+        f"configuration/tmpfiles.d/{path.name}"
+        for path in (repo_root / "etc/tmpfiles.d").glob("*.conf")
+    }
 
     assert "configuration/temperature-bot.env.example" in paths
     assert "documentation/DEPLOYMENT_PACKAGE.md" in paths
@@ -120,6 +133,7 @@ def test_builder_collects_complete_migrations_units_and_configuration(tmp_path):
         expected_migrations
     )
     assert {payload.path for payload in payloads if payload.role == "systemd"} == expected_units
+    assert expected_tmpfiles <= paths
 
 
 def test_builder_rejects_reserved_manifest_payload(tmp_path):
@@ -160,6 +174,7 @@ def test_installer_stages_atomically_and_activates_relative_symlink(tmp_path):
     package = _package(tmp_path)
     root = tmp_path / "opt/temperature-bot"
     systemd_dir = tmp_path / "etc/systemd/system"
+    tmpfiles_dir = tmp_path / "etc/tmpfiles.d"
 
     result = install_package(
         package,
@@ -167,11 +182,16 @@ def test_installer_stages_atomically_and_activates_relative_symlink(tmp_path):
         create_venv=False,
         activate=True,
         systemd_dir=systemd_dir,
+        tmpfiles_dir=tmpfiles_dir,
     )
 
     assert result.release_directory == root / "releases/1.2.3-aaaaaaaaaaaa"
     assert (root / "current").readlink() == Path("releases/1.2.3-aaaaaaaaaaaa")
     assert (systemd_dir / "minute.service").read_text() == "[Service]\nType=oneshot\n"
+    assert (tmpfiles_dir / "temperature-bot.conf").read_text() == (
+        "f /run/lock/temperature-bot/ae200.lock 0444 root root - -\n"
+    )
+    assert stat.S_IMODE((tmpfiles_dir / "temperature-bot.conf").stat().st_mode) == 0o644
     assert not (systemd_dir / "runtime.env.example").exists()
     assert not list((root / "releases").glob("*.staging.*"))
 

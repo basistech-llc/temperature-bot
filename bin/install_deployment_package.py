@@ -8,7 +8,7 @@ import os
 import shutil
 import subprocess
 import tempfile
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from pydantic import BaseModel, ConfigDict
 
@@ -31,6 +31,7 @@ class InstallationResult(BaseModel):
     release_directory: Path
     activated: bool
     systemd_units_installed: list[Path]
+    tmpfiles_installed: list[Path]
 
 
 def _run(*args: str) -> None:
@@ -71,15 +72,15 @@ def _install_environment(release: Path, manifest: DeploymentManifest, uv: str, p
     )
 
 
-def _install_systemd_units(
-    release: Path, manifest: DeploymentManifest, systemd_dir: Path
+def _install_files(
+    release: Path, members: list[str], destination: Path
 ) -> list[Path]:
-    systemd_dir.mkdir(parents=True, exist_ok=True)
+    destination.mkdir(parents=True, exist_ok=True)
     installed = []
-    for member in manifest.systemd_units:
+    for member in members:
         source = release / member
-        target = systemd_dir / source.name
-        with tempfile.NamedTemporaryFile(dir=systemd_dir, delete=False) as temporary:
+        target = destination / source.name
+        with tempfile.NamedTemporaryFile(dir=destination, delete=False) as temporary:
             temp_path = Path(temporary.name)
             temporary.write(source.read_bytes())
         try:
@@ -89,6 +90,21 @@ def _install_systemd_units(
             temp_path.unlink(missing_ok=True)
         installed.append(target)
     return installed
+
+
+def _tmpfiles_members(manifest: DeploymentManifest) -> list[str]:
+    directory = PurePosixPath("configuration/tmpfiles.d")
+    members = sorted(
+        item.path
+        for item in manifest.files
+        if item.role == "configuration"
+        and PurePosixPath(item.path).parent == directory
+        and PurePosixPath(item.path).suffix == ".conf"
+    )
+    names = [PurePosixPath(member).name for member in members]
+    if len(names) != len(set(names)):
+        raise ValueError("tmpfiles configuration names are not unique")
+    return members
 
 
 def _activate(root: Path, release: Path) -> None:
@@ -110,6 +126,7 @@ def install_package(
     create_venv: bool = True,
     activate: bool = False,
     systemd_dir: Path | None = None,
+    tmpfiles_dir: Path | None = None,
 ) -> InstallationResult:
     """Stage a verified immutable release and optionally activate/install units."""
     manifest = verify_package(package)
@@ -138,8 +155,13 @@ def install_package(
                 shutil.rmtree(staging)
 
     installed_units = (
-        _install_systemd_units(release, manifest, systemd_dir)
+        _install_files(release, manifest.systemd_units, systemd_dir)
         if systemd_dir is not None
+        else []
+    )
+    installed_tmpfiles = (
+        _install_files(release, _tmpfiles_members(manifest), tmpfiles_dir)
+        if tmpfiles_dir is not None
         else []
     )
     if activate:
@@ -150,6 +172,7 @@ def install_package(
         release_directory=release,
         activated=activate,
         systemd_units_installed=installed_units,
+        tmpfiles_installed=installed_tmpfiles,
     )
 
 
@@ -165,6 +188,7 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--skip-venv", action="store_true")
     parser.add_argument("--activate", action="store_true")
     parser.add_argument("--systemd-dir", type=Path)
+    parser.add_argument("--tmpfiles-dir", type=Path)
     args = parser.parse_args(argv)
 
     sidecar = args.checksum or args.package.with_suffix(args.package.suffix + ".sha256")
@@ -185,6 +209,7 @@ def main(argv: list[str] | None = None) -> None:
         create_venv=not args.skip_venv,
         activate=args.activate,
         systemd_dir=args.systemd_dir,
+        tmpfiles_dir=args.tmpfiles_dir,
     )
     print(json.dumps(result.model_dump(mode="json"), indent=2))
 

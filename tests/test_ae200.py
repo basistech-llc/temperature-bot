@@ -160,6 +160,10 @@ def test_ae200_command_lock_is_reusable_without_write_permission(monkeypatch, tm
         pass
 
 
+def test_ae200_command_lock_defaults_to_managed_runtime_path():
+    assert ae200.AE200_COMMAND_LOCK_PATH == "/run/lock/temperature-bot/ae200.lock"
+
+
 def test_async_runner_serializes_commands(monkeypatch, tmp_path):
     """AE-200 commands should not run concurrently through one runner."""
     monkeypatch.setattr(ae200, "AE200_COMMAND_LOCK_PATH", str(tmp_path / "ae200.lock"))

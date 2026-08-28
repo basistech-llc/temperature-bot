@@ -71,6 +71,7 @@ FLYWAY_VERSION ?= 12.8.1
 DEPLOYMENT_BUILD_DIR    := build/deployment-package
 DEPLOYMENT_REQUIREMENTS := $(DEPLOYMENT_BUILD_DIR)/runtime.txt
 SYSTEMD_SCHEDULED_DIR  := etc/systemd
+LOCAL_AE200_LOCK       := $(abspath .tmp/runtime/ae200.lock)
 
 # Test selection override, e.g.
 #   make PYTEST_ARGS=tests/test_db.py::test_name pytest
@@ -250,22 +251,32 @@ validate-migrations: ## Validate that all migrations apply from scratch
 
 local-dev: $(REQ) ## Run the web backend locally with simulated hardware data
 	@echo Running with simulator
-	export AE200_SIMULATOR=1 HUBITAT_SIMULATOR=1 AIRTHINGS_SIMULATOR=1 && $(MAKE) _local-dev-web
+	@mkdir -p $(dir $(LOCAL_AE200_LOCK)); \
+	    test -e $(LOCAL_AE200_LOCK) || install -m 0444 /dev/null $(LOCAL_AE200_LOCK)
+	AE200_COMMAND_LOCK_PATH=$(LOCAL_AE200_LOCK) \
+	    AE200_SIMULATOR=1 HUBITAT_SIMULATOR=1 AIRTHINGS_SIMULATOR=1 \
+	    $(MAKE) _local-dev-web
 
 rooms-ui-demo: $(REQ) ## Run the room matrix against disposable synthetic data
 	$(PYTHON) -m bin.rooms_ui_demo --database /tmp/temperature-bot-rooms-ui-demo.db
 
 local-live-dev: $(REQ) ## Run the web backend locally against live AE-200 hardware
 	@echo updating database
-	AE200_SIMULATOR= HUBITAT_SIMULATOR= AIRTHINGS_SIMULATOR= $(MAKE) every-minute
+	@mkdir -p $(dir $(LOCAL_AE200_LOCK)); \
+	    test -e $(LOCAL_AE200_LOCK) || install -m 0444 /dev/null $(LOCAL_AE200_LOCK)
+	AE200_COMMAND_LOCK_PATH=$(LOCAL_AE200_LOCK) \
+	    AE200_SIMULATOR= HUBITAT_SIMULATOR= AIRTHINGS_SIMULATOR= $(MAKE) every-minute
 	@echo Running without simulator
-	AE200_SIMULATOR= HUBITAT_SIMULATOR= AIRTHINGS_SIMULATOR= $(MAKE) _local-dev-web
+	AE200_COMMAND_LOCK_PATH=$(LOCAL_AE200_LOCK) \
+	    AE200_SIMULATOR= HUBITAT_SIMULATOR= AIRTHINGS_SIMULATOR= $(MAKE) _local-dev-web
 
 _local-dev-web: $(REQ) ## Internal: shared web backend runner for local-dev targets
 	FLASK_DEBUG=True uv run --locked flask --app app.main:app run --port 8000
 
 live-dev-runner: $(REQ) ## Run the collection agent and rules runner against live hardware
-	LOG_LEVEL=DEBUG $(PYTHON) bin/runner.py
+	@mkdir -p $(dir $(LOCAL_AE200_LOCK)); \
+	    test -e $(LOCAL_AE200_LOCK) || install -m 0444 /dev/null $(LOCAL_AE200_LOCK)
+	AE200_COMMAND_LOCK_PATH=$(LOCAL_AE200_LOCK) LOG_LEVEL=DEBUG $(PYTHON) bin/runner.py
 
 tags: ## Build an etags TAGS file for all Python sources
 	etags */*.py
@@ -330,10 +341,12 @@ deployment-package-check: deployment-package ## Install the package into a dispo
 	    "$$package" --require-checksum \
 	    --root "$$install_tmp/opt/temperature-bot" \
 	    --systemd-dir "$$install_tmp/etc/systemd/system" \
+	    --tmpfiles-dir "$$install_tmp/etc/tmpfiles.d" \
 	    --activate >/dev/null; \
 	test -L "$$install_tmp/opt/temperature-bot/current"; \
 	test -x "$$install_tmp/opt/temperature-bot/current/venv/bin/python"; \
 	test -f "$$install_tmp/etc/systemd/system/temperature-bot-minute.timer"; \
+	test -f "$$install_tmp/etc/tmpfiles.d/temperature-bot.conf"; \
 	echo "Installed and activated $$package in a disposable root"
 
 systemd-verify: ## Validate packaged scheduled-job units on Linux
