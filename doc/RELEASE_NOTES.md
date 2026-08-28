@@ -21,6 +21,8 @@ change they completed.
   directory, stream a non-privileged read-only SQLite dump into
   `var/db/temperature_bot`, apply Flyway migrations, and report each operation.
 - Excluded required `.tmp` branch worktrees from Python test discovery.
+- Fixed AE-200 commands across production and developer service accounts by
+  making the host-wide advisory lock reusable without write permission.
 
 ## 0.11.0 - 2026-08-20
 
