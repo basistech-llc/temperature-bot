@@ -66,6 +66,7 @@ ALERT_LABELS = {
     CHECK_WATER: "water issue",
 }
 AE200_COMMAND_LOCK_PATH = os.getenv("AE200_COMMAND_LOCK_PATH", "/tmp/temperature-bot-ae200.lock")
+AE200_COMMAND_LOCK_MODE = 0o444
 AE200_WRITE_SETTLE_SECONDS = float(os.getenv("AE200_WRITE_SETTLE_SECONDS", "0.25"))
 AE200_WRITE_RESPONSE_TIMEOUT_SECONDS = float(
     os.getenv("AE200_WRITE_RESPONSE_TIMEOUT_SECONDS", "10")
@@ -278,7 +279,18 @@ class AsyncRunner:  # pylint: disable=too-few-public-methods
 @contextlib.contextmanager
 def ae200_command_lock():
     """Serialize AE-200 websocket commands across local processes."""
-    lock_fd = os.open(AE200_COMMAND_LOCK_PATH, os.O_CREAT | os.O_RDWR, 0o600)
+    # flock() locks the inode and never writes the file.  A read-only file lets
+    # production and developer service accounts share the same controller lock.
+    open_flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
+    try:
+        lock_fd = os.open(
+            AE200_COMMAND_LOCK_PATH,
+            open_flags | os.O_CREAT | os.O_EXCL,
+            AE200_COMMAND_LOCK_MODE,
+        )
+        os.fchmod(lock_fd, AE200_COMMAND_LOCK_MODE)
+    except FileExistsError:
+        lock_fd = os.open(AE200_COMMAND_LOCK_PATH, open_flags)
     try:
         fcntl.flock(lock_fd, fcntl.LOCK_EX)
         yield

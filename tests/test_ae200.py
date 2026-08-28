@@ -4,6 +4,7 @@ Integration tests for AE200 device communication.
 import asyncio
 import concurrent.futures
 import socket
+import stat
 import threading
 
 import pytest
@@ -144,6 +145,19 @@ def test_async_runner_runs_inside_current_event_loop(monkeypatch, tmp_path):
         return ae200.AsyncRunner().run_async_safely(_async_value("ok"))
 
     assert asyncio.run(call_runner()) == "ok"
+
+
+def test_ae200_command_lock_is_reusable_without_write_permission(monkeypatch, tmp_path):
+    """Separate service accounts must be able to open an existing shared lock."""
+    lock_path = tmp_path / "ae200.lock"
+    monkeypatch.setattr(ae200, "AE200_COMMAND_LOCK_PATH", str(lock_path))
+
+    with ae200.ae200_command_lock():
+        pass
+
+    assert stat.S_IMODE(lock_path.stat().st_mode) == ae200.AE200_COMMAND_LOCK_MODE
+    with ae200.ae200_command_lock():
+        pass
 
 
 def test_async_runner_serializes_commands(monkeypatch, tmp_path):
