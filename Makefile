@@ -129,8 +129,8 @@ $(DEV_DB):
 	@false
 
 # Back up the local database directory, stream a read-only dump from the remote
-# host into a new database, and apply any pending Flyway migrations. The
-# A read-only URI includes committed WAL contents without modifying the remote
+# host into a new database, and apply any pending Flyway migrations. A
+# read-only URI includes committed WAL contents without modifying the remote
 # database. Timeouts bound lock waits, connection setup, and dead SSH sessions.
 # NOTE: temperature-bot-config.yaml includes production secrets
 #       until we move to better secret management system
@@ -179,16 +179,16 @@ fetch-dev-db: ## Fetch the dev DB and config from the remote host
 	sqlite3 -batch -init /dev/null -readonly "$$db" 'SELECT count(*) FROM devices;' >/dev/null; \
 	echo "Applying pending Flyway migrations"; \
 	DEV_DB="$$db" $(MAKE) migrate-db; \
+	echo "Fetching $(FETCH_HOST):$(FETCH_REMOTE_CONFIG) into ./temperature-bot-config.yaml"; \
+	rsync --verbose --archive -e 'ssh -o BatchMode=yes' \
+		$(FETCH_HOST):$(FETCH_REMOTE_CONFIG) ./temperature-bot-config.yaml; \
+	echo "Files in $$(dirname "$$db"):"; \
+	ls -l "$$(dirname "$$db")"; \
+	echo "Database row counts:"; \
+	sqlite3 "$$db" "select 'devices',count(*) from devices;select 'devlog',count(*) from devlog;select 'changelog',count(*) from changelog;select 'aqi',count(*) from aqi;"; \
 	trap - EXIT; \
 	test -z "$$backup_dir" || echo "Previous database directory retained at $$backup_dir"; \
-	echo "Database refresh and migration completed successfully: $$db"
-	@echo "Fetching $(FETCH_HOST):$(FETCH_REMOTE_CONFIG) into ./temperature-bot-config.yaml"
-	rsync --verbose --archive -e 'ssh -o BatchMode=yes' \
-		$(FETCH_HOST):$(FETCH_REMOTE_CONFIG) ./temperature-bot-config.yaml
-	@echo "Files in $(dir $(DEV_DB)):"
-	@ls -l $(dir $(DEV_DB))
-	@echo "Database row counts:"
-	sqlite3 $(DEV_DB) "select 'devices',count(*) from devices;select 'devlog',count(*) from devlog;select 'changelog',count(*) from changelog;select 'aqi',count(*) from aqi;"
+	echo "Database refresh, migration, and config fetch completed successfully: $$db"
 
 # Build the etc/schema.sql file by applying all Flyway migrations to a fresh
 # temp database and dumping the resulting schema. This keeps schema.sql in sync
