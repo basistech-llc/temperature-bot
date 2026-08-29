@@ -10,10 +10,18 @@ The application is a Flask service with server-rendered Jinja pages, JSON API
 endpoints, SQLite persistence, and a mix of synchronous app code plus async
 AE-200 websocket calls hidden behind `app/ae200.py`.
 
-The immediate problem is not Flask itself. The problem is the boundary where
-synchronous Flask handlers call async AE-200 websocket code. That boundary needs
-to be explicit, serialized, and timeout-aware so Mitsubishi control failures do
-not become Flask request failures or event-loop ownership bugs.
+The immediate problem is not Flask itself. The boundary where synchronous Flask
+handlers call async AE-200 WebSocket code needs to be explicit and timeout-aware
+so Mitsubishi control failures do not become Flask request failures or
+event-loop ownership bugs. It does not need to serialize independent requests:
+each request uses its own WebSocket, and Mitsubishi documents concurrent
+clients.
+
+The Mitsubishi technical manual lists simultaneous browser and Integrated
+Centralized Control Web clients, and the native protocol broadcasts
+`notifyRequest` state changes to connected WebSocket clients. See issue #233
+for the official limits, protocol captures, independent implementations, and
+security-advisory analysis behind this decision.
 
 ## Benefits of Moving to FastAPI and Async
 
@@ -39,9 +47,10 @@ A FastAPI migration would be a service rewrite, not a bug fix.
 
 The current failures can be addressed without replacing Flask:
 
-- AE-200 commands can be serialized at the existing command boundary.
-- Web and runner processes can share a file-backed command lock.
 - The async bridge can stop reusing event loops across requests.
+- Each command can use an independent, short-lived WebSocket connection.
+- Writes can validate `setResponse` and read back state when confirmation is
+  required.
 - Flask routes can continue returning the same JSON contracts and rendering the
   same Jinja templates.
 - Existing tests, Makefile targets, local-dev flows, and production deployment
@@ -53,8 +62,8 @@ Moving now would create avoidable risk:
   could block the ASGI event loop anyway.
 - The browser UI is mostly server-rendered plus targeted JavaScript; converting
   it to websocket-driven state needs design and test work.
-- AE-200 hardware control needs command isolation, timeout behavior, and error
-  reporting regardless of whether the web framework is Flask or FastAPI.
+- AE-200 hardware control needs timeout behavior, response validation, and
+  error reporting regardless of whether the web framework is Flask or FastAPI.
 
 The pragmatic path is to first isolate AE-200 I/O behind a small command
 boundary. That makes the current Flask app more reliable and keeps a future
@@ -68,26 +77,23 @@ For now, application code should use the module-level synchronous functions in
 AE-200 websocket reads and writes through one runner. That runner should:
 
 - Run async websocket calls without reusing a stale event loop.
-- Allow only one in-flight AE-200 command at a time inside the process.
-- Use a file-backed lock so the web process and runner process do not talk to
-  the AE-200 simultaneously.
+- Allow independent one-request-per-WebSocket commands to overlap.
 - Return structured errors to route handlers rather than leaking low-level
   event-loop failures.
 
 This is enough for the current Flask app because each UI action can still make a
-simple synchronous request while AE-200 access is serialized underneath.
+simple synchronous request while other controller clients continue operating.
 
 ## Workqueue Option
 
-A workqueue for AE-200 commands makes sense, but it is a larger design choice
-than the current semaphore.
+A workqueue for AE-200 commands could support product features, but it is not
+required for protocol correctness.
 
 It would be useful if we need:
 
 - User-visible command status, such as queued, running, succeeded, failed, or
   timed out.
 - Backpressure when a browser, cronjob, or rules pass submits several commands.
-- Cross-process ownership of all AE-200 commands rather than cooperative locks.
 - Centralized timeout and retry policy.
 - Durable logging of command attempts and outcomes.
 - Optional isolation in a worker thread or separate process.
@@ -103,8 +109,8 @@ read back device state to confirm the result.
 Recommended future shape:
 
 1. Define Pydantic command/result models for AE-200 operations.
-2. Put all commands into one in-memory worker queue with a small timeout.
-3. Serialize execution in a dedicated worker thread.
+2. Add a bounded queue only if measurements show backpressure is needed.
+3. Coalesce superseded writes to the same device where semantics permit it.
 4. Add bounded retries for reads and idempotent writes.
 5. Report command status through JSON first.
 6. Add browser websockets later to stream status and device updates.

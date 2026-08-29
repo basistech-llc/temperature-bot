@@ -28,13 +28,12 @@ const option = buildPerformanceOption([
     observed_at_ms: 1000,
     sample_type: "ae200_request",
     total_ms: 12,
-    lock_wait_ms: 1,
     connect_ms: 2,
     response_ms: 5,
   },
 ]);
 assert.strictEqual(option.yAxis.name, "milliseconds");
 assert.deepStrictEqual(option.series[0].data, [[1000, 12]]);
-assert.deepStrictEqual(option.series[5].data, [[1000, 5]]);
+assert.deepStrictEqual(option.series[4].data, [[1000, 5]]);
 
 console.log("performance_monitoring.js tests passed");

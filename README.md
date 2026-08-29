@@ -51,8 +51,9 @@ metadata, map polygons, source multipliers, persisted FCU set ranges, API
 payloads, and rule semantics are documented in
 `doc/calculated-temperatures-and-rooms.md`.
 
-AE-200 control currently stays inside the Flask app behind a serialized async
-bridge. The tradeoffs for a future FastAPI/async/websocket migration are in
+AE-200 control currently stays inside the Flask app behind an async bridge that
+uses one WebSocket connection per request. The tradeoffs for a future
+FastAPI/async/websocket migration are in
 `doc/fastapi-async-ae200.md`.
 
 ## Data Contracts

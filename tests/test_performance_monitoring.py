@@ -41,7 +41,6 @@ def _sample(observed_at_ms: int, *, operation: str = "get_devices"):
         operation=operation,
         target_host="ae200.example",
         target_port=80,
-        lock_wait_ms=1.25,
         connect_ms=2.5,
         response_ms=3.75,
         total_ms=8.0,
@@ -210,11 +209,10 @@ def test_performance_samples_persist_filter_and_expire(test_database_conn):
 
 
 def test_async_runner_records_success_and_original_failure(
-    test_database_conn, monkeypatch, tmp_path
+    test_database_conn,
 ):
     """Instrumentation records both outcomes without replacing exceptions."""
     test_database_conn.commit()
-    monkeypatch.setattr(ae200, "AE200_COMMAND_LOCK_PATH", str(tmp_path / "ae200.lock"))
     runner = ae200.AsyncRunner()
 
     async def succeed():
@@ -246,7 +244,54 @@ def test_async_runner_records_success_and_original_failure(
         (10_000, 1, "ok", None),
         (11_000, 0, "error", "ValueError"),
     ]
-    assert all(row[4] >= 0 for row in rows)
+    assert all(row[4] is None for row in rows)
+
+
+def test_concurrent_ae200_commands_keep_websocket_responses_isolated(monkeypatch):
+    """Independent command sockets may overlap without exchanging responses."""
+
+    async def exercise():
+        active = 0
+        maximum_active = 0
+        both_connected = asyncio.Event()
+
+        async def handler(websocket):
+            nonlocal active, maximum_active
+            request = await websocket.recv()
+            group = request.split('Group="', maxsplit=1)[1].split('"', maxsplit=1)[0]
+            active += 1
+            maximum_active = max(maximum_active, active)
+            if active == 2:
+                both_connected.set()
+            await asyncio.wait_for(both_connected.wait(), timeout=1)
+            await websocket.send(
+                "<Packet><Command>getResponse</Command><DatabaseManager>"
+                f'<Mnet Group="{group}" Drive="ON" FanSpeed="HIGH"/>'
+                "</DatabaseManager></Packet>"
+            )
+            active -= 1
+
+        async with websockets.serve(
+            handler, "127.0.0.1", 0, subprotocols=["b_xmlproc"]
+        ) as server:
+            port = server.sockets[0].getsockname()[1]
+            controller = ae200.AE200Functions(f"127.0.0.1:{port}")
+            runner = ae200.AsyncRunner()
+            results = await asyncio.gather(
+                asyncio.to_thread(
+                    runner.run_async_safely, controller.getDeviceInfoAsync(10)
+                ),
+                asyncio.to_thread(
+                    runner.run_async_safely, controller.getDeviceInfoAsync(20)
+                ),
+            )
+            return results, maximum_active
+
+    monkeypatch.setattr(ae200, "AE200_SIMULATOR", False)
+    results, maximum_active = asyncio.run(exercise())
+
+    assert [result["Group"] for result in results] == ["10", "20"]
+    assert maximum_active == 2
 
 
 def test_ae200_exchange_times_real_local_websocket(monkeypatch):

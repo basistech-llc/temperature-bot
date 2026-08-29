@@ -582,7 +582,6 @@ def create_database(db_path: Path) -> dict[str, int]:
         now_ms = now * 1000
         for index in range(24):
             observed_at_ms = now_ms - (23 - index) * 60 * 60 * 1000
-            lock_wait_ms = 1.0 + index % 4
             connect_ms = 18.0 + index % 6
             response_ms = 85.0 + index * 2.5
             performance_monitoring.insert_sample(
@@ -595,11 +594,10 @@ def create_database(db_path: Path) -> dict[str, int]:
                     operation=performance_monitoring.OPERATION_GET_DEVICES,
                     target_host="ae200.example",
                     target_port=80,
-                    lock_wait_ms=lock_wait_ms,
                     connect_ms=connect_ms,
                     response_ms=response_ms,
                     close_ms=2.0,
-                    total_ms=lock_wait_ms + connect_ms + response_ms + 2.0,
+                    total_ms=connect_ms + response_ms + 2.0,
                     success=True,
                     outcome="ok",
                     response_bytes=2048,

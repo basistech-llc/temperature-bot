@@ -282,5 +282,5 @@ switch command is not automatically safe just because the simulator is on.
 | A room dashboard tile says "No data for 2h" | Its last reading is older than the ten-minute freshness cutoff. Says nothing about the device itself — the runner, cron, or the hub may be what stopped. |
 | A control tile says "Unavailable" | Different condition: the live Maker API read for that device just failed, so it is not exposed on hub `.51` or the hub is unreachable. |
 | A sensor logs data but appears on no room page | It has no `room_id`. Assign it in the Air Quality matrix. |
-| AE-200 values are stale or commands are slow | The WebSocket is serialized and slow by nature; see `doc/performance-monitoring.md`. |
+| AE-200 values are stale or commands are slow | Compare WebSocket connection/response timing with the independent network probes; see `doc/performance-monitoring.md`. |
 | Airthings values stop updating | Cloud-only integration — check internet and Airthings service. |

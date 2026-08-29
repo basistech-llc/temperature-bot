@@ -12,8 +12,6 @@ Simulator if AE200_SIMULATOR contains an explicit true value
 # pylint: disable=missing-function-docstring
 # pylint: disable=redefined-outer-name
 
-import contextlib
-import fcntl
 import os
 from os.path import dirname,join
 from pathlib import Path
@@ -21,7 +19,6 @@ import asyncio
 import xml.etree.ElementTree as ET
 import logging
 import json
-import threading
 import time
 
 import concurrent.futures
@@ -65,8 +62,6 @@ ALERT_LABELS = {
     FILTER_SIGN: "filter warning",
     CHECK_WATER: "water issue",
 }
-AE200_COMMAND_LOCK_PATH = os.getenv("AE200_COMMAND_LOCK_PATH", "/tmp/temperature-bot-ae200.lock")
-AE200_COMMAND_LOCK_MODE = 0o444
 AE200_WRITE_SETTLE_SECONDS = float(os.getenv("AE200_WRITE_SETTLE_SECONDS", "0.25"))
 AE200_WRITE_RESPONSE_TIMEOUT_SECONDS = float(
     os.getenv("AE200_WRITE_RESPONSE_TIMEOUT_SECONDS", "10")
@@ -233,20 +228,11 @@ def get_device_mode(device):
 class AsyncRunner:  # pylint: disable=too-few-public-methods
     """Manages async operations for the application"""
 
-    def __init__(self):
-        self._command_semaphore = threading.BoundedSemaphore(value=1)
-
     def run_async_safely(self, coro, *, sample=None):
         """Run an async coroutine safely, handling existing event loops"""
         started_ns = time.perf_counter_ns()
         try:
-            with self._command_semaphore:
-                with ae200_command_lock():
-                    if sample is not None:
-                        sample.lock_wait_ms = performance_monitoring.elapsed_ms(
-                            started_ns
-                        )
-                    result = self._run_async_safely(coro)
+            result = self._run_async_safely(coro)
             if sample is not None:
                 sample.success = True
                 sample.outcome = "ok"
@@ -274,30 +260,6 @@ class AsyncRunner:  # pylint: disable=too-few-public-methods
         with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
             future = executor.submit(asyncio.run, coro)
             return future.result()
-
-
-@contextlib.contextmanager
-def ae200_command_lock():
-    """Serialize AE-200 websocket commands across local processes."""
-    # flock() locks the inode and never writes the file.  A read-only file lets
-    # production and developer service accounts share the same controller lock.
-    open_flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
-    try:
-        lock_fd = os.open(
-            AE200_COMMAND_LOCK_PATH,
-            open_flags | os.O_CREAT | os.O_EXCL,
-            AE200_COMMAND_LOCK_MODE,
-        )
-        os.fchmod(lock_fd, AE200_COMMAND_LOCK_MODE)
-    except FileExistsError:
-        lock_fd = os.open(AE200_COMMAND_LOCK_PATH, open_flags)
-    try:
-        fcntl.flock(lock_fd, fcntl.LOCK_EX)
-        yield
-    finally:
-        fcntl.flock(lock_fd, fcntl.LOCK_UN)
-        os.close(lock_fd)
-
 
 # Singleton instance
 runner = AsyncRunner()
