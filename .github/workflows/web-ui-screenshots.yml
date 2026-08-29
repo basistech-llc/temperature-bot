@@ -191,8 +191,10 @@ jobs:
               marker,
               '## Web UI Screenshots',
               '',
-              `Generated ${manifest.pages.length} screenshots for this PR.`,
               `[Workflow run](${process.env.RUN_URL})`,
+              '',
+              '<details>',
+              `<summary>Show ${manifest.pages.length} generated screenshots</summary>`,
               '',
             ];
 
@@ -210,6 +212,7 @@ jobs:
                 ''
               );
             }
+            lines.push('</details>', '');
 
             const body = lines.join('\n');
             const comments = await github.paginate(github.rest.issues.listComments, {
