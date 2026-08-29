@@ -1,0 +1,10 @@
+[Unit]
+Description=Temperature Bot deg1 simulator UI socket
+
+[Socket]
+ListenStream=127.0.0.1:8004
+NoDelay=yes
+Service=deg1_basistech_net.service
+
+[Install]
+WantedBy=sockets.target

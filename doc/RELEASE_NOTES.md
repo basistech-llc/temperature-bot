@@ -10,7 +10,7 @@ change they completed.
 - Restored `slg1` and `deg1` as immutable simulator-only UI instances with a
   typed fail-closed runtime policy, stateful AE-200 and Hubitat commands, clear
   simulator banners/status metadata, private databases, and systemd egress
-  denial.
+  isolation through socket activation and private network namespaces.
 
 ### Deployment and operations
 

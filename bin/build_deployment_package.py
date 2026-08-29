@@ -62,7 +62,7 @@ def collect_payloads(requirements: Path, wheel: Path) -> list[PayloadSource]:
         )
     for unit in sorted((REPO_ROOT / "etc/systemd").iterdir()):
         if unit.is_file():
-            is_unit = unit.suffix in {".service", ".timer"}
+            is_unit = unit.suffix in {".service", ".socket", ".timer"}
             payloads.append(
                 PayloadSource(
                     source=unit,

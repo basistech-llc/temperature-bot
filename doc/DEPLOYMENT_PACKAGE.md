@@ -55,6 +55,8 @@ configuration/slg1.env.example
 configuration/deg1.env.example
 systemd/slg1_basistech_net.service
 systemd/deg1_basistech_net.service
+systemd/slg1_basistech_net.socket
+systemd/deg1_basistech_net.socket
 systemd/temperature-bot-minute.service
 systemd/temperature-bot-minute.timer
 systemd/temperature-bot-hourly.service
@@ -90,10 +92,12 @@ deployment transaction verifies the package before copying units, runs
 restores them on pre-commit rollback.
 
 The developer web units run one worker so their in-memory Hubitat simulators
-provide deterministic read-after-write behavior. They also use systemd
-`IPAddressDeny=any` with loopback allowed, so an application regression cannot
-connect to live controller command endpoints. They do not install or enable
-scheduled collection/rules timers. Their shared immutable activation root is
+provide deterministic read-after-write behavior. Systemd socket units own the
+host-loopback ports and pass their listening descriptors to Gunicorn; the web
+processes run with `PrivateNetwork=yes`, so an application regression has no
+route to live controller command endpoints. They also retain the systemd IP
+allowlist as defense in depth. They do not install or enable scheduled
+collection/rules timers. Their shared immutable activation root is
 `/opt/temperature-bot-dev`; `/opt/temperature-bot` remains reserved for
 production services and scheduled jobs.
 

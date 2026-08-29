@@ -234,8 +234,9 @@ run it.** A second collector will fight production for control of the hardware.
 
 A developer instance — `slg1` or `deg1` — runs the web service only, with no
 runner timers. Its typed startup policy requires all four simulators, a matching
-private database identity/root, and disabled scheduling. Its systemd unit also
-denies non-loopback IP traffic. Rules changes are shadow-only on both and must
+private database identity/root, and disabled scheduling. A systemd socket owns
+its host-loopback port while Gunicorn runs in a private network namespace with
+no controller route. Rules changes are shadow-only on both and must
 not send commands until a human approves the cutover (`doc/tech-debt.md`).
 
 If this instance genuinely is the collector, install and enable the versioned

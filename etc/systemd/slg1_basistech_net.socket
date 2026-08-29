@@ -1,0 +1,10 @@
+[Unit]
+Description=Temperature Bot slg1 simulator UI socket
+
+[Socket]
+ListenStream=127.0.0.1:8003
+NoDelay=yes
+Service=slg1_basistech_net.service
+
+[Install]
+WantedBy=sockets.target

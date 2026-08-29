@@ -110,7 +110,7 @@ def test_builder_collects_complete_migrations_units_and_configuration(tmp_path):
     expected_units = {
         f"systemd/{path.name}"
         for path in (repo_root / "etc/systemd").iterdir()
-        if path.is_file() and path.suffix in {".service", ".timer"}
+        if path.is_file() and path.suffix in {".service", ".socket", ".timer"}
     }
 
     assert "configuration/temperature-bot.env.example" in paths
@@ -118,12 +118,28 @@ def test_builder_collects_complete_migrations_units_and_configuration(tmp_path):
     assert "configuration/deg1.env.example" in paths
     assert "systemd/slg1_basistech_net.service" in paths
     assert "systemd/deg1_basistech_net.service" in paths
+    assert "systemd/slg1_basistech_net.socket" in paths
+    assert "systemd/deg1_basistech_net.socket" in paths
     assert "documentation/DEPLOYMENT_PACKAGE.md" in paths
     assert "installer/install_deployment_package.py" in paths
     assert {payload.path for payload in payloads if payload.role == "migration"} == (
         expected_migrations
     )
     assert {payload.path for payload in payloads if payload.role == "systemd"} == expected_units
+
+
+def test_developer_units_use_socket_activation_and_private_network():
+    repo_root = Path(__file__).resolve().parents[1]
+    for instance, port in (("slg1", 8003), ("deg1", 8004)):
+        service = (repo_root / f"etc/systemd/{instance}_basistech_net.service").read_text()
+        socket_unit = (
+            repo_root / f"etc/systemd/{instance}_basistech_net.socket"
+        ).read_text()
+
+        assert "PrivateNetwork=yes" in service
+        assert "--bind fd://3" in service
+        assert f"Requires={instance}_basistech_net.socket" in service
+        assert f"ListenStream=127.0.0.1:{port}" in socket_unit
 
 
 def test_builder_rejects_reserved_manifest_payload(tmp_path):

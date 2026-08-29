@@ -350,6 +350,7 @@ systemd-verify: ## Validate packaged scheduled-job units on Linux
 	    { echo "systemd-analyze is required for systemd-verify"; exit 1; }
 	systemd-analyze verify \
 	    $(wildcard $(SYSTEMD_SCHEDULED_DIR)/*.service) \
+	    $(wildcard $(SYSTEMD_SCHEDULED_DIR)/*.socket) \
 	    $(wildcard $(SYSTEMD_SCHEDULED_DIR)/*.timer)
 	@if command -v rg >/dev/null; then \
 		! rg -n 'User=(simsong|deg|root)|Group=(simsong|deg|root)|/home/' \
