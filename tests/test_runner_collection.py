@@ -1,5 +1,7 @@
 """Collection-only runner behavior."""
 
+import json
+
 from bin import runner
 
 
@@ -30,5 +32,5 @@ def test_read_only_ae200_collection_persists_state_without_alerts(
         (device["device_id"],),
     ).fetchone()
     assert reading["temp10x"] == 225
-    assert '"ErrorSign": "ON"' in reading["status_json"]
+    assert json.loads(reading["status_json"])["ErrorSign"] == "ON"
     assert test_database_conn.execute("SELECT count(*) FROM alerts").fetchone()[0] == 0
