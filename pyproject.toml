@@ -41,7 +41,7 @@ requires = ["hatchling>=1.27,<2"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["app", "bin", "lib"]
+packages = ["app", "bin"]
 
 [tool.hatch.build.targets.wheel.force-include]
 "etc/schema.sql" = "etc/schema.sql"
@@ -67,9 +67,6 @@ dev = [
     "types-pyyaml==6.0.12.20260518",
     "types-requests==2.33.0.20260712",
 ]
-
-[tool.ruff]
-exclude = ["lib/"]
 
 [tool.ruff.lint]
 ignore = ["ANN201", "ANN401"]  # Ignore missing return type annotations and Any types
@@ -119,7 +116,7 @@ root = "."
 
 
 [tool.pytest.ini_options]
-norecursedirs = [".tmp", "lib/ctools"]
+norecursedirs = [".tmp"]
 env = [
     "PYTEST=1",
     "AE200_SIMULATOR=1",
