@@ -97,8 +97,12 @@ and writes the ZIP and sidecar under `dist/`. `deployment-package-verify`
 checks the whole-ZIP sidecar and every manifest entry. The stronger
 `deployment-package-check` installs the package into a disposable versioned
 root, creates a fresh virtual environment, installs the locked dependencies
-and wheel, imports the installed application version, and exercises atomic
-activation. It does not touch `/opt`, `/etc`, systemd, or a real database.
+and wheel, imports the installed web application and runner outside the source
+checkout, executes an installed console script after atomic activation, and
+checks the systemd inventory. The virtual environment is created as relocatable
+so its entry points remain valid when the staging directory is renamed to the
+immutable release directory. This requires `uv` 0.10.8 or newer. The check does
+not touch `/opt`, `/etc`, systemd, or a real database.
 
 ## Installer contract
 

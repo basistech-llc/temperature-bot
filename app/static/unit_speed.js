@@ -57,6 +57,7 @@ const FCU_TEMP_SOURCE_MULTIPLIER_KEY = "multiplier";
 const FCU_TEMP_SOURCE_TITLE = "FCU Temperature Sources";
 const DEVICE_DISPLAY_NAME_KEY = "display_name";
 const DEVICE_TYPE_ICONS = { ERV: "♻️", FCU: "🌀", SENSOR: "📡" };
+const FAN_CONTROL_DEVICE_TYPES = new Set(["ERV", "FCU"]);
 
 // Refresh logic
 var start = Date.now();
@@ -115,6 +116,9 @@ function clearPendingFanChange(pendingChanges, deviceId, change) {
  * @returns {string|null} The id of the radio to select, or null if undetermined.
  */
 function fanRadioIdForDevice(dev, pendingRadioId = null) {
+  if (!FAN_CONTROL_DEVICE_TYPES.has(dev.device_type)) {
+    return null;
+  }
   if (pendingRadioId) {
     return pendingRadioId;
   }
