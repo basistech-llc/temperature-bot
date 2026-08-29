@@ -130,9 +130,10 @@ writes through the production database.
 The current deploy target does not stop the every-minute writer. Its preflight
 snapshot is consistent, but the migration itself still needs a maintenance
 window. Until GitHub issues tracking that deploy safeguard are resolved, a
-rooms migration must be performed in a maintenance window: stop the cron
-runner, verify no runner is active, create a consistent `sqlite3 ... .backup`
-snapshot, run the migration and smoke checks, and only then restart the runner.
+rooms migration must be performed in a maintenance window: stop the runner
+timers and any active runner services, verify no runner is active, create a
+consistent `sqlite3 ... .backup` snapshot, run the migration and smoke checks,
+and only then restart the runner timers.
 
 To roll back a room migration, stop all writers again, preserve the failed
 database for diagnosis, restore the complete pre-migration SQLite backup

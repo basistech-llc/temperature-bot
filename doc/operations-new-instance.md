@@ -228,15 +228,14 @@ issues real fan-speed and drive commands to the AE-200. **Only one instance may
 run it.** A second collector will fight production for control of the hardware.
 
 A developer instance — `slg1` or `deg1` — should run the web service only, with
-no runner cron entries. Rules changes are shadow-only on both and must not send
+no runner timers. Rules changes are shadow-only on both and must not send
 commands until a human approves the cutover (`doc/tech-debt.md`).
 
-If this instance genuinely is the collector, the production cron entries are
-recorded as comments in the Makefile (`Cron targets` section) and cover the
-per-minute runner, the hourly AQI fetch, and the daily compaction. The AE-200
-network probe is packaged as
-`etc/temperature-bot-performance-monitor.{service,timer}`; see
-`doc/performance-monitoring.md`. Use the timer or the cron entry, never both.
+If this instance genuinely is the collector, install and enable the versioned
+minute, hourly, and daily services and timers under `etc/systemd/`; see
+`doc/systemd-scheduled-jobs.md`. The AE-200 network probe is packaged separately
+as `etc/temperature-bot-performance-monitor.{service,timer}`; see
+`doc/performance-monitoring.md`.
 
 ### 10. Verify
 
@@ -415,8 +414,8 @@ sudo systemctl restart <instance>_basistech_net.service
 Flyway Community has no `undo`. The only rollback is the file backup taken
 before the migration.
 
-1. Stop every writer: the instance service, and the runner cron entries if this
-   instance collects.
+1. Stop every writer: the instance service and all runner timers and active
+   runner services if this instance collects.
 2. Preserve the failed database for diagnosis; do not overwrite it.
 3. Restore the complete pre-migration backup from `<DEPLOY_BACKUP_DIR>`,
    including its Flyway history.
