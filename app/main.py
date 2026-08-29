@@ -13,13 +13,13 @@ from flask import Flask, send_from_directory, jsonify
 from werkzeug.exceptions import HTTPException
 from werkzeug.middleware.proxy_fix import ProxyFix
 
-from . import ae200
 from . import db
 from . import room_config
 from . import routes_api
 from . import routes_web
 from .performance_routes import performance_routes
 from .ae200_routes import ae200_routes
+from .instance_policy import ControlMode, InstancePolicy, load_instance_policy
 from .models import ApplicationMetadata, json_ready
 from .version import __version__, git_branch, git_sha
 
@@ -80,12 +80,9 @@ def fix_boto_log_level():
             logging.getLogger(name).setLevel(logging.INFO)
 
 
-def create_app():
+def create_app(instance_policy: InstancePolicy | None = None):
     """Create and configure the Flask application"""
-
-
-
-
+    policy = instance_policy or load_instance_policy()
     # https://flask.palletsprojects.com/en/stable/config/
     app = Flask(__name__)
     setattr(app, "wsgi_app", ProxyFix(app.wsgi_app, x_for=1, x_proto=1))
@@ -93,6 +90,7 @@ def create_app():
     # Make flask_pydantic raise instead of writing its own {"validation_error": ...}
     # body, so app/api_errors.py is the single place that formats API failures.
     app.config["FLASK_PYDANTIC_VALIDATION_ERROR_RAISE"] = True
+    app.config["INSTANCE_POLICY"] = policy
 
     # Configure logging
     log_level = os.getenv("LOG_LEVEL", "INFO").upper()
@@ -102,9 +100,10 @@ def create_app():
     db.validate_database_schema_on_startup()
 
     @app.context_processor
-    def simulator_context():
+    def deployment_context():
         return {
-            "ae200_simulator": bool(ae200.AE200_SIMULATOR),
+            "simulator_mode": policy.control_mode is ControlMode.SIMULATOR,
+            "instance_name": policy.instance,
             "room_dashboards": sorted(
                 room_config.ROOM_CONFIGS.values(), key=lambda config: config.label
             ),

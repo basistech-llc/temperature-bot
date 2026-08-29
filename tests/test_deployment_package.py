@@ -114,6 +114,10 @@ def test_builder_collects_complete_migrations_units_and_configuration(tmp_path):
     }
 
     assert "configuration/temperature-bot.env.example" in paths
+    assert "configuration/slg1.env.example" in paths
+    assert "configuration/deg1.env.example" in paths
+    assert "systemd/slg1_basistech_net.service" in paths
+    assert "systemd/deg1_basistech_net.service" in paths
     assert "documentation/DEPLOYMENT_PACKAGE.md" in paths
     assert "installer/install_deployment_package.py" in paths
     assert {payload.path for payload in payloads if payload.role == "migration"} == (

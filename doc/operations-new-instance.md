@@ -22,12 +22,12 @@ rather than a canonical record, and is marked unverified where it appears.
 |---|---|---|---|---|---|
 | `air.basistech.net` | 8100 | `air_basistech_net.service` | `/home/air/temperature-bot` | `temperature_bot` | `/var/db/temperature_bot/temperature-bot.db` |
 | staging | 8101 | `air-stage_basistech_net.service` | `/home/air-stage/temperature-bot` | `temperature_bot` | `/home/air-stage/var/db/temperature-bot.db` |
-| `slg1.basistech.net` | 8003 | `slg1_basistech_net.service` | `/home/simsong/temperature-bot` | `simsong` | `/home/simsong/temperature-bot/var/db/temperature-bot.db` |
-| `deg1.basistech.net` | 8004 | `deg1_basistech_net.service` | `/home/deg/temperature-bot` | `deg` | `/home/deg/var/db/temperature-bot.db` |
+| `slg1.basistech.net` | 8003 | `slg1_basistech_net.service` | `/opt/temperature-bot-dev/current` | `simsong` | `/home/simsong/var/db/temperature-bot.db` |
+| `deg1.basistech.net` | 8004 | `deg1_basistech_net.service` | `/opt/temperature-bot-dev/current` | `deg` | `/home/deg/var/db/temperature-bot.db` |
 
-Ports, app directories, service accounts, and `DB_PATH` in this table are read
-from the checked-in unit files in `etc/*.service`, which must be copied to
-`/etc/systemd/system/` by hand.
+Ports, app directories, and service accounts in this table are read from the
+packaged units in `etc/systemd/`. Database paths and instance policies are in
+the corresponding packaged environment-file examples.
 
 **All four instances run on one physical machine.** `air.basistech.net`,
 `slg1.basistech.net`, staging, and `deg1.basistech.net` are the same host under
@@ -41,6 +41,11 @@ risk.
 account, home directory, and private database path. Neither is more
 authoritative or more "staging" than the other. Do not point either at the live
 production database.
+
+Both developer services share one immutable application activation at
+`/opt/temperature-bot-dev/current`. This is deliberately separate from
+`/opt/temperature-bot/current`, which production scheduled jobs use. Never
+activate a developer package through the production symlink.
 
 Consequences worth internalizing before touching anything:
 
@@ -227,9 +232,11 @@ The per-minute runner does more than read: it executes the rules engine and
 issues real fan-speed and drive commands to the AE-200. **Only one instance may
 run it.** A second collector will fight production for control of the hardware.
 
-A developer instance — `slg1` or `deg1` — should run the web service only, with
-no runner timers. Rules changes are shadow-only on both and must not send
-commands until a human approves the cutover (`doc/tech-debt.md`).
+A developer instance — `slg1` or `deg1` — runs the web service only, with no
+runner timers. Its typed startup policy requires all four simulators, a matching
+private database identity/root, and disabled scheduling. Its systemd unit also
+denies non-loopback IP traffic. Rules changes are shadow-only on both and must
+not send commands until a human approves the cutover (`doc/tech-debt.md`).
 
 If this instance genuinely is the collector, install and enable the versioned
 minute, hourly, and daily services and timers under `etc/systemd/`; see
@@ -288,13 +295,12 @@ made, and nothing written through it reaches production.
 
 ### 2. Point the unit at it
 
-Edit the instance's unit in `etc/` so the change is versioned rather than only
-live, then install it:
+Edit the instance's environment file so the change is explicit, then restart
+the packaged unit:
 
 ```bash
-# Verify etc/deg1_basistech_net.service names the private DB_PATH:
-#   Environment="DB_PATH=/home/deg/var/db/temperature-bot.db"
-sudo cp -f etc/deg1_basistech_net.service /etc/systemd/system/
+# Verify /etc/temperature-bot/deg1.env names the private DB_PATH:
+#   DB_PATH=/home/deg/var/db/temperature-bot.db
 sudo systemctl daemon-reload
 sudo systemctl restart deg1_basistech_net.service
 ```
@@ -303,16 +309,10 @@ Two cautions on this step:
 
 - **`daemon-reload` before `restart`**, or systemd restarts the old definition
   and the instance silently keeps using the previous database.
-- **A repo edit becomes a dirty working tree.** `make deploy` starts with
-  `git pull --ff-only`, which refuses to run when an incoming commit also
-  touches the file you edited — and, when it does not, silently leaves your
-  edit in place, so the checkout quietly diverges from the branch instead.
-  Either commit the change, or use a systemd drop-in instead —
-  `/etc/systemd/system/deg1_basistech_net.service.d/db.conf` containing a
-  `[Service]` section with the `Environment=` line — which overrides the unit
-  without touching the repository. A drop-in also keeps one developer's
-  playground state out of shared history; the tradeoff is that the setting is
-  then invisible to anyone reading `etc/`.
+- **Keep the policy coherent.** Changing only `DB_PATH` makes the service fail
+  closed if it leaves `TEMPERATURE_BOT_DATABASE_ROOT` or
+  `TEMPERATURE_BOT_DATABASE_IDENTITY` inconsistent. Install the environment
+  file atomically with mode `0640`; it is host state, not a checkout file.
 
 ### 3. Verify the switch took
 

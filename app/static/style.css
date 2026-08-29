@@ -286,7 +286,7 @@ button {
 }
 
 .has-simulator-banner {
-    padding-top: 28px;
+    padding-top: 36px;
 }
 
 .simulator-banner {
@@ -299,10 +299,9 @@ button {
     color: #fff;
     font-size: 14pt;
     font-weight: 700;
-    line-height: 1;
-    padding: 4px 0;
+    line-height: 1.2;
+    padding: 6px 12px;
     text-align: center;
-    text-transform: lowercase;
 }
 
 .cell-temp {

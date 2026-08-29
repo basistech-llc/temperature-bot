@@ -51,6 +51,10 @@ requirements/runtime.txt
 migrations/V*.sql
 migrations/R*.sql
 configuration/temperature-bot.env.example
+configuration/slg1.env.example
+configuration/deg1.env.example
+systemd/slg1_basistech_net.service
+systemd/deg1_basistech_net.service
 systemd/temperature-bot-minute.service
 systemd/temperature-bot-minute.timer
 systemd/temperature-bot-hourly.service
@@ -75,12 +79,23 @@ time, and whether the source tree was dirty. A future immutable release job
 must refuse dirty input; local and ephemeral PR packages retain the flag for
 diagnosis.
 
-The example environment file is configuration documentation and is never
-copied to the systemd unit directory. Systemd `.service` and `.timer` files are
+The example environment files are configuration documentation and are never
+copied to the systemd unit directory. The `slg1` and `deg1` examples define
+separate private databases and the complete simulator-only policy; deployment
+must replace `GIT_COMMIT` with the verified manifest commit. Systemd `.service`
+and `.timer` files are
 payload, not trusted instructions merely because they are in a ZIP. The
 deployment transaction verifies the package before copying units, runs
 `systemd-analyze verify`, preserves the previously installed units, and
 restores them on pre-commit rollback.
+
+The developer web units run one worker so their in-memory Hubitat simulators
+provide deterministic read-after-write behavior. They also use systemd
+`IPAddressDeny=any` with loopback allowed, so an application regression cannot
+connect to live controller command endpoints. They do not install or enable
+scheduled collection/rules timers. Their shared immutable activation root is
+`/opt/temperature-bot-dev`; `/opt/temperature-bot` remains reserved for
+production services and scheduled jobs.
 
 ## Build and inspect
 

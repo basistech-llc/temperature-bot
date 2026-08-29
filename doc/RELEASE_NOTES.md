@@ -7,6 +7,11 @@ change they completed.
 
 ## Unreleased
 
+- Restored `slg1` and `deg1` as immutable simulator-only UI instances with a
+  typed fail-closed runtime policy, stateful AE-200 and Hubitat commands, clear
+  simulator banners/status metadata, private databases, and systemd egress
+  denial.
+
 ### Deployment and operations
 
 - Migrated dependency management and CI from Poetry to `uv`, with pinned setup

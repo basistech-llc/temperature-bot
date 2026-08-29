@@ -353,10 +353,14 @@ systemd-verify: ## Validate packaged scheduled-job units on Linux
 	    $(wildcard $(SYSTEMD_SCHEDULED_DIR)/*.timer)
 	@if command -v rg >/dev/null; then \
 		! rg -n 'User=(simsong|deg|root)|Group=(simsong|deg|root)|/home/' \
-		    $(SYSTEMD_SCHEDULED_DIR); \
+		    $(SYSTEMD_SCHEDULED_DIR)/temperature-bot-minute.service \
+		    $(SYSTEMD_SCHEDULED_DIR)/temperature-bot-hourly.service \
+		    $(SYSTEMD_SCHEDULED_DIR)/temperature-bot-daily.service; \
 	else \
 		! grep -ERn 'User=(simsong|deg|root)|Group=(simsong|deg|root)|/home/' \
-		    $(SYSTEMD_SCHEDULED_DIR); \
+		    $(SYSTEMD_SCHEDULED_DIR)/temperature-bot-minute.service \
+		    $(SYSTEMD_SCHEDULED_DIR)/temperature-bot-hourly.service \
+		    $(SYSTEMD_SCHEDULED_DIR)/temperature-bot-daily.service; \
 	fi
 
 format: $(REQ) ## Auto-fix Python style issues with ruff

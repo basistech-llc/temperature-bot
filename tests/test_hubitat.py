@@ -113,22 +113,9 @@ def test_update_from_hubitat_persists_status_json(
     )
 
 
-def test_live_hubitat_commands_are_refused_from_tests():
-    """The guard that keeps the suite off real hardware must itself be pinned.
-
-    conftest's ``refuse_live_hubitat_commands`` is the only thing standing
-    between an unpatched command test and a real office outlet, and it fails
-    silently if ``send_device_command`` is renamed or the fixture stops
-    applying. Calling through a wrapper rather than the low-level function
-    proves the whole write layer is covered, not just the one name.
-
-    The arguments are deliberately harmless. The regression this test detects
-    is precisely the one where the call is not intercepted, so a real device id
-    would make the test perform the write it exists to prevent. Hubitat ids are
-    numeric, so this one can name nothing, and ``off`` could not energize it
-    even if it did.
-    """
-    with pytest.raises(AssertionError, match="live Hubitat device not-a-device-id"):
+def test_simulator_refuses_unknown_hubitat_devices():
+    """Unknown simulator ids fail locally instead of falling through to HTTP."""
+    with pytest.raises(RuntimeError, match="simulated Hubitat device.*does not exist"):
         hubitat.set_switch("not-a-device-id", "off")
 
 

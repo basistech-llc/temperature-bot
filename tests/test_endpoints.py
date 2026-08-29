@@ -14,7 +14,8 @@ from helpers.mock_helpers import MockHelper
 
 from app import ae200, db, rules_engine
 from app.constants import RULES_MASTER_DEVICE_NAME
-from app.version import __version__, git_sha
+from app.main import app
+from app.version import __version__, git_commit, git_sha
 logger = logging.getLogger(__name__)
 
 
@@ -25,7 +26,12 @@ def test_get_version(flask_test_client):  # noqa: F811
 
     response = flask_test_client.get("/api/v1/version")
     assert response.status_code == 200
-    assert response.json == {"version": __version__, "sha": git_sha()}
+    assert response.json == {
+        "version": __version__,
+        "sha": git_sha(),
+        "commit": git_commit(),
+        **app.config["INSTANCE_POLICY"].public_status().model_dump(mode="json"),
+    }
 
 
 def test_status_endpoint(flask_test_client):  # noqa: F811

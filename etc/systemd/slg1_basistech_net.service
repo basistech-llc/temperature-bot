@@ -1,0 +1,21 @@
+[Unit]
+Description=Temperature Bot slg1 simulator UI
+After=network.target
+
+[Service]
+User=simsong
+Group=simsong
+WorkingDirectory=/opt/temperature-bot-dev/current
+EnvironmentFile=/etc/temperature-bot/slg1.env
+ExecStart=/opt/temperature-bot-dev/current/venv/bin/gunicorn app.main:app --bind 127.0.0.1:8003 --workers 1 --access-logfile - --error-logfile - --log-level ${LOG_LEVEL}
+Restart=always
+RestartSec=2
+UMask=0027
+NoNewPrivileges=yes
+PrivateTmp=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+IPAddressDeny=any
+IPAddressAllow=localhost
+
+[Install]
+WantedBy=multi-user.target
