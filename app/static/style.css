@@ -285,11 +285,12 @@ button {
     text-align: center;
 }
 
-.has-simulator-banner {
+.has-instance-banner {
     padding-top: 36px;
 }
 
-.simulator-banner {
+.simulator-banner,
+.instance-banner {
     position: fixed;
     top: 0;
     left: 0;
@@ -304,9 +305,14 @@ button {
     text-align: center;
 }
 
-.simulator-banner a {
+.simulator-banner a,
+.instance-banner a {
     color: inherit;
     text-decoration: underline;
+}
+
+.read-only-banner {
+    background: #8a5a00;
 }
 
 .cell-temp {

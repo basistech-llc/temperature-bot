@@ -116,8 +116,13 @@ def test_builder_collects_complete_migrations_units_and_configuration(tmp_path):
     assert "configuration/temperature-bot.env.example" in paths
     assert "configuration/slg1.env.example" in paths
     assert "configuration/deg1.env.example" in paths
+    assert "configuration/air-stage.env.example" in paths
     assert "systemd/slg1_basistech_net.service" in paths
     assert "systemd/deg1_basistech_net.service" in paths
+    assert "systemd/air-stage_basistech_net.service" in paths
+    assert "systemd/temperature-bot-stage-minute.service" in paths
+    assert "systemd/temperature-bot-stage-minute.timer" in paths
+    assert "systemd/temperature-bot-stage-ae200-notifications.service" in paths
     assert "configuration/slg1_basistech_net.socket" in paths
     assert "configuration/deg1_basistech_net.socket" in paths
     assert "documentation/DEPLOYMENT_PACKAGE.md" in paths
@@ -144,6 +149,25 @@ def test_developer_units_use_socket_activation_and_private_network():
         assert f"Sockets={instance}_basistech_net.socket" in service
         assert f"Requires={instance}_basistech_net.socket" in service
         assert f"ListenStream=127.0.0.1:{port}" in socket_unit
+
+
+def test_stage_units_are_isolated_and_staggered():
+    systemd = Path(__file__).resolve().parents[1] / "etc/systemd"
+    web = (systemd / "air-stage_basistech_net.service").read_text()
+    collector = (systemd / "temperature-bot-stage-minute.service").read_text()
+    timer = (systemd / "temperature-bot-stage-minute.timer").read_text()
+    notifications = (
+        systemd / "temperature-bot-stage-ae200-notifications.service"
+    ).read_text()
+
+    assert "/opt/temperature-bot-stage/current" in web
+    assert "127.0.0.1:8101" in web
+    assert "EnvironmentFile=/etc/temperature-bot/air-stage.env" in web
+    assert "/run/temperature-bot-stage/writer.lock" in collector
+    assert "--ae200-read-only" in collector
+    assert "OnCalendar=*-*-* *:*:05" in timer
+    assert "RandomizedDelaySec=15s" in timer
+    assert "/opt/temperature-bot-stage/current" in notifications
 
 
 def test_builder_rejects_reserved_manifest_payload(tmp_path):

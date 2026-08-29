@@ -39,6 +39,7 @@ from app.models import (
     AlertRuleResult,
     AlertRuleState,
 )
+from app.instance_policy import load_instance_policy
 from app import rules_engine
 
 
@@ -48,24 +49,30 @@ logger = logging.getLogger(__name__)
 AIRTHINGS_READING_BATCH = TypeAdapter(list[AirthingsDeviceReading])
 
 
-def update_from_ae200(conn):
+def update_from_ae200(conn, *, evaluate_alerts: bool = True):
     if ae200.AE200_SIMULATOR:
         # Use simulator functions
         devs = ae200.get_devices()
         for dev in devs:
             data = ae200.get_device_info(dev["id"])
-            process_device_alert_data(conn, dev, data)
+            process_device_alert_data(conn, dev, data, evaluate_alerts=evaluate_alerts)
     else:
         # Use real AE200 device
         d = ae200.AE200Functions()
         devs = d.getDevices()
         for dev in devs:
             data = d.getDeviceInfo(dev["id"])
-            process_device_alert_data(conn, dev, data)
+            process_device_alert_data(conn, dev, data, evaluate_alerts=evaluate_alerts)
 
 
 def process_device_alert_data(
-    conn, dev, data, *, observed_at: int | None = None, notifier=None
+    conn,
+    dev,
+    data,
+    *,
+    observed_at: int | None = None,
+    notifier=None,
+    evaluate_alerts: bool = True,
 ):
     """Process device data for both temperature logging and alert collection."""
     # [TODO] Need to add synthetic alert data to simulator
@@ -75,38 +82,39 @@ def process_device_alert_data(
         conn, device_name=dev["name"], ae200_device_id=dev["id"]
     )
 
-    alert_time = observed_at if observed_at is not None else int(time.time())
-    for alert_type in ae200.ALERT_FIELDS:
-        value = data.get(alert_type)
-        if value == "ON":
-            state = AlertRuleState.ACTIVE
-        elif value == "OFF":
-            state = AlertRuleState.INACTIVE
-        else:
-            state = AlertRuleState.INDETERMINATE
-        label = ae200.ALERT_LABELS[alert_type]
-        rules_engine.apply_alert_evaluation(
-            conn,
-            AlertRuleEvaluation(
-                device_id=device_id,
-                now=alert_time,
-                commit=True,
-                result=AlertRuleResult(
-                    alert_type=alert_type,
-                    state=state,
-                    started_at=alert_time,
-                    message=(
-                        f":warning: AE-200 {dev['name']} reports {label}."
-                        if state == AlertRuleState.ACTIVE
-                        else f":warning: AE-200 {dev['name']} {label} cannot be evaluated."
-                    ),
-                    resolved_message=(
-                        f":white_check_mark: AE-200 {dev['name']} cleared {label}."
+    if evaluate_alerts:
+        alert_time = observed_at if observed_at is not None else int(time.time())
+        for alert_type in ae200.ALERT_FIELDS:
+            value = data.get(alert_type)
+            if value == "ON":
+                state = AlertRuleState.ACTIVE
+            elif value == "OFF":
+                state = AlertRuleState.INACTIVE
+            else:
+                state = AlertRuleState.INDETERMINATE
+            label = ae200.ALERT_LABELS[alert_type]
+            rules_engine.apply_alert_evaluation(
+                conn,
+                AlertRuleEvaluation(
+                    device_id=device_id,
+                    now=alert_time,
+                    commit=True,
+                    result=AlertRuleResult(
+                        alert_type=alert_type,
+                        state=state,
+                        started_at=alert_time,
+                        message=(
+                            f":warning: AE-200 {dev['name']} reports {label}."
+                            if state == AlertRuleState.ACTIVE
+                            else f":warning: AE-200 {dev['name']} {label} cannot be evaluated."
+                        ),
+                        resolved_message=(
+                            f":white_check_mark: AE-200 {dev['name']} cleared {label}."
+                        ),
                     ),
                 ),
-            ),
-            notifier=notifier,
-        )
+                notifier=notifier,
+            )
 
     db.insert_devlog_entry(conn, device_id=device_id, temp=temp, statusdict=data)
 
@@ -445,6 +453,11 @@ def setup_parser():
     )
     parser.add_argument("--aqi", help="Save AQI to database", action="store_true")
     parser.add_argument("--airthings", help="debug the airthings", action="store_true")
+    parser.add_argument(
+        "--ae200-read-only",
+        help="collect AE-200 state without alerts or HVAC rules",
+        action="store_true",
+    )
     clogging.add_argument(parser)
     return parser
 
@@ -463,6 +476,8 @@ def main():
     if args.airthings:
         update_from_airthings(None)
         sys.exit(0)
+    if args.ae200_read_only:
+        load_instance_policy().require_read_only_collector()
 
     db.validate_database_schema_on_startup()
     conn = db.get_db_connection()
@@ -474,6 +489,8 @@ def main():
         update_aqi(conn)
     elif args.daily:
         daily_cleanup(conn, datetime.datetime.now())
+    elif args.ae200_read_only:
+        update_from_ae200(conn, evaluate_alerts=False)
     elif args.rules:
         if args.rules == "prune":
             rules_engine.prune_rules(conn)

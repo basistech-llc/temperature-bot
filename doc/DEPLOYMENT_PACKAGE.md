@@ -53,10 +53,15 @@ migrations/R*.sql
 configuration/temperature-bot.env.example
 configuration/slg1.env.example
 configuration/deg1.env.example
+configuration/air-stage.env.example
 configuration/slg1_basistech_net.socket
 configuration/deg1_basistech_net.socket
 systemd/slg1_basistech_net.service
 systemd/deg1_basistech_net.service
+systemd/air-stage_basistech_net.service
+systemd/temperature-bot-stage-minute.service
+systemd/temperature-bot-stage-minute.timer
+systemd/temperature-bot-stage-ae200-notifications.service
 systemd/temperature-bot-minute.service
 systemd/temperature-bot-minute.timer
 systemd/temperature-bot-hourly.service
@@ -103,6 +108,13 @@ allowlist as defense in depth. They do not install or enable scheduled
 collection/rules timers. Their shared immutable activation root is
 `/opt/temperature-bot-dev`; `/opt/temperature-bot` remains reserved for
 production services and scheduled jobs.
+
+The read-only staging release has its own `/opt/temperature-bot-stage` root,
+database, web service on loopback port 8101, minute collector, writer lock, and
+notification collector. Its web process rejects every mutating HTTP method and
+the legacy mutating `GET /api/v1/disable-rules` route. The minute job is limited
+to AE-200 reads and cannot run alerts or HVAC rules. Production fires at second
+00; staging fires 5–20 seconds later using `RandomizedDelaySec=15s`.
 
 ## Build and inspect
 

@@ -21,12 +21,14 @@ DATABASE_IDENTITY_ENV = "TEMPERATURE_BOT_DATABASE_IDENTITY"
 DATABASE_ROOT_ENV = "TEMPERATURE_BOT_DATABASE_ROOT"
 SCHEDULER_MODE_ENV = "TEMPERATURE_BOT_SCHEDULER_MODE"
 DEVELOPER_INSTANCES = frozenset({"slg1", "deg1"})
+READ_ONLY_INSTANCES = frozenset({"air-stage"})
 
 
 class ControlMode(StrEnum):
     """Whether controller commands are live or simulated."""
 
     LIVE = "live"
+    READ_ONLY = "read-only"
     SIMULATOR = "simulator"
 
 
@@ -72,27 +74,46 @@ class InstancePolicy(BaseModel):
                     "simulator control mode requires AE-200, Hubitat, Airthings, "
                     "and AQICN simulators"
                 )
-        elif any(self.integrations.model_dump().values()):
+        elif self.control_mode is ControlMode.LIVE and any(
+            self.integrations.model_dump().values()
+        ):
             raise ValueError("live control mode cannot mix simulator integrations")
+
+        if self.control_mode is ControlMode.READ_ONLY:
+            if self.instance not in READ_ONLY_INSTANCES:
+                raise ValueError("read-only control mode requires an approved instance")
+            if self.integrations.ae200:
+                raise ValueError("read-only control mode requires live AE-200 reads")
+            self._validate_private_database("read-only")
+            if self.scheduler_mode is not SchedulerMode.ENABLED:
+                raise ValueError("read-only instance requires its collection scheduler")
 
         if self.instance not in DEVELOPER_INSTANCES:
             return self
 
         if self.control_mode is not ControlMode.SIMULATOR:
             raise ValueError(f"developer instance {self.instance} must be simulator-only")
-        if self.database_identity != self.instance:
-            raise ValueError(
-                f"developer instance {self.instance} requires matching database identity"
-            )
-        if self.database_root is None:
-            raise ValueError(f"developer instance {self.instance} requires a database root")
-        database = self.database_path.resolve(strict=False)
-        root = self.database_root.resolve(strict=False)
-        if not database.is_relative_to(root):
-            raise ValueError(f"developer database {database} is outside private root {root}")
+        self._validate_private_database("developer")
         if self.scheduler_mode is not SchedulerMode.DISABLED:
             raise ValueError(f"developer instance {self.instance} cannot run schedulers")
         return self
+
+    def _validate_private_database(self, kind: str) -> None:
+        if self.database_identity != self.instance:
+            raise ValueError(
+                f"{kind} instance {self.instance} requires matching database identity"
+            )
+        if self.database_root is None:
+            raise ValueError(f"{kind} instance {self.instance} requires a database root")
+        database = self.database_path.resolve(strict=False)
+        root = self.database_root.resolve(strict=False)
+        if not database.is_relative_to(root):
+            raise ValueError(f"{kind} database {database} is outside private root {root}")
+
+    def require_read_only_collector(self) -> None:
+        """Fail closed unless this process is the staging collection plane."""
+        if self.control_mode is not ControlMode.READ_ONLY:
+            raise RuntimeError("AE-200 read-only collection requires read-only control mode")
 
     def public_status(self) -> "InstanceStatus":
         """Return the non-secret status exposed through the API."""
