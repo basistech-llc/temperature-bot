@@ -137,7 +137,10 @@ def test_developer_units_use_socket_activation_and_private_network():
         ).read_text()
 
         assert "PrivateNetwork=yes" in service
-        assert "--bind fd://3" in service
+        assert "/venv/bin/python -m gunicorn" in service
+        assert "StandardInput=socket" in service
+        assert "--bind fd://0" in service
+        assert f"Sockets={instance}_basistech_net.socket" in service
         assert f"Requires={instance}_basistech_net.socket" in service
         assert f"ListenStream=127.0.0.1:{port}" in socket_unit
 
