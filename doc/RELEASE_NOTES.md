@@ -27,6 +27,11 @@ change they completed.
 - Removed the redundant `bin/runner.py` source-inode lock after retiring cron;
   scheduled jobs remain mutually exclusive through the systemd writer lock.
 
+### Development workflow
+
+- Collapsed automated web UI screenshot galleries in pull-request comments so
+  reviewers can expand them only when needed.
+
 ## 0.11.0 - 2026-08-20
 
 ### Room dashboards and hardware
