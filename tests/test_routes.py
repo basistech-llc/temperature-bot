@@ -120,6 +120,8 @@ def test_simulator_banner_is_rendered(flask_test_client):  # noqa: F811
     assert 'class="simulator-banner"' in html
     assert "SIMULATOR —" in html
     assert "commands do not reach the AE-200 or building equipment" in html
+    assert '<a href="https://air-stage.basistech.net/">staging</a>' in html
+    assert '<a href="https://air.basistech.net/">production</a>' in html
 
 
 def test_rooms_menu_has_one_plain_link_per_room(flask_test_client):  # noqa: F811

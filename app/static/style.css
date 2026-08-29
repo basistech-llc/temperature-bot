@@ -304,6 +304,11 @@ button {
     text-align: center;
 }
 
+.simulator-banner a {
+    color: inherit;
+    text-decoration: underline;
+}
+
 .cell-temp {
     color: #000; /* Default black for fresh temperatures */
 }
