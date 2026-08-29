@@ -26,6 +26,15 @@ change they completed.
   concurrent controller clients.
 - Removed the redundant `bin/runner.py` source-inode lock after retiring cron;
   scheduled jobs remain mutually exclusive through the systemd writer lock.
+- Corrected deployment packages to include the runner's `lib.ctools` dependency
+  and made staged virtual environments relocatable. Package checks now execute
+  the final-path Gunicorn script and import the installed runner in isolation.
+
+### Web interface
+
+- Stopped the status refresh from looking for fan-speed radio buttons on sensor
+  and untyped device rows, eliminating misleading console warnings while
+  preserving ERV and FCU control updates.
 
 ### Development workflow
 

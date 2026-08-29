@@ -40,7 +40,7 @@ def _run(*args: str) -> None:
 def _install_environment(release: Path, manifest: DeploymentManifest, uv: str, python: str) -> None:
     environment = release / "venv"
     interpreter = environment / "bin/python"
-    _run(uv, "venv", "--python", python, str(environment))
+    _run(uv, "venv", "--relocatable", "--python", python, str(environment))
     _run(
         uv,
         "pip",
@@ -59,16 +59,24 @@ def _install_environment(release: Path, manifest: DeploymentManifest, uv: str, p
         "--no-deps",
         str(release / manifest.wheel),
     )
+
+
+def _verify_environment(release: Path, manifest: DeploymentManifest) -> None:
+    environment = release / "venv"
+    interpreter = environment / "bin/python"
     _run(
         str(interpreter),
+        "-I",
         "-c",
         (
             "import importlib.util; from app.version import __version__; "
             f"assert __version__ == {manifest.version!r}, __version__; "
             "assert importlib.util.find_spec('bin.runner') is not None; "
+            "assert importlib.util.find_spec('lib.ctools.clogging') is not None; "
             "assert importlib.util.find_spec('app.deployment_package') is not None"
         ),
     )
+    _run(str(environment / "bin/gunicorn"), "--version")
 
 
 def _install_systemd_units(
@@ -136,6 +144,9 @@ def install_package(
         finally:
             if staging.exists():
                 shutil.rmtree(staging)
+
+    if create_venv:
+        _verify_environment(release, manifest)
 
     installed_units = (
         _install_systemd_units(release, manifest, systemd_dir)

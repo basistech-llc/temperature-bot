@@ -225,23 +225,23 @@ function testPendingFanChangeOwnership() {
 // -- The bug: off unit holding Auto must show Off, not Auto --
 check(
   "off + held Auto (-1) -> Off",
-  fanRadioIdForDevice({ device_id: 5, drive: 0, fan_speed: -1 }),
+  fanRadioIdForDevice({ device_id: 5, device_type: "FCU", drive: 0, fan_speed: -1 }),
   "radio-5-0",
 );
 check(
   "off + held numbered speed -> Off",
-  fanRadioIdForDevice({ device_id: 5, drive: 0, fan_speed: 2 }),
+  fanRadioIdForDevice({ device_id: 5, device_type: "ERV", drive: 0, fan_speed: 2 }),
   "radio-5-0",
 );
 check(
   "drive string 'Off' + held Auto -> Off",
-  fanRadioIdForDevice({ device_id: 7, drive: "Off", fan_speed: -1 }),
+  fanRadioIdForDevice({ device_id: 7, device_type: "FCU", drive: "Off", fan_speed: -1 }),
   "radio-7-0",
 );
 check(
   "pending Off selection is not overwritten by stale High status",
   fanRadioIdForDevice(
-    { device_id: 7, drive: 1, fan_speed: 4 },
+    { device_id: 7, device_type: "FCU", drive: 1, fan_speed: 4 },
     "radio-7-0",
   ),
   "radio-7-0",
@@ -501,25 +501,35 @@ async function testEnableRulesForDevicePost() {
 // -- On states still resolve correctly --
 check(
   "on + Auto (-1) -> Auto",
-  fanRadioIdForDevice({ device_id: 5, drive: 1, fan_speed: -1 }),
+  fanRadioIdForDevice({ device_id: 5, device_type: "FCU", drive: 1, fan_speed: -1 }),
   "radio-5-auto",
 );
 check(
   "on + numbered speed -> that speed",
-  fanRadioIdForDevice({ device_id: 5, drive: 1, fan_speed: 3 }),
+  fanRadioIdForDevice({ device_id: 5, device_type: "ERV", drive: 1, fan_speed: 3 }),
   "radio-5-3",
 );
 check(
   "on + speed via legacy 'speed' field -> that speed",
-  fanRadioIdForDevice({ device_id: 9, drive: 1, speed: 4 }),
+  fanRadioIdForDevice({ device_id: 9, device_type: "FCU", drive: 1, speed: 4 }),
   "radio-9-4",
 );
 
 // -- Missing / falsy drive is treated as off --
 check(
   "no drive field -> Off",
-  fanRadioIdForDevice({ device_id: 5 }),
+  fanRadioIdForDevice({ device_id: 5, device_type: "FCU" }),
   "radio-5-0",
+);
+check(
+  "sensor rows do not resolve HVAC radio ids",
+  fanRadioIdForDevice({ device_id: 7720080, device_type: "SENSOR" }),
+  null,
+);
+check(
+  "untyped rows do not resolve HVAC radio ids",
+  fanRadioIdForDevice({ device_id: 1348015, device_type: null }),
+  null,
 );
 
 // -- AE-200 mode display --

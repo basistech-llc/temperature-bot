@@ -41,7 +41,7 @@ requires = ["hatchling>=1.27,<2"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["app", "bin"]
+packages = ["app", "bin", "lib"]
 
 [tool.hatch.build.targets.wheel.force-include]
 "etc/schema.sql" = "etc/schema.sql"

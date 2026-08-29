@@ -323,7 +323,8 @@ deployment-package-verify: deployment-package ## Verify the deployment ZIP inven
 	echo "Verified $$package"
 
 deployment-package-check: deployment-package ## Install the package into a disposable immutable root
-	@package="$$(ls -1t dist/temperature-bot-deployment-*.zip | head -1)"; \
+	@set -eu; \
+	package="$$(ls -1t dist/temperature-bot-deployment-*.zip | head -1)"; \
 	install_tmp="$$(mktemp -d)"; \
 	trap 'rm -rf "$$install_tmp"' EXIT; \
 	$(PYTHON) -m bin.install_deployment_package \
@@ -333,6 +334,14 @@ deployment-package-check: deployment-package ## Install the package into a dispo
 	    --activate >/dev/null; \
 	test -L "$$install_tmp/opt/temperature-bot/current"; \
 	test -x "$$install_tmp/opt/temperature-bot/current/venv/bin/python"; \
+	echo "Verifying installed runner imports outside the source checkout"; \
+	DB_PATH="$$install_tmp/temperature-bot.db" \
+	TEMPERATURE_BOT_CONFIG="$(abspath tests/temperature-bot-config-test.yaml)" \
+	AE200_SIMULATOR=1 HUBITAT_SIMULATOR=1 AIRTHINGS_SIMULATOR=1 AQICN_SIMULATOR=1 \
+	"$$install_tmp/opt/temperature-bot/current/venv/bin/python" -I -c \
+	    'import bin.runner; import lib.ctools.clogging'; \
+	echo "Executing the relocated Gunicorn console script"; \
+	"$$install_tmp/opt/temperature-bot/current/venv/bin/gunicorn" --version; \
 	test -f "$$install_tmp/etc/systemd/system/temperature-bot-minute.timer"; \
 	echo "Installed and activated $$package in a disposable root"
 
