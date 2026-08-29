@@ -110,7 +110,7 @@ def test_builder_collects_complete_migrations_units_and_configuration(tmp_path):
     expected_units = {
         f"systemd/{path.name}"
         for path in (repo_root / "etc/systemd").iterdir()
-        if path.is_file() and path.suffix in {".service", ".socket", ".timer"}
+        if path.is_file() and path.suffix in {".service", ".timer"}
     }
 
     assert "configuration/temperature-bot.env.example" in paths
@@ -118,8 +118,8 @@ def test_builder_collects_complete_migrations_units_and_configuration(tmp_path):
     assert "configuration/deg1.env.example" in paths
     assert "systemd/slg1_basistech_net.service" in paths
     assert "systemd/deg1_basistech_net.service" in paths
-    assert "systemd/slg1_basistech_net.socket" in paths
-    assert "systemd/deg1_basistech_net.socket" in paths
+    assert "configuration/slg1_basistech_net.socket" in paths
+    assert "configuration/deg1_basistech_net.socket" in paths
     assert "documentation/DEPLOYMENT_PACKAGE.md" in paths
     assert "installer/install_deployment_package.py" in paths
     assert {payload.path for payload in payloads if payload.role == "migration"} == (

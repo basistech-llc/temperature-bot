@@ -343,6 +343,8 @@ deployment-package-check: deployment-package ## Install the package into a dispo
 	echo "Executing the relocated Gunicorn console script"; \
 	"$$install_tmp/opt/temperature-bot/current/venv/bin/gunicorn" --version; \
 	test -f "$$install_tmp/etc/systemd/system/temperature-bot-minute.timer"; \
+	test -f "$$install_tmp/etc/systemd/system/slg1_basistech_net.socket"; \
+	test -f "$$install_tmp/etc/systemd/system/deg1_basistech_net.socket"; \
 	echo "Installed and activated $$package in a disposable root"
 
 systemd-verify: ## Validate packaged scheduled-job units on Linux

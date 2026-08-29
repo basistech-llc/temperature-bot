@@ -53,10 +53,10 @@ migrations/R*.sql
 configuration/temperature-bot.env.example
 configuration/slg1.env.example
 configuration/deg1.env.example
+configuration/slg1_basistech_net.socket
+configuration/deg1_basistech_net.socket
 systemd/slg1_basistech_net.service
 systemd/deg1_basistech_net.service
-systemd/slg1_basistech_net.socket
-systemd/deg1_basistech_net.socket
 systemd/temperature-bot-minute.service
 systemd/temperature-bot-minute.timer
 systemd/temperature-bot-hourly.service
@@ -82,7 +82,10 @@ must refuse dirty input; local and ephemeral PR packages retain the flag for
 diagnosis.
 
 The example environment files are configuration documentation and are never
-copied to the systemd unit directory. The `slg1` and `deg1` examples define
+copied to the systemd unit directory. Socket units use the configuration role
+so package-format-1 verifiers that predate socket activation can still verify
+the manifest; the current installer recognizes verified `.socket` payloads and
+installs them with service/timer units. The `slg1` and `deg1` examples define
 separate private databases and the complete simulator-only policy; deployment
 must replace `GIT_COMMIT` with the verified manifest commit. Systemd `.service`
 and `.timer` files are

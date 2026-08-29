@@ -84,7 +84,12 @@ def _install_systemd_units(
 ) -> list[Path]:
     systemd_dir.mkdir(parents=True, exist_ok=True)
     installed = []
-    for member in manifest.systemd_units:
+    socket_units = [
+        item.path
+        for item in manifest.files
+        if item.role == "configuration" and Path(item.path).suffix == ".socket"
+    ]
+    for member in [*manifest.systemd_units, *socket_units]:
         source = release / member
         target = systemd_dir / source.name
         with tempfile.NamedTemporaryFile(dir=systemd_dir, delete=False) as temporary:
