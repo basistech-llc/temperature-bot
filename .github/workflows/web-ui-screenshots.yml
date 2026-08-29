@@ -17,8 +17,10 @@ jobs:
     env:
       TEMPERATURE_BOT_CONFIG: "tests/temperature-bot-config-test.yaml"
       AE200_SIMULATOR: 1
+      HUBITAT_SIMULATOR: 1
       AIRTHINGS_SIMULATOR: 1
       AQICN_SIMULATOR: 1
+      TEMPERATURE_BOT_CONTROL_MODE: simulator
       UV_VERSION: '0.11.26'
       RUFF_VERSION: '0.15.15'
     steps:

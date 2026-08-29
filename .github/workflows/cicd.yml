@@ -21,6 +21,8 @@ jobs:
       AE200_SIMULATOR: 1
       HUBITAT_SIMULATOR: 1
       AIRTHINGS_SIMULATOR: 1
+      AQICN_SIMULATOR: 1
+      TEMPERATURE_BOT_CONTROL_MODE: simulator
       AQICN_TOKEN: ${{ secrets.AQICN_TOKEN }}
       AIRNOW_API_KEY: ${{ secrets.AIRNOW_API_KEY }}
       UV_VERSION: '0.11.26'
