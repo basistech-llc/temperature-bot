@@ -44,8 +44,8 @@ No manual SQLite insert is required for normal temperature logging. A new
 exposed temperature sensor is created in the local `devices` table on first
 successful collection. Temperature Bot re-enumerates the Maker API
 `/devices/all` endpoint on every Hubitat scan, so a newly authorized live device
-should be picked up on the next scan. Production cron normally runs that scan
-once per minute.
+should be picked up on the next scan. The production minute timer normally runs
+that scan once per minute.
 
 Room dashboards select sensors canonically: `_canonical_room_sensors()` reads
 `devices.room_id`, so a newly logged Hubitat sensor appears on a room dashboard
@@ -94,7 +94,8 @@ dashboards may have separate tokens.
 
 ## Discovery And Collection
 
-`bin/runner.py` runs every minute in production cron. The default run path calls:
+`bin/runner.py` runs every minute through `temperature-bot-minute.timer`. The
+default run path calls:
 
 1. `update_from_ae200(conn)`
 2. `update_from_hubitat(conn)`

@@ -24,6 +24,8 @@ change they completed.
 - Removed unnecessary in-process and host-wide AE-200 command locks. Each
   request already uses an independent WebSocket, and Mitsubishi documents
   concurrent controller clients.
+- Removed the redundant `bin/runner.py` source-inode lock after retiring cron;
+  scheduled jobs remain mutually exclusive through the systemd writer lock.
 
 ## 0.11.0 - 2026-08-20
 

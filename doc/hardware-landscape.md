@@ -34,9 +34,9 @@ independent systems that were installed for their own reasons:
                                                                   Flask web UI
 ```
 
-`bin/runner.py` runs from cron every minute, polls each system, and writes rows
-into one SQLite database. The web UI reads that database. Nothing streams; every
-number you see on a page was pulled by a poll.
+`bin/runner.py` runs from the production systemd timer every minute, polls each
+system, and writes rows into one SQLite database. The web UI reads that
+database. Nothing streams; every number you see on a page was pulled by a poll.
 
 ## Hubitat
 
@@ -279,7 +279,7 @@ switch command is not automatically safe just because the simulator is on.
 | A device appears on a Hubitat dashboard but not in our UI | Usually just not ticked in Maker API app 520. Check `/hub2/devicesList` before concluding it is absent from the hub — most Broadway devices were already meshed onto `.51` and merely unexposed. |
 | A device id from a Hubitat URL does not work in our config | Ids are per-hub. Hub Mesh gives the same device a different id on each hub, and the foreign id may name an unrelated device here. |
 | A control tile is inert and the log shows validation failures | Maker API sends `attributes` as a mapping from `/devices/all` but as a list from `/devices/<id>`. See `doc/Hubitat_Info.md`. |
-| A room dashboard tile says "No data for 2h" | Its last reading is older than the ten-minute freshness cutoff. Says nothing about the device itself — the runner, cron, or the hub may be what stopped. |
+| A room dashboard tile says "No data for 2h" | Its last reading is older than the ten-minute freshness cutoff. Says nothing about the device itself — the runner, timer, or the hub may be what stopped. |
 | A control tile says "Unavailable" | Different condition: the live Maker API read for that device just failed, so it is not exposed on hub `.51` or the hub is unreachable. |
 | A sensor logs data but appears on no room page | It has no `room_id`. Assign it in the Air Quality matrix. |
 | AE-200 values are stale or commands are slow | Compare WebSocket connection/response timing with the independent network probes; see `doc/performance-monitoring.md`. |

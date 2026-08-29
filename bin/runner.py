@@ -1,5 +1,5 @@
 """
-Runs every minute by cron.
+Runs every minute through the production systemd timer.
  - gets temperature and writes to database
  - runs rules engine
 """
@@ -42,7 +42,6 @@ from app.models import (
 from app import rules_engine
 
 
-import lib.ctools.lock as clock
 import lib.ctools.clogging as clogging
 
 logger = logging.getLogger(__name__)
@@ -483,7 +482,6 @@ def main():
             print(res)
     else:
         # Run everything
-        clock.lock_script(abspath(__file__))
         update_from_ae200(conn)
         update_from_hubitat(conn)
         update_from_airthings(conn)

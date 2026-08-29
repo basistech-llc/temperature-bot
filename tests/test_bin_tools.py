@@ -68,27 +68,6 @@ def test_runner_module_help_has_no_runpy_warning():
     assert "RuntimeWarning" not in result.stderr
 
 
-def test_runner_default_lock_uses_runner_file(monkeypatch, temp_db):
-    """Default runner execution must not lock '-m' under `python -m bin.runner`."""
-    captured = {}
-
-    def capture_lock(lockfile=None):
-        captured["lockfile"] = lockfile
-        return 1
-
-    monkeypatch.setenv(TEST_DB_NAME, temp_db)
-    monkeypatch.setattr(sys, "argv", ["-m"])
-    monkeypatch.setattr(runner.clock, "lock_script", capture_lock)
-    monkeypatch.setattr(runner, "update_from_ae200", lambda conn: None)
-    monkeypatch.setattr(runner, "update_from_hubitat", lambda conn: None)
-    monkeypatch.setattr(runner, "update_from_airthings", lambda conn: None)
-    monkeypatch.setattr(runner.db, "get_rules_master_enabled", lambda conn: False)
-
-    runner.main()
-
-    assert captured["lockfile"] == str(Path(runner.__file__).resolve())
-
-
 @pytest.mark.parametrize("failure", ["timeout", "malformed"])
 def test_runner_alerts_continue_when_airthings_poll_fails(
     failure, monkeypatch, temp_db, caplog
@@ -126,7 +105,6 @@ def test_runner_alerts_continue_when_airthings_poll_fails(
 
     monkeypatch.setenv(TEST_DB_NAME, temp_db)
     monkeypatch.setattr(sys, "argv", ["runner"])
-    monkeypatch.setattr(runner.clock, "lock_script", lambda _path: 1)
     monkeypatch.setattr(runner, "update_from_ae200", lambda _conn: None)
     monkeypatch.setattr(runner, "update_from_hubitat", lambda _conn: None)
     monkeypatch.setattr(runner.db, "get_rules_master_enabled", lambda _conn: False)

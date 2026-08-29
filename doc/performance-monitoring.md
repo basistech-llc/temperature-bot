@@ -78,25 +78,15 @@ The default closed port is TCP/1 and is configurable with
 `AE200_REJECT_PORT`. Network firewalls may silently drop that port instead of
 rejecting it, so deployment must confirm the expected `refused` outcome.
 
-The probe is a separate short-lived process, intended to run once per minute:
-
-```cron
-* * * * * cd /home/air/temperature-bot && \
-  DB_PATH=/var/db/temperature_bot/temperature-bot.db \
-  TEMPERATURE_BOT_INSTANCE=production \
-  PERFORMANCE_CLIENT_ID=network-probe \
-  .venv/bin/python -m bin.performance_monitor --once \
-  >> /home/air/temperature-bot-performance.log 2>&1
-```
-
-Offsetting it by about 30 seconds is useful when comparing the probe with the
-minute collector. The process is independent of the HVAC Rules master switch.
-The checked-in `etc/temperature-bot-performance-monitor.service` and `.timer`
-run the production probe at 30 seconds past each minute. Install them in
-`/etc/systemd/system`, run `systemctl daemon-reload`, and enable the timer with
-`systemctl enable --now temperature-bot-performance-monitor.timer`. Use either
-the timer or the example cron entry, not both. A staging installation needs a
-copy or override with the staging working directory, database, and instance id.
+The probe is a separate short-lived process, independent of the HVAC Rules
+master switch. The checked-in
+`etc/temperature-bot-performance-monitor.service` and `.timer` run it at 30
+seconds past each minute so its measurements can be compared with the minute
+collector. Install them in `/etc/systemd/system`, run `systemctl daemon-reload`,
+and enable the timer with
+`systemctl enable --now temperature-bot-performance-monitor.timer`. A staging
+installation needs a copy or override with the staging working directory,
+database, and instance id.
 
 ## Storage
 
