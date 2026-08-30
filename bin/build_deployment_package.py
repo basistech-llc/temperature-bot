@@ -74,6 +74,15 @@ def collect_payloads(requirements: Path, wheel: Path) -> list[PayloadSource]:
                     role="systemd" if is_unit else "configuration",
                 )
             )
+    for nginx_config in sorted((REPO_ROOT / "etc/nginx").iterdir()):
+        if nginx_config.is_file():
+            payloads.append(
+                PayloadSource(
+                    source=nginx_config,
+                    path=f"nginx/{nginx_config.name}",
+                    role="configuration",
+                )
+            )
     return payloads
 
 

@@ -125,12 +125,24 @@ def test_builder_collects_complete_migrations_units_and_configuration(tmp_path):
     assert "systemd/temperature-bot-stage-ae200-notifications.service" in paths
     assert "configuration/slg1_basistech_net.socket" in paths
     assert "configuration/deg1_basistech_net.socket" in paths
+    assert "nginx/air-stage.basistech.net" in paths
     assert "documentation/DEPLOYMENT_PACKAGE.md" in paths
     assert "installer/install_deployment_package.py" in paths
     assert {payload.path for payload in payloads if payload.role == "migration"} == (
         expected_migrations
     )
     assert {payload.path for payload in payloads if payload.role == "systemd"} == expected_units
+
+
+def test_air_stage_nginx_routes_only_to_staging_loopback():
+    config = (
+        Path(__file__).resolve().parents[1] / "etc/nginx/air-stage.basistech.net"
+    ).read_text()
+
+    assert config.count("server_name air-stage.basistech.net;") == 2
+    assert "proxy_pass http://127.0.0.1:8101;" in config
+    assert "return 301 https://$host$request_uri;" in config
+    assert "air.basistech.net" not in config.replace("air-stage.basistech.net", "")
 
 
 def test_developer_units_use_socket_activation_and_private_network():

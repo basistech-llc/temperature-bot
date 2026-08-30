@@ -2,6 +2,7 @@
 Description=Run the Temperature Bot hourly data job
 
 [Timer]
+# Deterministic production schedule; no RandomizedDelaySec.
 OnCalendar=*-*-* *:00:30
 AccuracySec=1s
 Persistent=true

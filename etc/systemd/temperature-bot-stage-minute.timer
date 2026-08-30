@@ -2,6 +2,7 @@
 Description=Run the Temperature Bot staging collector every minute
 
 [Timer]
+# Staging starts 5–20 seconds after production's deterministic second-00 poll.
 OnCalendar=*-*-* *:*:05
 RandomizedDelaySec=15s
 AccuracySec=1s

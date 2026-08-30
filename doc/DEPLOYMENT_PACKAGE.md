@@ -56,6 +56,7 @@ configuration/deg1.env.example
 configuration/air-stage.env.example
 configuration/slg1_basistech_net.socket
 configuration/deg1_basistech_net.socket
+nginx/air-stage.basistech.net
 systemd/slg1_basistech_net.service
 systemd/deg1_basistech_net.service
 systemd/air-stage_basistech_net.service
@@ -98,6 +99,12 @@ payload, not trusted instructions merely because they are in a ZIP. The
 deployment transaction verifies the package before copying units, runs
 `systemd-analyze verify`, preserves the previously installed units, and
 restores them on pre-commit rollback.
+
+The `nginx/` directory contains reviewed virtual-host configuration captured
+from the live deployment. It is verified as part of the package but is not
+installed automatically. An operator must preserve the previous site file,
+install the candidate into nginx's site directory, run `nginx -t`, and reload
+nginx only after validation succeeds.
 
 The developer web units run one worker so their in-memory Hubitat simulators
 provide deterministic read-after-write behavior. Systemd socket units own the

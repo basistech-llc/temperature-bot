@@ -11,6 +11,10 @@ change they completed.
   typed fail-closed runtime policy, stateful AE-200 and Hubitat commands, clear
   simulator banners/status metadata, private databases, and systemd egress
   isolation through socket activation and private network namespaces.
+- Restored `air-stage` as an immutable live-control staging instance with a
+  private database, a persistent real-equipment warning, an AE-200-only
+  collection job staggered 5–20 seconds after production, and the validated
+  nginx virtual host.
 
 ### Deployment and operations
 
@@ -34,6 +38,8 @@ change they completed.
 - Corrected deployment packages to include the runner's `lib.ctools` dependency
   and made staged virtual environments relocatable. Package checks now execute
   the final-path Gunicorn script and import the installed runner in isolation.
+- Added the validated live `air-stage` nginx virtual host to deployment packages
+  without automatically installing host routing configuration.
 
 ### Web interface
 
