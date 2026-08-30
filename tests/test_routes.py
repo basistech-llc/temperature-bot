@@ -536,6 +536,7 @@ def test_kitchen_route(flask_test_client):  # noqa: F811
     response = flask_test_client.get("/kitchen")
     assert response.status_code == 200
     assert b"Kitchen" in response.data or b"room_dashboard" in response.data
+    assert b'<meta http-equiv="refresh" content="3600">' in response.data
     assert b"/static/hickory_life.js" not in response.data
 
 
@@ -545,6 +546,7 @@ def test_hickory_route(flask_test_client):  # noqa: F811
     assert response.status_code == 200
     assert b'data-room-control-key="hickory"' in response.data
     assert b"Hickory" in response.data or b"room_dashboard" in response.data
+    assert b'<meta http-equiv="refresh" content="3600">' in response.data
     assert b"/static/hickory_life.js" in response.data
 
 

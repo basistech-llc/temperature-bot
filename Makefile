@@ -289,7 +289,7 @@ check: $(REQ) dependency-check ## Run all static analysis checks
 
 dependency-check: ## Verify the uv lockfile and reject legacy dependency tooling
 	uv lock --check
-	@! git grep -n -i 'poe''try' -- ':!.beads/**' ':!lib/ctools/**' ':!doc/RELEASE_NOTES.md'
+	@! git grep -n -i 'poe''try' -- ':!.beads/**' ':!doc/RELEASE_NOTES.md'
 
 build: dependency-check ## Build the source distribution and wheel
 	uv build --no-sources
@@ -338,7 +338,7 @@ deployment-package-check: deployment-package ## Install the package into a dispo
 	TEMPERATURE_BOT_CONFIG="$(abspath tests/temperature-bot-config-test.yaml)" \
 	AE200_SIMULATOR=1 HUBITAT_SIMULATOR=1 AIRTHINGS_SIMULATOR=1 AQICN_SIMULATOR=1 \
 	"$$install_tmp/opt/temperature-bot/current/venv/bin/python" -I -c \
-	    'import bin.runner; import lib.ctools.clogging'; \
+	    'import bin.runner; import app.clogging'; \
 	echo "Executing the relocated Gunicorn console script"; \
 	"$$install_tmp/opt/temperature-bot/current/venv/bin/gunicorn" --version; \
 	test -f "$$install_tmp/opt/temperature-bot/current/systemd/temperature-bot-minute.timer"; \

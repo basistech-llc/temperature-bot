@@ -15,6 +15,8 @@ change they completed.
   private database, a persistent real-equipment warning, an AE-200-only
   collection job staggered 5–20 seconds after production, and the validated
   nginx virtual host.
+- Vendored the small runner logging helper and removed the ctools submodule and
+  unused `lock.py` import, simplifying clean checkouts and deployment packages.
 
 ### Deployment and operations
 

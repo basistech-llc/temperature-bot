@@ -46,7 +46,7 @@ temperature-bot/
 │   ├── conftest.py                     # Pytest fixtures
 │   ├── helpers/                        # Test helpers
 │   └── test_*.py
-└── lib/ctools                          # External submodule, excluded from linting
+└── app/clogging.py                     # Vendored runner logging/syslog helper
 ```
 
 ## Required Workflow

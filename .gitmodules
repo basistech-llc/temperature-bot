@@ -1,3 +1,0 @@
-[submodule "lib/ctools"]
-	path = lib/ctools
-	url = git@github.com:simsong/ctools.git

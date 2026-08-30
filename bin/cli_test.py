@@ -18,8 +18,7 @@ from app.ae200 import AE200Functions
 import app.ae200 as ae200
 import app.db as db
 
-import lib.ctools.clogging as clogging
-import lib.ctools.lock as clock
+from app import clogging
 
 def setup_parser():
     import argparse
