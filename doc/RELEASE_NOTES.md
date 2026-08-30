@@ -7,17 +7,33 @@ change they completed.
 
 ## Unreleased
 
+## 1.0a1 - 2026-08-30
+
 - Restored `slg1` and `deg1` as immutable simulator-only UI instances with a
   typed fail-closed runtime policy, stateful AE-200 and Hubitat commands, clear
   simulator banners/status metadata, private databases, and systemd egress
-  isolation through socket activation and private network namespaces.
+  isolation through socket activation and private network namespaces. Local
+  simulator startup now sets the complete control policy explicitly, while
+  live mode permits read-only Airthings and AQICN simulators but rejects
+  simulated command-bearing AE-200 or Hubitat integrations.
 - Restored `air-stage` as an immutable live-control staging instance with a
   private database, a persistent real-equipment warning, an AE-200-only
   collection job staggered 5–20 seconds after production, and the validated
   nginx virtual host.
+- Vendored the small runner logging helper and removed the ctools submodule and
+  unused `lock.py` import, simplifying clean checkouts and deployment packages.
 
 ### Deployment and operations
 
+- Added tag-triggered, tested, attested GitHub Releases containing the immutable
+  deployment ZIP and SHA-256 sidecar. Release tags are checked against the
+  canonical PEP 440 project version before publication.
+- Added a target-aware host updater for `production`, `staging`, and the shared
+  `developers` root. It discovers stable or prerelease channels, resolves the
+  immutable tag commit, enforces bounded downloads, verifies package and outer
+  hashes, rejects dirty/older/mismatched artifacts, and stages releases under a
+  host lock. Explicit activation is limited to schema-neutral updates and rolls
+  the release pointer and unit state back if health checks fail.
 - Made application deployment endpoint-neutral and removed the installer's
   systemd-copy capability. The deployment specification now maps every endpoint
   and requires systemd, nginx, environment, and other host configuration to use
@@ -44,6 +60,8 @@ change they completed.
   the final-path Gunicorn script and import the installed runner in isolation.
 - Added the validated live `air-stage` nginx virtual host to deployment packages
   without automatically installing host routing configuration.
+- Made each room dashboard reload hourly so long-running wall displays acquire
+  deployed template and static-asset changes without operator intervention.
 
 ### Web interface
 

@@ -135,10 +135,9 @@ def test_makefile_local_targets_control_sensor_simulators():
         encoding="utf-8"
     )
 
-    assert (
-        "export AE200_SIMULATOR=1 HUBITAT_SIMULATOR=1 AIRTHINGS_SIMULATOR=1"
-        in makefile
-    )
+    assert "TEMPERATURE_BOT_CONTROL_MODE=simulator" in makefile
+    assert "AE200_SIMULATOR=1 HUBITAT_SIMULATOR=1" in makefile
+    assert "AIRTHINGS_SIMULATOR=1 AQICN_SIMULATOR=1" in makefile
     assert (
         "AE200_SIMULATOR= HUBITAT_SIMULATOR= AIRTHINGS_SIMULATOR= $(MAKE) every-minute"
         in makefile
@@ -147,6 +146,16 @@ def test_makefile_local_targets_control_sensor_simulators():
         "AE200_SIMULATOR= HUBITAT_SIMULATOR= AIRTHINGS_SIMULATOR= $(MAKE) _local-dev-web"
         in makefile
     )
+
+
+def test_fetch_dev_db_allows_interactive_ssh_authentication():
+    """The developer database fetch must allow SSH password fallback."""
+    makefile = (Path(__file__).resolve().parents[1] / "Makefile").read_text(
+        encoding="utf-8"
+    )
+
+    assert makefile.count("BatchMode=no") == 2
+    assert "BatchMode=yes" not in makefile
 
 
 def test_update_from_airthings_persists_sensor_status(monkeypatch, test_database_conn):

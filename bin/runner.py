@@ -48,7 +48,7 @@ from app.instance_policy import load_instance_policy
 from app import rules_engine
 
 
-import lib.ctools.clogging as clogging
+from app import clogging
 
 logger = logging.getLogger(__name__)
 AIRTHINGS_READING_BATCH = TypeAdapter(list[AirthingsDeviceReading])

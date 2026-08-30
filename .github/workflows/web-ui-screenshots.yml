@@ -54,8 +54,6 @@ jobs:
       - name: Checkout
         if: steps.resolve_pr.outputs.number != '' && steps.resolve_pr.outputs.same_repo == 'true'
         uses: actions/checkout@v7
-        with:
-          submodules: true
 
       - name: Set up Python
         if: steps.resolve_pr.outputs.number != '' && steps.resolve_pr.outputs.same_repo == 'true'

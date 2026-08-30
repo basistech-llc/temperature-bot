@@ -2,6 +2,10 @@
 {% set hide_nav = True %}
 {% block title %}{{ location }}{% endblock %}
 {% block head %}
+{# These panels are long-lived kiosk pages. A full hourly reload picks up
+   deployments and server-rendered configuration that the 10-second status
+   polling cannot update. #}
+<meta http-equiv="refresh" content="3600">
 <link rel="stylesheet" href="/static/slider.css">
 <style>
 /* CSS Variables for maintainability */

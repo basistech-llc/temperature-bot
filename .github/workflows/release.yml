@@ -1,0 +1,108 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - '[0-9]*'
+      - 'v[0-9]*'
+
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      TEMPERATURE_BOT_CONFIG: tests/temperature-bot-config-test.yaml
+      AE200_SIMULATOR: 1
+      HUBITAT_SIMULATOR: 1
+      AIRTHINGS_SIMULATOR: 1
+      AQICN_SIMULATOR: 1
+      TEMPERATURE_BOT_CONTROL_MODE: simulator
+      UV_VERSION: '0.11.26'
+      FLYWAY_VERSION: '12.8.1'
+    steps:
+      - name: Checkout tagged commit
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v10.0.1
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+
+      - name: Install project tools
+        run: make install-ubuntu
+
+      - name: Install Flyway
+        run: |
+          FLYWAY_TAR="flyway-commandline-${FLYWAY_VERSION}-linux-x64.tar.gz"
+          curl --fail --silent --show-error --location \
+            --output "/tmp/${FLYWAY_TAR}" \
+            "https://github.com/flyway/flyway/releases/download/flyway-${FLYWAY_VERSION}/${FLYWAY_TAR}"
+          mkdir -p /tmp/flyway-release
+          tar -xzf "/tmp/${FLYWAY_TAR}" -C /tmp/flyway-release
+          echo "/tmp/flyway-release/flyway-${FLYWAY_VERSION}" >> "$GITHUB_PATH"
+
+      - name: Verify tag and version
+        id: version
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: make release-tag-check GITHUB_REF_NAME="$RELEASE_TAG" GITHUB_OUTPUT="$GITHUB_OUTPUT"
+
+      - name: Check and test
+        run: make check test
+
+      - name: Build and install immutable deployment package
+        run: make deployment-package-check systemd-verify
+
+      - name: Verify clean release provenance
+        run: |
+          package="$(ls -1 dist/temperature-bot-deployment-*.zip)"
+          .venv/bin/python -m bin.install_deployment_package \
+            "$package" --require-checksum --verify-only > /tmp/manifest.json
+          test "$(jq -r .dirty /tmp/manifest.json)" = false
+          test "$(jq -r .commit /tmp/manifest.json)" = "$GITHUB_SHA"
+
+      - name: Attest release assets
+        uses: actions/attest-build-provenance@v3
+        with:
+          subject-path: |
+            dist/temperature-bot-deployment-*.zip
+            dist/temperature-bot-deployment-*.zip.sha256
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_VERSION: ${{ steps.version.outputs.version }}
+          IS_PRERELEASE: ${{ steps.version.outputs.prerelease }}
+        run: |
+          prerelease=()
+          if test "$IS_PRERELEASE" = true; then prerelease=(--prerelease); fi
+          gh release create "$RELEASE_TAG" \
+            dist/temperature-bot-deployment-*.zip \
+            dist/temperature-bot-deployment-*.zip.sha256 \
+            --verify-tag \
+            --title "Temperature Bot ${RELEASE_VERSION}" \
+            --generate-notes \
+            "${prerelease[@]}"

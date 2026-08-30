@@ -105,6 +105,8 @@ systemd/temperature-bot-hourly.service
 systemd/temperature-bot-hourly.timer
 systemd/temperature-bot-daily.service
 systemd/temperature-bot-daily.timer
+systemd/temperature-bot-release-update@.service
+systemd/temperature-bot-release-update@.timer
 installer/install_deployment_package.py
 documentation/DEPLOYMENT.md
 metadata/VERSION
@@ -119,8 +121,8 @@ locked third-party environment and application artifact independently visible.
 The migration directory is the complete Flyway history from the same commit,
 not only migrations newer than the currently deployed schema. The manifest
 records the required Flyway version, Python constraint, exact Git commit, build
-time, and whether the source tree was dirty. A future immutable release job
-must refuse dirty input; local and ephemeral PR packages retain the flag for
+time, and whether the source tree was dirty. The tag-triggered release workflow
+refuses dirty input; local and ephemeral PR packages retain the flag for
 diagnosis.
 
 The example environment files, socket units, services, and timers are
@@ -202,6 +204,62 @@ An existing trusted release environment runs the installer. First-host
 bootstrap remains an operations procedure under #44. A package may carry a
 new installer for the next transaction, but the currently trusted verifier
 must validate that package before candidate code is executed.
+
+## GitHub Releases and target-aware updates
+
+Pushing a tag whose normalized PEP 440 value matches `VERSION` and
+`pyproject.toml` runs `.github/workflows/release.yml`. The workflow repeats the
+Linux checks and tests, builds and installs the immutable package in a
+disposable root, verifies clean commit provenance, attests the ZIP and checksum
+sidecar, and creates the GitHub Release. A prerelease project version, such as
+canonical `1.0a1`, produces a prerelease even when the tag uses the equivalent
+human spelling `1.0-alpha1`.
+
+The trusted currently installed environment can inspect the release channel and
+stage a newer application for exactly one application root:
+
+```bash
+# Stable releases only; report without installing.
+/opt/temperature-bot/current/venv/bin/python \
+  -m bin.github_release_update production --check-only
+
+# Include prereleases and stage the newest verified release.
+sudo -u temperature_bot /opt/temperature-bot/current/venv/bin/python \
+  -m bin.github_release_update production --channel prerelease
+```
+
+The target must be `production`, `staging`, or `developers`. `slg1` and `deg1`
+are intentionally not individual choices because both use
+`/opt/temperature-bot-dev/current`. Discovery resolves the release tag through
+the GitHub Git-data API and requires its commit to match the package manifest.
+Downloads have time and size bounds. The outer SHA-256 sidecar, ZIP structure,
+payload inventory and hashes, canonical version, dirty flag, and monotonic
+version ordering must all pass before staging. Results are written atomically
+to `<target-root>/release-update-state.json`; concurrent runs serialize on
+`<target-root>/.release-update.lock`. GitHub unavailability or malformed assets
+leave the active release untouched.
+
+The packaged `temperature-bot-release-update@.service` and `.timer` are
+reference host configuration for periodic stable-channel staging. As with all
+host configuration, an operator must explicitly install and enable the selected
+instance; the package installer does not modify `/etc` or systemd.
+
+Activation is deliberately narrower than staging:
+
+```bash
+sudo /opt/temperature-bot/current/venv/bin/python \
+  -m bin.github_release_update production --channel prerelease --activate
+```
+
+`--activate` requires root and refuses the candidate unless every packaged
+migration path and SHA-256 is identical to the active release. It records which
+target units are active, quiesces only that target, switches `current`
+atomically, restores the previously active long-running units/timers, and
+requires every loopback version endpoint to report the candidate version,
+commit, and instance identity. Failure before health success restores the prior
+release pointer and unit state. A candidate with any migration change remains
+staged and must use the database snapshot/migration transaction in #216; this
+command never modifies a database.
 
 ## Legacy Make targets
 
@@ -302,5 +360,5 @@ developer pair are never activated in one transaction.
 Every pull request builds and checks one deployment ZIP on Ubuntu, then uploads
 the ZIP and its `.sha256` sidecar as a GitHub Actions artifact. These packages
 are test evidence, not releases and not authorized for production deployment.
-They expire after five days. Stable release assets will instead be published
-and retained through the immutable GitHub Release workflow tracked by #213.
+They expire after five days. Version tags publish retained, attested assets
+through the immutable GitHub Release workflow implemented for #213.

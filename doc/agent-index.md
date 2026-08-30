@@ -67,6 +67,8 @@ room control tiles, and room dashboard frontend work.
 - `app/templates/room_dashboard.html`
   - Shared room dashboard Jinja template. Loops the configured control list and
     pre-renders HVAC cards, sensors, live clock, and script includes.
+  - All room button panels perform a full page reload every hour so long-lived
+    kiosk displays pick up deployments and server-rendered configuration.
 - `app/static/room_dashboard.js`
   - Room dashboard behavior: speed buttons, set temperature controls, configured
     room controls, polling, and scale-to-fit.

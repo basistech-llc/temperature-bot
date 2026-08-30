@@ -1,0 +1,23 @@
+[Unit]
+Description=Check and stage the latest Temperature Bot release for %i
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=temperature_bot
+Group=temperature_bot
+WorkingDirectory=/opt/temperature-bot/current
+ExecStart=/usr/bin/env /opt/temperature-bot/current/venv/bin/python -m bin.github_release_update %i
+UMask=0027
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ReadWritePaths=-/opt/temperature-bot -/opt/temperature-bot-stage -/opt/temperature-bot-dev
+ProtectHome=read-only
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+
+[Install]
+WantedBy=multi-user.target

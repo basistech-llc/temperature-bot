@@ -131,7 +131,9 @@ $(DEV_DB):
 # Back up the local database directory, stream a read-only dump from the remote
 # host into a new database, and apply any pending Flyway migrations. A
 # read-only URI includes committed WAL contents without modifying the remote
-# database. Timeouts bound lock waits, connection setup, and dead SSH sessions.
+# database. This developer fetch is intentionally interactive so SSH can use
+# the configured key or prompt for a password. Timeouts bound lock waits,
+# connection setup, and dead SSH sessions.
 # NOTE: temperature-bot-config.yaml includes production secrets
 #       until we move to better secret management system
 fetch-dev-db: SHELL := /bin/bash
@@ -168,7 +170,7 @@ fetch-dev-db: ## Fetch the dev DB and config from the remote host
 	mkdir -p "$$db_dir"; \
 	echo "Streaming a read-only SQLite dump from $(FETCH_HOST):$(FETCH_REMOTE_DB)"; \
 	echo "Importing the dump into $$db"; \
-	ssh -o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=15 \
+	ssh -o BatchMode=no -o ConnectTimeout=10 -o ServerAliveInterval=15 \
 		-o ServerAliveCountMax=4 $(FETCH_HOST) \
 		"timeout 180 sqlite3 -batch -init /dev/null -cmd 'PRAGMA busy_timeout=30000;' \
 		'file:$(FETCH_REMOTE_DB)?mode=ro' .dump" \
@@ -180,7 +182,7 @@ fetch-dev-db: ## Fetch the dev DB and config from the remote host
 	echo "Applying pending Flyway migrations"; \
 	DEV_DB="$$db" $(MAKE) migrate-db; \
 	echo "Fetching $(FETCH_HOST):$(FETCH_REMOTE_CONFIG) into ./temperature-bot-config.yaml"; \
-	rsync --verbose --archive -e 'ssh -o BatchMode=yes' \
+	rsync --verbose --archive -e 'ssh -o BatchMode=no' \
 		$(FETCH_HOST):$(FETCH_REMOTE_CONFIG) ./temperature-bot-config.yaml; \
 	echo "Files in $$(dirname "$$db"):"; \
 	ls -l "$$(dirname "$$db")"; \
@@ -250,7 +252,8 @@ validate-migrations: ## Validate that all migrations apply from scratch
 
 local-dev: $(REQ) ## Run the web backend locally with simulated hardware data
 	@echo Running with simulator
-	export AE200_SIMULATOR=1 HUBITAT_SIMULATOR=1 AIRTHINGS_SIMULATOR=1 && $(MAKE) _local-dev-web
+	TEMPERATURE_BOT_CONTROL_MODE=simulator AE200_SIMULATOR=1 HUBITAT_SIMULATOR=1 \
+		AIRTHINGS_SIMULATOR=1 AQICN_SIMULATOR=1 $(MAKE) _local-dev-web
 
 rooms-ui-demo: $(REQ) ## Run the room matrix against disposable synthetic data
 	$(PYTHON) -m bin.rooms_ui_demo --database /tmp/temperature-bot-rooms-ui-demo.db
@@ -285,11 +288,20 @@ check: $(REQ) dependency-check ## Run all static analysis checks
 	$(MAKE) djlint
 	$(MAKE) eslint
 	$(MAKE) check-types
+	$(MAKE) release-code-check
 	$(MAKE) validate-migrations
+
+release-code-check: $(REQ) ## Check release publication and updater code
+	uv run --locked ruff check \
+		bin/github_release_update.py bin/release_tag.py tests/test_release_update.py
+	$(PYTHON) -m pylint --persistent=n --output-format=parseable \
+		--rcfile .pylintrc --fail-under=10.0 \
+		bin/github_release_update.py bin/release_tag.py tests/test_release_update.py
+	uv run --locked mypy bin/github_release_update.py bin/release_tag.py
 
 dependency-check: ## Verify the uv lockfile and reject legacy dependency tooling
 	uv lock --check
-	@! git grep -n -i 'poe''try' -- ':!.beads/**' ':!lib/ctools/**' ':!doc/RELEASE_NOTES.md'
+	@! git grep -n -i 'poe''try' -- ':!.beads/**' ':!doc/RELEASE_NOTES.md'
 
 build: dependency-check ## Build the source distribution and wheel
 	uv build --no-sources
@@ -342,7 +354,7 @@ deployment-package-check: deployment-package ## Install the package into a dispo
 	TEMPERATURE_BOT_CONFIG="$(abspath tests/temperature-bot-config-test.yaml)" \
 	AE200_SIMULATOR=1 HUBITAT_SIMULATOR=1 AIRTHINGS_SIMULATOR=1 AQICN_SIMULATOR=1 \
 	"$$install_tmp/opt/temperature-bot/current/venv/bin/python" -I -c \
-	    'import bin.runner; import lib.ctools.clogging'; \
+	    'import bin.runner; import app.clogging'; \
 	echo "Executing the relocated Gunicorn console script"; \
 	"$$install_tmp/opt/temperature-bot/current/venv/bin/gunicorn" --version; \
 	test -f "$$install_tmp/opt/temperature-bot/current/systemd/temperature-bot-minute.timer"; \
@@ -350,6 +362,10 @@ deployment-package-check: deployment-package ## Install the package into a dispo
 	test -f "$$install_tmp/opt/temperature-bot/current/configuration/deg1_basistech_net.socket"; \
 	test ! -e "$$install_tmp/etc"; \
 	echo "Installed and activated $$package in a disposable root"
+
+release-tag-check: $(REQ) ## Verify the current tag matches the canonical project version
+	$(PYTHON) -m bin.release_tag \
+		$(if $(GITHUB_OUTPUT),--github-output $(GITHUB_OUTPUT),)
 
 systemd-verify: ## Validate packaged scheduled-job units on Linux
 	@command -v systemd-analyze >/dev/null || \
@@ -438,7 +454,7 @@ outdated: $(REQ) ## Report outdated Python and CDN dependencies
 	@echo "=== CDN libraries (in templates) ==="
 	bash etc/check-cdn-versions.bash
 
-.PHONY: lint check dependency-check build build-check deployment-package deployment-package-verify deployment-package-check systemd-verify format pylint ruff-check no-type-ignore pylint-check djlint eslint check-types pytest test-js test playwright-install web-screenshots outdated
+.PHONY: lint check release-code-check dependency-check build build-check deployment-package deployment-package-verify deployment-package-check release-tag-check systemd-verify format pylint ruff-check no-type-ignore pylint-check djlint eslint check-types pytest test-js test playwright-install web-screenshots outdated
 
 ################################################################
 ## Scheduled runner targets
@@ -481,7 +497,7 @@ install-either: ## Shared install steps for macOS and Ubuntu
 	uv run --locked playwright install --with-deps # This will be fast if CI restored .playwright
 
 install-ubuntu: ## Install the development environment on Ubuntu
-	sudo apt install python3-pip pipx ripgrep
+	sudo apt-get install -y python3-pip pipx ripgrep
 	make install-either
 
 install-macos: ## Install the development environment on macOS

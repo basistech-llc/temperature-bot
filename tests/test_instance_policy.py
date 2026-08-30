@@ -116,6 +116,36 @@ def test_stage_policy_allows_live_control_with_private_database(monkeypatch, tmp
     assert not any(policy.integrations.model_dump().values())
 
 
+def test_live_policy_allows_read_only_simulators():
+    policy = InstancePolicy(
+        instance="production",
+        role=InstanceRole.PRODUCTION,
+        control_mode=ControlMode.LIVE,
+        database_identity="production",
+        database_path=Path("temperature-bot.db"),
+        private_database=False,
+        scheduler_mode=SchedulerMode.ENABLED,
+        integrations=IntegrationModes(
+            ae200=False,
+            hubitat=False,
+            airthings=True,
+            aqicn=True,
+        ),
+    )
+
+    assert policy.integrations.airthings
+    assert policy.integrations.aqicn
+
+
+@pytest.mark.parametrize("integration", ("AE200_SIMULATOR", "HUBITAT_SIMULATOR"))
+def test_live_policy_rejects_command_simulators(monkeypatch, integration):
+    monkeypatch.setenv(CONTROL_MODE_ENV, "live")
+    monkeypatch.setenv(integration, "1")
+
+    with pytest.raises(ValidationError, match="command-bearing integrations"):
+        load_instance_policy()
+
+
 @pytest.mark.parametrize(
     ("change", "message"),
     (
@@ -187,24 +217,3 @@ def test_hubitat_command_is_stateful_inside_simulator(flask_test_client):  # noq
     left = next(control for control in status.json["controls"] if control["key"] == "tv-cart-left")
     assert left["switch"] == "on"
     assert hubitat.get_device_info("618")["attributes"]["switch"] == "on"
-
-
-def test_live_policy_allows_read_only_simulators():
-    policy = InstancePolicy(
-        instance="production",
-        role=InstanceRole.PRODUCTION,
-        control_mode=ControlMode.LIVE,
-        database_identity="production",
-        database_path=Path("temperature-bot.db"),
-        private_database=False,
-        scheduler_mode=SchedulerMode.ENABLED,
-        integrations=IntegrationModes(
-            ae200=False,
-            hubitat=False,
-            airthings=True,
-            aqicn=True,
-        ),
-    )
-
-    assert policy.integrations.airthings
-    assert policy.integrations.aqicn

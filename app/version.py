@@ -6,6 +6,7 @@ deployed without mixing that into the semantic version string.
 """
 
 import functools
+import json
 import os
 import subprocess
 from pathlib import Path
@@ -15,6 +16,24 @@ VERSION_FILE = REPO_ROOT / "VERSION"
 UNKNOWN_SHA = "unknown"
 
 __version__ = VERSION_FILE.read_text(encoding="utf-8").strip()
+
+
+def _deployment_commit() -> str | None:
+    """Return provenance from an immutable release manifest, when present."""
+    manifest_path = Path.cwd() / "manifest.json"
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    if (
+        manifest.get("application") == "temperature-bot"
+        and manifest.get("version") == __version__
+        and manifest.get("dirty") is False
+    ):
+        commit = manifest.get("commit")
+        if isinstance(commit, str):
+            return commit
+    return None
 
 
 def _git_rev_parse(*args: str) -> str:
@@ -34,6 +53,9 @@ def _git_rev_parse(*args: str) -> str:
 @functools.lru_cache(maxsize=1)
 def git_sha() -> str:
     """Return the short git SHA for this checkout, or "unknown"."""
+    deployed = _deployment_commit()
+    if deployed:
+        return deployed[:12]
     env_commit = os.getenv("GIT_COMMIT") or os.getenv("COMMIT_SHA")
     if env_commit:
         return env_commit[:12]
@@ -43,6 +65,9 @@ def git_sha() -> str:
 @functools.lru_cache(maxsize=1)
 def git_commit() -> str:
     """Return the exact deployed commit, or ``unknown``."""
+    deployed = _deployment_commit()
+    if deployed:
+        return deployed
     env_commit = os.getenv("GIT_COMMIT") or os.getenv("COMMIT_SHA")
     if env_commit:
         return env_commit
