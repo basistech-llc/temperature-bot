@@ -148,6 +148,16 @@ def test_makefile_local_targets_control_sensor_simulators():
     )
 
 
+def test_fetch_dev_db_allows_interactive_ssh_authentication():
+    """The developer database fetch must allow SSH password fallback."""
+    makefile = (Path(__file__).resolve().parents[1] / "Makefile").read_text(
+        encoding="utf-8"
+    )
+
+    assert makefile.count("BatchMode=no") == 2
+    assert "BatchMode=yes" not in makefile
+
+
 def test_update_from_airthings_persists_sensor_status(monkeypatch, test_database_conn):
     """Airthings updater should write both temperature and rich air-quality payloads."""
     monkeypatch.setattr(

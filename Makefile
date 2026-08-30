@@ -131,7 +131,9 @@ $(DEV_DB):
 # Back up the local database directory, stream a read-only dump from the remote
 # host into a new database, and apply any pending Flyway migrations. A
 # read-only URI includes committed WAL contents without modifying the remote
-# database. Timeouts bound lock waits, connection setup, and dead SSH sessions.
+# database. This developer fetch is intentionally interactive so SSH can use
+# the configured key or prompt for a password. Timeouts bound lock waits,
+# connection setup, and dead SSH sessions.
 # NOTE: temperature-bot-config.yaml includes production secrets
 #       until we move to better secret management system
 fetch-dev-db: SHELL := /bin/bash
@@ -168,7 +170,7 @@ fetch-dev-db: ## Fetch the dev DB and config from the remote host
 	mkdir -p "$$db_dir"; \
 	echo "Streaming a read-only SQLite dump from $(FETCH_HOST):$(FETCH_REMOTE_DB)"; \
 	echo "Importing the dump into $$db"; \
-	ssh -o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=15 \
+	ssh -o BatchMode=no -o ConnectTimeout=10 -o ServerAliveInterval=15 \
 		-o ServerAliveCountMax=4 $(FETCH_HOST) \
 		"timeout 180 sqlite3 -batch -init /dev/null -cmd 'PRAGMA busy_timeout=30000;' \
 		'file:$(FETCH_REMOTE_DB)?mode=ro' .dump" \
@@ -180,7 +182,7 @@ fetch-dev-db: ## Fetch the dev DB and config from the remote host
 	echo "Applying pending Flyway migrations"; \
 	DEV_DB="$$db" $(MAKE) migrate-db; \
 	echo "Fetching $(FETCH_HOST):$(FETCH_REMOTE_CONFIG) into ./temperature-bot-config.yaml"; \
-	rsync --verbose --archive -e 'ssh -o BatchMode=yes' \
+	rsync --verbose --archive -e 'ssh -o BatchMode=no' \
 		$(FETCH_HOST):$(FETCH_REMOTE_CONFIG) ./temperature-bot-config.yaml; \
 	echo "Files in $$(dirname "$$db"):"; \
 	ls -l "$$(dirname "$$db")"; \
