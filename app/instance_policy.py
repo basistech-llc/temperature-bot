@@ -73,10 +73,12 @@ class InstancePolicy(BaseModel):
                     "simulator control mode requires AE-200, Hubitat, Airthings, "
                     "and AQICN simulators"
                 )
-        elif self.control_mode is ControlMode.LIVE and any(
-            self.integrations.model_dump().values()
+        elif self.control_mode is ControlMode.LIVE and (
+            self.integrations.ae200 or self.integrations.hubitat
         ):
-            raise ValueError("live control mode cannot mix simulator integrations")
+            raise ValueError(
+                "live control mode cannot simulate command-bearing integrations"
+            )
 
         if self.instance in STAGING_INSTANCES:
             if self.control_mode is not ControlMode.LIVE:
