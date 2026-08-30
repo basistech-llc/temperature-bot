@@ -39,8 +39,8 @@ def collect_payloads(requirements: Path, wheel: Path) -> list[PayloadSource]:
             mode=0o755,
         ),
         PayloadSource(
-            source=REPO_ROOT / "doc/DEPLOYMENT_PACKAGE.md",
-            path="documentation/DEPLOYMENT_PACKAGE.md",
+            source=REPO_ROOT / "doc/DEPLOYMENT.md",
+            path="documentation/DEPLOYMENT.md",
             role="documentation",
         ),
         PayloadSource(

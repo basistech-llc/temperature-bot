@@ -44,8 +44,10 @@ alerts, contact other integrations, or run HVAC rules.
 
 ## Install
 
-The deployment package owns the canonical unit bytes. Before the complete
-upgrade transaction exists, installation remains an explicit human operation:
+The repository owns the reviewed unit references, but application deployment
+never installs them. Host-unit installation is a separate explicitly targeted
+transaction defined in `DEPLOYMENT.md`. Before that transaction is automated,
+installation remains an explicit human operation:
 
 ```bash
 sudo install -d -m 0750 -o root -g temperature_bot /etc/temperature-bot

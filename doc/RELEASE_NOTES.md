@@ -18,6 +18,10 @@ change they completed.
 
 ### Deployment and operations
 
+- Made application deployment endpoint-neutral and removed the installer's
+  systemd-copy capability. The deployment specification now maps every endpoint
+  and requires systemd, nginx, environment, and other host configuration to use
+  a separate explicitly targeted transaction.
 - Migrated dependency management and CI from Poetry to `uv`, with pinned setup
   tooling and macOS setup support.
 - Changed production services to use the dedicated service-account database

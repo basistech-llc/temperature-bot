@@ -6,6 +6,11 @@ migration mechanics see `doc/sql-migrations.md`; for the AE-200 probe timer see
 `doc/performance-monitoring.md`. For the read-only inventory of database paths
 actually installed on `slg1`, see `doc/DATABASES.md`.
 
+`doc/DEPLOYMENT.md` is the canonical deployment specification. Application
+release activation never installs systemd, nginx, environment, account, or
+certificate configuration. Steps 7 and 8 below are separate endpoint-specific
+host-configuration work, not side effects of installing application code.
+
 Most steps here are manual. `doc/tech-debt.md` and GitHub issues #31, #76, and
 #180 track automating them. The "Not yet automated" section at the end lists
 exactly what is missing so nobody has to rediscover it.
