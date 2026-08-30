@@ -11,6 +11,8 @@ change they completed.
   typed fail-closed runtime policy, stateful AE-200 and Hubitat commands, clear
   simulator banners/status metadata, private databases, and systemd egress
   isolation through socket activation and private network namespaces.
+- Vendored the small runner logging helper and removed the ctools submodule and
+  unused `lock.py` import, simplifying clean checkouts and deployment packages.
 
 ### Deployment and operations
 

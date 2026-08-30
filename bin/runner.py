@@ -42,7 +42,7 @@ from app.models import (
 from app import rules_engine
 
 
-import lib.ctools.clogging as clogging
+from app import clogging
 
 logger = logging.getLogger(__name__)
 AIRTHINGS_READING_BATCH = TypeAdapter(list[AirthingsDeviceReading])
