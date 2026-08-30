@@ -1,0 +1,11 @@
+[Unit]
+Description=Periodically check for a Temperature Bot release for %i
+
+[Timer]
+OnCalendar=hourly
+RandomizedDelaySec=15m
+Persistent=true
+Unit=temperature-bot-release-update@%i.service
+
+[Install]
+WantedBy=timers.target

@@ -1,5 +1,7 @@
 """Tests for version metadata."""
 
+import json
+
 import subprocess
 
 from conftest import flask_test_client  # noqa: F401  # pylint: disable=unused-import
@@ -26,6 +28,31 @@ def test_git_sha_returns_current_checkout():
         )
         assert version.git_sha() == result.stdout.strip()
     finally:
+        version.git_sha.cache_clear()
+
+
+def test_immutable_manifest_overrides_stale_environment(monkeypatch, tmp_path):
+    commit = "a" * 40
+    (tmp_path / "manifest.json").write_text(
+        json.dumps(
+            {
+                "application": "temperature-bot",
+                "version": version.__version__,
+                "commit": commit,
+                "dirty": False,
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("GIT_COMMIT", "b" * 40)
+    version.git_commit.cache_clear()
+    version.git_sha.cache_clear()
+    try:
+        assert version.git_commit() == commit
+        assert version.git_sha() == commit[:12]
+    finally:
+        version.git_commit.cache_clear()
         version.git_sha.cache_clear()
 
 
