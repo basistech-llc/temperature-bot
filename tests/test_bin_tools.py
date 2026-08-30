@@ -135,10 +135,9 @@ def test_makefile_local_targets_control_sensor_simulators():
         encoding="utf-8"
     )
 
-    assert (
-        "export AE200_SIMULATOR=1 HUBITAT_SIMULATOR=1 AIRTHINGS_SIMULATOR=1"
-        in makefile
-    )
+    assert "TEMPERATURE_BOT_CONTROL_MODE=simulator" in makefile
+    assert "AE200_SIMULATOR=1 HUBITAT_SIMULATOR=1" in makefile
+    assert "AIRTHINGS_SIMULATOR=1 AQICN_SIMULATOR=1" in makefile
     assert (
         "AE200_SIMULATOR= HUBITAT_SIMULATOR= AIRTHINGS_SIMULATOR= $(MAKE) every-minute"
         in makefile

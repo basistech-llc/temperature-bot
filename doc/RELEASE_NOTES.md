@@ -10,7 +10,10 @@ change they completed.
 - Restored `slg1` and `deg1` as immutable simulator-only UI instances with a
   typed fail-closed runtime policy, stateful AE-200 and Hubitat commands, clear
   simulator banners/status metadata, private databases, and systemd egress
-  isolation through socket activation and private network namespaces.
+  isolation through socket activation and private network namespaces. Local
+  simulator startup now sets the complete control policy explicitly, while
+  live mode permits read-only Airthings and AQICN simulators but rejects
+  simulated command-bearing AE-200 or Hubitat integrations.
 - Restored `air-stage` as an immutable live-control staging instance with a
   private database, a persistent real-equipment warning, an AE-200-only
   collection job staggered 5–20 seconds after production, and the validated

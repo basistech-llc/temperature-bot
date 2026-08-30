@@ -76,12 +76,34 @@ def test_stage_policy_allows_live_control_with_private_database(monkeypatch, tmp
     assert not any(policy.integrations.model_dump().values())
 
 
+def test_live_policy_allows_read_only_simulators(monkeypatch):
+    monkeypatch.setenv(CONTROL_MODE_ENV, "live")
+    monkeypatch.setenv("AE200_SIMULATOR", "0")
+    monkeypatch.setenv("HUBITAT_SIMULATOR", "0")
+    monkeypatch.setenv("AIRTHINGS_SIMULATOR", "1")
+    monkeypatch.setenv("AQICN_SIMULATOR", "1")
+
+    policy = load_instance_policy()
+
+    assert policy.integrations.airthings
+    assert policy.integrations.aqicn
+
+
+@pytest.mark.parametrize("integration", ("AE200_SIMULATOR", "HUBITAT_SIMULATOR"))
+def test_live_policy_rejects_command_simulators(monkeypatch, integration):
+    monkeypatch.setenv(CONTROL_MODE_ENV, "live")
+    monkeypatch.setenv(integration, "1")
+
+    with pytest.raises(ValidationError, match="command-bearing integrations"):
+        load_instance_policy()
+
+
 @pytest.mark.parametrize(
     ("change", "message"),
     (
         (("control", "simulator"), "requires live control mode"),
         (("scheduler", "disabled"), "requires its collection scheduler"),
-        (("integration", "1"), "live control mode cannot mix simulator"),
+        (("integration", "1"), "cannot simulate command-bearing integrations"),
         (("identity", "production"), "requires matching database identity"),
         (("database", "outside"), "outside private root"),
     ),

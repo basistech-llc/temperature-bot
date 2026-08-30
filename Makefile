@@ -250,7 +250,8 @@ validate-migrations: ## Validate that all migrations apply from scratch
 
 local-dev: $(REQ) ## Run the web backend locally with simulated hardware data
 	@echo Running with simulator
-	export AE200_SIMULATOR=1 HUBITAT_SIMULATOR=1 AIRTHINGS_SIMULATOR=1 && $(MAKE) _local-dev-web
+	TEMPERATURE_BOT_CONTROL_MODE=simulator AE200_SIMULATOR=1 HUBITAT_SIMULATOR=1 \
+		AIRTHINGS_SIMULATOR=1 AQICN_SIMULATOR=1 $(MAKE) _local-dev-web
 
 rooms-ui-demo: $(REQ) ## Run the room matrix against disposable synthetic data
 	$(PYTHON) -m bin.rooms_ui_demo --database /tmp/temperature-bot-rooms-ui-demo.db
