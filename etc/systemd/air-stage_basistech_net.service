@@ -1,4 +1,3 @@
-### /etc/systemd/system/air-stage_basistech_net.service ###
 [Unit]
 Description=Temperature Bot live staging UI
 After=network-online.target
@@ -16,7 +15,6 @@ RestartSec=2
 UMask=0027
 NoNewPrivileges=yes
 PrivateTmp=yes
-
 
 [Install]
 WantedBy=multi-user.target

@@ -1,0 +1,21 @@
+[Unit]
+Description=Collect AE-200 notifications for Temperature Bot staging
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=temperature_bot
+Group=temperature_bot
+WorkingDirectory=/opt/temperature-bot-stage/current
+EnvironmentFile=/etc/temperature-bot/air-stage.env
+EnvironmentFile=-/etc/temperature-bot/ae200-notifications.env
+ExecStart=/usr/bin/env /opt/temperature-bot-stage/current/venv/bin/python -m bin.ae200_notifications --loglevel ${LOG_LEVEL}
+Restart=always
+RestartSec=5
+UMask=0027
+NoNewPrivileges=yes
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target

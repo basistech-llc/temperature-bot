@@ -7,6 +7,7 @@ the non-login `temperature_bot` account, share an OS lock, and log to journald.
 | Timer | Schedule | Command |
 |---|---|---|
 | `temperature-bot-minute.timer` | every wall-clock minute | `bin.runner` |
+| `temperature-bot-stage-minute.timer` | every minute, 5–20 seconds after production | `bin.runner --ae200-stage-collection` |
 | `temperature-bot-hourly.timer` | 30 seconds after each hour | `bin.runner --aqi` |
 | `temperature-bot-daily.timer` | 15 seconds after midnight | `bin.runner --daily` |
 
@@ -15,6 +16,13 @@ catch-up invocation after downtime; it does not replay every missed interval.
 The three services use `/run/temperature-bot/writer.lock` so differently named
 jobs cannot write concurrently. systemd also prevents a second instance of one
 oneshot service while it is active.
+
+Staging has a separate timer, writer lock, and database. Its 5-second base
+offset plus a 0–15-second systemd random delay prevents synchronized AE-200
+polling while keeping every staging run within the first 20 seconds of the
+minute. The staging web application sends live equipment commands, while the
+policy-guarded scheduled runner only reads AE-200 state; it does not evaluate
+alerts, contact other integrations, or run HVAC rules.
 
 ## Install
 

@@ -53,10 +53,15 @@ migrations/R*.sql
 configuration/temperature-bot.env.example
 configuration/slg1.env.example
 configuration/deg1.env.example
+configuration/air-stage.env.example
 configuration/slg1_basistech_net.socket
 configuration/deg1_basistech_net.socket
 systemd/slg1_basistech_net.service
 systemd/deg1_basistech_net.service
+systemd/air-stage_basistech_net.service
+systemd/temperature-bot-stage-minute.service
+systemd/temperature-bot-stage-minute.timer
+systemd/temperature-bot-stage-ae200-notifications.service
 systemd/temperature-bot-minute.service
 systemd/temperature-bot-minute.timer
 systemd/temperature-bot-hourly.service
@@ -103,6 +108,14 @@ allowlist as defense in depth. They do not install or enable scheduled
 collection/rules timers. Their shared immutable activation root is
 `/opt/temperature-bot-dev`; `/opt/temperature-bot` remains reserved for
 production services and scheduled jobs.
+
+The live staging release has its own `/opt/temperature-bot-stage` root,
+database, web service on loopback port 8101, minute collector, writer lock, and
+notification collector. Its web process uses the real integrations, so UI
+commands affect building equipment; a persistent banner makes that boundary
+explicit. The minute job is limited to AE-200 reads and cannot run alerts or
+HVAC rules. Production fires at second 00; staging fires 5–20 seconds later
+using `RandomizedDelaySec=15s`.
 
 ## Build and inspect
 
@@ -162,7 +175,7 @@ machine. It must record every transition and be safely restartable.
    manifest inventory, every payload SHA-256, version/tag agreement, Python,
    Flyway, disk space, configuration, and target instance identity.
 3. **Stage** — install into a new immutable release directory and virtual
-   environment. Run package-resource and read-only application preflight checks
+   environment. Run package-resource and non-mutating application preflight checks
    without changing the active release.
 4. **Lock** — acquire the host deployment lock. Record the active release,
    installed unit bytes, unit enabled/active states, database identity/schema,

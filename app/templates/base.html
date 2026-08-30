@@ -30,12 +30,18 @@
   {% endblock %}
 
 </head>
-<body class="{% if simulator_mode %}has-simulator-banner{% endif %}">
+<body class="{% if simulator_mode or staging_mode %}has-instance-banner{% endif %}">
   {% if simulator_mode %}
   <div class="simulator-banner" role="status" aria-live="polite">
     SIMULATOR — {{ instance_name }} commands do not reach the AE-200 or building equipment.
     View <a href="https://air-stage.basistech.net/">staging</a> or
     <a href="https://air.basistech.net/">production</a>.
+  </div>
+  {% endif %}
+  {% if staging_mode %}
+  <div class="instance-banner staging-banner" role="alert" aria-live="assertive">
+    STAGING ENVIRONMENT — This site is live. All changes will be reflected on the real equipment.
+    View <a href="https://air.basistech.net/">production</a>.
   </div>
   {% endif %}
   <header>

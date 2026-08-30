@@ -9,7 +9,7 @@ from functools import lru_cache
 from os.path import abspath
 from pathlib import Path
 from urllib.parse import quote
-from flask import Flask, send_from_directory, jsonify
+from flask import Flask, jsonify, send_from_directory
 from werkzeug.exceptions import HTTPException
 from werkzeug.middleware.proxy_fix import ProxyFix
 
@@ -103,6 +103,7 @@ def create_app(instance_policy: InstancePolicy | None = None):
     def deployment_context():
         return {
             "simulator_mode": policy.control_mode is ControlMode.SIMULATOR,
+            "staging_mode": policy.is_staging(),
             "instance_name": policy.instance,
             "room_dashboards": sorted(
                 room_config.ROOM_CONFIGS.values(), key=lambda config: config.label

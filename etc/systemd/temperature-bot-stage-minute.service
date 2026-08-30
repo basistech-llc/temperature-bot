@@ -1,0 +1,20 @@
+[Unit]
+Description=Collect AE-200 state for Temperature Bot staging
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=temperature_bot
+Group=temperature_bot
+WorkingDirectory=/opt/temperature-bot-stage/current
+EnvironmentFile=/etc/temperature-bot/air-stage.env
+Environment=PERFORMANCE_CLIENT_ID=stage-minute-runner
+RuntimeDirectory=temperature-bot-stage
+RuntimeDirectoryMode=0750
+RuntimeDirectoryPreserve=yes
+UMask=0027
+ExecStart=/usr/bin/flock --exclusive --wait 50 /run/temperature-bot-stage/writer.lock /opt/temperature-bot-stage/current/venv/bin/python -m bin.runner --loglevel ${LOG_LEVEL} --ae200-stage-collection
+TimeoutStartSec=5min
+TimeoutStopSec=30s
+NoNewPrivileges=yes
