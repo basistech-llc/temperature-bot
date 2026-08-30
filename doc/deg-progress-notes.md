@@ -194,7 +194,9 @@ Before fetching, an existing `var/db/temperature_bot` directory is moved to a
 timestamped directory under `var/db/backups`.
 
 So this single step also covers the "Configure" step above — no separate config copy needed.
-SSH normally uses your key; if prompted for a password, it's in Bitwarden under `slg1.basistech.net`.
+SSH normally uses your key. The `fetch-dev-db` target permits the normal SSH
+password prompt as a fallback; if prompted, the password is in Bitwarden under
+`slg1.basistech.net`.
 
 **Mitsubishi control panel**
 
