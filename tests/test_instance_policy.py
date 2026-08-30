@@ -7,11 +7,16 @@ from pydantic import ValidationError
 
 from app import hubitat
 from app.instance_policy import (
+    ControlMode,
     CONTROL_MODE_ENV,
     DATABASE_IDENTITY_ENV,
     DATABASE_ROOT_ENV,
     INSTANCE_ENV,
+    InstancePolicy,
+    InstanceRole,
+    IntegrationModes,
     SCHEDULER_MODE_ENV,
+    SchedulerMode,
     SIMULATOR_ENVIRONMENTS,
     load_policy_table,
     load_instance_policy,
@@ -116,7 +121,7 @@ def test_stage_policy_allows_live_control_with_private_database(monkeypatch, tmp
     (
         (("control", "simulator"), "requires live control mode"),
         (("scheduler", "disabled"), "requires its collection scheduler"),
-        (("integration", "1"), "live control mode cannot mix simulator"),
+        (("integration", "1"), "cannot simulate command-bearing integrations"),
         (("identity", "production"), "requires matching database identity"),
         (("database", "outside"), "outside private root"),
     ),
@@ -182,3 +187,24 @@ def test_hubitat_command_is_stateful_inside_simulator(flask_test_client):  # noq
     left = next(control for control in status.json["controls"] if control["key"] == "tv-cart-left")
     assert left["switch"] == "on"
     assert hubitat.get_device_info("618")["attributes"]["switch"] == "on"
+
+
+def test_live_policy_allows_read_only_simulators():
+    policy = InstancePolicy(
+        instance="production",
+        role=InstanceRole.PRODUCTION,
+        control_mode=ControlMode.LIVE,
+        database_identity="production",
+        database_path=Path("temperature-bot.db"),
+        private_database=False,
+        scheduler_mode=SchedulerMode.ENABLED,
+        integrations=IntegrationModes(
+            ae200=False,
+            hubitat=False,
+            airthings=True,
+            aqicn=True,
+        ),
+    )
+
+    assert policy.integrations.airthings
+    assert policy.integrations.aqicn
