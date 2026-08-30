@@ -9,7 +9,7 @@ from functools import lru_cache
 from os.path import abspath
 from pathlib import Path
 from urllib.parse import quote
-from flask import Flask, send_from_directory, jsonify, request
+from flask import Flask, jsonify, send_from_directory
 from werkzeug.exceptions import HTTPException
 from werkzeug.middleware.proxy_fix import ProxyFix
 
@@ -92,15 +92,6 @@ def create_app(instance_policy: InstancePolicy | None = None):
     app.config["FLASK_PYDANTIC_VALIDATION_ERROR_RAISE"] = True
     app.config["INSTANCE_POLICY"] = policy
 
-    @app.before_request
-    def enforce_read_only_instance():
-        mutating_get = request.path == "/api/v1/disable-rules"
-        if policy.control_mode is ControlMode.READ_ONLY and (
-            request.method not in {"GET", "HEAD", "OPTIONS"} or mutating_get
-        ):
-            return jsonify({"error": "Read-only instance", "code": "read_only"}), 403
-        return None
-
     # Configure logging
     log_level = os.getenv("LOG_LEVEL", "INFO").upper()
     logging.basicConfig(format=LOGGING_CONFIG, level=log_level, force=True)
@@ -112,7 +103,7 @@ def create_app(instance_policy: InstancePolicy | None = None):
     def deployment_context():
         return {
             "simulator_mode": policy.control_mode is ControlMode.SIMULATOR,
-            "read_only_mode": policy.control_mode is ControlMode.READ_ONLY,
+            "staging_mode": policy.is_staging(),
             "instance_name": policy.instance,
             "room_dashboards": sorted(
                 room_config.ROOM_CONFIGS.values(), key=lambda config: config.label

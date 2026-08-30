@@ -5,7 +5,7 @@ import json
 from bin import runner
 
 
-def test_read_only_ae200_collection_persists_state_without_alerts(
+def test_ae200_stage_collection_persists_state_without_alerts(
     test_database_conn,
 ):
     status = {

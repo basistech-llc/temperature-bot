@@ -21,14 +21,13 @@ DATABASE_IDENTITY_ENV = "TEMPERATURE_BOT_DATABASE_IDENTITY"
 DATABASE_ROOT_ENV = "TEMPERATURE_BOT_DATABASE_ROOT"
 SCHEDULER_MODE_ENV = "TEMPERATURE_BOT_SCHEDULER_MODE"
 DEVELOPER_INSTANCES = frozenset({"slg1", "deg1"})
-READ_ONLY_INSTANCES = frozenset({"air-stage"})
+STAGING_INSTANCES = frozenset({"air-stage"})
 
 
 class ControlMode(StrEnum):
     """Whether controller commands are live or simulated."""
 
     LIVE = "live"
-    READ_ONLY = "read-only"
     SIMULATOR = "simulator"
 
 
@@ -79,14 +78,12 @@ class InstancePolicy(BaseModel):
         ):
             raise ValueError("live control mode cannot mix simulator integrations")
 
-        if self.control_mode is ControlMode.READ_ONLY:
-            if self.instance not in READ_ONLY_INSTANCES:
-                raise ValueError("read-only control mode requires an approved instance")
-            if self.integrations.ae200:
-                raise ValueError("read-only control mode requires live AE-200 reads")
-            self._validate_private_database("read-only")
+        if self.instance in STAGING_INSTANCES:
+            if self.control_mode is not ControlMode.LIVE:
+                raise ValueError("staging instance requires live control mode")
+            self._validate_private_database("staging")
             if self.scheduler_mode is not SchedulerMode.ENABLED:
-                raise ValueError("read-only instance requires its collection scheduler")
+                raise ValueError("staging instance requires its collection scheduler")
 
         if self.instance not in DEVELOPER_INSTANCES:
             return self
@@ -110,10 +107,14 @@ class InstancePolicy(BaseModel):
         if not database.is_relative_to(root):
             raise ValueError(f"{kind} database {database} is outside private root {root}")
 
-    def require_read_only_collector(self) -> None:
+    def require_staging_collector(self) -> None:
         """Fail closed unless this process is the staging collection plane."""
-        if self.control_mode is not ControlMode.READ_ONLY:
-            raise RuntimeError("AE-200 read-only collection requires read-only control mode")
+        if self.instance not in STAGING_INSTANCES:
+            raise RuntimeError("AE-200 staging collection requires a staging instance")
+
+    def is_staging(self) -> bool:
+        """Return whether this is an approved live staging instance."""
+        return self.instance in STAGING_INSTANCES
 
     def public_status(self) -> "InstanceStatus":
         """Return the non-secret status exposed through the API."""

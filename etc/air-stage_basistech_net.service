@@ -1,6 +1,6 @@
 ### /etc/systemd/system/air-stage_basistech_net.service ###
 [Unit]
-Description=Temperature Bot read-only staging UI
+Description=Temperature Bot live staging UI
 After=network-online.target
 Wants=network-online.target
 

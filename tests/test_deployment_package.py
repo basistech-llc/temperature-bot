@@ -164,7 +164,7 @@ def test_stage_units_are_isolated_and_staggered():
     assert "127.0.0.1:8101" in web
     assert "EnvironmentFile=/etc/temperature-bot/air-stage.env" in web
     assert "/run/temperature-bot-stage/writer.lock" in collector
-    assert "--ae200-read-only" in collector
+    assert "--ae200-stage-collection" in collector
     assert "OnCalendar=*-*-* *:*:05" in timer
     assert "RandomizedDelaySec=15s" in timer
     assert "/opt/temperature-bot-stage/current" in notifications

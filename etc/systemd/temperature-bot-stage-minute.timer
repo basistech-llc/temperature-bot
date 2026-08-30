@@ -1,5 +1,5 @@
 [Unit]
-Description=Run the read-only Temperature Bot staging collector every minute
+Description=Run the Temperature Bot staging collector every minute
 
 [Timer]
 OnCalendar=*-*-* *:*:05

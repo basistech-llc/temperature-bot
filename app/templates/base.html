@@ -30,7 +30,7 @@
   {% endblock %}
 
 </head>
-<body class="{% if simulator_mode or read_only_mode %}has-instance-banner{% endif %}">
+<body class="{% if simulator_mode or staging_mode %}has-instance-banner{% endif %}">
   {% if simulator_mode %}
   <div class="simulator-banner" role="status" aria-live="polite">
     SIMULATOR — {{ instance_name }} commands do not reach the AE-200 or building equipment.
@@ -38,9 +38,9 @@
     <a href="https://air.basistech.net/">production</a>.
   </div>
   {% endif %}
-  {% if read_only_mode %}
-  <div class="instance-banner read-only-banner" role="status" aria-live="polite">
-    READ ONLY — {{ instance_name }} reads live AE-200 data but cannot send commands.
+  {% if staging_mode %}
+  <div class="instance-banner staging-banner" role="alert" aria-live="assertive">
+    STAGING ENVIRONMENT — This site is live. All changes will be reflected on the real equipment.
     View <a href="https://air.basistech.net/">production</a>.
   </div>
   {% endif %}

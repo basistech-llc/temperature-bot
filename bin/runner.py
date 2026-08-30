@@ -454,7 +454,7 @@ def setup_parser():
     parser.add_argument("--aqi", help="Save AQI to database", action="store_true")
     parser.add_argument("--airthings", help="debug the airthings", action="store_true")
     parser.add_argument(
-        "--ae200-read-only",
+        "--ae200-stage-collection",
         help="collect AE-200 state without alerts or HVAC rules",
         action="store_true",
     )
@@ -476,8 +476,8 @@ def main():
     if args.airthings:
         update_from_airthings(None)
         sys.exit(0)
-    if args.ae200_read_only:
-        load_instance_policy().require_read_only_collector()
+    if args.ae200_stage_collection:
+        load_instance_policy().require_staging_collector()
 
     db.validate_database_schema_on_startup()
     conn = db.get_db_connection()
@@ -489,7 +489,7 @@ def main():
         update_aqi(conn)
     elif args.daily:
         daily_cleanup(conn, datetime.datetime.now())
-    elif args.ae200_read_only:
+    elif args.ae200_stage_collection:
         update_from_ae200(conn, evaluate_alerts=False)
     elif args.rules:
         if args.rules == "prune":
