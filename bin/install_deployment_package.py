@@ -7,8 +7,8 @@ import json
 import os
 import shutil
 import subprocess
-import tempfile
 from pathlib import Path
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
@@ -30,7 +30,7 @@ class InstallationResult(BaseModel):
     commit: str
     release_directory: Path
     activated: bool
-    systemd_units_installed: list[Path]
+    host_configuration_installed: Literal[False] = False
 
 
 def _run(*args: str) -> None:
@@ -79,26 +79,6 @@ def _verify_environment(release: Path, manifest: DeploymentManifest) -> None:
     _run(str(environment / "bin/gunicorn"), "--version")
 
 
-def _install_systemd_units(
-    release: Path, manifest: DeploymentManifest, systemd_dir: Path
-) -> list[Path]:
-    systemd_dir.mkdir(parents=True, exist_ok=True)
-    installed = []
-    for member in manifest.systemd_units:
-        source = release / member
-        target = systemd_dir / source.name
-        with tempfile.NamedTemporaryFile(dir=systemd_dir, delete=False) as temporary:
-            temp_path = Path(temporary.name)
-            temporary.write(source.read_bytes())
-        try:
-            temp_path.chmod(0o644)
-            os.replace(temp_path, target)
-        finally:
-            temp_path.unlink(missing_ok=True)
-        installed.append(target)
-    return installed
-
-
 def _activate(root: Path, release: Path) -> None:
     current = root / "current"
     if current.exists() and not current.is_symlink():
@@ -117,9 +97,8 @@ def install_package(
     python: str = "3.12",
     create_venv: bool = True,
     activate: bool = False,
-    systemd_dir: Path | None = None,
 ) -> InstallationResult:
-    """Stage a verified immutable release and optionally activate/install units."""
+    """Stage a verified immutable release and optionally activate it."""
     manifest = verify_package(package)
     release_name = f"{manifest.version}-{manifest.commit[:12]}"
     releases = root / "releases"
@@ -148,11 +127,6 @@ def install_package(
     if create_venv:
         _verify_environment(release, manifest)
 
-    installed_units = (
-        _install_systemd_units(release, manifest, systemd_dir)
-        if systemd_dir is not None
-        else []
-    )
     if activate:
         _activate(root, release)
     return InstallationResult(
@@ -160,7 +134,6 @@ def install_package(
         commit=manifest.commit,
         release_directory=release,
         activated=activate,
-        systemd_units_installed=installed_units,
     )
 
 
@@ -175,7 +148,6 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--python", default="3.12")
     parser.add_argument("--skip-venv", action="store_true")
     parser.add_argument("--activate", action="store_true")
-    parser.add_argument("--systemd-dir", type=Path)
     args = parser.parse_args(argv)
 
     sidecar = args.checksum or args.package.with_suffix(args.package.suffix + ".sha256")
@@ -195,7 +167,6 @@ def main(argv: list[str] | None = None) -> None:
         python=args.python,
         create_venv=not args.skip_venv,
         activate=args.activate,
-        systemd_dir=args.systemd_dir,
     )
     print(json.dumps(result.model_dump(mode="json"), indent=2))
 

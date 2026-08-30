@@ -4,22 +4,25 @@ This is the live SQLite inventory for the Temperature Bot deployment on
 `slg1`. It records which database each instance actually uses and separates
 runtime databases from old working copies, snapshots, and tool caches.
 
-Last verified read-only on 2026-08-25 at 15:42 UTC. The installed systemd
+The full inventory was last verified read-only on 2026-08-25 at 15:42 UTC.
+The four runtime entries and their effective services were re-verified during
+the simulator and staging deployments on 2026-08-29. The installed systemd
 units and running-process environments are the source of truth; checked-in
 unit files describe intended configuration and may differ from the host.
 
 ## Runtime databases
 
-| Database | Consumer | Runtime state | Schema | Latest `devlog` (UTC) | Notes |
-|---|---|---|---|---|---|
-| `/var/db/temperature_bot/temperature-bot.db` | `air_basistech_net.service` and `air-stage_basistech_net.service`, both configured as `temperature_bot` | `air-stage` is running on `127.0.0.1:8100`; `air` is restart-looping because it tries to bind the same port | Flyway V18 | 2026-08-25 13:34:03 | Production database. Staging must not use it; tracked by #218. |
-| `/home/deg/var/db/temperature-bot.db` | `deg1_basistech_net.service`, running as `deg` | Running on `127.0.0.1:8004` | Flyway V18 | 2026-08-25 13:34:03 | David's private copy. The file and existing WAL/SHM sidecars are owned by `deg`, but the parent directory is `root:root` mode `0755`; SQLite cannot reliably create or remove sidecars there. |
-| `/home/simsong/temperature-bot/var/db/temperature-bot.db` | `slg1_basistech_net.service`, running as `simsong` | Running on `127.0.0.1:8003` | Flyway V18 | 2026-08-13 09:34:02 | Simson's private copy. |
+| Database | Consumer | Runtime state | Schema | Notes |
+|---|---|---|---|---|
+| `/var/db/temperature_bot/temperature-bot.db` | `air_basistech_net.service` and `temperature-bot-minute.service`, running as `temperature_bot` with database identity `production` | Production web service on `127.0.0.1:8100`; minute collector runs at `:00` | Flyway V18 | Production database. Only production services use it. |
+| `/home/air-stage/var/db/temperature-bot.db` | `air-stage_basistech_net.service` and `temperature-bot-stage-minute.service`, running as `temperature_bot` with database identity `air-stage` | Live-control staging web service on `127.0.0.1:8101`; AE-200-only collector runs 5-20 seconds after each minute | Flyway V18 | Independent staging database, created from production with SQLite's backup API. Web requests can control live equipment; the scheduled collector reads AE-200 state without sending commands or alerts. |
+| `/home/deg/var/db/temperature-bot.db` | `deg1_basistech_net.service`, running as `deg` with database identity `deg1` | Simulator-only service on `127.0.0.1:8004`; scheduler disabled | Flyway V18 | David's private copy. The directory and database are owned by `deg`; the pre-deployment backup is under `/home/deg/var/db/backups`. |
+| `/home/simsong/var/db/temperature-bot.db` | `slg1_basistech_net.service`, running as `simsong` with database identity `slg1` | Simulator-only service on `127.0.0.1:8003`; scheduler disabled | Flyway V18 | Simson's private copy, created with SQLite's backup API from the former checkout-local database. |
 
-No scheduled collector currently uses a database. The `temperature_bot`
-crontab contains only commented entries, and those comments still name the
-retired `/var/db/temperature-bot.db` path. No Temperature Bot systemd timers
-are installed.
+Production and staging use separate systemd timers and writer locks. Production
+runs exactly at `:00`; staging uses `OnCalendar=*-*-* *:*:05` with up to 15
+seconds of randomized delay. The staging notification collector is installed
+but remains disabled until its AE-200 WebUserAuth credential is configured.
 
 ## Non-runtime application databases
 
@@ -35,10 +38,6 @@ the files in this table during the audit.
 | `/home/air/temperature-bot/temperature-bot.db` | Empty SQLite database | — | Unused 4 KiB file at the application's fallback path. |
 | `/home/air-stage/temperature-bot/temperature-bot.db` | Empty SQLite database | — | Unused 4 KiB file at the application's fallback path. |
 | `/home/deg/air-backup/temperature-bot/temperature-bot.db` | Empty SQLite database | — | Unused 4 KiB file in an old checkout backup. |
-
-The intended private staging path,
-`/home/air-stage/var/db/temperature-bot.db`, does not exist. The installed
-staging unit instead points at production.
 
 ## Backup and snapshot databases
 

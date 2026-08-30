@@ -3,6 +3,7 @@ Hubitat implementation
 """
 
 import json
+from copy import deepcopy
 from pathlib import Path
 
 import requests
@@ -13,6 +14,12 @@ OFFLINE = 'OFFLINE - '
 HUBITAT_SIMULATOR_ENV = "HUBITAT_SIMULATOR"
 SIMULATOR_DIR = Path(__file__).resolve().parent / "test_data"
 SIMULATOR_DEVICES_FILE = SIMULATOR_DIR / "hubitat_get_devices.json"
+ATTRIBUTES_KEY = "attributes"
+DEVICE_ID_KEY = "id"
+LABEL_KEY = "label"
+LEVEL_KEY = "level"
+SPEED_KEY = "speed"
+SWITCH_KEY = "switch"
 
 HUBITAT_GET_ALL_DEVICES_FULL_DETAILS = "http://{host}/apps/api/{appId}/devices/all?access_token={access_token}"
 HUBITAT_GET_DEVICE_INFO = "http://{host}/apps/api/{appId}/devices/{device_id}?access_token={access_token}"
@@ -34,9 +41,33 @@ def hubitat_simulator_enabled() -> bool:
     return env_flag_enabled(HUBITAT_SIMULATOR_ENV)
 
 
-def _simulated_devices():
+def _load_simulated_devices():
     with open(SIMULATOR_DEVICES_FILE, "r", encoding="utf-8") as f:
         return json.load(f)
+
+
+_SIMULATED_DEVICES = _load_simulated_devices()
+
+
+def _simulated_devices():
+    return deepcopy(_SIMULATED_DEVICES)
+
+
+def _simulated_device(device_id):
+    target = str(device_id)
+    try:
+        return next(
+            device
+            for device in _SIMULATED_DEVICES
+            if str(device.get(DEVICE_ID_KEY)) == target
+        )
+    except StopIteration as exc:
+        raise RuntimeError(f"simulated Hubitat device {target} does not exist") from exc
+
+
+def reset_simulator() -> None:
+    """Restore the deterministic Hubitat simulator fixture."""
+    _SIMULATED_DEVICES[:] = _load_simulated_devices()
 
 
 def _coerce_numeric(value):
@@ -139,6 +170,8 @@ def dump_dashboard(dash_id, access_token_override=None):
     Fetches dashboard elements.
     Note: Dashboards often have their own unique access tokens.
     """
+    if hubitat_simulator_enabled():
+        raise RuntimeError("Hubitat dashboards are unavailable in simulator mode")
     config = get_config()
     hubitat_cfg = config.get("hubitat", {})
     dashboard_app_id = hubitat_cfg.get("dashboard_appId") or hubitat_cfg.get("appId")
@@ -195,6 +228,22 @@ def send_device_command(device_id, command, secondary_value=""):
 
     This is the low-level helper used by all device-control wrappers.
     """
+    if hubitat_simulator_enabled():
+        device = _simulated_device(device_id)
+        attributes = device.setdefault(ATTRIBUTES_KEY, {})
+        if command in {"on", "off"}:
+            attributes[SWITCH_KEY] = command
+        elif command == "setLevel":
+            level = int(secondary_value)
+            attributes[LEVEL_KEY] = level
+            attributes[SWITCH_KEY] = "on" if level else "off"
+        elif command == "setSpeed":
+            attributes[SPEED_KEY] = str(secondary_value)
+            attributes[SWITCH_KEY] = "off" if secondary_value == "off" else "on"
+        else:
+            raise ValueError(f"unsupported simulated Hubitat command: {command}")
+        return deepcopy(device)
+
     params = get_base_params()
     url = HUBITAT_SEND_DEVICE_COMMAND.format(
         host=params['host'],
@@ -212,6 +261,8 @@ def send_device_command(device_id, command, secondary_value=""):
 
 def get_device_info(device_id):
     """Fetch full details for a single device by ID."""
+    if hubitat_simulator_enabled():
+        return deepcopy(_simulated_device(device_id))
     params = get_base_params()
     url = HUBITAT_GET_DEVICE_INFO.format(
         host=params['host'],
@@ -257,7 +308,9 @@ def set_fan_speed(device_id, speed):
 def _find_device_by_label(label):
     """Find a device by its Hubitat label. Raises RuntimeError if not found."""
     devices = get_all_devices()
-    target = next((d for d in devices if d.get('label') == label), None)
+    target = next(
+        (device for device in devices if device.get(LABEL_KEY) == label), None
+    )
     if not target:
         raise RuntimeError(f"Device with label '{label}' not found in Maker API.")
     return target
@@ -270,7 +323,7 @@ def control_room_tv(direction, *, up_label, down_label):
     """
     label = up_label if direction == "up" else down_label
     target = _find_device_by_label(label)
-    return send_device_command(target['id'], "on")
+    return send_device_command(target[DEVICE_ID_KEY], "on")
 
 
 def control_hickory_tv(direction):

@@ -330,7 +330,6 @@ deployment-package-check: deployment-package ## Install the package into a dispo
 	$(PYTHON) -m bin.install_deployment_package \
 	    "$$package" --require-checksum \
 	    --root "$$install_tmp/opt/temperature-bot" \
-	    --systemd-dir "$$install_tmp/etc/systemd/system" \
 	    --activate >/dev/null; \
 	test -L "$$install_tmp/opt/temperature-bot/current"; \
 	test -x "$$install_tmp/opt/temperature-bot/current/venv/bin/python"; \
@@ -342,7 +341,10 @@ deployment-package-check: deployment-package ## Install the package into a dispo
 	    'import bin.runner; import app.clogging'; \
 	echo "Executing the relocated Gunicorn console script"; \
 	"$$install_tmp/opt/temperature-bot/current/venv/bin/gunicorn" --version; \
-	test -f "$$install_tmp/etc/systemd/system/temperature-bot-minute.timer"; \
+	test -f "$$install_tmp/opt/temperature-bot/current/systemd/temperature-bot-minute.timer"; \
+	test -f "$$install_tmp/opt/temperature-bot/current/configuration/slg1_basistech_net.socket"; \
+	test -f "$$install_tmp/opt/temperature-bot/current/configuration/deg1_basistech_net.socket"; \
+	test ! -e "$$install_tmp/etc"; \
 	echo "Installed and activated $$package in a disposable root"
 
 systemd-verify: ## Validate packaged scheduled-job units on Linux
@@ -350,13 +352,18 @@ systemd-verify: ## Validate packaged scheduled-job units on Linux
 	    { echo "systemd-analyze is required for systemd-verify"; exit 1; }
 	systemd-analyze verify \
 	    $(wildcard $(SYSTEMD_SCHEDULED_DIR)/*.service) \
+	    $(wildcard $(SYSTEMD_SCHEDULED_DIR)/*.socket) \
 	    $(wildcard $(SYSTEMD_SCHEDULED_DIR)/*.timer)
 	@if command -v rg >/dev/null; then \
 		! rg -n 'User=(simsong|deg|root)|Group=(simsong|deg|root)|/home/' \
-		    $(SYSTEMD_SCHEDULED_DIR); \
+		    $(SYSTEMD_SCHEDULED_DIR)/temperature-bot-minute.service \
+		    $(SYSTEMD_SCHEDULED_DIR)/temperature-bot-hourly.service \
+		    $(SYSTEMD_SCHEDULED_DIR)/temperature-bot-daily.service; \
 	else \
 		! grep -ERn 'User=(simsong|deg|root)|Group=(simsong|deg|root)|/home/' \
-		    $(SYSTEMD_SCHEDULED_DIR); \
+		    $(SYSTEMD_SCHEDULED_DIR)/temperature-bot-minute.service \
+		    $(SYSTEMD_SCHEDULED_DIR)/temperature-bot-hourly.service \
+		    $(SYSTEMD_SCHEDULED_DIR)/temperature-bot-daily.service; \
 	fi
 
 format: $(REQ) ## Auto-fix Python style issues with ruff

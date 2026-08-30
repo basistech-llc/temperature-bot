@@ -82,11 +82,13 @@ The probe is a separate short-lived process, independent of the HVAC Rules
 master switch. The checked-in
 `etc/temperature-bot-performance-monitor.service` and `.timer` run it at 30
 seconds past each minute so its measurements can be compared with the minute
-collector. Install them in `/etc/systemd/system`, run `systemctl daemon-reload`,
-and enable the timer with
-`systemctl enable --now temperature-bot-performance-monitor.timer`. A staging
-installation needs a copy or override with the staging working directory,
-database, and instance id.
+collector. This is a deterministic schedule with no `RandomizedDelaySec`. The
+probe does not acquire `/run/temperature-bot/writer.lock`; its database write
+uses SQLite's bounded wait rather than the application-runner lock. Install the
+units in `/etc/systemd/system`, run `systemctl daemon-reload`, and enable the
+timer with `systemctl enable --now temperature-bot-performance-monitor.timer`.
+A staging installation needs a copy or override with the staging working
+directory, database, and instance id.
 
 ## Storage
 

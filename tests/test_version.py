@@ -5,6 +5,7 @@ import subprocess
 from conftest import flask_test_client  # noqa: F401  # pylint: disable=unused-import
 
 from app import version
+from app.main import app
 
 
 def test_version_file_is_source_of_truth():
@@ -52,4 +53,9 @@ def test_version_page(flask_test_client):  # noqa: F811
 def test_api_version(flask_test_client):  # noqa: F811
     response = flask_test_client.get("/api/v1/version")
     assert response.status_code == 200
-    assert response.json == {"version": version.__version__, "sha": version.git_sha()}
+    assert response.json == {
+        "version": version.__version__,
+        "sha": version.git_sha(),
+        "commit": version.git_commit(),
+        **app.config["INSTANCE_POLICY"].public_status().model_dump(mode="json"),
+    }

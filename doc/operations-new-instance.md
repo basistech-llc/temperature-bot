@@ -6,15 +6,20 @@ migration mechanics see `doc/sql-migrations.md`; for the AE-200 probe timer see
 `doc/performance-monitoring.md`. For the read-only inventory of database paths
 actually installed on `slg1`, see `doc/DATABASES.md`.
 
+`doc/DEPLOYMENT.md` is the canonical deployment specification. Application
+release activation never installs systemd, nginx, environment, account, or
+certificate configuration. Steps 7 and 8 below are separate endpoint-specific
+host-configuration work, not side effects of installing application code.
+
 Most steps here are manual. `doc/tech-debt.md` and GitHub issues #31, #76, and
 #180 track automating them. The "Not yet automated" section at the end lists
 exactly what is missing so nobody has to rediscover it.
 
 Provenance: everything about ports, service accounts, paths, database
 locations, migrations, and Makefile behavior is read from the repository and is
-as reliable as the repository is. The nginx section is the exception — it is
-derived from `doc/deg-progress-notes.md`, which is exploratory personal notes
-rather than a canonical record, and is marked unverified where it appears.
+as reliable as the repository is. The `air-stage` nginx virtual host was copied
+from the validated live configuration on 2026-08-29. The other nginx sites are
+still derived from `doc/deg-progress-notes.md` and remain unverified.
 
 ## Current instances
 
@@ -22,12 +27,12 @@ rather than a canonical record, and is marked unverified where it appears.
 |---|---|---|---|---|---|
 | `air.basistech.net` | 8100 | `air_basistech_net.service` | `/home/air/temperature-bot` | `temperature_bot` | `/var/db/temperature_bot/temperature-bot.db` |
 | staging | 8101 | `air-stage_basistech_net.service` | `/home/air-stage/temperature-bot` | `temperature_bot` | `/home/air-stage/var/db/temperature-bot.db` |
-| `slg1.basistech.net` | 8003 | `slg1_basistech_net.service` | `/home/simsong/temperature-bot` | `simsong` | `/home/simsong/temperature-bot/var/db/temperature-bot.db` |
-| `deg1.basistech.net` | 8004 | `deg1_basistech_net.service` | `/home/deg/temperature-bot` | `deg` | `/home/deg/var/db/temperature-bot.db` |
+| `slg1.basistech.net` | 8003 | `slg1_basistech_net.service` | `/opt/temperature-bot-dev/current` | `simsong` | `/home/simsong/var/db/temperature-bot.db` |
+| `deg1.basistech.net` | 8004 | `deg1_basistech_net.service` | `/opt/temperature-bot-dev/current` | `deg` | `/home/deg/var/db/temperature-bot.db` |
 
-Ports, app directories, service accounts, and `DB_PATH` in this table are read
-from the checked-in unit files in `etc/*.service`, which must be copied to
-`/etc/systemd/system/` by hand.
+Ports, app directories, and service accounts in this table are read from the
+packaged units in `etc/systemd/`. Database paths and instance policies are in
+the corresponding packaged environment-file examples.
 
 **All four instances run on one physical machine.** `air.basistech.net`,
 `slg1.basistech.net`, staging, and `deg1.basistech.net` are the same host under
@@ -41,6 +46,11 @@ risk.
 account, home directory, and private database path. Neither is more
 authoritative or more "staging" than the other. Do not point either at the live
 production database.
+
+Both developer services share one immutable application activation at
+`/opt/temperature-bot-dev/current`. This is deliberately separate from
+`/opt/temperature-bot/current`, which production scheduled jobs use. Never
+activate a developer package through the production symlink.
 
 Consequences worth internalizing before touching anything:
 
@@ -196,11 +206,26 @@ reinstall a debug configuration on a production host.
 
 ### 8. Configure nginx
 
-> **Unverified section.** nginx configuration is **not in this repository**, and
-> nothing here was checked against the live server. The layout below comes from
-> `doc/deg-progress-notes.md`, which is exploratory personal notes — not
-> canonical and not guaranteed current. Read the running configuration on the
-> server and correct this section when someone does.
+The live `air-stage.basistech.net` virtual host is tracked at
+`etc/nginx/air-stage.basistech.net`. It terminates TLS with the shared
+BasisTech certificate, proxies to the staging loopback service on port 8101,
+and redirects HTTP to HTTPS. The file was copied from the running host after
+`nginx -t` and public HTTP/HTTPS checks passed.
+
+Install it through nginx's normal available/enabled layout, preserving any
+previous file for rollback:
+
+```bash
+sudo install -m 0644 etc/nginx/air-stage.basistech.net /etc/nginx/sites-available/air-stage.basistech.net
+sudo ln -sfn ../sites-available/air-stage.basistech.net /etc/nginx/sites-enabled/air-stage.basistech.net
+sudo nginx -t
+sudo systemctl reload nginx
+```
+
+The other site files are not yet tracked. Their layout below comes from
+`doc/deg-progress-notes.md`, which is exploratory personal notes rather than a
+canonical record. Inspect the effective live configuration before changing
+them.
 
 - Site files in `/etc/nginx/sites-available/`, symlinked into `sites-enabled/`.
 - Proxy the DNS name to `127.0.0.1:<port>`.
@@ -227,9 +252,12 @@ The per-minute runner does more than read: it executes the rules engine and
 issues real fan-speed and drive commands to the AE-200. **Only one instance may
 run it.** A second collector will fight production for control of the hardware.
 
-A developer instance — `slg1` or `deg1` — should run the web service only, with
-no runner timers. Rules changes are shadow-only on both and must not send
-commands until a human approves the cutover (`doc/tech-debt.md`).
+A developer instance — `slg1` or `deg1` — runs the web service only, with no
+runner timers. Its typed startup policy requires all four simulators, a matching
+private database identity/root, and disabled scheduling. A systemd socket owns
+its host-loopback port while Gunicorn runs in a private network namespace with
+no controller route. Rules changes are shadow-only on both and must
+not send commands until a human approves the cutover (`doc/tech-debt.md`).
 
 If this instance genuinely is the collector, install and enable the versioned
 minute, hourly, and daily services and timers under `etc/systemd/`; see
@@ -288,13 +316,12 @@ made, and nothing written through it reaches production.
 
 ### 2. Point the unit at it
 
-Edit the instance's unit in `etc/` so the change is versioned rather than only
-live, then install it:
+Edit the instance's environment file so the change is explicit, then restart
+the packaged unit:
 
 ```bash
-# Verify etc/deg1_basistech_net.service names the private DB_PATH:
-#   Environment="DB_PATH=/home/deg/var/db/temperature-bot.db"
-sudo cp -f etc/deg1_basistech_net.service /etc/systemd/system/
+# Verify /etc/temperature-bot/deg1.env names the private DB_PATH:
+#   DB_PATH=/home/deg/var/db/temperature-bot.db
 sudo systemctl daemon-reload
 sudo systemctl restart deg1_basistech_net.service
 ```
@@ -303,16 +330,10 @@ Two cautions on this step:
 
 - **`daemon-reload` before `restart`**, or systemd restarts the old definition
   and the instance silently keeps using the previous database.
-- **A repo edit becomes a dirty working tree.** `make deploy` starts with
-  `git pull --ff-only`, which refuses to run when an incoming commit also
-  touches the file you edited — and, when it does not, silently leaves your
-  edit in place, so the checkout quietly diverges from the branch instead.
-  Either commit the change, or use a systemd drop-in instead —
-  `/etc/systemd/system/deg1_basistech_net.service.d/db.conf` containing a
-  `[Service]` section with the `Environment=` line — which overrides the unit
-  without touching the repository. A drop-in also keeps one developer's
-  playground state out of shared history; the tradeoff is that the setting is
-  then invisible to anyone reading `etc/`.
+- **Keep the policy coherent.** Changing only `DB_PATH` makes the service fail
+  closed if it leaves `TEMPERATURE_BOT_DATABASE_ROOT` or
+  `TEMPERATURE_BOT_DATABASE_IDENTITY` inconsistent. Install the environment
+  file atomically with mode `0640`; it is host state, not a checkout file.
 
 ### 3. Verify the switch took
 
@@ -442,7 +463,9 @@ Known gaps, so they can be planned rather than rediscovered:
 - **Service files.** `etc/*.service` must be hand-copied to
   `/etc/systemd/system/`; nothing validates that a host's installed unit matches
   the repository. Issues #31 and #180.
-- **nginx configuration** is not in the repository at all.
+- **nginx coverage and installation.** The validated `air-stage` virtual host
+  is tracked and packaged, but the other site files and automated validated
+  installation/rollback are not yet in the repository.
 - **Cron entries** exist only as Makefile comments.
 - **No per-instance deploy targets.** `make deploy` is gated to `slg1` with
   production paths; `make deploy-stage` is hardcoded to `air-stage`.

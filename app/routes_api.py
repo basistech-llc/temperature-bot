@@ -8,7 +8,7 @@ import time
 import xml.etree.ElementTree as ET
 from contextlib import contextmanager
 
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, current_app, request, jsonify
 from flask_pydantic import validate
 from pydantic import TypeAdapter, ValidationError
 from websockets.exceptions import WebSocketException
@@ -22,7 +22,8 @@ from .api_errors import (
     UpstreamUnavailable,
     register_error_handlers,
 )
-from .version import __version__, git_sha
+from .instance_policy import InstancePolicy
+from .version import __version__, git_commit, git_sha
 from . import db
 from . import db_alerts
 from . import rules_engine
@@ -191,7 +192,15 @@ def _hubitat_control(what: str):
 
 @api_v1.route("/version")
 def get_version_json():
-    return jsonify({"version": __version__, "sha": git_sha()})
+    policy: InstancePolicy = current_app.config["INSTANCE_POLICY"]
+    return jsonify(
+        {
+            "version": __version__,
+            "sha": git_sha(),
+            "commit": git_commit(),
+            **policy.public_status().model_dump(mode="json"),
+        }
+    )
 
 
 @api_v1.route("/set_fcu_state", methods=["POST"])

@@ -1,0 +1,25 @@
+[Unit]
+Description=Temperature Bot slg1 simulator UI
+Requires=slg1_basistech_net.socket
+After=slg1_basistech_net.socket
+
+[Service]
+Sockets=slg1_basistech_net.socket
+StandardInput=socket
+User=simsong
+Group=simsong
+WorkingDirectory=/opt/temperature-bot-dev/current
+EnvironmentFile=/etc/temperature-bot/slg1.env
+ExecStart=/usr/bin/env /opt/temperature-bot-dev/current/venv/bin/python -m gunicorn app.main:app --bind fd://0 --workers 1 --access-logfile - --error-logfile - --log-level ${LOG_LEVEL}
+Restart=always
+RestartSec=2
+UMask=0027
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateNetwork=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+IPAddressDeny=any
+IPAddressAllow=localhost
+
+[Install]
+WantedBy=multi-user.target

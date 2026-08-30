@@ -14,6 +14,8 @@ RuntimeDirectory=temperature-bot
 RuntimeDirectoryMode=0750
 RuntimeDirectoryPreserve=yes
 UMask=0027
+# Scheduled-job lock, not a SQLite integrity lock: serialize the complete
+# minute/hourly/daily workflows, including transactions and external effects.
 ExecStart=/usr/bin/flock --exclusive --wait 50 /run/temperature-bot/writer.lock /opt/temperature-bot/current/venv/bin/python -m bin.runner --loglevel ${LOG_LEVEL} --daily
 TimeoutStartSec=30min
 TimeoutStopSec=30s

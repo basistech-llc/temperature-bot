@@ -41,6 +41,15 @@ def git_sha() -> str:
 
 
 @functools.lru_cache(maxsize=1)
+def git_commit() -> str:
+    """Return the exact deployed commit, or ``unknown``."""
+    env_commit = os.getenv("GIT_COMMIT") or os.getenv("COMMIT_SHA")
+    if env_commit:
+        return env_commit
+    return _git_rev_parse("HEAD")
+
+
+@functools.lru_cache(maxsize=1)
 def git_branch() -> str:
     """Return the current git branch for this checkout, or "unknown"."""
     env_branch = os.getenv("GIT_BRANCH") or os.getenv("BRANCH_NAME")

@@ -2,6 +2,7 @@
 Description=Run the Temperature Bot collector every minute
 
 [Timer]
+# Deterministic production schedule; no RandomizedDelaySec.
 OnCalendar=*-*-* *:*:00
 AccuracySec=1s
 Persistent=true
