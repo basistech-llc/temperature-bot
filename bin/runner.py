@@ -2,6 +2,11 @@
 Runs every minute through the production systemd timer.
  - gets temperature and writes to database
  - runs rules engine
+
+The production minute, hourly, and daily systemd units wrap this process with
+the shared /run/temperature-bot/writer.lock. That advisory lock serializes the
+complete scheduled workflows, not SQLite itself; direct invocations do not
+acquire it and rely on SQLite transaction locking.
 """
 
 import sys

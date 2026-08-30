@@ -6,15 +6,20 @@ migration mechanics see `doc/sql-migrations.md`; for the AE-200 probe timer see
 `doc/performance-monitoring.md`. For the read-only inventory of database paths
 actually installed on `slg1`, see `doc/DATABASES.md`.
 
+`doc/DEPLOYMENT.md` is the canonical deployment specification. Application
+release activation never installs systemd, nginx, environment, account, or
+certificate configuration. Steps 7 and 8 below are separate endpoint-specific
+host-configuration work, not side effects of installing application code.
+
 Most steps here are manual. `doc/tech-debt.md` and GitHub issues #31, #76, and
 #180 track automating them. The "Not yet automated" section at the end lists
 exactly what is missing so nobody has to rediscover it.
 
 Provenance: everything about ports, service accounts, paths, database
 locations, migrations, and Makefile behavior is read from the repository and is
-as reliable as the repository is. The nginx section is the exception — it is
-derived from `doc/deg-progress-notes.md`, which is exploratory personal notes
-rather than a canonical record, and is marked unverified where it appears.
+as reliable as the repository is. The `air-stage` nginx virtual host was copied
+from the validated live configuration on 2026-08-29. The other nginx sites are
+still derived from `doc/deg-progress-notes.md` and remain unverified.
 
 ## Current instances
 
@@ -201,11 +206,26 @@ reinstall a debug configuration on a production host.
 
 ### 8. Configure nginx
 
-> **Unverified section.** nginx configuration is **not in this repository**, and
-> nothing here was checked against the live server. The layout below comes from
-> `doc/deg-progress-notes.md`, which is exploratory personal notes — not
-> canonical and not guaranteed current. Read the running configuration on the
-> server and correct this section when someone does.
+The live `air-stage.basistech.net` virtual host is tracked at
+`etc/nginx/air-stage.basistech.net`. It terminates TLS with the shared
+BasisTech certificate, proxies to the staging loopback service on port 8101,
+and redirects HTTP to HTTPS. The file was copied from the running host after
+`nginx -t` and public HTTP/HTTPS checks passed.
+
+Install it through nginx's normal available/enabled layout, preserving any
+previous file for rollback:
+
+```bash
+sudo install -m 0644 etc/nginx/air-stage.basistech.net /etc/nginx/sites-available/air-stage.basistech.net
+sudo ln -sfn ../sites-available/air-stage.basistech.net /etc/nginx/sites-enabled/air-stage.basistech.net
+sudo nginx -t
+sudo systemctl reload nginx
+```
+
+The other site files are not yet tracked. Their layout below comes from
+`doc/deg-progress-notes.md`, which is exploratory personal notes rather than a
+canonical record. Inspect the effective live configuration before changing
+them.
 
 - Site files in `/etc/nginx/sites-available/`, symlinked into `sites-enabled/`.
 - Proxy the DNS name to `127.0.0.1:<port>`.
@@ -443,7 +463,9 @@ Known gaps, so they can be planned rather than rediscovered:
 - **Service files.** `etc/*.service` must be hand-copied to
   `/etc/systemd/system/`; nothing validates that a host's installed unit matches
   the repository. Issues #31 and #180.
-- **nginx configuration** is not in the repository at all.
+- **nginx coverage and installation.** The validated `air-stage` virtual host
+  is tracked and packaged, but the other site files and automated validated
+  installation/rollback are not yet in the repository.
 - **Cron entries** exist only as Makefile comments.
 - **No per-instance deploy targets.** `make deploy` is gated to `slg1` with
   production paths; `make deploy-stage` is hardcoded to `air-stage`.

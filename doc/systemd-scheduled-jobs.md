@@ -4,18 +4,36 @@ Temperature Bot's minute, hourly, and daily production jobs are defined as
 separate systemd oneshot services and timers under `etc/systemd/`. They run as
 the non-login `temperature_bot` account, share an OS lock, and log to journald.
 
-| Timer | Schedule | Command |
-|---|---|---|
-| `temperature-bot-minute.timer` | every wall-clock minute | `bin.runner` |
-| `temperature-bot-stage-minute.timer` | every minute, 5–20 seconds after production | `bin.runner --ae200-stage-collection` |
-| `temperature-bot-hourly.timer` | 30 seconds after each hour | `bin.runner --aqi` |
-| `temperature-bot-daily.timer` | 15 seconds after midnight | `bin.runner --daily` |
+| Timer | Schedule | Random delay | Command |
+|---|---|---|---|
+| `temperature-bot-minute.timer` | every wall-clock minute | none | `bin.runner` |
+| `temperature-bot-stage-minute.timer` | 5 seconds after every minute | 0–15 seconds | `bin.runner --ae200-stage-collection` |
+| `temperature-bot-hourly.timer` | 30 seconds after each hour | none | `bin.runner --aqi` |
+| `temperature-bot-daily.timer` | 15 seconds after midnight | none | `bin.runner --daily` |
 
-The offsets retain the historical cron timing. `Persistent=true` runs one
+The production offsets retain the historical cron timing and are deterministic;
+none of those three timers uses `RandomizedDelaySec`. `Persistent=true` runs one
 catch-up invocation after downtime; it does not replay every missed interval.
-The three services use `/run/temperature-bot/writer.lock` so differently named
-jobs cannot write concurrently. systemd also prevents a second instance of one
-oneshot service while it is active.
+The separate AE-200 network performance probe is also deterministic: it runs at
+`:30` each minute with no random delay. It is observational rather than one of
+the three application runners and is documented in `performance-monitoring.md`.
+
+The three production services use `/run/temperature-bot/writer.lock` as a
+scheduled-job lock. It is not needed for SQLite file integrity: SQLite accepts
+connections from multiple processes and serializes their write transactions.
+The OS lock instead covers each runner's complete process, including its
+multiple database transactions and any external side effects, so the differently
+named minute, hourly, and daily workflows cannot interleave. This also avoids
+relying on a SQLite busy timeout when two scheduled services reach a write at
+once. systemd already prevents a second instance of any one oneshot service,
+but it does not otherwise serialize different services.
+
+The lock is advisory and deliberately narrower than a global database mutex.
+Web requests and a runner invoked directly outside these systemd units do not
+acquire it; neither does the separate network performance probe. Those writers
+continue to rely on SQLite transaction locking. Each production runner unit
+waits up to 50 seconds for the scheduled-job lock and fails visibly in journald
+if the wait expires.
 
 Staging has a separate timer, writer lock, and database. Its 5-second base
 offset plus a 0–15-second systemd random delay prevents synchronized AE-200
@@ -26,8 +44,10 @@ alerts, contact other integrations, or run HVAC rules.
 
 ## Install
 
-The deployment package owns the canonical unit bytes. Before the complete
-upgrade transaction exists, installation remains an explicit human operation:
+The repository owns the reviewed unit references, but application deployment
+never installs them. Host-unit installation is a separate explicitly targeted
+transaction defined in `DEPLOYMENT.md`. Before that transaction is automated,
+installation remains an explicit human operation:
 
 ```bash
 sudo install -d -m 0750 -o root -g temperature_bot /etc/temperature-bot

@@ -39,8 +39,8 @@ def collect_payloads(requirements: Path, wheel: Path) -> list[PayloadSource]:
             mode=0o755,
         ),
         PayloadSource(
-            source=REPO_ROOT / "doc/DEPLOYMENT_PACKAGE.md",
-            path="documentation/DEPLOYMENT_PACKAGE.md",
+            source=REPO_ROOT / "doc/DEPLOYMENT.md",
+            path="documentation/DEPLOYMENT.md",
             role="documentation",
         ),
         PayloadSource(
@@ -72,6 +72,15 @@ def collect_payloads(requirements: Path, wheel: Path) -> list[PayloadSource]:
                         else f"configuration/{unit.name}"
                     ),
                     role="systemd" if is_unit else "configuration",
+                )
+            )
+    for nginx_config in sorted((REPO_ROOT / "etc/nginx").iterdir()):
+        if nginx_config.is_file():
+            payloads.append(
+                PayloadSource(
+                    source=nginx_config,
+                    path=f"nginx/{nginx_config.name}",
+                    role="configuration",
                 )
             )
     return payloads

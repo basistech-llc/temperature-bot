@@ -11,11 +11,19 @@ change they completed.
   typed fail-closed runtime policy, stateful AE-200 and Hubitat commands, clear
   simulator banners/status metadata, private databases, and systemd egress
   isolation through socket activation and private network namespaces.
+- Restored `air-stage` as an immutable live-control staging instance with a
+  private database, a persistent real-equipment warning, an AE-200-only
+  collection job staggered 5–20 seconds after production, and the validated
+  nginx virtual host.
 - Vendored the small runner logging helper and removed the ctools submodule and
   unused `lock.py` import, simplifying clean checkouts and deployment packages.
 
 ### Deployment and operations
 
+- Made application deployment endpoint-neutral and removed the installer's
+  systemd-copy capability. The deployment specification now maps every endpoint
+  and requires systemd, nginx, environment, and other host configuration to use
+  a separate explicitly targeted transaction.
 - Migrated dependency management and CI from Poetry to `uv`, with pinned setup
   tooling and macOS setup support.
 - Changed production services to use the dedicated service-account database
@@ -36,6 +44,8 @@ change they completed.
 - Corrected deployment packages to include the runner's `lib.ctools` dependency
   and made staged virtual environments relocatable. Package checks now execute
   the final-path Gunicorn script and import the installed runner in isolation.
+- Added the validated live `air-stage` nginx virtual host to deployment packages
+  without automatically installing host routing configuration.
 
 ### Web interface
 

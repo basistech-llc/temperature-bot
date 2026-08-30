@@ -75,10 +75,11 @@ deploy` target is intended for the production host only. It pulls code, installs
 dependencies, validates Flyway migrations, backs up the production SQLite DB,
 applies pending migrations, and validates again.
 
-`doc/DEPLOYMENT_PACKAGE.md` defines the ZIP artifact containing the wheel,
-locked runtime requirements, Flyway migrations, systemd units, installer, and
-manifest. Pull requests build and install this package in a disposable root;
-their Actions artifacts expire after five days and are not production releases.
+`doc/DEPLOYMENT.md` defines the endpoint contract, host-configuration boundary,
+and ZIP artifact containing the wheel, locked runtime requirements, Flyway
+migrations, reviewed host-configuration references, installer, and manifest.
+Pull requests build and install this package in a disposable root; their Actions
+artifacts expire after five days and are not production releases.
 
 To stand up a new instance, or an additional observation instance on the shared
 server, follow `doc/operations-new-instance.md`.
