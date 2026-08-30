@@ -7,6 +7,9 @@ change they completed.
 
 ## Unreleased
 
+- Vendored the small runner logging helper and removed the ctools submodule and
+  unused `lock.py` import, simplifying clean checkouts and deployment packages.
+
 ### Deployment and operations
 
 - Migrated dependency management and CI from Poetry to `uv`, with pinned setup
