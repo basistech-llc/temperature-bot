@@ -288,7 +288,16 @@ check: $(REQ) dependency-check ## Run all static analysis checks
 	$(MAKE) djlint
 	$(MAKE) eslint
 	$(MAKE) check-types
+	$(MAKE) release-code-check
 	$(MAKE) validate-migrations
+
+release-code-check: $(REQ) ## Check release publication and updater code
+	uv run --locked ruff check \
+		bin/github_release_update.py bin/release_tag.py tests/test_release_update.py
+	$(PYTHON) -m pylint --persistent=n --output-format=parseable \
+		--rcfile .pylintrc --fail-under=10.0 \
+		bin/github_release_update.py bin/release_tag.py tests/test_release_update.py
+	uv run --locked mypy bin/github_release_update.py bin/release_tag.py
 
 dependency-check: ## Verify the uv lockfile and reject legacy dependency tooling
 	uv lock --check
@@ -349,6 +358,10 @@ deployment-package-check: deployment-package ## Install the package into a dispo
 	test -f "$$install_tmp/opt/temperature-bot/current/configuration/deg1_basistech_net.socket"; \
 	test ! -e "$$install_tmp/etc"; \
 	echo "Installed and activated $$package in a disposable root"
+
+release-tag-check: $(REQ) ## Verify the current tag matches the canonical project version
+	$(PYTHON) -m bin.release_tag \
+		$(if $(GITHUB_OUTPUT),--github-output $(GITHUB_OUTPUT),)
 
 systemd-verify: ## Validate packaged scheduled-job units on Linux
 	@command -v systemd-analyze >/dev/null || \
@@ -437,7 +450,7 @@ outdated: $(REQ) ## Report outdated Python and CDN dependencies
 	@echo "=== CDN libraries (in templates) ==="
 	bash etc/check-cdn-versions.bash
 
-.PHONY: lint check dependency-check build build-check deployment-package deployment-package-verify deployment-package-check systemd-verify format pylint ruff-check no-type-ignore pylint-check djlint eslint check-types pytest test-js test playwright-install web-screenshots outdated
+.PHONY: lint check release-code-check dependency-check build build-check deployment-package deployment-package-verify deployment-package-check release-tag-check systemd-verify format pylint ruff-check no-type-ignore pylint-check djlint eslint check-types pytest test-js test playwright-install web-screenshots outdated
 
 ################################################################
 ## Scheduled runner targets
@@ -480,7 +493,7 @@ install-either: ## Shared install steps for macOS and Ubuntu
 	uv run --locked playwright install --with-deps # This will be fast if CI restored .playwright
 
 install-ubuntu: ## Install the development environment on Ubuntu
-	sudo apt install python3-pip pipx ripgrep
+	sudo apt-get install -y python3-pip pipx ripgrep
 	make install-either
 
 install-macos: ## Install the development environment on macOS
