@@ -13,6 +13,7 @@ from app.instance_policy import (
     INSTANCE_ENV,
     SCHEDULER_MODE_ENV,
     SIMULATOR_ENVIRONMENTS,
+    load_policy_table,
     load_instance_policy,
 )
 from app.main import create_app
@@ -38,6 +39,40 @@ def _stage_environment(monkeypatch, root: Path) -> None:
     monkeypatch.setenv(SCHEDULER_MODE_ENV, "enabled")
     for name in SIMULATOR_ENVIRONMENTS:
         monkeypatch.setenv(name, "0")
+
+
+def test_policy_table_declares_all_deployed_instances():
+    table = load_policy_table()
+
+    assert {definition.name for definition in table.instances} == {
+        "production",
+        "air-stage",
+        "slg1",
+        "deg1",
+    }
+    assert table.for_instance("slg1").database_identity == "slg1"
+    assert table.for_instance("deg1").database_identity == "deg1"
+
+
+def test_policy_rejects_unknown_instance(monkeypatch):
+    monkeypatch.setenv(INSTANCE_ENV, "unknown-instance")
+
+    with pytest.raises(ValueError, match="not in the instance policy table"):
+        load_instance_policy()
+
+
+@pytest.mark.parametrize("instance", ("slg1", "deg1"))
+def test_developer_policy_allows_both_private_simulator_instances(
+    monkeypatch, tmp_path, instance
+):
+    _developer_environment(monkeypatch, tmp_path, instance)
+
+    policy = load_instance_policy()
+
+    assert policy.instance == instance
+    assert policy.role == "developer"
+    assert policy.private_database
+    assert policy.control_mode == "simulator"
 
 
 def test_developer_policy_requires_every_simulator(monkeypatch, tmp_path):

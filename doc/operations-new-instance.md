@@ -31,8 +31,16 @@ still derived from `doc/deg-progress-notes.md` and remain unverified.
 | `deg1.basistech.net` | 8004 | `deg1_basistech_net.service` | `/opt/temperature-bot-dev/current` | `deg` | `/home/deg/var/db/temperature-bot.db` |
 
 Ports, app directories, and service accounts in this table are read from the
-packaged units in `etc/systemd/`. Database paths and instance policies are in
-the corresponding packaged environment-file examples.
+packaged units in `etc/systemd/`. The declarative instance policy is in
+`app/instance_policy.yaml`; database paths and runtime overrides are in the
+corresponding packaged environment-file examples.
+
+The `slg1` database is deliberately outside the application directory:
+`/home/simsong/var/db/temperature-bot.db`, not
+`/home/simsong/temperature-bot/var/db/temperature-bot.db`. This keeps the
+private database and its WAL files independent of replacing or removing the
+application checkout. `deg1` already used the equivalent external path,
+`/home/deg/var/db/temperature-bot.db`, so its database location did not change.
 
 **All four instances run on one physical machine.** `air.basistech.net`,
 `slg1.basistech.net`, staging, and `deg1.basistech.net` are the same host under

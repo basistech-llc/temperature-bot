@@ -1,0 +1,46 @@
+version: 1
+instances:
+  - name: production
+    role: production
+    control_mode: live
+    scheduler_mode: enabled
+    database_identity: production
+    private_database: false
+    integrations:
+      ae200: false
+      hubitat: false
+      airthings: false
+      aqicn: false
+  - name: air-stage
+    role: staging
+    control_mode: live
+    scheduler_mode: enabled
+    database_identity: air-stage
+    private_database: true
+    integrations:
+      ae200: false
+      hubitat: false
+      airthings: false
+      aqicn: false
+  - name: slg1
+    role: developer
+    control_mode: simulator
+    scheduler_mode: disabled
+    database_identity: slg1
+    private_database: true
+    integrations:
+      ae200: true
+      hubitat: true
+      airthings: true
+      aqicn: true
+  - name: deg1
+    role: developer
+    control_mode: simulator
+    scheduler_mode: disabled
+    database_identity: deg1
+    private_database: true
+    integrations:
+      ae200: true
+      hubitat: true
+      airthings: true
+      aqicn: true

@@ -301,6 +301,8 @@ build-check: build ## Install the wheel in a clean environment and import the ap
 	uv pip install --python "$$build_tmp/venv/bin/python" dist/*.whl; \
 	cd "$$build_tmp"; \
 	DB_PATH="$$build_tmp/temperature-bot.db" \
+	TEMPERATURE_BOT_INSTANCE=slg1 \
+	TEMPERATURE_BOT_DATABASE_ROOT="$$build_tmp" \
 	TEMPERATURE_BOT_CONFIG="$(abspath tests/temperature-bot-config-test.yaml)" \
 	AE200_SIMULATOR=1 HUBITAT_SIMULATOR=1 AIRTHINGS_SIMULATOR=1 AQICN_SIMULATOR=1 \
 	"$$build_tmp/venv/bin/python" -c 'from wsgi import app; assert app.name == "app.main"'
@@ -334,7 +336,9 @@ deployment-package-check: deployment-package ## Install the package into a dispo
 	test -L "$$install_tmp/opt/temperature-bot/current"; \
 	test -x "$$install_tmp/opt/temperature-bot/current/venv/bin/python"; \
 	echo "Verifying installed runner imports outside the source checkout"; \
-	DB_PATH="$$install_tmp/temperature-bot.db" \
+	DB_PATH="$$install_tmp/opt/temperature-bot/temperature-bot.db" \
+	TEMPERATURE_BOT_INSTANCE=slg1 \
+	TEMPERATURE_BOT_DATABASE_ROOT="$$install_tmp/opt/temperature-bot" \
 	TEMPERATURE_BOT_CONFIG="$(abspath tests/temperature-bot-config-test.yaml)" \
 	AE200_SIMULATOR=1 HUBITAT_SIMULATOR=1 AIRTHINGS_SIMULATOR=1 AQICN_SIMULATOR=1 \
 	"$$install_tmp/opt/temperature-bot/current/venv/bin/python" -I -c \
