@@ -11,16 +11,26 @@ from pathlib import Path
 
 import pytest
 
+# Set environment variables before importing the application. The module-level
+# Flask app validates the instance policy during import.
+os.environ["TEMPERATURE_BOT_INSTANCE"] = "slg1"
+os.environ["AE200_SIMULATOR"] = "1"
+os.environ["HUBITAT_SIMULATOR"] = "1"
+os.environ["AIRTHINGS_SIMULATOR"] = "1"
+os.environ["AQICN_SIMULATOR"] = "1"
+os.environ["TEMPERATURE_BOT_DATABASE_ROOT"] = str(Path(__file__).parent)
+os.environ["DB_PATH"] = str(Path(__file__).parent / "temperature-bot.db")
+
+# pylint: disable=wrong-import-position
 from app import hubitat, routes_api
 from app.main import app as flask_app
 from app.paths import SCHEMA_FILE_PATH
+# pylint: enable=wrong-import-position
 
 DEFAULT_AQI_VALUE = 45
 TEST_DEVICE_NAME = "Broadway Test"
 
 # Set environment variables for all tests
-os.environ["AE200_SIMULATOR"] = "1"
-os.environ["HUBITAT_SIMULATOR"] = "1"
 os.environ["PLAYWRIGHT_BROWSERS_PATH"] = str(
     Path(__file__).resolve().parents[0].parents[0] / ".playwright"
 )

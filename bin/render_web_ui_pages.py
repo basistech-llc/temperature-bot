@@ -401,7 +401,13 @@ def configure_environment(db_path: Path) -> None:
     os.environ["DB_PATH"] = str(db_path)
     os.environ["TEST_DB_NAME"] = str(db_path)
     os.environ["PYTEST"] = "1"
+    os.environ["TEMPERATURE_BOT_INSTANCE"] = "slg1"
+    os.environ["TEMPERATURE_BOT_DATABASE_IDENTITY"] = "slg1"
+    os.environ["TEMPERATURE_BOT_DATABASE_ROOT"] = str(db_path.parent)
+    os.environ["TEMPERATURE_BOT_CONTROL_MODE"] = "simulator"
+    os.environ["TEMPERATURE_BOT_SCHEDULER_MODE"] = "disabled"
     os.environ.setdefault("AE200_SIMULATOR", "1")
+    os.environ.setdefault("HUBITAT_SIMULATOR", "1")
     os.environ.setdefault("AIRTHINGS_SIMULATOR", "1")
     os.environ.setdefault("AQICN_SIMULATOR", "1")
     os.environ.setdefault("TEMPERATURE_BOT_CONFIG", str(DEFAULT_CONFIG))

@@ -328,7 +328,8 @@ the Maker API device list cannot answer.
 
 Run tests and local commands through the Makefile.
 
-- `make local-dev` runs Flask with `HUBITAT_SIMULATOR=1`.
+- `make local-dev-sim` runs Flask with `HUBITAT_SIMULATOR=1`; `make local-dev`
+  remains an alias.
 - Pytest sets `HUBITAT_SIMULATOR=1` in `pyproject.toml`.
 - `tests/test_hubitat.py` covers numeric extraction, simulator fixture loading,
   and persistence of Hubitat `status_json`.

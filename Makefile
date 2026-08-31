@@ -10,8 +10,9 @@
 #    make make-dev-db  - creates a local database via Flyway migrations
 #    make fetch-dev-db - refreshes var/db/temperature_bot from production and migrates it
 #    make migrate-db   - applies pending Flyway migrations to the existing local DB
-#    make local-dev - Runs the web backend locally with simulator
-#    make local-live-dev - Runs the web backend locally against live AE-200
+#    make local-dev-sim - Runs the web backend locally with simulator
+#    make local-dev-live - Runs the web backend locally against live hardware
+#    make local-dev - Alias for local-dev-sim
 #    make live-dev-runner - Runs the collection agent and rules runner locally, with live collection
 #
 # Environment variables:
@@ -26,6 +27,7 @@
 export DB_PATH ?= var/db/temperature_bot/temperature-bot.db
 export DEV_DB  ?= $(DB_PATH)
 DEV_DB_BACKUP_DIR ?= var/db/backups
+LOCAL_DATABASE_ROOT := $(abspath $(dir $(DB_PATH)))
 
 # Flyway migration SQL directory
 FLYWAY_SQL_DIR := etc/flyway/sql
@@ -250,19 +252,37 @@ validate-migrations: ## Validate that all migrations apply from scratch
 ## NOTE: It does not do JavaScript live reload; you need to use node for that
 ##       or just hit shift-reload on the web browser
 
-local-dev: $(REQ) ## Run the web backend locally with simulated hardware data
+local-dev-sim: $(REQ) ## Run the web backend locally with simulated hardware data
 	@echo Running with simulator
-	TEMPERATURE_BOT_CONTROL_MODE=simulator AE200_SIMULATOR=1 HUBITAT_SIMULATOR=1 \
-		AIRTHINGS_SIMULATOR=1 AQICN_SIMULATOR=1 $(MAKE) _local-dev-web
+	TEMPERATURE_BOT_INSTANCE=local-dev-sim \
+	TEMPERATURE_BOT_DATABASE_IDENTITY=local-dev-sim \
+	TEMPERATURE_BOT_DATABASE_ROOT="$(LOCAL_DATABASE_ROOT)" \
+	TEMPERATURE_BOT_CONTROL_MODE=simulator TEMPERATURE_BOT_SCHEDULER_MODE=disabled \
+	AE200_SIMULATOR=1 HUBITAT_SIMULATOR=1 AIRTHINGS_SIMULATOR=1 AQICN_SIMULATOR=1 \
+	$(MAKE) _local-dev-web
+
+local-dev: local-dev-sim ## Alias for local-dev-sim
 
 rooms-ui-demo: $(REQ) ## Run the room matrix against disposable synthetic data
 	$(PYTHON) -m bin.rooms_ui_demo --database /tmp/temperature-bot-rooms-ui-demo.db
 
-local-live-dev: $(REQ) ## Run the web backend locally against live AE-200 hardware
+local-dev-live: $(REQ) ## Run the web backend locally against live hardware
 	@echo updating database
-	AE200_SIMULATOR= HUBITAT_SIMULATOR= AIRTHINGS_SIMULATOR= $(MAKE) every-minute
+	TEMPERATURE_BOT_INSTANCE=local-dev-live \
+	TEMPERATURE_BOT_DATABASE_IDENTITY=local-dev-live \
+	TEMPERATURE_BOT_DATABASE_ROOT="$(LOCAL_DATABASE_ROOT)" \
+	TEMPERATURE_BOT_CONTROL_MODE=live TEMPERATURE_BOT_SCHEDULER_MODE=disabled \
+	AE200_SIMULATOR= HUBITAT_SIMULATOR= AIRTHINGS_SIMULATOR= AQICN_SIMULATOR= \
+	$(MAKE) every-minute
 	@echo Running without simulator
-	AE200_SIMULATOR= HUBITAT_SIMULATOR= AIRTHINGS_SIMULATOR= $(MAKE) _local-dev-web
+	TEMPERATURE_BOT_INSTANCE=local-dev-live \
+	TEMPERATURE_BOT_DATABASE_IDENTITY=local-dev-live \
+	TEMPERATURE_BOT_DATABASE_ROOT="$(LOCAL_DATABASE_ROOT)" \
+	TEMPERATURE_BOT_CONTROL_MODE=live TEMPERATURE_BOT_SCHEDULER_MODE=disabled \
+	AE200_SIMULATOR= HUBITAT_SIMULATOR= AIRTHINGS_SIMULATOR= AQICN_SIMULATOR= \
+	$(MAKE) _local-dev-web
+
+local-live-dev: local-dev-live ## Compatibility alias for local-dev-live
 
 _local-dev-web: $(REQ) ## Internal: shared web backend runner for local-dev targets
 	FLASK_DEBUG=True uv run --locked flask --app app.main:app run --port 8000
@@ -273,7 +293,7 @@ live-dev-runner: $(REQ) ## Run the collection agent and rules runner against liv
 tags: ## Build an etags TAGS file for all Python sources
 	etags */*.py
 
-.PHONY: local-dev rooms-ui-demo local-live-dev _local-dev-web live-dev-runner tags
+.PHONY: local-dev local-dev-sim local-dev-live local-live-dev rooms-ui-demo _local-dev-web live-dev-runner tags
 ################################################################
 ## Analysis tools
 ## Static Analysis
@@ -313,6 +333,8 @@ build-check: build ## Install the wheel in a clean environment and import the ap
 	uv pip install --python "$$build_tmp/venv/bin/python" dist/*.whl; \
 	cd "$$build_tmp"; \
 	DB_PATH="$$build_tmp/temperature-bot.db" \
+	TEMPERATURE_BOT_INSTANCE=slg1 \
+	TEMPERATURE_BOT_DATABASE_ROOT="$$build_tmp" \
 	TEMPERATURE_BOT_CONFIG="$(abspath tests/temperature-bot-config-test.yaml)" \
 	AE200_SIMULATOR=1 HUBITAT_SIMULATOR=1 AIRTHINGS_SIMULATOR=1 AQICN_SIMULATOR=1 \
 	"$$build_tmp/venv/bin/python" -c 'from wsgi import app; assert app.name == "app.main"'
@@ -346,7 +368,9 @@ deployment-package-check: deployment-package ## Install the package into a dispo
 	test -L "$$install_tmp/opt/temperature-bot/current"; \
 	test -x "$$install_tmp/opt/temperature-bot/current/venv/bin/python"; \
 	echo "Verifying installed runner imports outside the source checkout"; \
-	DB_PATH="$$install_tmp/temperature-bot.db" \
+	DB_PATH="$$install_tmp/opt/temperature-bot/temperature-bot.db" \
+	TEMPERATURE_BOT_INSTANCE=slg1 \
+	TEMPERATURE_BOT_DATABASE_ROOT="$$install_tmp/opt/temperature-bot" \
 	TEMPERATURE_BOT_CONFIG="$(abspath tests/temperature-bot-config-test.yaml)" \
 	AE200_SIMULATOR=1 HUBITAT_SIMULATOR=1 AIRTHINGS_SIMULATOR=1 AQICN_SIMULATOR=1 \
 	"$$install_tmp/opt/temperature-bot/current/venv/bin/python" -I -c \
