@@ -40,6 +40,7 @@ FLYWAY_VALIDATE_TEMP := /tmp/temperature-bot-flyway-validate.db
 # Remote host and paths used by fetch-dev-db (override as needed for your environment)
 FETCH_HOST           ?= air.basistech.net
 FETCH_REMOTE_DB      ?= /var/db/temperature_bot/temperature-bot.db
+FETCH_REMOTE_DB_USER ?= temperature_bot
 FETCH_REMOTE_CONFIG  ?= /home/air/temperature-bot/temperature-bot-config.yaml
 
 # Deployment defaults. Override only when intentionally targeting a different
@@ -133,9 +134,10 @@ $(DEV_DB):
 # Back up the local database directory, stream a read-only dump from the remote
 # host into a new database, and apply any pending Flyway migrations. A
 # read-only URI includes committed WAL contents without modifying the remote
-# database. This developer fetch is intentionally interactive so SSH can use
-# the configured key or prompt for a password. Timeouts bound lock waits,
-# connection setup, and dead SSH sessions.
+# database. SQLite runs as the database owner so it can coordinate through the
+# WAL-index sidecar. This developer fetch is intentionally interactive so SSH
+# can use the configured key or prompt for a password. Timeouts bound lock
+# waits, connection setup, and dead SSH sessions.
 # NOTE: temperature-bot-config.yaml includes production secrets
 #       until we move to better secret management system
 fetch-dev-db: SHELL := /bin/bash
@@ -174,7 +176,8 @@ fetch-dev-db: ## Fetch the dev DB and config from the remote host
 	echo "Importing the dump into $$db"; \
 	ssh -o BatchMode=no -o ConnectTimeout=10 -o ServerAliveInterval=15 \
 		-o ServerAliveCountMax=4 $(FETCH_HOST) \
-		"timeout 180 sqlite3 -batch -init /dev/null -cmd 'PRAGMA busy_timeout=30000;' \
+		"timeout 180 sudo -n -u $(FETCH_REMOTE_DB_USER) \
+		sqlite3 -batch -init /dev/null -cmd '.timeout 30000' \
 		'file:$(FETCH_REMOTE_DB)?mode=ro' .dump" \
 		| sqlite3 -batch -init /dev/null "$$db"; \
 	echo "Checking SQLite integrity"; \
