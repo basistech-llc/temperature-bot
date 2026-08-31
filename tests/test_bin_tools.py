@@ -135,17 +135,20 @@ def test_makefile_local_targets_control_sensor_simulators():
         encoding="utf-8"
     )
 
+    assert "local-dev-sim:" in makefile
+    assert "local-dev: local-dev-sim" in makefile
+    assert "local-dev-live:" in makefile
+    assert "local-live-dev: local-dev-live" in makefile
+    assert "TEMPERATURE_BOT_INSTANCE=local-dev-sim" in makefile
+    assert "TEMPERATURE_BOT_INSTANCE=local-dev-live" in makefile
+    assert "TEMPERATURE_BOT_DATABASE_IDENTITY=local-dev-sim" in makefile
+    assert "TEMPERATURE_BOT_DATABASE_IDENTITY=local-dev-live" in makefile
+    assert "TEMPERATURE_BOT_DATABASE_ROOT=\"$(LOCAL_DATABASE_ROOT)\"" in makefile
     assert "TEMPERATURE_BOT_CONTROL_MODE=simulator" in makefile
-    assert "AE200_SIMULATOR=1 HUBITAT_SIMULATOR=1" in makefile
-    assert "AIRTHINGS_SIMULATOR=1 AQICN_SIMULATOR=1" in makefile
-    assert (
-        "AE200_SIMULATOR= HUBITAT_SIMULATOR= AIRTHINGS_SIMULATOR= $(MAKE) every-minute"
-        in makefile
-    )
-    assert (
-        "AE200_SIMULATOR= HUBITAT_SIMULATOR= AIRTHINGS_SIMULATOR= $(MAKE) _local-dev-web"
-        in makefile
-    )
+    assert "TEMPERATURE_BOT_CONTROL_MODE=live" in makefile
+    assert "TEMPERATURE_BOT_SCHEDULER_MODE=disabled" in makefile
+    assert "AE200_SIMULATOR=1 HUBITAT_SIMULATOR=1 AIRTHINGS_SIMULATOR=1 AQICN_SIMULATOR=1" in makefile
+    assert "AE200_SIMULATOR= HUBITAT_SIMULATOR= AIRTHINGS_SIMULATOR= AQICN_SIMULATOR=" in makefile
 
 
 def test_fetch_dev_db_allows_interactive_ssh_authentication():

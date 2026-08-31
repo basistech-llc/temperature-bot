@@ -44,3 +44,25 @@ instances:
       hubitat: true
       airthings: true
       aqicn: true
+  - name: local-dev-live
+    role: local
+    control_mode: live
+    scheduler_mode: disabled
+    database_identity: local-dev-live
+    private_database: true
+    integrations:
+      ae200: false
+      hubitat: false
+      airthings: false
+      aqicn: false
+  - name: local-dev-sim
+    role: local
+    control_mode: simulator
+    scheduler_mode: disabled
+    database_identity: local-dev-sim
+    private_database: true
+    integrations:
+      ae200: true
+      hubitat: true
+      airthings: true
+      aqicn: true

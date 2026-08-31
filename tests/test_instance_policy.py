@@ -9,6 +9,7 @@ from app import hubitat
 from app.instance_policy import (
     ControlMode,
     CONTROL_MODE_ENV,
+    DEFAULT_POLICY_FILE,
     DATABASE_IDENTITY_ENV,
     DATABASE_ROOT_ENV,
     INSTANCE_ENV,
@@ -54,9 +55,22 @@ def test_policy_table_declares_all_deployed_instances():
         "air-stage",
         "slg1",
         "deg1",
+        "local-dev-live",
+        "local-dev-sim",
     }
     assert table.for_instance("slg1").database_identity == "slg1"
     assert table.for_instance("deg1").database_identity == "deg1"
+
+
+def test_policy_table_rejects_unsupported_version(tmp_path):
+    policy_path = tmp_path / "instance-policy.yaml"
+    policy_path.write_text(
+        DEFAULT_POLICY_FILE.read_text(encoding="utf-8").replace("version: 1", "version: 2", 1),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValidationError, match="Input should be 1"):
+        load_policy_table(policy_path)
 
 
 def test_policy_rejects_unknown_instance(monkeypatch):
@@ -103,6 +117,30 @@ def test_developer_policy_rejects_schedulers(monkeypatch, tmp_path):
 
     with pytest.raises(ValidationError, match="cannot run schedulers"):
         load_instance_policy()
+
+
+@pytest.mark.parametrize(
+    ("instance", "control_mode", "simulated"),
+    (("local-dev-live", "live", False), ("local-dev-sim", "simulator", True)),
+)
+def test_local_development_profiles_match_their_policy(
+    monkeypatch, tmp_path, instance, control_mode, simulated
+):
+    monkeypatch.setenv(INSTANCE_ENV, instance)
+    monkeypatch.setenv(CONTROL_MODE_ENV, control_mode)
+    monkeypatch.setenv(DATABASE_IDENTITY_ENV, instance)
+    monkeypatch.setenv(DATABASE_ROOT_ENV, str(tmp_path))
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "temperature-bot.db"))
+    monkeypatch.setenv(SCHEDULER_MODE_ENV, "disabled")
+    for name in SIMULATOR_ENVIRONMENTS:
+        monkeypatch.setenv(name, "1" if simulated else "0")
+
+    policy = load_instance_policy()
+
+    assert policy.role == "local"
+    assert policy.control_mode == control_mode
+    assert policy.scheduler_mode == "disabled"
+    assert not policy.is_staging()
 
 
 def test_stage_policy_allows_live_control_with_private_database(monkeypatch, tmp_path):

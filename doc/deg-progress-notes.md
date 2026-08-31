@@ -139,8 +139,10 @@ Two flavors, both serve Flask on `http://localhost:8000` with `FLASK_DEBUG=True`
 
 | Command | AE200 data | Needs Tailscale | Use when |
 |---------|-----------|-----------------|----------|
-| `make local-dev`      | simulated (`AE200_SIMULATOR=1`) | no  | UI work, no hardware needed |
-| `make local-live-dev` | live hardware                   | yes | seeing real device data |
+| `make local-dev-sim`  | simulated (`AE200_SIMULATOR=1`) | no  | UI work, no hardware needed |
+| `make local-dev-live` | live hardware                   | yes | seeing real device data |
+
+`make local-dev` remains an alias for `make local-dev-sim`.
 
 The web interface needs a populated DB to show anything useful (see `make fetch-dev-db`).
 

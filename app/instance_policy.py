@@ -6,6 +6,7 @@ import os
 import socket
 from enum import StrEnum
 from pathlib import Path
+from typing import Literal
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -45,6 +46,7 @@ class InstanceRole(StrEnum):
     PRODUCTION = "production"
     STAGING = "staging"
     DEVELOPER = "developer"
+    LOCAL = "local"
 
 
 class IntegrationModes(BaseModel):
@@ -80,7 +82,7 @@ class InstancePolicyTable(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    version: int = 1
+    version: Literal[1] = 1
     instances: list[InstanceDefinition] = Field(min_length=1)
 
     @model_validator(mode="after")
@@ -136,7 +138,7 @@ class InstancePolicy(BaseModel):
 
     def _validate_database_policy(self) -> None:
         if (
-            self.role in {InstanceRole.STAGING, InstanceRole.DEVELOPER}
+            self.role in {InstanceRole.STAGING, InstanceRole.DEVELOPER, InstanceRole.LOCAL}
             and not self.private_database
         ):
             raise ValueError(
@@ -161,6 +163,9 @@ class InstancePolicy(BaseModel):
                 raise ValueError(f"developer instance {self.instance} must be simulator-only")
             if self.scheduler_mode is not SchedulerMode.DISABLED:
                 raise ValueError(f"developer instance {self.instance} cannot run schedulers")
+
+        if self.role is InstanceRole.LOCAL and self.scheduler_mode is not SchedulerMode.DISABLED:
+            raise ValueError(f"local instance {self.instance} cannot run schedulers")
 
     def _validate_private_database(self, kind: str) -> None:
         if self.database_identity != self.instance:

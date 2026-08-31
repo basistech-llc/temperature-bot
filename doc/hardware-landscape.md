@@ -258,7 +258,7 @@ minutes are excluded rather than shown stale.
 
 ## Simulators
 
-None of the above is needed to develop locally. `make local-dev` runs with
+None of the above is needed to develop locally. `make local-dev-sim` runs with
 simulator flags set, serving canned payloads:
 
 | Flag | Replaces |
