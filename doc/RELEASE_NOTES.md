@@ -7,6 +7,26 @@ change they completed.
 
 ## Unreleased
 
+- Advanced the development version to `1.0.0a2`; no release tag has been
+  created yet.
+- Added a production-only, unauthenticated database snapshot endpoint for VPN
+  users. Snapshots use SQLite's backup API, include committed WAL data, pass
+  `quick_check`, and carry size and SHA-256 response headers. `make
+  fetch-dev-db` now downloads and verifies this snapshot without SSH or a copy
+  of the production secrets file.
+- Hardened release discovery to ignore unrelated screenshot releases, page
+  through the GitHub release history, and optionally select one exact tag.
+  Installed wheels now provide the `temperature-bot-release-update` command.
+  Root-owned application roots are staged by the tightly sandboxed root
+  updater service, and activation now refuses stale instance/control-mode
+  configuration before stopping any unit.
+- Added concise clean-macOS setup and release/deployment checklists, including
+  the simulator/database boundary and the first staging activation gate.
+- Made clean simulator runs and tests select the checked-in non-secret test
+  configuration, so Deep Dive pages do not depend on an untracked local file.
+- Made `make build-check` build and install exactly one wheel in a disposable
+  directory, independent of stale files under `dist/`.
+
 ## 1.0a1 - 2026-08-30
 
 - Restored `slg1` and `deg1` as immutable simulator-only UI instances with a

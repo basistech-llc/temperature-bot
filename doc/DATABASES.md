@@ -106,6 +106,9 @@ These symlinks do not create additional databases:
 - Do not copy a live WAL-mode database with raw `cp` or `rsync`. Use SQLite
   `.backup`, the backup API, or `VACUUM INTO`, then run `PRAGMA quick_check` on
   the result.
+- Developers should use `make fetch-dev-db`, which downloads the
+  production-only `/api/v1/database-snapshot` over the VPN and verifies the
+  server-provided SHA-256. The endpoint does not expose the configuration file.
 - Do not rely on the checkout-root fallback `temperature-bot.db`; every service,
   timer, and cron job must set `DB_PATH` explicitly.
 - Treat `~` systemd files and commented cron entries as stale references, not

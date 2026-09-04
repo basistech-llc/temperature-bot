@@ -10,6 +10,8 @@ services. It stores device history in SQLite and serves both web pages and
 Use the Makefile for setup, checks, tests, and local runs.
 Python dependencies and the in-project `.venv` are managed by uv from the
 committed `uv.lock` file.
+See `doc/macos-clean-setup.md` for the clean-machine checklist and why an empty
+simulator database shows no historical devices.
 
 ```bash
 make install-macos      # macOS setup
@@ -80,12 +82,14 @@ and ZIP artifact containing the wheel, locked runtime requirements, Flyway
 migrations, reviewed host-configuration references, installer, and manifest.
 Pull requests build and install this package in a disposable root; their Actions
 artifacts expire after five days and are not production releases.
+The numbered maintainer procedure is `doc/release-and-deploy.md`.
 
 To stand up a new instance, or an additional observation instance on the shared
 server, follow `doc/operations-new-instance.md`.
 
 Tests and local runs use simulator flags for external systems where possible:
-`AE200_SIMULATOR=1`, `AIRTHINGS_SIMULATOR=1`, and `AQICN_SIMULATOR=1`.
+`AE200_SIMULATOR=1`, `HUBITAT_SIMULATOR=1`, `AIRTHINGS_SIMULATOR=1`, and
+`AQICN_SIMULATOR=1`.
 
 ## References
 

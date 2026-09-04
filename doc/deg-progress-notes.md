@@ -111,8 +111,8 @@ The SSH password for the server is in Bitwarden (entry: `slg1.basistech.net`). N
 `air.basistech.net` and `slg1.basistech.net` are the **same machine** — the Makefile defaults to
 `air` (`FETCH_HOST`), but either name works.
 
-Easiest way to confirm Tailscale is actually connected: just run `make fetch-dev-db` (next step).
-If it pulls the DB successfully, your connection is good.
+The database snapshot endpoint is reachable only on the company VPN. Running
+`make fetch-dev-db` in the next step checks that path without requiring SSH.
 
 3. **Create local database**:
    ```bash
@@ -129,9 +129,9 @@ If it pulls the DB successfully, your connection is good.
    Clone a snapshot of the live DB locally.
 
 4. **Configure**:
-   - Copy `temperature-bot-config.yaml` and fill in your values (or use existing one)
-   - For simulator mode, you don't need real Hubitat/AE200 credentials
-   - For live mode, you'll need VPN access (Tailscale) and real credentials
+   - Simulator mode does not require `temperature-bot-config.yaml` or live credentials.
+   - Live mode requires separately managed configuration, VPN access, and an
+     intentional decision to reach real hardware.
 
 **Running the Web Server**
 
@@ -186,19 +186,18 @@ To get a copy of the production database with real data:
 ```bash
 make fetch-dev-db
 ```
-This streams a read-only SQLite dump over Tailscale/SSH from the server
-(`air.basistech.net`, aka `slg1.basistech.net`), applies pending Flyway
-migrations, and shows row-count stats. It pulls down **two** things:
-- the database → `var/db/temperature_bot/temperature-bot.db`
-- `temperature-bot-config.yaml` (with production secrets) → repo root
+This downloads a consistent SQLite backup from the unauthenticated production
+snapshot API over the VPN, verifies the response SHA-256, applies pending
+Flyway migrations, and shows row-count stats. It writes only the database at
+`var/db/temperature_bot/temperature-bot.db`; it never downloads the production
+configuration or its secrets.
 
 Before fetching, an existing `var/db/temperature_bot` directory is moved to a
 timestamped directory under `var/db/backups`.
 
-So this single step also covers the "Configure" step above — no separate config copy needed.
-SSH normally uses your key. The `fetch-dev-db` target permits the normal SSH
-password prompt as a fallback; if prompted, the password is in Bitwarden under
-`slg1.basistech.net`.
+The endpoint is intentionally unauthenticated at the application layer because
+`air.basistech.net` resolves to the private VPN address. A VPN connection is
+still required.
 
 **Mitsubishi control panel**
 

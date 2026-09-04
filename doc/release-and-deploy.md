@@ -1,0 +1,105 @@
+# Release and deploy a version
+
+This checklist is for maintainers. A release is an immutable GitHub Release,
+not a server-side `git pull`. Never tag a commit that has not passed review and
+CI.
+
+1. On a branch from current `main`, set the same canonical PEP 440 version in
+   `VERSION` and `pyproject.toml`, refresh `uv.lock`, and move all meaningful
+   entries from **Unreleased** into a dated version section in
+   `doc/RELEASE_NOTES.md`.
+
+2. Validate the proposed release through the Makefile:
+
+   ```bash
+   make check
+   make test
+   make build-check
+   make deployment-package-check
+   make systemd-verify
+   ```
+
+3. Merge the reviewed pull request and verify that CI passed on the resulting
+   `main` commit. Start from a clean, current checkout of that exact commit.
+
+4. Validate, create, and push a signed tag. For the current prerelease target,
+   the commands will be:
+
+   ```bash
+   make release-tag-check GITHUB_REF_NAME=1.0.0a2
+   git tag -s 1.0.0a2 -m "Temperature Bot 1.0.0a2"
+   git push origin 1.0.0a2
+   ```
+
+5. Wait for the **Release** workflow. It must publish one
+   `temperature-bot-deployment-*.zip` and its `.sha256` sidecar. Verify both:
+
+   ```bash
+   gh run list --workflow Release --limit 5
+   gh release view 1.0.0a2
+   ```
+
+6. Connect to `air` using a normal maintainer account, never direct root SSH.
+   Verify that the pinned updater dependency is root-owned and is version
+   `0.11.26`:
+
+   ```bash
+   sudo stat -c '%U %G %a %n' /usr/local/bin/uv
+   sudo /usr/local/bin/uv --version
+   ```
+
+   If it is absent, complete the root-owned uv bootstrap in issue #44 before
+   continuing; do not point the root updater at a user-writable executable.
+
+   If the active installation already provides `temperature-bot-release-update`,
+   check the exact release without changing staging:
+
+   ```bash
+   ssh air.basistech.net
+   sudo /opt/temperature-bot-stage/current/venv/bin/temperature-bot-release-update \
+     staging --channel prerelease --tag 1.0.0a2 --check-only
+   ```
+
+   For the first release after the old checkout-based deployment, the active
+   wheel does not contain that command. Bootstrap only the trusted updater from
+   the signed tag, using the already installed production environment:
+
+   ```bash
+   git clone --branch 1.0.0a2 --single-branch \
+     https://github.com/basistech-llc/temperature-bot.git \
+     temperature-bot-release-tools-1.0.0a2
+   cd temperature-bot-release-tools-1.0.0a2
+   git verify-tag 1.0.0a2
+   sudo /opt/temperature-bot/current/venv/bin/python \
+     -m bin.github_release_update staging --channel prerelease \
+     --tag 1.0.0a2 --check-only
+   ```
+
+7. Stage the verified release, then activate it only after reviewing the
+   reported manifest and the staging environment policy:
+
+   The current `air-stage` control-mode drift is tracked in issue #252 and must
+   be resolved by an explicit policy decision before activation.
+
+   ```bash
+   sudo /opt/temperature-bot-stage/current/venv/bin/temperature-bot-release-update \
+     staging --channel prerelease --tag 1.0.0a2
+   sudo /opt/temperature-bot-stage/current/venv/bin/temperature-bot-release-update \
+     staging --channel prerelease --tag 1.0.0a2 --activate
+   curl --fail https://air-stage.basistech.net/api/v1/version
+   ```
+
+   During the one-time bootstrap, substitute the verified source-checkout
+   Python command from step 6 for the console command shown here.
+
+   Activation refuses releases with changed migration hashes and restores the
+   previous release pointer and unit state if health checks fail. Use the
+   transactional migration procedure tracked in issue #216 when migrations
+   differ.
+
+8. After staging has been exercised, repeat check, stage, and activation with
+   target `production`. Production deployment requires a separate explicit
+   decision; a staging test never authorizes it.
+
+For the full trust model, target table, rollback behavior, and first-install
+bootstrap boundary, see `doc/DEPLOYMENT.md`.

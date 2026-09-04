@@ -17,7 +17,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any, Literal, TypeVar
 
-from packaging.version import Version
+from packaging.version import InvalidVersion, Version
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
 
 from app.deployment_package import (
@@ -31,6 +31,9 @@ from bin.install_deployment_package import install_package
 DEFAULT_REPOSITORY = "basistech-llc/temperature-bot"
 DEFAULT_API = "https://api.github.com"
 DEFAULT_MAX_BYTES = 500 * 1024 * 1024
+DEFAULT_UV = "/usr/local/bin/uv"
+RELEASES_PER_PAGE = 100
+MAX_RELEASE_PAGES = 20
 PACKAGE_PREFIX = "temperature-bot-deployment-"
 STATE_FILE = "release-update-state.json"
 ModelT = TypeVar("ModelT", bound=BaseModel)
@@ -97,6 +100,18 @@ class HealthEndpoint(BaseModel):
 
     url: str
     instance: str
+    control_mode: str | None = None
+
+
+class RuntimeHealth(BaseModel):
+    """Fields used to prove target identity and release health."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    version: str
+    commit: str
+    instance: str
+    control_mode: str | None = None
 
 
 class DeploymentTarget(BaseModel):
@@ -119,6 +134,8 @@ class ActivationOptions(BaseModel):
     require_root: bool = True
     systemctl: str = "systemctl"
     create_venv: bool = True
+    uv: str = DEFAULT_UV
+    python: str = "3.12"
     health_timeout: float = Field(default=30, gt=0)
 
 
@@ -130,9 +147,12 @@ class UpdateOptions(BaseModel):
     repository: str = DEFAULT_REPOSITORY
     channel: ReleaseChannel = ReleaseChannel.STABLE
     api_base: str = DEFAULT_API
+    tag: str | None = None
     check_only: bool = False
     activate: bool = False
     create_venv: bool = True
+    uv: str = DEFAULT_UV
+    python: str = "3.12"
 
 
 TARGETS = {
@@ -161,7 +181,9 @@ TARGETS = {
         ),
         health=(
             HealthEndpoint(
-                url="http://127.0.0.1:8100/api/v1/version", instance="production"
+                url="http://127.0.0.1:8100/api/v1/version",
+                instance="production",
+                control_mode="live",
             ),
         ),
     ),
@@ -181,7 +203,9 @@ TARGETS = {
         ),
         health=(
             HealthEndpoint(
-                url="http://127.0.0.1:8101/api/v1/version", instance="air-stage"
+                url="http://127.0.0.1:8101/api/v1/version",
+                instance="air-stage",
+                control_mode="live",
             ),
         ),
     ),
@@ -201,8 +225,16 @@ TARGETS = {
             "deg1_basistech_net.service",
         ),
         health=(
-            HealthEndpoint(url="http://127.0.0.1:8003/api/v1/version", instance="slg1"),
-            HealthEndpoint(url="http://127.0.0.1:8004/api/v1/version", instance="deg1"),
+            HealthEndpoint(
+                url="http://127.0.0.1:8003/api/v1/version",
+                instance="slg1",
+                control_mode="simulator",
+            ),
+            HealthEndpoint(
+                url="http://127.0.0.1:8004/api/v1/version",
+                instance="deg1",
+                control_mode="simulator",
+            ),
         ),
     ),
 }
@@ -248,19 +280,45 @@ def discover_release(
     channel: ReleaseChannel,
     *,
     api_base: str = DEFAULT_API,
+    tag: str | None = None,
     timeout: float = 15,
 ) -> GitHubRelease:
-    """Return the newest non-draft release permitted by *channel*."""
+    """Return an eligible application release permitted by *channel*."""
     encoded_repo = urllib.parse.quote(repository, safe="/")
     base = f"{api_base.rstrip('/')}/repos/{encoded_repo}/releases"
-    if channel is ReleaseChannel.STABLE:
-        return _json(f"{base}/latest", GitHubRelease, timeout=timeout)
-    with _request(f"{base}?per_page=30", timeout=timeout) as response:
-        releases = TypeAdapter(list[GitHubRelease]).validate_json(response.read())
+    if tag:
+        encoded_tag = urllib.parse.quote(tag, safe="")
+        release = _json(
+            f"{base}/tags/{encoded_tag}", GitHubRelease, timeout=timeout
+        )
+        if not _eligible_release(release, channel):
+            raise ValueError(f"release {tag} is not an eligible {channel.value} release")
+        return release
+
+    for page in range(1, MAX_RELEASE_PAGES + 1):
+        url = f"{base}?per_page={RELEASES_PER_PAGE}&page={page}"
+        with _request(url, timeout=timeout) as response:
+            releases = TypeAdapter(list[GitHubRelease]).validate_json(response.read())
+        for release in releases:
+            if _eligible_release(release, channel):
+                return release
+        if len(releases) < RELEASES_PER_PAGE:
+            break
+    raise ValueError(f"GitHub has no eligible {channel.value} application release")
+
+
+def _eligible_release(release: GitHubRelease, channel: ReleaseChannel) -> bool:
+    """Return whether *release* is a publishable Temperature Bot artifact."""
+    if release.draft:
+        return False
     try:
-        return next(release for release in releases if not release.draft)
-    except StopIteration as error:
-        raise ValueError("GitHub has no published releases") from error
+        version = Version(release.tag_name.removeprefix("v"))
+        _release_assets(release)
+    except (InvalidVersion, ValueError):
+        return False
+    if channel is ReleaseChannel.STABLE:
+        return not release.prerelease and not version.is_prerelease
+    return True
 
 
 def resolve_tag_commit(
@@ -410,19 +468,47 @@ def _check_health(
         for endpoint in target.health:
             try:
                 with urllib.request.urlopen(endpoint.url, timeout=3) as response:
-                    payload: dict[str, Any] = json.load(response)
-                if payload.get("version") != manifest.version:
-                    raise ValueError(f"version is {payload.get('version')}")
-                if payload.get("commit") != manifest.commit:
-                    raise ValueError(f"commit is {payload.get('commit')}")
-                if payload.get("instance") != endpoint.instance:
-                    raise ValueError(f"instance is {payload.get('instance')}")
+                    payload = RuntimeHealth.model_validate_json(response.read())
+                if payload.version != manifest.version:
+                    raise ValueError(f"version is {payload.version}")
+                if payload.commit != manifest.commit:
+                    raise ValueError(f"commit is {payload.commit}")
+                if payload.instance != endpoint.instance:
+                    raise ValueError(f"instance is {payload.instance}")
+                if (
+                    endpoint.control_mode
+                    and payload.control_mode != endpoint.control_mode
+                ):
+                    raise ValueError(f"control mode is {payload.control_mode}")
             except (OSError, ValueError, json.JSONDecodeError) as error:
                 errors.append(f"{endpoint.url}: {error}")
         if not errors:
             return
         time.sleep(1)
     raise RuntimeError("release health checks failed: " + "; ".join(errors))
+
+
+def _check_activation_preflight(target: DeploymentTarget) -> None:
+    """Refuse to stop services when the active target policy has drifted."""
+    for endpoint in target.health:
+        if endpoint.control_mode is None:
+            continue
+        try:
+            with urllib.request.urlopen(endpoint.url, timeout=3) as response:
+                payload = RuntimeHealth.model_validate_json(response.read())
+        except (OSError, ValueError) as error:
+            raise ValueError(f"cannot verify active target {endpoint.url}: {error}") from error
+        if payload.instance != endpoint.instance:
+            raise ValueError(
+                f"active target {endpoint.url} reports instance {payload.instance}; "
+                f"expected {endpoint.instance}"
+            )
+        if payload.control_mode != endpoint.control_mode:
+            raise ValueError(
+                f"active target {endpoint.instance} uses control mode "
+                f"{payload.control_mode}; expected {endpoint.control_mode}; "
+                "reconcile the reviewed host environment before activation"
+            )
 
 
 def activate_schema_neutral_release(
@@ -440,6 +526,7 @@ def activate_schema_neutral_release(
             "candidate migrations differ from the active release; stage succeeded but "
             "activation requires the transactional migration workflow in issue #216"
         )
+    _check_activation_preflight(target)
     old_release = (target.root / "current").resolve(strict=True)
     was_active = {
         unit: _is_active(unit, options.systemctl) for unit in target.resume_units
@@ -451,6 +538,8 @@ def activate_schema_neutral_release(
         installation = install_package(
             package,
             target.root,
+            uv=options.uv,
+            python=options.python,
             create_venv=options.create_venv,
             activate=True,
         )
@@ -488,7 +577,10 @@ def run_update(
 ) -> UpdateResult:
     """Run one serialized release check for *target*."""
     release = discover_release(
-        options.repository, options.channel, api_base=options.api_base
+        options.repository,
+        options.channel,
+        api_base=options.api_base,
+        tag=options.tag,
     )
     expected_commit = resolve_tag_commit(
         options.repository, release.tag_name, api_base=options.api_base
@@ -519,6 +611,8 @@ def run_update(
                 installation = install_package(
                     package,
                     target.root,
+                    uv=options.uv,
+                    python=options.python,
                     create_venv=options.create_venv,
                     activate=False,
                 )
@@ -542,7 +636,15 @@ def run_update(
                             "release was staged but activation requires issue #216"
                         )
                     release_directory = activate_schema_neutral_release(
-                        package, target, active, manifest
+                        package,
+                        target,
+                        active,
+                        manifest,
+                        ActivationOptions(
+                            create_venv=options.create_venv,
+                            uv=options.uv,
+                            python=options.python,
+                        ),
                     )
                     disposition = "activated"
         result = UpdateResult(
@@ -572,6 +674,9 @@ def main(argv: list[str] | None = None) -> None:
     )
     parser.add_argument("--check-only", action="store_true")
     parser.add_argument("--activate", action="store_true")
+    parser.add_argument("--tag", help="select one exact published release tag")
+    parser.add_argument("--uv", default=DEFAULT_UV)
+    parser.add_argument("--python", default="3.12")
     args = parser.parse_args(argv)
     if args.activate and args.check_only:
         parser.error("--activate cannot be combined with --check-only")
@@ -581,8 +686,11 @@ def main(argv: list[str] | None = None) -> None:
             UpdateOptions(
                 repository=args.repository,
                 channel=args.channel,
+                tag=args.tag,
                 check_only=args.check_only,
                 activate=args.activate,
+                uv=args.uv,
+                python=args.python,
             ),
         )
     except (OSError, RuntimeError, ValueError) as error:

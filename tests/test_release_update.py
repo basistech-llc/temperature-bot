@@ -24,6 +24,7 @@ from bin.github_release_update import (
     UpdateOptions,
     activate_schema_neutral_release,
     activation_is_schema_neutral,
+    discover_release,
     run_update,
     update_required,
 )
@@ -162,10 +163,21 @@ def release_api(tmp_path):
             },
         ],
     }
+    screenshot_release = {
+        "tag_name": "web-ui-screenshots-pr-999",
+        "html_url": f"{base}/screenshot-release",
+        "draft": False,
+        "prerelease": True,
+        "assets": [],
+    }
     ReleaseServer.routes = {
-        "/repos/basistech-llc/temperature-bot/releases?per_page=30": (
+        "/repos/basistech-llc/temperature-bot/releases?per_page=100&page=1": (
             "application/json",
-            json.dumps([release]).encode(),
+            json.dumps([screenshot_release, release]).encode(),
+        ),
+        "/repos/basistech-llc/temperature-bot/releases/tags/1.0-alpha1": (
+            "application/json",
+            json.dumps(release).encode(),
         ),
         "/repos/basistech-llc/temperature-bot/git/ref/tags/1.0-alpha1": (
             "application/json",
@@ -185,7 +197,7 @@ def release_api(tmp_path):
 
 
 def test_alpha_tag_alias_is_legal_for_canonical_version():
-    assert str(validate_tag("1.0-alpha1")) == "1.0a1"
+    assert str(validate_tag("1.0.0-alpha2")) == "1.0.0a2"
 
 
 def test_release_update_downloads_verifies_and_stages(release_api, tmp_path):
@@ -215,6 +227,44 @@ def test_release_update_downloads_verifies_and_stages(release_api, tmp_path):
         (target.root / "release-update-state.json").read_bytes()
     )
     assert state == result
+
+
+def test_release_discovery_skips_unrelated_screenshot_releases(release_api):
+    api_base, _commit = release_api
+
+    release = discover_release(
+        "basistech-llc/temperature-bot",
+        ReleaseChannel.PRERELEASE,
+        api_base=api_base,
+    )
+
+    assert release.tag_name == "1.0-alpha1"
+
+
+def test_release_update_can_select_an_exact_tag(release_api, tmp_path):
+    api_base, commit = release_api
+    target = DeploymentTarget(
+        name="test",
+        root=tmp_path / "install",
+        quiesce_units=(),
+        resume_units=(),
+        health=(HealthEndpoint(url="http://127.0.0.1", instance="test"),),
+    )
+
+    result = run_update(
+        target,
+        UpdateOptions(
+            channel=ReleaseChannel.PRERELEASE,
+            api_base=api_base,
+            tag="1.0-alpha1",
+            check_only=True,
+            create_venv=False,
+        ),
+    )
+
+    assert result.disposition == "available"
+    assert result.tag == "1.0-alpha1"
+    assert result.commit == commit
 
 
 def test_activation_refuses_changed_migrations(tmp_path):
@@ -311,3 +361,65 @@ def test_failed_health_rolls_back_release_and_units(tmp_path):
         ["stop", "web.service"],
         ["start", "web.service"],
     ]
+
+
+def test_activation_refuses_control_mode_drift_before_stopping_units(tmp_path):
+    active_package = _package(tmp_path / "active", "0.9", "a" * 40)
+    candidate_package = _package(tmp_path / "candidate", "1.0", "b" * 40)
+    active = verify_package(active_package)
+    candidate = verify_package(candidate_package)
+    root = tmp_path / "root"
+    installed = install_package(
+        active_package, root, create_venv=False, activate=True
+    )
+    command, state = _systemctl(tmp_path)
+    server = ThreadingHTTPServer(("127.0.0.1", 0), ReleaseServer)
+    ReleaseServer.routes = {
+        "/api/v1/version": (
+            "application/json",
+            json.dumps(
+                {
+                    "version": "0.9",
+                    "commit": "a" * 40,
+                    "instance": "test",
+                    "control_mode": "read-only",
+                }
+            ).encode(),
+        )
+    }
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    target = DeploymentTarget(
+        name="test",
+        root=root,
+        quiesce_units=("web.service",),
+        resume_units=("web.service",),
+        health=(
+            HealthEndpoint(
+                url=f"http://127.0.0.1:{server.server_port}/api/v1/version",
+                instance="test",
+                control_mode="live",
+            ),
+        ),
+    )
+    try:
+        with pytest.raises(ValueError, match="uses control mode read-only"):
+            activate_schema_neutral_release(
+                candidate_package,
+                target,
+                active,
+                candidate,
+                ActivationOptions(
+                    require_root=False,
+                    systemctl=str(command),
+                    create_venv=False,
+                    health_timeout=1,
+                ),
+            )
+    finally:
+        server.shutdown()
+        thread.join()
+        server.server_close()
+
+    assert (root / "current").resolve() == installed.release_directory
+    assert json.loads(state.read_text())["events"] == []

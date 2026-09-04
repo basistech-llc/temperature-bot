@@ -315,9 +315,9 @@ ownership.
 `make fetch-dev-db` produces the checkout-local developer layout at
 `var/db/temperature_bot/temperature-bot.db`. Before fetching, it moves an
 existing `var/db/temperature_bot` directory to a timestamped directory under
-`var/db/backups`. It then streams a read-only SQLite dump over SSH into the new
-database and applies pending Flyway migrations. Prefer `.backup` when making a
-server-side instance copy.
+`var/db/backups`. It then downloads a verified SQLite-backup snapshot from the
+production API over the VPN and applies pending Flyway migrations. Prefer
+`.backup` when making a server-side instance copy.
 
 A copy is a fork, not a view: it stops receiving new readings the moment it is
 made, and nothing written through it reaches production.

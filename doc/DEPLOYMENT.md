@@ -212,8 +212,8 @@ Pushing a tag whose normalized PEP 440 value matches `VERSION` and
 Linux checks and tests, builds and installs the immutable package in a
 disposable root, verifies clean commit provenance, attests the ZIP and checksum
 sidecar, and creates the GitHub Release. A prerelease project version, such as
-canonical `1.0a1`, produces a prerelease even when the tag uses the equivalent
-human spelling `1.0-alpha1`.
+canonical `1.0.0a2`, produces a prerelease even when the tag uses the equivalent
+human spelling `1.0.0-alpha2`.
 
 The trusted currently installed environment can inspect the release channel and
 stage a newer application for exactly one application root:
@@ -224,9 +224,14 @@ stage a newer application for exactly one application root:
   -m bin.github_release_update production --check-only
 
 # Include prereleases and stage the newest verified release.
-sudo -u temperature_bot /opt/temperature-bot/current/venv/bin/python \
+sudo /opt/temperature-bot/current/venv/bin/python \
   -m bin.github_release_update production --channel prerelease
 ```
+
+Pass `--tag <tag>` to select a specific published application release instead
+of the newest eligible release. Discovery skips web-screenshot and other
+GitHub Releases that do not contain exactly one deployment ZIP and its SHA-256
+sidecar.
 
 The target must be `production`, `staging`, or `developers`. `slg1` and `deg1`
 are intentionally not individual choices because both use
@@ -244,6 +249,13 @@ reference host configuration for periodic stable-channel staging. As with all
 host configuration, an operator must explicitly install and enable the selected
 instance; the package installer does not modify `/etc` or systemd.
 
+The staging process runs as root because the immutable `/opt` application
+roots are root-owned. Its systemd sandbox permits writes only to those roots;
+it never activates a release unless `--activate` is explicit.
+It uses a pinned, root-owned uv executable at `/usr/local/bin/uv`; never run a
+root updater through a service-account-owned executable. Override that audited
+path explicitly with `--uv` if the host layout changes.
+
 Activation is deliberately narrower than staging:
 
 ```bash
@@ -256,10 +268,16 @@ migration path and SHA-256 is identical to the active release. It records which
 target units are active, quiesces only that target, switches `current`
 atomically, restores the previously active long-running units/timers, and
 requires every loopback version endpoint to report the candidate version,
-commit, and instance identity. Failure before health success restores the prior
+commit, instance identity, and expected control mode. Before stopping anything,
+it also verifies the active endpoint's instance and control mode, so stale host
+configuration fails closed. Failure before health success restores the prior
 release pointer and unit state. A candidate with any migration change remains
 staged and must use the database snapshot/migration transaction in #216; this
 command never modifies a database.
+
+The currently observed `air-stage` host/source policy mismatch is tracked in
+#252. Resolve the intended control and simulator modes; do not weaken this
+preflight or silently rewrite the host environment to bypass it.
 
 ## Legacy Make targets
 
