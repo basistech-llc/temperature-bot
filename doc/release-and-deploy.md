@@ -62,18 +62,26 @@ CI.
 
    For the first release after the old checkout-based deployment, the active
    wheel does not contain that command. Bootstrap only the trusted updater from
-   the signed tag, using the already installed production environment:
+   the signed tag into a root-owned checkout, using the already installed
+   production environment. The destination must not already exist:
 
    ```bash
-   git clone --branch 1.0.0a2 --single-branch \
+   sudo git clone --config core.hooksPath=/dev/null \
+     --branch 1.0.0a2 --single-branch \
      https://github.com/basistech-llc/temperature-bot.git \
-     temperature-bot-release-tools-1.0.0a2
-   cd temperature-bot-release-tools-1.0.0a2
-   git verify-tag 1.0.0a2
-   sudo /opt/temperature-bot/current/venv/bin/python \
+     /opt/temperature-bot-release-tools-1.0.0a2
+   sudo git -C /opt/temperature-bot-release-tools-1.0.0a2 verify-tag 1.0.0a2
+   sudo git -C /opt/temperature-bot-release-tools-1.0.0a2 status --porcelain
+   sudo /usr/bin/env \
+     PYTHONPATH=/opt/temperature-bot-release-tools-1.0.0a2 \
+     /opt/temperature-bot/current/venv/bin/python \
      -m bin.github_release_update staging --channel prerelease \
      --tag 1.0.0a2 --check-only
    ```
+
+   The status command must print nothing. Do not run a root updater from a
+   normal user's checkout, even after tag verification, because that user could
+   replace imported Python files between verification and execution.
 
 7. Stage the verified release, then activate it only after reviewing the
    reported manifest and the staging environment policy:
