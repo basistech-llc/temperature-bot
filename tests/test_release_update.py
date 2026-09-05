@@ -8,6 +8,7 @@ import pwd
 import shutil
 import subprocess
 import threading
+import zipfile
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -68,6 +69,48 @@ def _source(root: Path, name: str, data: bytes) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(data)
     return path
+
+
+def _wheel_with_import_side_effect(
+    root: Path, version: str, sentinel: Path
+) -> Path:
+    wheel = root / f"temperature_bot-{version}-py3-none-any.whl"
+    dist_info = f"temperature_bot-{version}.dist-info"
+    files = {
+        "app/__init__.py": b"",
+        "app/version.py": (
+            "from pathlib import Path\n"
+            f"Path({str(sentinel)!r}).write_text('executed')\n"
+            f"__version__ = {version!r}\n"
+        ).encode(),
+        "app/clogging.py": b"",
+        "app/deployment_package.py": b"",
+        "bin/__init__.py": b"",
+        "bin/runner.py": b"",
+        "bin/github_release_update.py": b"",
+        "bin/source_deployment.py": b"",
+        f"{dist_info}/METADATA": (
+            "Metadata-Version: 2.1\n"
+            "Name: temperature-bot\n"
+            f"Version: {version}\n"
+        ).encode(),
+        f"{dist_info}/WHEEL": (
+            "Wheel-Version: 1.0\n"
+            "Generator: temperature-bot-test\n"
+            "Root-Is-Purelib: true\n"
+            "Tag: py3-none-any\n"
+        ).encode(),
+        f"{dist_info}/entry_points.txt": (
+            "[console_scripts]\n"
+            "gunicorn = app.version:main\n"
+        ).encode(),
+    }
+    record = "".join(f"{name},,\n" for name in (*files, f"{dist_info}/RECORD"))
+    files[f"{dist_info}/RECORD"] = record.encode()
+    with zipfile.ZipFile(wheel, "w") as archive:
+        for name, data in files.items():
+            archive.writestr(name, data)
+    return wheel
 
 
 def _package(
@@ -392,6 +435,42 @@ def test_source_commit_is_built_into_verified_deployment_package(tmp_path):
     assert not manifest.dirty
     assert repeated_manifest == manifest
     assert repeated_package.read_bytes() == package.read_bytes()
+
+
+def test_root_staging_does_not_execute_candidate_code(tmp_path):
+    version = "1.0.0a2"
+    sentinel = tmp_path / "candidate-executed"
+    wheel = _wheel_with_import_side_effect(tmp_path, version, sentinel)
+    requirements = _source(tmp_path, "runtime.txt", b"")
+    package = tmp_path / "deployment.zip"
+    build_package(
+        package,
+        PackageIdentity(
+            version=version,
+            commit="a" * 40,
+            built_at=datetime(2026, 9, 5, tzinfo=timezone.utc),
+            requires_python=">=3.12",
+            flyway_version="12.8.1",
+        ),
+        [
+            PayloadSource(
+                source=wheel,
+                path=f"wheel/{wheel.name}",
+                role="wheel",
+            ),
+            PayloadSource(
+                source=requirements,
+                path="requirements/runtime.txt",
+                role="requirements",
+            ),
+        ],
+    )
+
+    uv = shutil.which("uv")
+    assert uv is not None
+    install_package(package, tmp_path / "root", uv=uv, python="3.12")
+
+    assert not sentinel.exists()
 
 
 def test_activation_refuses_changed_migrations(tmp_path):

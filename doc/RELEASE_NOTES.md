@@ -20,8 +20,9 @@ change they completed.
   or commit; the build runs unprivileged and records the immutable commit.
   Installed wheels now provide the `temperature-bot-release-update` command.
   Root-owned application roots are staged by the tightly sandboxed root
-  updater service, and activation now refuses stale instance/control-mode
-  configuration or systemd unit definitions before stopping any unit.
+  updater service without executing candidate code, and activation now refuses
+  stale instance/control-mode configuration or systemd unit definitions before
+  stopping any unit.
 - Added concise clean-macOS setup and release/deployment checklists, including
   the simulator/database boundary and the first staging activation gate.
 - Made clean simulator runs and tests select the checked-in non-secret test

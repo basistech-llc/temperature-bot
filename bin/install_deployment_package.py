@@ -7,6 +7,7 @@ import json
 import os
 import shutil
 import subprocess
+from email.parser import Parser
 from pathlib import Path
 from typing import Literal
 
@@ -48,6 +49,8 @@ def _install_environment(release: Path, manifest: DeploymentManifest, uv: str, p
         "--python",
         str(interpreter),
         "--require-hashes",
+        "--only-binary",
+        ":all:",
         str(release / manifest.requirements),
     )
     _run(
@@ -62,23 +65,38 @@ def _install_environment(release: Path, manifest: DeploymentManifest, uv: str, p
 
 
 def _verify_environment(release: Path, manifest: DeploymentManifest) -> None:
+    """Verify installed files and metadata without executing candidate code."""
     environment = release / "venv"
-    interpreter = environment / "bin/python"
-    _run(
-        str(interpreter),
-        "-I",
-        "-c",
-        (
-            "import importlib.util; from app.version import __version__; "
-            f"assert __version__ == {manifest.version!r}, __version__; "
-            "assert importlib.util.find_spec('bin.runner') is not None; "
-            "assert importlib.util.find_spec('bin.github_release_update') is not None; "
-            "assert importlib.util.find_spec('bin.source_deployment') is not None; "
-            "assert importlib.util.find_spec('app.clogging') is not None; "
-            "assert importlib.util.find_spec('app.deployment_package') is not None"
-        ),
+    site_packages = list(environment.glob("lib*/python*/site-packages"))
+    if len(site_packages) != 1:
+        raise ValueError(f"expected one site-packages directory; found {site_packages}")
+    site = site_packages[0]
+    distributions = list(site.glob("temperature_bot-*.dist-info"))
+    if len(distributions) != 1:
+        raise ValueError(
+            f"expected one temperature-bot distribution; found {distributions}"
+        )
+    metadata_path = distributions[0] / "METADATA"
+    if not metadata_path.is_file() or metadata_path.is_symlink():
+        raise ValueError("installed temperature-bot metadata is not a regular file")
+    metadata = Parser().parsestr(metadata_path.read_text(encoding="utf-8"))
+    if metadata["Name"] != "temperature-bot" or metadata["Version"] != manifest.version:
+        raise ValueError("installed temperature-bot metadata does not match the manifest")
+    required = (
+        "app/version.py",
+        "app/clogging.py",
+        "app/deployment_package.py",
+        "bin/runner.py",
+        "bin/github_release_update.py",
+        "bin/source_deployment.py",
     )
-    _run(str(environment / "bin/gunicorn"), "--version")
+    for relative in required:
+        installed = site / relative
+        if not installed.is_file() or installed.is_symlink():
+            raise ValueError(f"installed application file is missing: {relative}")
+    gunicorn = environment / "bin/gunicorn"
+    if not gunicorn.is_file() or gunicorn.is_symlink():
+        raise ValueError("installed gunicorn entry point is missing")
 
 
 def _activate(root: Path, release: Path) -> None:
@@ -91,7 +109,7 @@ def _activate(root: Path, release: Path) -> None:
     os.replace(temporary, current)
 
 
-def install_package(
+def install_package(  # pylint: disable=too-many-arguments
     package: Path,
     root: Path,
     *,

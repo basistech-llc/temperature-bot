@@ -237,10 +237,12 @@ For an explicitly authorized pre-release test, `--branch <name>` or
 `--commit <sha>` resolves the selector through GitHub to one immutable commit,
 checks out that detached commit, and builds the deployment package locally.
 The source build runs as the unprivileged `nobody` account with no supplementary
-groups; only the trusted updater stages the verified result as root. A branch
-is resolved once at the start, so a concurrent push cannot change the commit
-being installed. Source builds do not have GitHub Release attestations and must
-not replace the signed-tag release path for production promotion.
+groups. Root staging accepts binary dependency artifacts only and verifies
+installed metadata and files without importing the candidate application or
+executing its entry points. A branch is resolved once at the start, so a
+concurrent push cannot change the commit being installed. Source builds do not
+have GitHub Release attestations and must not replace the signed-tag release
+path for production promotion.
 
 The target must be `production`, `staging`, or `developers`. `slg1` and `deg1`
 are intentionally not individual choices because both use
