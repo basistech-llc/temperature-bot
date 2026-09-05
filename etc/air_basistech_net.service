@@ -7,7 +7,8 @@ After=network.target
 User=temperature_bot
 Group=temperature_bot
 WorkingDirectory=/opt/temperature-bot/current
-Environment="PATH=/opt/temperature-bot/current/venv/bin"
+Environment="PATH=/opt/temperature-bot/current/venv/bin:/usr/bin:/bin"
+EnvironmentFile=/etc/temperature-bot/runtime.env
 Environment="DB_PATH=/var/db/temperature_bot/temperature-bot.db"
 Environment="TEMPERATURE_BOT_INSTANCE=production"
 Environment="PERFORMANCE_CLIENT_ID=web"
