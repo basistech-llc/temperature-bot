@@ -16,6 +16,8 @@ change they completed.
   of the production secrets file.
 - Hardened release discovery to ignore unrelated screenshot releases, page
   through the GitHub release history, and optionally select one exact tag.
+  Explicit staging tests can also resolve and build a GitHub branch or commit;
+  the build runs unprivileged and records the resolved immutable commit.
   Installed wheels now provide the `temperature-bot-release-update` command.
   Root-owned application roots are staged by the tightly sandboxed root
   updater service, and activation now refuses stale instance/control-mode

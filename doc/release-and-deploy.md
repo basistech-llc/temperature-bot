@@ -105,6 +105,27 @@ CI.
    transactional migration procedure tracked in issue #216 when migrations
    differ.
 
+   Before a tag exists, an explicitly authorized staging test may select a
+   branch or exact commit instead. The updater resolves a branch to one commit
+   before building, and performs the source build as an unprivileged account:
+
+   ```bash
+   sudo /opt/temperature-bot/current/venv/bin/python \
+     -m bin.github_release_update staging \
+     --branch codex/release-readiness-a2 --check-only
+   sudo /opt/temperature-bot/current/venv/bin/python \
+     -m bin.github_release_update staging \
+     --commit FULL_OR_ABBREVIATED_SHA --activate
+   ```
+
+   The installed updater can be used directly. During the first-release
+   bootstrap, resolve the branch to a commit, clone that exact commit into a
+   new root-owned `/opt/temperature-bot-release-tools-COMMIT` directory, verify
+   that `HEAD` is the expected commit and the checkout is clean, and use that
+   directory as `PYTHONPATH`, as in step 6. Branch/commit builds are for staging
+   validation only and do not replace the signed tag, GitHub Release artifact,
+   or attestation required for production.
+
 8. After staging has been exercised, repeat check, stage, and activation with
    target `production`. Production deployment requires a separate explicit
    decision; a staging test never authorizes it.

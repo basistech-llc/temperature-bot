@@ -3,6 +3,10 @@
 from __future__ import annotations
 
 import json
+import os
+import pwd
+import shutil
+import subprocess
 import threading
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -25,11 +29,17 @@ from bin.github_release_update import (
     activate_schema_neutral_release,
     activation_is_schema_neutral,
     discover_release,
+    resolve_source_selection,
     run_update,
     update_required,
 )
 from bin.install_deployment_package import install_package
 from bin.release_tag import validate_tag
+from bin.source_deployment import (
+    SourceBuildOptions,
+    SourceSelection,
+    build_source_package,
+)
 
 
 class ReleaseServer(BaseHTTPRequestHandler):
@@ -183,6 +193,18 @@ def release_api(tmp_path):
             "application/json",
             json.dumps({"object": {"sha": commit, "type": "commit"}}).encode(),
         ),
+        "/repos/basistech-llc/temperature-bot/commits/codex%2Frelease-readiness-a2": (
+            "application/json",
+            json.dumps(
+                {"sha": commit, "html_url": f"{base}/commit/{commit}"}
+            ).encode(),
+        ),
+        f"/repos/basistech-llc/temperature-bot/commits/{commit[:12]}": (
+            "application/json",
+            json.dumps(
+                {"sha": commit, "html_url": f"{base}/commit/{commit}"}
+            ).encode(),
+        ),
         f"/assets/{package.name}": ("application/zip", package.read_bytes()),
         f"/assets/{checksum.name}": ("text/plain", checksum.read_bytes()),
     }
@@ -267,6 +289,81 @@ def test_release_update_can_select_an_exact_tag(release_api, tmp_path):
     assert result.commit == commit
 
 
+def test_branch_and_commit_selectors_resolve_to_immutable_commit(release_api):
+    api_base, commit = release_api
+
+    branch = resolve_source_selection(
+        "basistech-llc/temperature-bot",
+        "branch",
+        "codex/release-readiness-a2",
+        api_base=api_base,
+    )
+    exact = resolve_source_selection(
+        "basistech-llc/temperature-bot",
+        "commit",
+        commit[:12],
+        api_base=api_base,
+    )
+
+    assert branch.commit == commit
+    assert exact.commit == commit
+    assert branch.kind == "branch"
+    assert exact.kind == "commit"
+
+
+def test_source_selectors_are_mutually_exclusive():
+    with pytest.raises(ValueError, match="mutually exclusive"):
+        UpdateOptions(branch="main", commit="a" * 40)
+
+
+def test_source_selectors_are_restricted_to_staging(tmp_path):
+    target = DeploymentTarget(
+        name="production",
+        root=tmp_path / "production",
+        quiesce_units=(),
+        resume_units=(),
+        health=(),
+    )
+
+    with pytest.raises(ValueError, match="restricted to staging"):
+        run_update(target, UpdateOptions(branch="main"))
+
+
+def test_source_commit_is_built_into_verified_deployment_package(tmp_path):
+    repo_root = Path(__file__).resolve().parents[1]
+    commit = subprocess.run(
+        ["git", "-C", str(repo_root), "rev-parse", "HEAD"],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    uv = shutil.which("uv")
+    assert uv is not None
+    selection = SourceSelection(
+        kind="commit",
+        value=commit,
+        commit=commit,
+        html_url=f"https://github.com/basistech-llc/temperature-bot/commit/{commit}",
+    )
+
+    package, manifest = build_source_package(
+        selection,
+        tmp_path,
+        SourceBuildOptions(
+            repository="basistech-llc/temperature-bot",
+            clone_url=repo_root.as_uri(),
+            uv=uv,
+            python="3.12",
+            build_user=pwd.getpwuid(os.getuid()).pw_name,
+        ),
+    )
+
+    assert package.is_file()
+    assert package.with_suffix(".zip.sha256").is_file()
+    assert manifest.commit == commit
+    assert not manifest.dirty
+
+
 def test_activation_refuses_changed_migrations(tmp_path):
     active = verify_package(_package(tmp_path / "active", "0.9", "a" * 40))
     candidate = verify_package(
@@ -281,6 +378,15 @@ def test_update_refuses_older_release(tmp_path):
     active = verify_package(_package(tmp_path / "active", "2.0", "a" * 40))
     candidate = verify_package(_package(tmp_path / "candidate", "1.0", "b" * 40))
 
+    with pytest.raises(ValueError, match="refusing non-newer release"):
+        update_required(active, candidate)
+
+
+def test_source_update_allows_new_commit_at_same_version(tmp_path):
+    active = verify_package(_package(tmp_path / "active", "1.0", "a" * 40))
+    candidate = verify_package(_package(tmp_path / "candidate", "1.0", "b" * 40))
+
+    assert update_required(active, candidate, allow_same_version=True)
     with pytest.raises(ValueError, match="refusing non-newer release"):
         update_required(active, candidate)
 

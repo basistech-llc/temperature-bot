@@ -314,11 +314,17 @@ check: $(REQ) dependency-check ## Run all static analysis checks
 
 release-code-check: $(REQ) ## Check release publication and updater code
 	uv run --locked ruff check \
-		bin/github_release_update.py bin/release_tag.py tests/test_release_update.py
+		bin/build_deployment_package.py bin/github_release_update.py \
+		bin/source_deployment.py \
+		bin/release_tag.py tests/test_release_update.py
 	$(PYTHON) -m pylint --persistent=n --output-format=parseable \
 		--rcfile .pylintrc --fail-under=10.0 \
-		bin/github_release_update.py bin/release_tag.py tests/test_release_update.py
-	uv run --locked mypy bin/github_release_update.py bin/release_tag.py
+		bin/build_deployment_package.py bin/github_release_update.py \
+		bin/source_deployment.py \
+		bin/release_tag.py tests/test_release_update.py
+	uv run --locked mypy \
+		bin/build_deployment_package.py bin/github_release_update.py \
+		bin/source_deployment.py bin/release_tag.py
 
 dependency-check: ## Verify the uv lockfile and reject legacy dependency tooling
 	uv lock --check

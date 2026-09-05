@@ -6,6 +6,7 @@ import argparse
 import fcntl
 import json
 import os
+import re
 import subprocess
 import tempfile
 import time
@@ -18,7 +19,7 @@ from pathlib import Path
 from typing import Any, Literal, TypeVar
 
 from packaging.version import InvalidVersion, Version
-from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
+from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, model_validator
 
 from app.deployment_package import (
     DeploymentManifest,
@@ -27,6 +28,12 @@ from app.deployment_package import (
     verify_package,
 )
 from bin.install_deployment_package import install_package
+from bin.source_deployment import (
+    DEFAULT_BUILD_USER,
+    SourceBuildOptions,
+    SourceSelection,
+    build_source_package,
+)
 
 DEFAULT_REPOSITORY = "basistech-llc/temperature-bot"
 DEFAULT_API = "https://api.github.com"
@@ -93,6 +100,15 @@ class AnnotatedTag(BaseModel):
     git_object: GitObject = Field(alias="object")
 
 
+class GitHubCommit(BaseModel):
+    """An immutable commit resolved by GitHub from a branch or SHA."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    sha: str = Field(pattern=r"^[0-9a-f]{40}$")
+    html_url: str
+
+
 class HealthEndpoint(BaseModel):
     """One endpoint and expected deployment identity."""
 
@@ -148,11 +164,21 @@ class UpdateOptions(BaseModel):
     channel: ReleaseChannel = ReleaseChannel.STABLE
     api_base: str = DEFAULT_API
     tag: str | None = None
+    branch: str | None = None
+    commit: str | None = None
     check_only: bool = False
     activate: bool = False
     create_venv: bool = True
     uv: str = DEFAULT_UV
     python: str = "3.12"
+    build_user: str = DEFAULT_BUILD_USER
+
+    @model_validator(mode="after")
+    def one_source_selector(self) -> "UpdateOptions":
+        selectors = (self.tag, self.branch, self.commit)
+        if sum(value is not None for value in selectors) > 1:
+            raise ValueError("--tag, --branch, and --commit are mutually exclusive")
+        return self
 
 
 TARGETS = {
@@ -342,6 +368,38 @@ def resolve_tag_commit(
     raise ValueError(f"tag {tag} has excessive annotated-tag indirection")
 
 
+def resolve_source_selection(
+    repository: str,
+    kind: Literal["branch", "commit"],
+    value: str,
+    *,
+    api_base: str = DEFAULT_API,
+    timeout: float = 15,
+) -> SourceSelection:
+    """Resolve a branch or commit selector to one immutable GitHub commit."""
+    if not value or value.strip() != value:
+        raise ValueError(f"invalid {kind} selector")
+    if kind == "commit" and not re.fullmatch(r"[0-9a-fA-F]{7,40}", value):
+        raise ValueError("commit must be a 7-to-40-character hexadecimal SHA")
+    encoded_repo = urllib.parse.quote(repository, safe="/")
+    encoded_value = urllib.parse.quote(value, safe="")
+    record = _json(
+        f"{api_base.rstrip('/')}/repos/{encoded_repo}/commits/{encoded_value}",
+        GitHubCommit,
+        timeout=timeout,
+    )
+    if kind == "commit" and not record.sha.startswith(value.lower()):
+        raise ValueError(
+            f"GitHub resolved commit {value} to unexpected SHA {record.sha}"
+        )
+    return SourceSelection(
+        kind=kind,
+        value=value,
+        commit=record.sha,
+        html_url=record.html_url,
+    )
+
+
 def _release_assets(release: GitHubRelease) -> tuple[GitHubAsset, GitHubAsset]:
     packages = [
         asset
@@ -413,13 +471,22 @@ def active_manifest(target: DeploymentTarget) -> DeploymentManifest | None:
     return manifest
 
 
-def update_required(active: DeploymentManifest | None, candidate: DeploymentManifest) -> bool:
+def update_required(
+    active: DeploymentManifest | None,
+    candidate: DeploymentManifest,
+    *,
+    allow_same_version: bool = False,
+) -> bool:
     """Return whether *candidate* is newer than the active release."""
     if active is None:
         return True
     if active.commit == candidate.commit and Version(active.version) == Version(candidate.version):
         return False
-    if Version(candidate.version) <= Version(active.version):
+    candidate_version = Version(candidate.version)
+    active_version = Version(active.version)
+    if candidate_version < active_version or (
+        candidate_version == active_version and not allow_same_version
+    ):
         raise ValueError(
             f"refusing non-newer release {candidate.version} over active {active.version}"
         )
@@ -576,32 +643,72 @@ def run_update(
     target: DeploymentTarget, options: UpdateOptions = UpdateOptions()
 ) -> UpdateResult:
     """Run one serialized release check for *target*."""
-    release = discover_release(
-        options.repository,
-        options.channel,
-        api_base=options.api_base,
-        tag=options.tag,
-    )
-    expected_commit = resolve_tag_commit(
-        options.repository, release.tag_name, api_base=options.api_base
-    )
+    if (options.branch or options.commit) and target.name != "staging":
+        raise ValueError("branch and commit sources are restricted to staging")
     active = active_manifest(target)
-    if active and active.commit == expected_commit:
-        return UpdateResult(
-            checked_at=datetime.now(timezone.utc),
-            target=target.name,
-            release_url=release.html_url,
-            tag=release.tag_name,
-            version=active.version,
-            commit=active.commit,
-            disposition="current",
-            release_directory=(target.root / "current").resolve(),
-        )
     with tempfile.TemporaryDirectory(prefix="temperature-bot-release-") as temporary:
-        package, manifest = download_and_verify(
-            release, expected_commit, Path(temporary)
+        temporary_path = Path(temporary)
+        source_selection = None
+        release: GitHubRelease | None = None
+        if options.branch or options.commit:
+            kind: Literal["branch", "commit"] = (
+                "branch" if options.branch else "commit"
+            )
+            value = options.branch or options.commit
+            assert value is not None
+            source_selection = resolve_source_selection(
+                options.repository,
+                kind,
+                value,
+                api_base=options.api_base,
+            )
+            expected_commit = source_selection.commit
+            source_url = source_selection.html_url
+            source_label = f"{kind}:{value}"
+        else:
+            release = discover_release(
+                options.repository,
+                options.channel,
+                api_base=options.api_base,
+                tag=options.tag,
+            )
+            expected_commit = resolve_tag_commit(
+                options.repository, release.tag_name, api_base=options.api_base
+            )
+            source_url = release.html_url
+            source_label = release.tag_name
+        if active and active.commit == expected_commit:
+            return UpdateResult(
+                checked_at=datetime.now(timezone.utc),
+                target=target.name,
+                release_url=source_url,
+                tag=source_label,
+                version=active.version,
+                commit=active.commit,
+                disposition="current",
+                release_directory=(target.root / "current").resolve(),
+            )
+        if source_selection:
+            package, manifest = build_source_package(
+                source_selection,
+                temporary_path,
+                SourceBuildOptions(
+                    repository=options.repository,
+                    uv=options.uv,
+                    python=options.python,
+                    build_user=options.build_user,
+                ),
+            )
+        else:
+            assert release is not None
+            package, manifest = download_and_verify(
+                release, expected_commit, temporary_path
+            )
+        update_required(
+            active,
+            manifest,
+            allow_same_version=source_selection is not None,
         )
-        update_required(active, manifest)
         disposition: Literal["available", "staged", "activated"] = "available"
         release_directory = None
         if not options.check_only:
@@ -623,8 +730,8 @@ def run_update(
                         staged = UpdateResult(
                             checked_at=datetime.now(timezone.utc),
                             target=target.name,
-                            release_url=release.html_url,
-                            tag=release.tag_name,
+                            release_url=source_url,
+                            tag=source_label,
                             version=manifest.version,
                             commit=manifest.commit,
                             disposition="staged",
@@ -650,8 +757,8 @@ def run_update(
         result = UpdateResult(
             checked_at=datetime.now(timezone.utc),
             target=target.name,
-            release_url=release.html_url,
-            tag=release.tag_name,
+            release_url=source_url,
+            tag=source_label,
             version=manifest.version,
             commit=manifest.commit,
             disposition=disposition,
@@ -674,9 +781,13 @@ def main(argv: list[str] | None = None) -> None:
     )
     parser.add_argument("--check-only", action="store_true")
     parser.add_argument("--activate", action="store_true")
-    parser.add_argument("--tag", help="select one exact published release tag")
+    source = parser.add_mutually_exclusive_group()
+    source.add_argument("--tag", help="select one exact published release tag")
+    source.add_argument("--branch", help="build one GitHub branch head")
+    source.add_argument("--commit", help="build one exact GitHub commit SHA")
     parser.add_argument("--uv", default=DEFAULT_UV)
     parser.add_argument("--python", default="3.12")
+    parser.add_argument("--build-user", default=DEFAULT_BUILD_USER)
     args = parser.parse_args(argv)
     if args.activate and args.check_only:
         parser.error("--activate cannot be combined with --check-only")
@@ -687,10 +798,13 @@ def main(argv: list[str] | None = None) -> None:
                 repository=args.repository,
                 channel=args.channel,
                 tag=args.tag,
+                branch=args.branch,
+                commit=args.commit,
                 check_only=args.check_only,
                 activate=args.activate,
                 uv=args.uv,
                 python=args.python,
+                build_user=args.build_user,
             ),
         )
     except (OSError, RuntimeError, ValueError) as error:

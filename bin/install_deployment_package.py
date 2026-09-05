@@ -72,6 +72,8 @@ def _verify_environment(release: Path, manifest: DeploymentManifest) -> None:
             "import importlib.util; from app.version import __version__; "
             f"assert __version__ == {manifest.version!r}, __version__; "
             "assert importlib.util.find_spec('bin.runner') is not None; "
+            "assert importlib.util.find_spec('bin.github_release_update') is not None; "
+            "assert importlib.util.find_spec('bin.source_deployment') is not None; "
             "assert importlib.util.find_spec('app.clogging') is not None; "
             "assert importlib.util.find_spec('app.deployment_package') is not None"
         ),
