@@ -22,6 +22,7 @@ from app.deployment_package import (
     verify_package,
 )
 from bin.build_deployment_package import collect_payloads
+from bin.github_release_update import TARGETS
 from bin.install_deployment_package import install_package, main as installer_main
 
 
@@ -109,7 +110,8 @@ def test_builder_collects_complete_migrations_units_and_configuration(tmp_path):
     }
     expected_units = {
         f"systemd/{path.name}"
-        for path in (repo_root / "etc/systemd").iterdir()
+        for directory in (repo_root / "etc", repo_root / "etc/systemd")
+        for path in directory.iterdir()
         if path.is_file() and path.suffix in {".service", ".socket", ".timer"}
     }
 
@@ -132,6 +134,21 @@ def test_builder_collects_complete_migrations_units_and_configuration(tmp_path):
         expected_migrations
     )
     assert {payload.path for payload in payloads if payload.role == "systemd"} == expected_units
+    packaged_units = {Path(path).name for path in expected_units}
+    for target in TARGETS.values():
+        assert set((*target.quiesce_units, *target.resume_units)) <= packaged_units
+
+
+def test_production_units_run_from_immutable_release_root():
+    etc = Path(__file__).resolve().parents[1] / "etc"
+    for name in (
+        "air_basistech_net.service",
+        "temperature-bot-ae200-notifications.service",
+        "temperature-bot-performance-monitor.service",
+    ):
+        unit = (etc / name).read_text()
+        assert "/opt/temperature-bot/current" in unit
+        assert "/home/air/temperature-bot" not in unit
 
 
 def test_air_stage_nginx_routes_only_to_staging_loopback():

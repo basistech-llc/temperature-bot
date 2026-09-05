@@ -3,18 +3,20 @@
 Looks like I'll be touching this only at the end of each month, so stashing notes, thoughts, and
 open tabs here:
 
-## Current status — refreshed 2026-09-05 06:02 EDT
+## Current status — refreshed 2026-09-05 08:35 EDT
 
 - Draft [PR #253](https://github.com/basistech-llc/temperature-bot/pull/253)
-  prepares the `1.0.0b1` release workflow. Beta implementation commit
-  `c3f85599bc8a508a75137ae0100c019d72a460da` passed all CI checks. Copilot's
-  22:46 EDT review identified mutable source inputs, unchecked systemd
-  drop-ins, and incomplete runtime-policy preflight. The current branch freezes
-  a root-owned source checkout before unprivileged builds, rejects drop-ins,
-  and verifies database identity, scheduler mode, and every integration mode;
-  signed commit `12948ff41fb696e7d3dce7ef3c550b4ea8435094` passed all five
-  current-head GitHub checks and has no review threads. A Copilot re-review of
-  that head remains pending, so no beta or stable tag has been created.
+  prepares the `1.0.0b1` release workflow. Copilot's 08:23 EDT review identified
+  four remaining updater boundaries: untrusted build-output handoff, stale
+  same-version branch builds, release-state writes outside the target lock, and
+  production units missing from deployment packages. The current branch copies
+  builder output into root-owned storage with descriptor-anchored no-follow and
+  concurrent-change checks, re-resolves branch heads and records state under
+  the target lock, packages every target unit, and points production services
+  at `/opt/temperature-bot/current`. Repository checks, all 606 Python tests,
+  every JavaScript suite, the focused release/package tests, and package/tag
+  verification pass. A fresh current-head Copilot review and GitHub CI are still
+  required, so no beta or stable tag has been created.
 - `air-stage` is live-control staging, not a simulator. It is running
   `1.0.0b1-c3f85599bc8a`, with every integration simulator disabled and its
   collection scheduler enabled. Its public version endpoint was healthy at the

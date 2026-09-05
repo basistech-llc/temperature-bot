@@ -320,6 +320,7 @@ class UpdateCandidate(BaseModel):
     source_url: str
     source_label: str
     allow_same_version: bool
+    branch: str | None = None
 
 
 def _request(url: str, *, timeout: float) -> Any:
@@ -777,6 +778,18 @@ def _stage_candidate(
     target.root.mkdir(parents=True, exist_ok=True)
     with (target.root / ".release-update.lock").open("a+b") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
+        if candidate.branch is not None:
+            current_head = resolve_source_selection(
+                options.repository,
+                "branch",
+                candidate.branch,
+                api_base=options.api_base,
+            )
+            if current_head.commit != candidate.manifest.commit:
+                raise ValueError(
+                    f"branch {candidate.branch} changed from "
+                    f"{candidate.manifest.commit} to {current_head.commit} during build"
+                )
         active = active_manifest(target)
         if not update_required(
             active,
@@ -826,16 +839,18 @@ def _stage_candidate(
                 ),
             )
             disposition = "activated"
-    return UpdateResult(
-        checked_at=datetime.now(timezone.utc),
-        target=target.name,
-        release_url=candidate.source_url,
-        tag=candidate.source_label,
-        version=candidate.manifest.version,
-        commit=candidate.manifest.commit,
-        disposition=disposition,
-        release_directory=release_directory,
-    )
+        result = UpdateResult(
+            checked_at=datetime.now(timezone.utc),
+            target=target.name,
+            release_url=candidate.source_url,
+            tag=candidate.source_label,
+            version=candidate.manifest.version,
+            commit=candidate.manifest.commit,
+            disposition=disposition,
+            release_directory=release_directory,
+        )
+        _write_state(target, result)
+        return result
 
 
 def run_update(
@@ -900,6 +915,7 @@ def run_update(
             source_url=source_url,
             source_label=source_label,
             allow_same_version=source_selection is not None,
+            branch=options.branch,
         )
         if options.check_only:
             update_required(
@@ -918,8 +934,6 @@ def run_update(
                 release_directory=None,
             )
         result = _stage_candidate(candidate, target, options)
-        if result.disposition != "current":
-            _write_state(target, result)
         return result
 
 

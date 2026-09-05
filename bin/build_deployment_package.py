@@ -75,7 +75,26 @@ def collect_payloads(
                 role="migration",
             )
         )
-    for unit in sorted((repo_root / "etc/systemd").iterdir()):
+    systemd = repo_root / "etc/systemd"
+    canonical_unit_names = {
+        unit.name
+        for unit in systemd.iterdir()
+        if unit.is_file() and unit.suffix in {".service", ".socket", ".timer"}
+    }
+    for unit in sorted((repo_root / "etc").iterdir()):
+        if (
+            unit.is_file()
+            and unit.suffix in {".service", ".socket", ".timer"}
+            and unit.name not in canonical_unit_names
+        ):
+            payloads.append(
+                PayloadSource(
+                    source=unit,
+                    path=f"systemd/{unit.name}",
+                    role="systemd",
+                )
+            )
+    for unit in sorted(systemd.iterdir()):
         if unit.is_file():
             is_unit = unit.suffix in {".service", ".socket", ".timer"}
             payloads.append(

@@ -25,14 +25,17 @@ change they completed.
   Root-owned application roots are staged by the tightly sandboxed root
   updater service without executing candidate code; its service group keeps
   releases readable by the runtime account and its private uv cache is writable.
-  Source builds now use a
-  root-owned read-only checkout so unprivileged candidate code cannot change
-  packaging inputs. Activation refuses incomplete runtime policy, changed
-  systemd unit definitions, or unreviewed systemd drop-ins before stopping any
-  unit. The active manifest is revalidated while holding the target update lock,
-  preventing a downloaded stale candidate from racing a concurrent update.
-  Socket units are packaged as systemd units so developer activation preflight
-  can verify them.
+  Source builds now use a root-owned read-only checkout so unprivileged
+  candidate code cannot change packaging inputs. Builder outputs are copied
+  through anchored directory descriptors with no-follow and concurrent-change
+  checks into root-owned storage before trusted package assembly. Activation
+  refuses incomplete runtime policy, changed systemd unit definitions, or
+  unreviewed systemd drop-ins before stopping any unit. Branch heads and the
+  active manifest are revalidated while holding the target update lock, and
+  release status is written before that lock is released, preventing stale
+  candidates or state from racing a concurrent update. Every target unit,
+  including the legacy production units and developer sockets, is packaged for
+  preflight; production services now run from `/opt/temperature-bot/current`.
 - Added concise clean-macOS setup and release/deployment checklists, including
   the simulator/database boundary and the first staging activation gate.
 - Made clean simulator runs and tests select the checked-in non-secret test

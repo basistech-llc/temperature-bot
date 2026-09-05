@@ -61,6 +61,16 @@ class BuilderContext(BaseModel):
     gid: int
 
 
+class BuildOutputContext(BaseModel):
+    """Anchored untrusted output and private trusted destination."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    artifacts: Path
+    artifacts_fd: int
+    trusted: Path
+
+
 def _trusted_root_executable(value: str) -> Path:
     executable = Path(value).resolve(strict=True)
     metadata = executable.stat()
@@ -218,12 +228,11 @@ def _restore_cleanup_access(directory: Path, checkout: Path) -> None:
 
 def _build_inputs(
     checkout: Path,
-    artifacts: Path,
+    output: BuildOutputContext,
     uv_path: Path,
     context: BuilderContext,
 ) -> tuple[Path, Path]:
-    dist = artifacts / "dist"
-    requirements = artifacts / "runtime.txt"
+    dist = output.artifacts / "dist"
     build_context = context.model_copy(update={"cwd": checkout})
     _run_builder(
         [str(uv_path), "build", "--no-sources", "--out-dir", str(dist)],
@@ -242,12 +251,101 @@ def _build_inputs(
         build_context,
         capture_output=True,
     )
-    requirements.write_text(exported.stdout, encoding="utf-8")
+    requirements = output.trusted / "runtime.txt"
+    _write_trusted_output(requirements, exported.stdout.encode("utf-8"))
     version = (checkout / "VERSION").read_text(encoding="utf-8").strip()
-    wheels = sorted(dist.glob(f"temperature_bot-{version}-*.whl"))
-    if len(wheels) != 1:
-        raise ValueError(f"expected one source wheel for {version}; found {len(wheels)}")
-    return requirements, wheels[0]
+    directory_flags = os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0)
+    dist_fd = os.open("dist", directory_flags, dir_fd=output.artifacts_fd)
+    try:
+        wheel_names = sorted(
+            name
+            for name in os.listdir(dist_fd)
+            if name.startswith(f"temperature_bot-{version}-") and name.endswith(".whl")
+        )
+        if len(wheel_names) != 1:
+            raise ValueError(
+                f"expected one source wheel for {version}; found {len(wheel_names)}"
+            )
+        wheel = output.trusted / wheel_names[0]
+        _copy_builder_output(dist_fd, wheel_names[0], wheel, context.uid)
+    finally:
+        os.close(dist_fd)
+    return requirements, wheel
+
+
+def _write_trusted_output(destination: Path, data: bytes) -> None:
+    descriptor = os.open(
+        destination,
+        os.O_WRONLY
+        | os.O_CREAT
+        | os.O_EXCL
+        | getattr(os, "O_NOFOLLOW", 0),
+        0o400,
+    )
+    try:
+        view = memoryview(data)
+        while view:
+            view = view[os.write(descriptor, view) :]
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+
+
+def _copy_builder_output(
+    directory_fd: int, name: str, destination: Path, expected_uid: int
+) -> None:
+    """Copy one stable regular builder output into root-owned storage."""
+    source_fd = os.open(
+        name,
+        os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0),
+        dir_fd=directory_fd,
+    )
+    destination_fd: int | None = None
+    try:
+        before = os.fstat(source_fd)
+        if (
+            not stat.S_ISREG(before.st_mode)
+            or before.st_nlink != 1
+            or before.st_uid != expected_uid
+        ):
+            raise ValueError(f"untrusted builder output is not a private regular file: {name}")
+        destination_fd = os.open(
+            destination,
+            os.O_WRONLY
+            | os.O_CREAT
+            | os.O_EXCL
+            | getattr(os, "O_NOFOLLOW", 0),
+            0o400,
+        )
+        while block := os.read(source_fd, 1024 * 1024):
+            view = memoryview(block)
+            while view:
+                view = view[os.write(destination_fd, view) :]
+        os.fsync(destination_fd)
+        after = os.fstat(source_fd)
+        before_identity = (
+            before.st_dev,
+            before.st_ino,
+            before.st_size,
+            before.st_mtime_ns,
+            before.st_ctime_ns,
+        )
+        after_identity = (
+            after.st_dev,
+            after.st_ino,
+            after.st_size,
+            after.st_mtime_ns,
+            after.st_ctime_ns,
+        )
+        if before_identity != after_identity:
+            raise ValueError(f"builder output changed while being copied: {name}")
+    except Exception:
+        destination.unlink(missing_ok=True)
+        raise
+    finally:
+        if destination_fd is not None:
+            os.close(destination_fd)
+        os.close(source_fd)
 
 
 def build_source_package(
@@ -257,6 +355,12 @@ def build_source_package(
 ) -> tuple[Path, DeploymentManifest]:
     """Build a selected commit unprivileged, then verify its deployment package."""
     _workspace, artifacts, uv_path, context = _prepare_workspace(directory, options)
+    trusted = directory / "trusted"
+    trusted.mkdir(mode=0o700)
+    artifacts_fd = os.open(
+        artifacts,
+        os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0),
+    )
     trusted_context = context.model_copy(
         update={
             "cwd": directory,
@@ -280,11 +384,18 @@ def build_source_package(
             }
         )
         requirements, wheel = _build_inputs(
-            checkout, artifacts, uv_path, reproducible_context
+            checkout,
+            BuildOutputContext(
+                artifacts=artifacts,
+                artifacts_fd=artifacts_fd,
+                trusted=trusted,
+            ),
+            uv_path,
+            reproducible_context,
         )
         package = build_checkout_package(
             checkout,
-            directory,
+            trusted,
             requirements,
             wheel,
             CheckoutPackageOptions(
@@ -300,4 +411,5 @@ def build_source_package(
             raise ValueError("source package provenance does not match the selected commit")
         return package, manifest
     finally:
+        os.close(artifacts_fd)
         _restore_cleanup_access(directory, checkout)

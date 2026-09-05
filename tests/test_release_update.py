@@ -28,9 +28,11 @@ from bin.github_release_update import (
     HealthEndpoint,
     ReleaseChannel,
     RuntimeHealth,
+    UpdateCandidate,
     UpdateResult,
     UpdateOptions,
     _check_runtime_policy,
+    _stage_candidate,
     active_manifest,
     activate_schema_neutral_release,
     activation_is_schema_neutral,
@@ -44,6 +46,7 @@ from bin.release_tag import validate_tag
 from bin.source_deployment import (
     SourceBuildOptions,
     SourceSelection,
+    _copy_builder_output,
     build_source_package,
 )
 
@@ -368,6 +371,70 @@ def test_concurrent_newer_release_rejects_stale_candidate(release_api, tmp_path)
     assert current is not None
     assert current.version == "2.0"
     assert not (target.root / "releases/1.0a1-aaaaaaaaaaaa").exists()
+
+
+def test_stage_rejects_branch_that_changed_during_build(release_api, tmp_path):
+    api_base, built_commit = release_api
+    branch = "codex/release-readiness-a2"
+    current_commit = "b" * 40
+    ReleaseServer.routes[
+        f"/repos/basistech-llc/temperature-bot/commits/{branch.replace('/', '%2F')}"
+    ] = (
+        "application/json",
+        json.dumps(
+            {"sha": current_commit, "html_url": f"{api_base}/commit/{current_commit}"}
+        ).encode(),
+    )
+    package = _package(tmp_path / "candidate", "1.0a1", built_commit)
+    manifest = verify_package(package)
+    target = DeploymentTarget(
+        name="staging",
+        root=tmp_path / "install",
+        quiesce_units=(),
+        resume_units=(),
+        health=(),
+    )
+    candidate = UpdateCandidate(
+        package=package,
+        manifest=manifest,
+        source_url=f"{api_base}/commit/{built_commit}",
+        source_label=f"branch:{branch}",
+        allow_same_version=True,
+        branch=branch,
+    )
+
+    with pytest.raises(ValueError, match="changed .* during build"):
+        _stage_candidate(
+            candidate,
+            target,
+            UpdateOptions(
+                branch=branch,
+                api_base=api_base,
+                create_venv=False,
+            ),
+        )
+
+    assert not (target.root / "releases").exists()
+
+
+def test_builder_output_copy_rejects_symlinks(tmp_path):
+    artifacts = tmp_path / "artifacts"
+    artifacts.mkdir()
+    target = _source(tmp_path, "target.whl", b"wheel")
+    (artifacts / "candidate.whl").symlink_to(target)
+    directory_fd = os.open(artifacts, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        with pytest.raises(OSError):
+            _copy_builder_output(
+                directory_fd,
+                "candidate.whl",
+                tmp_path / "trusted.whl",
+                os.getuid(),
+            )
+    finally:
+        os.close(directory_fd)
+
+    assert not (tmp_path / "trusted.whl").exists()
 
 
 def test_release_discovery_skips_unrelated_screenshot_releases(release_api):
