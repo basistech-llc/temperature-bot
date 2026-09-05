@@ -7,9 +7,10 @@ change they completed.
 
 ## Unreleased
 
-## 1.0.0b1 - Unreleased
+## 1.0.0 - 2026-09-05
 
-- Advanced the release version to `1.0.0b1`.
+- Advanced release workflow and deployment hardening from prior betas into the
+  production `1.0.0` release.
 - Added a production-only, unauthenticated database snapshot endpoint for VPN
   users. Snapshots use SQLite's backup API, include committed WAL data, pass
   `quick_check`, and carry size and SHA-256 response headers. `make
