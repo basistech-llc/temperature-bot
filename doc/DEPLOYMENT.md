@@ -236,13 +236,14 @@ sidecar.
 For an explicitly authorized pre-release test, `--branch <name>` or
 `--commit <sha>` resolves the selector through GitHub to one immutable commit,
 checks out that detached commit, and builds the deployment package locally.
-The source build runs as the unprivileged `nobody` account with no supplementary
-groups. Root staging accepts binary dependency artifacts only and verifies
-installed metadata and files without importing the candidate application or
-executing its entry points. A branch is resolved once at the start, so a
-concurrent push cannot change the commit being installed. Source builds do not
-have GitHub Release attestations and must not replace the signed-tag release
-path for production promotion.
+The trusted updater checks out and freezes a root-owned, read-only source tree
+before candidate code runs. The build then runs from that immutable tree as the
+unprivileged `nobody` account with no supplementary groups. Root staging accepts
+binary dependency artifacts only and verifies installed metadata and files
+without importing the candidate application or executing its entry points. A
+branch is resolved once at the start, so a concurrent push cannot change the
+commit being installed. Source builds do not have GitHub Release attestations
+and must not replace the signed-tag release path for production promotion.
 
 The target must be `production`, `staging`, or `developers`. `slg1` and `deg1`
 are intentionally not individual choices because both use
@@ -279,12 +280,14 @@ migration path and SHA-256 is identical to the active release. It records which
 target units are active, quiesces only that target, switches `current`
 atomically, restores the previously active long-running units/timers, and
 requires every loopback version endpoint to report the candidate version,
-commit, instance identity, and expected control mode. Before stopping anything,
-it also verifies the active endpoint's instance and control mode, so stale host
-configuration fails closed. Failure before health success restores the prior
-release pointer and unit state. A candidate with any migration change remains
-staged and must use the database snapshot/migration transaction in #216; this
-command never modifies a database.
+commit, instance identity, database identity, control mode, scheduler mode, and
+all integration simulator modes. Before stopping anything, it verifies that
+complete active policy, requires every installed unit fragment to match the
+package, and rejects unreviewed systemd drop-ins, so stale host configuration
+fails closed. Failure before health success restores the prior release pointer
+and unit state. A candidate with any migration change remains staged and must
+use the database snapshot/migration transaction in #216; this command never
+modifies a database.
 
 The selected `air-stage` policy is live control with all integration simulator
 flags disabled. Activation preflight rejects future host/source drift; verify

@@ -20,13 +20,16 @@ from app.deployment_package import (
     build_package,
     verify_package,
 )
+from app.instance_policy import IntegrationModes
 from bin.github_release_update import (
     ActivationOptions,
     DeploymentTarget,
     HealthEndpoint,
     ReleaseChannel,
+    RuntimeHealth,
     UpdateResult,
     UpdateOptions,
+    _check_runtime_policy,
     activate_schema_neutral_release,
     activation_is_schema_neutral,
     discover_release,
@@ -174,7 +177,8 @@ state = json.loads(state_path.read_text())
 action = sys.argv[1]
 unit = sys.argv[-1]
 if action == "show":
-    print(Path(sys.argv[0]).with_name("installed-units") / sys.argv[2])
+    print(f"FragmentPath={Path(sys.argv[0]).with_name('installed-units') / sys.argv[2]}")
+    print(f"DropInPaths={state.get('drop_in_paths', '')}")
     raise SystemExit(0)
 if action == "is-active":
     raise SystemExit(0 if state.get(unit, False) else 3)
@@ -435,6 +439,11 @@ def test_source_commit_is_built_into_verified_deployment_package(tmp_path):
     assert not manifest.dirty
     assert repeated_manifest == manifest
     assert repeated_package.read_bytes() == package.read_bytes()
+    assert all(
+        not path.stat().st_mode & 0o222
+        for path in (first / "checkout").rglob("*")
+        if path.is_file()
+    )
 
 
 def test_root_staging_does_not_execute_candidate_code(tmp_path):
@@ -623,7 +632,7 @@ def test_activation_refuses_control_mode_drift_before_stopping_units(tmp_path):
         ),
     )
     try:
-        with pytest.raises(ValueError, match="uses control mode read-only"):
+        with pytest.raises(ValueError, match="control mode is read-only"):
             activate_schema_neutral_release(
                 candidate_package,
                 target,
@@ -645,6 +654,33 @@ def test_activation_refuses_control_mode_drift_before_stopping_units(tmp_path):
     assert json.loads(state.read_text())["events"] == []
 
 
+def test_complete_runtime_policy_rejects_integration_drift():
+    endpoint = HealthEndpoint(
+        url="http://127.0.0.1/api/v1/version",
+        instance="air-stage",
+        control_mode="live",
+        database_identity="air-stage",
+        scheduler_mode="enabled",
+        integrations=IntegrationModes(
+            ae200=False, hubitat=False, airthings=False, aqicn=False
+        ),
+    )
+    payload = RuntimeHealth(
+        version="1.0",
+        commit="a" * 40,
+        instance="air-stage",
+        control_mode="live",
+        database_identity="air-stage",
+        scheduler_mode="enabled",
+        integrations=IntegrationModes(
+            ae200=False, hubitat=False, airthings=False, aqicn=True
+        ),
+    )
+
+    with pytest.raises(ValueError, match="integration modes"):
+        _check_runtime_policy(endpoint, payload)
+
+
 def test_activation_refuses_systemd_unit_drift_before_stopping_units(tmp_path):
     active_package = _package(tmp_path / "active", "0.9", "a" * 40)
     candidate_package = _package(tmp_path / "candidate", "1.0", "b" * 40)
@@ -660,6 +696,38 @@ def test_activation_refuses_systemd_unit_drift_before_stopping_units(tmp_path):
     )
 
     with pytest.raises(ValueError, match="systemd unit definitions differ"):
+        activate_schema_neutral_release(
+            candidate_package,
+            _activation_target(root, 1),
+            active,
+            candidate,
+            ActivationOptions(
+                require_root=False,
+                systemctl=str(command),
+                create_venv=False,
+                health_timeout=0.1,
+            ),
+        )
+
+    assert (root / "current").resolve() == installed.release_directory
+    assert json.loads(state.read_text())["events"] == []
+
+
+def test_activation_refuses_systemd_drop_ins_before_stopping_units(tmp_path):
+    active_package = _package(tmp_path / "active", "0.9", "a" * 40)
+    candidate_package = _package(tmp_path / "candidate", "1.0", "b" * 40)
+    active = verify_package(active_package)
+    candidate = verify_package(candidate_package)
+    root = tmp_path / "root"
+    installed = install_package(
+        active_package, root, create_venv=False, activate=True
+    )
+    command, state = _systemctl(tmp_path)
+    systemd_state = json.loads(state.read_text())
+    systemd_state["drop_in_paths"] = "/etc/systemd/system/web.service.d/override.conf"
+    state.write_text(json.dumps(systemd_state), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="unreviewed drop-ins"):
         activate_schema_neutral_release(
             candidate_package,
             _activation_target(root, 1),

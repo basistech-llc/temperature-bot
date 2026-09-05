@@ -27,6 +27,7 @@ from app.deployment_package import (
     verify_outer_checksum,
     verify_package,
 )
+from app.instance_policy import ControlMode, IntegrationModes, SchedulerMode
 from bin.install_deployment_package import install_package
 from bin.source_deployment import (
     DEFAULT_BUILD_USER,
@@ -43,6 +44,8 @@ RELEASES_PER_PAGE = 100
 MAX_RELEASE_PAGES = 20
 PACKAGE_PREFIX = "temperature-bot-deployment-"
 STATE_FILE = "release-update-state.json"
+SYSTEMD_FRAGMENT_PROPERTY = "FragmentPath"
+SYSTEMD_DROP_IN_PROPERTY = "DropInPaths"
 ModelT = TypeVar("ModelT", bound=BaseModel)
 
 
@@ -116,7 +119,10 @@ class HealthEndpoint(BaseModel):
 
     url: str
     instance: str
-    control_mode: str | None = None
+    control_mode: ControlMode | None = None
+    database_identity: str | None = None
+    scheduler_mode: SchedulerMode | None = None
+    integrations: IntegrationModes | None = None
 
 
 class RuntimeHealth(BaseModel):
@@ -128,6 +134,9 @@ class RuntimeHealth(BaseModel):
     commit: str
     instance: str
     control_mode: str | None = None
+    database_identity: str | None = None
+    scheduler_mode: str | None = None
+    integrations: IntegrationModes | None = None
 
 
 class DeploymentTarget(BaseModel):
@@ -209,7 +218,12 @@ TARGETS = {
             HealthEndpoint(
                 url="http://127.0.0.1:8100/api/v1/version",
                 instance="production",
-                control_mode="live",
+                control_mode=ControlMode.LIVE,
+                database_identity="production",
+                scheduler_mode=SchedulerMode.ENABLED,
+                integrations=IntegrationModes(
+                    ae200=False, hubitat=False, airthings=False, aqicn=False
+                ),
             ),
         ),
     ),
@@ -231,7 +245,12 @@ TARGETS = {
             HealthEndpoint(
                 url="http://127.0.0.1:8101/api/v1/version",
                 instance="air-stage",
-                control_mode="live",
+                control_mode=ControlMode.LIVE,
+                database_identity="air-stage",
+                scheduler_mode=SchedulerMode.ENABLED,
+                integrations=IntegrationModes(
+                    ae200=False, hubitat=False, airthings=False, aqicn=False
+                ),
             ),
         ),
     ),
@@ -254,12 +273,22 @@ TARGETS = {
             HealthEndpoint(
                 url="http://127.0.0.1:8003/api/v1/version",
                 instance="slg1",
-                control_mode="simulator",
+                control_mode=ControlMode.SIMULATOR,
+                database_identity="slg1",
+                scheduler_mode=SchedulerMode.DISABLED,
+                integrations=IntegrationModes(
+                    ae200=True, hubitat=True, airthings=True, aqicn=True
+                ),
             ),
             HealthEndpoint(
                 url="http://127.0.0.1:8004/api/v1/version",
                 instance="deg1",
-                control_mode="simulator",
+                control_mode=ControlMode.SIMULATOR,
+                database_identity="deg1",
+                scheduler_mode=SchedulerMode.DISABLED,
+                integrations=IntegrationModes(
+                    ae200=True, hubitat=True, airthings=True, aqicn=True
+                ),
             ),
         ),
     ),
@@ -540,13 +569,7 @@ def _check_health(
                     raise ValueError(f"version is {payload.version}")
                 if payload.commit != manifest.commit:
                     raise ValueError(f"commit is {payload.commit}")
-                if payload.instance != endpoint.instance:
-                    raise ValueError(f"instance is {payload.instance}")
-                if (
-                    endpoint.control_mode
-                    and payload.control_mode != endpoint.control_mode
-                ):
-                    raise ValueError(f"control mode is {payload.control_mode}")
+                _check_runtime_policy(endpoint, payload)
             except (OSError, ValueError, json.JSONDecodeError) as error:
                 errors.append(f"{endpoint.url}: {error}")
         if not errors:
@@ -555,17 +578,46 @@ def _check_health(
     raise RuntimeError("release health checks failed: " + "; ".join(errors))
 
 
+def _check_runtime_policy(
+    endpoint: HealthEndpoint, payload: RuntimeHealth
+) -> None:
+    expected = (
+        ("instance", endpoint.instance, payload.instance),
+        ("control mode", endpoint.control_mode, payload.control_mode),
+        ("database identity", endpoint.database_identity, payload.database_identity),
+        ("scheduler mode", endpoint.scheduler_mode, payload.scheduler_mode),
+        ("integration modes", endpoint.integrations, payload.integrations),
+    )
+    for label, wanted, actual in expected:
+        if wanted is not None and actual != wanted:
+            raise ValueError(f"{label} is {actual}; expected {wanted}")
+
+
 def _unit_fragment(unit: str, systemctl: str) -> Path:
     result = subprocess.run(
-        [systemctl, "show", unit, "--property=FragmentPath", "--value"],
+        [
+            systemctl,
+            "show",
+            unit,
+            f"--property={SYSTEMD_FRAGMENT_PROPERTY}",
+            f"--property={SYSTEMD_DROP_IN_PROPERTY}",
+        ],
         check=True,
         capture_output=True,
         text=True,
         timeout=10,
     )
-    fragment = Path(result.stdout.strip())
+    properties = dict(
+        line.split("=", 1) for line in result.stdout.splitlines() if "=" in line
+    )
+    fragment = Path(properties.get(SYSTEMD_FRAGMENT_PROPERTY, ""))
     if not fragment.is_absolute() or not fragment.is_file():
         raise ValueError(f"cannot locate installed systemd unit {unit}")
+    if properties.get(SYSTEMD_DROP_IN_PROPERTY, "").strip():
+        raise ValueError(
+            f"installed systemd unit {unit} has unreviewed drop-ins: "
+            f"{properties[SYSTEMD_DROP_IN_PROPERTY]}"
+        )
     return fragment
 
 
@@ -602,17 +654,13 @@ def _check_activation_preflight(
                 payload = RuntimeHealth.model_validate_json(response.read())
         except (OSError, ValueError) as error:
             raise ValueError(f"cannot verify active target {endpoint.url}: {error}") from error
-        if payload.instance != endpoint.instance:
+        try:
+            _check_runtime_policy(endpoint, payload)
+        except ValueError as error:
             raise ValueError(
-                f"active target {endpoint.url} reports instance {payload.instance}; "
-                f"expected {endpoint.instance}"
-            )
-        if payload.control_mode != endpoint.control_mode:
-            raise ValueError(
-                f"active target {endpoint.instance} uses control mode "
-                f"{payload.control_mode}; expected {endpoint.control_mode}; "
+                f"active target {endpoint.url} policy mismatch: {error}; "
                 "reconcile the reviewed host environment before activation"
-            )
+            ) from error
 
 
 def activate_schema_neutral_release(

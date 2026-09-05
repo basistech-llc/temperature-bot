@@ -26,9 +26,9 @@ CI.
    the commands will be:
 
    ```bash
-   make release-tag-check GITHUB_REF_NAME=1.0.0b1
-   git tag -s 1.0.0b1 -m "Temperature Bot 1.0.0b1"
-   git push origin 1.0.0b1
+   make release-tag-check GITHUB_REF_NAME=v1.0.0b1
+   git tag -s v1.0.0b1 -m "Temperature Bot 1.0.0b1"
+   git push origin v1.0.0b1
    ```
 
 5. Wait for the **Release** workflow. It must publish one
@@ -36,7 +36,7 @@ CI.
 
    ```bash
    gh run list --workflow Release --limit 5
-   gh release view 1.0.0b1
+   gh release view v1.0.0b1
    ```
 
 6. Connect to `air` using a normal maintainer account, never direct root SSH.
@@ -57,7 +57,7 @@ CI.
    ```bash
    ssh air.basistech.net
    sudo /opt/temperature-bot-stage/current/venv/bin/temperature-bot-release-update \
-     staging --channel prerelease --tag 1.0.0b1 --check-only
+     staging --channel prerelease --tag v1.0.0b1 --check-only
    ```
 
    For the first release after the old checkout-based deployment, the active
@@ -67,16 +67,16 @@ CI.
 
    ```bash
    sudo git clone --config core.hooksPath=/dev/null \
-     --branch 1.0.0b1 --single-branch \
+     --branch v1.0.0b1 --single-branch \
      https://github.com/basistech-llc/temperature-bot.git \
      /opt/temperature-bot-release-tools-1.0.0b1
-   sudo git -C /opt/temperature-bot-release-tools-1.0.0b1 verify-tag 1.0.0b1
+   sudo git -C /opt/temperature-bot-release-tools-1.0.0b1 verify-tag v1.0.0b1
    sudo git -C /opt/temperature-bot-release-tools-1.0.0b1 status --porcelain
    sudo /usr/bin/env \
      PYTHONPATH=/opt/temperature-bot-release-tools-1.0.0b1 \
      /opt/temperature-bot/current/venv/bin/python \
      -m bin.github_release_update staging --channel prerelease \
-     --tag 1.0.0b1 --check-only
+     --tag v1.0.0b1 --check-only
    ```
 
    The status command must print nothing. Do not run a root updater from a
@@ -92,9 +92,9 @@ CI.
 
    ```bash
    sudo /opt/temperature-bot-stage/current/venv/bin/temperature-bot-release-update \
-     staging --channel prerelease --tag 1.0.0b1
+     staging --channel prerelease --tag v1.0.0b1
    sudo /opt/temperature-bot-stage/current/venv/bin/temperature-bot-release-update \
-     staging --channel prerelease --tag 1.0.0b1 --activate
+     staging --channel prerelease --tag v1.0.0b1 --activate
    curl --fail https://air-stage.basistech.net/api/v1/version
    ```
 
@@ -107,8 +107,9 @@ CI.
    differ.
 
    Before a tag exists, an explicitly authorized staging test may select a
-   branch or exact commit instead. The updater resolves a branch to one commit
-   before building, and performs the source build as an unprivileged account:
+   branch or exact commit instead. The updater resolves a branch to one commit,
+   freezes a root-owned read-only checkout, and performs the source build from
+   that immutable tree as an unprivileged account:
 
    ```bash
    sudo /opt/temperature-bot/current/venv/bin/python \

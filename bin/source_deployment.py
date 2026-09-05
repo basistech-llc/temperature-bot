@@ -108,8 +108,8 @@ def _prepare_workspace(
     if builder.pw_uid == 0:
         raise ValueError("source build user must not be root")
     if os.geteuid() == 0:
-        os.chown(directory, builder.pw_uid, builder.pw_gid)
-        directory.chmod(0o700)
+        os.chown(directory, 0, 0)
+    directory.chmod(0o711)
 
     workspace = directory / "source-build"
     home = workspace / "home"
@@ -195,6 +195,27 @@ def _checkout_source(
     return checkout, datetime.fromtimestamp(int(commit_epoch), timezone.utc)
 
 
+def _freeze_checkout(checkout: Path) -> None:
+    """Make every selected source byte immutable before candidate code runs."""
+    paths = [checkout, *checkout.rglob("*")]
+    if any(path.is_symlink() for path in paths):
+        raise ValueError("source checkout contains a symbolic link")
+    for path in reversed(paths):
+        metadata = path.stat()
+        if os.geteuid() == 0:
+            os.chown(path, 0, 0)
+        path.chmod(0o555 if path.is_dir() or metadata.st_mode & 0o111 else 0o444)
+
+
+def _restore_cleanup_access(directory: Path, checkout: Path) -> None:
+    """Keep the completed source private while permitting temporary cleanup."""
+    for path in checkout.rglob("*"):
+        if path.is_dir():
+            path.chmod(0o700)
+    checkout.chmod(0o700)
+    directory.chmod(0o700)
+
+
 def _build_inputs(
     checkout: Path,
     artifacts: Path,
@@ -235,36 +256,48 @@ def build_source_package(
     options: SourceBuildOptions,
 ) -> tuple[Path, DeploymentManifest]:
     """Build a selected commit unprivileged, then verify its deployment package."""
-    workspace, artifacts, uv_path, context = _prepare_workspace(directory, options)
-    checkout, built_at = _checkout_source(selection, options, workspace, context)
-    reproducible_context = context.model_copy(
+    _workspace, artifacts, uv_path, context = _prepare_workspace(directory, options)
+    trusted_context = context.model_copy(
         update={
-            "environment": {
-                **context.environment,
-                "SOURCE_DATE_EPOCH": str(int(built_at.timestamp())),
-            }
+            "cwd": directory,
+            "environment": {**context.environment, "HOME": str(directory)},
+            "uid": os.geteuid(),
+            "gid": os.getegid(),
         }
     )
-    requirements, wheel = _build_inputs(
-        checkout, artifacts, uv_path, reproducible_context
+    checkout, built_at = _checkout_source(
+        selection, options, directory, trusted_context
     )
-    if os.geteuid() == 0:
-        os.chown(directory, 0, 0)
-        directory.chmod(0o700)
-    package = build_checkout_package(
-        checkout,
-        directory,
-        requirements,
-        wheel,
-        CheckoutPackageOptions(
-            flyway_version=options.flyway_version,
-            commit=selection.commit,
-            built_at=built_at,
-            dirty=False,
-        ),
-    )
-    verify_outer_checksum(package)
-    manifest = verify_package(package)
-    if manifest.dirty or manifest.commit != selection.commit:
-        raise ValueError("source package provenance does not match the selected commit")
-    return package, manifest
+    _freeze_checkout(checkout)
+    try:
+        reproducible_context = context.model_copy(
+            update={
+                "cwd": checkout,
+                "environment": {
+                    **context.environment,
+                    "SOURCE_DATE_EPOCH": str(int(built_at.timestamp())),
+                },
+            }
+        )
+        requirements, wheel = _build_inputs(
+            checkout, artifacts, uv_path, reproducible_context
+        )
+        package = build_checkout_package(
+            checkout,
+            directory,
+            requirements,
+            wheel,
+            CheckoutPackageOptions(
+                flyway_version=options.flyway_version,
+                commit=selection.commit,
+                built_at=built_at,
+                dirty=False,
+            ),
+        )
+        verify_outer_checksum(package)
+        manifest = verify_package(package)
+        if manifest.dirty or manifest.commit != selection.commit:
+            raise ValueError("source package provenance does not match the selected commit")
+        return package, manifest
+    finally:
+        _restore_cleanup_access(directory, checkout)

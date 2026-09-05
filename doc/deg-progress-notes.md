@@ -1,7 +1,38 @@
-## Notes to self
+# Handoff notes for DEG
 
 Looks like I'll be touching this only at the end of each month, so stashing notes, thoughts, and
 open tabs here:
+
+## Current status — verified 2026-09-04 22:46 EDT
+
+- Draft [PR #253](https://github.com/basistech-llc/temperature-bot/pull/253)
+  prepares the `1.0.0b1` release workflow. Beta implementation commit
+  `c3f85599bc8a508a75137ae0100c019d72a460da` passed all CI checks. Copilot's
+  22:46 EDT review identified mutable source inputs, unchecked systemd
+  drop-ins, and incomplete runtime-policy preflight. The current branch freezes
+  a root-owned source checkout before unprivileged builds, rejects drop-ins,
+  and verifies database identity, scheduler mode, and every integration mode;
+  its focused updater suite passes, while current-head CI and re-review remain
+  pending.
+- `air-stage` is live-control staging, not a simulator. It is running
+  `1.0.0b1-c3f85599bc8a`, with every integration simulator disabled and its
+  collection scheduler enabled. The installed branch updater built, staged,
+  activated, and health-checked that release successfully.
+- Production remains on `0.11.0` at `7a7d2e53b32b` and was not changed by the
+  staging validation.
+- `slg1` and `deg1` share immutable developer release
+  `0.11.0-5ffc51e31536`. Both socket-activated services are running in simulator
+  mode with all integrations simulated, distinct private database identities,
+  and scheduling disabled. Their ports are 8003 and 8004, respectively.
+- There is no periodic release-updater unit installed on the host. Release
+  updates begin only when an operator invokes the installed updater command.
+
+Application releases and host configuration are separate transactions. The
+package may carry reviewed systemd, socket, environment, and nginx files for
+verification, but its installer does not write `/etc`, reload systemd/nginx, or
+change enablement. Do not deploy by pulling a server checkout; follow
+[`doc/release-and-deploy.md`](release-and-deploy.md) and
+[`doc/DEPLOYMENT.md`](DEPLOYMENT.md).
 
 - VPN for BasisTech: Tailscale, installed on MacBook deg-mac-2023
 - Site links:
@@ -213,13 +244,14 @@ make pytest  # Python tests only
 Tests automatically use `AE200_SIMULATOR=1` via the `[tool.pytest.ini_options]` `env` list in `pyproject.toml` and `tests/conftest.py`.
 
 
-# Progress notes
+# Operations reference
 
-## Config notes
+## Endpoint inventory
 
-- air.basistech.net runs on port 8100
-- slg1.basistech.net runs on port 8003
-- deg1.basistech.net will be on 8004
+- `air.basistech.net`: production on loopback port 8100
+- `air-stage.basistech.net`: live-control staging on loopback port 8101
+- `slg1.basistech.net`: simulator-only developer UI on loopback port 8003
+- `deg1.basistech.net`: simulator-only developer UI on loopback port 8004
 
 ### nginx config
 
@@ -229,33 +261,23 @@ Tests automatically use `AE200_SIMULATOR=1` via the `[tool.pytest.ini_options]` 
 - Restart: `sudo systemctl restart nginx`
 - Test status: `sudo systemctl status nginx`
 
-### deployments config
-
-- `git pull ...`, after setting up .ssh
-- `make install-ubuntu`
-- `<repo>/etc/*.service` has the service control files for each copy
-- Each needs to be copied manually into /etc/systemd/system
-- Start service with, e.g.,
+### Developer service diagnostics
 
 ```bash
-sudo systemctl daemon-reload
-sudo systemctl enable --now deg1_basistech_net.service
-```
-
-- See logs:
-
-```
-sudo systemctl status deg1_basistech_net.service
+curl --fail http://127.0.0.1:8004/api/v1/version
+sudo systemctl status deg1_basistech_net.socket deg1_basistech_net.service
 sudo journalctl -u deg1_basistech_net.service -e -n 200
 ```
 
-## Questions
+## Open deployment work
 
-- in /etc/nginx, what is causing default routing to air.basistech.net (e.g. of deg1, before I
-    configured it). Is this desirable behavior, or more confusing than it is worth?
-- Do we have any automation for deploying `<repo>/etc/*.service` to `/etc/systemd/system/*.service`?
+- [#213](https://github.com/basistech-llc/temperature-bot/issues/213): validated immutable GitHub Releases
+- [#215](https://github.com/basistech-llc/temperature-bot/issues/215): outbound host-side release polling
+- [#216](https://github.com/basistech-llc/temperature-bot/issues/216): transactional migration and rollback activation
+- [#217](https://github.com/basistech-llc/temperature-bot/issues/217): deployment preflight, live smoke tests, and provenance
+- [#218](https://github.com/basistech-llc/temperature-bot/issues/218): production/staging/developer runtime isolation
 
-## Todo
-
-- Move /etc/nginx config files to git in <repo>/etc
-- Write tooling to keep live nginx and systemctl files in sync with repo
+Issue [#252](https://github.com/basistech-llc/temperature-bot/issues/252) is
+closed: the selected `air-stage` policy is live control with all integration
+simulators disabled. Activation must continue to reject future drift from that
+policy.

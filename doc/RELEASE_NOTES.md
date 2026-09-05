@@ -22,10 +22,12 @@ change they completed.
   or commit; the build runs unprivileged and records the immutable commit.
   Installed wheels now provide the `temperature-bot-release-update` command.
   Root-owned application roots are staged by the tightly sandboxed root
-  updater service without executing candidate code, and activation now refuses
-  stale instance/control-mode configuration or systemd unit definitions before
-  stopping any unit. Socket units are packaged as systemd units so developer
-  activation preflight can verify them.
+  updater service without executing candidate code. Source builds now use a
+  root-owned read-only checkout so unprivileged candidate code cannot change
+  packaging inputs. Activation refuses incomplete runtime policy, changed
+  systemd unit definitions, or unreviewed systemd drop-ins before stopping any
+  unit. Socket units are packaged as systemd units so developer activation
+  preflight can verify them.
 - Added concise clean-macOS setup and release/deployment checklists, including
   the simulator/database boundary and the first staging activation gate.
 - Made clean simulator runs and tests select the checked-in non-secret test
@@ -36,6 +38,8 @@ change they completed.
   can clone pull-request merge commits without shallow-root failures.
 - Recorded the validated `air-stage` policy as live control with all integration
   simulators disabled; activation rejects future host/source drift.
+- Refreshed the DEG handoff with the live-verified immutable deployment state,
+  endpoint inventory, simulator boundary, and remaining deployment issues.
 
 ## 1.0a1 - 2026-08-30
 
