@@ -58,10 +58,11 @@ available; this document deliberately does not prescribe how to install them.
    WAL data, checks its integrity, and returns its SHA-256 in a response header.
 
    The Make target moves any existing local database directory to a timestamped
-   directory under `var/db/backups`, downloads the snapshot, verifies its
-   SHA-256 and SQLite integrity, and applies pending migrations. It does not
-   change the production database, contact building hardware, or download the
-   production configuration or secrets.
+   directory under `var/db/backups`, waits if a snapshot is already being made,
+   shows download progress, verifies the snapshot size, SHA-256, and SQLite
+   integrity, and applies pending migrations. It does not change the production
+   database, contact building hardware, or download the production configuration
+   or secrets.
 
 4. Start the safe simulator and open <http://localhost:8000>:
 
