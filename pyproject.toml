@@ -9,7 +9,7 @@
 
 [project]
 name = "temperature-bot"
-version = "1.0a1"
+version = "1.0.1-dev"
 requires-python = ">=3.12,<4.0.0"
 dependencies = [
     "aiohttp (==3.13.5)",
@@ -34,8 +34,10 @@ dependencies = [
 authors = [
 	{name="Simson Garfinkel", email="simsong@basistech.com"}
 ]
-
 readme = "README.md"
+
+[project.scripts]
+temperature-bot-release-update = "bin.github_release_update:main"
 
 [build-system]
 requires = ["hatchling>=1.27,<2"]

@@ -31,6 +31,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          # The source-deployment integration test clones this checkout.
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v6

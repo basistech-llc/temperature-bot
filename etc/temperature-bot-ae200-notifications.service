@@ -8,12 +8,12 @@ Wants=network-online.target
 Type=simple
 User=temperature_bot
 Group=temperature_bot
-WorkingDirectory=/home/air/temperature-bot
-Environment="PATH=/home/air/temperature-bot/.venv/bin:/usr/bin:/bin"
+WorkingDirectory=/opt/temperature-bot/current
+Environment="PATH=/opt/temperature-bot/current/venv/bin:/usr/bin:/bin"
 Environment="DB_PATH=/var/db/temperature_bot/temperature-bot.db"
 Environment="TEMPERATURE_BOT_INSTANCE=production"
 EnvironmentFile=-/etc/temperature-bot-ae200-notifications.env
-ExecStart=/home/air/temperature-bot/.venv/bin/python -m bin.ae200_notifications
+ExecStart=/opt/temperature-bot/current/venv/bin/python -m bin.ae200_notifications
 Restart=always
 RestartSec=5
 

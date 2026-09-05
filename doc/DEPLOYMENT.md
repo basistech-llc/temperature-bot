@@ -90,8 +90,8 @@ configuration/temperature-bot.env.example
 configuration/slg1.env.example
 configuration/deg1.env.example
 configuration/air-stage.env.example
-configuration/slg1_basistech_net.socket
-configuration/deg1_basistech_net.socket
+systemd/slg1_basistech_net.socket
+systemd/deg1_basistech_net.socket
 nginx/air-stage.basistech.net
 systemd/slg1_basistech_net.service
 systemd/deg1_basistech_net.service
@@ -212,8 +212,8 @@ Pushing a tag whose normalized PEP 440 value matches `VERSION` and
 Linux checks and tests, builds and installs the immutable package in a
 disposable root, verifies clean commit provenance, attests the ZIP and checksum
 sidecar, and creates the GitHub Release. A prerelease project version, such as
-canonical `1.0a1`, produces a prerelease even when the tag uses the equivalent
-human spelling `1.0-alpha1`.
+canonical `1.0.0b1`, produces a prerelease even when the tag uses the equivalent
+human spelling `1.0.0-beta1`.
 
 The trusted currently installed environment can inspect the release channel and
 stage a newer application for exactly one application root:
@@ -224,9 +224,26 @@ stage a newer application for exactly one application root:
   -m bin.github_release_update production --check-only
 
 # Include prereleases and stage the newest verified release.
-sudo -u temperature_bot /opt/temperature-bot/current/venv/bin/python \
+sudo /opt/temperature-bot/current/venv/bin/python \
   -m bin.github_release_update production --channel prerelease
 ```
+
+Pass `--tag <tag>` to select a specific published application release instead
+of the newest eligible release. Discovery skips web-screenshot and other
+GitHub Releases that do not contain exactly one deployment ZIP and its SHA-256
+sidecar.
+
+For an explicitly authorized pre-release test, `--branch <name>` or
+`--commit <sha>` resolves the selector through GitHub to one immutable commit,
+checks out that detached commit, and builds the deployment package locally.
+The trusted updater checks out and freezes a root-owned, read-only source tree
+before candidate code runs. The build then runs from that immutable tree as the
+unprivileged `nobody` account with no supplementary groups. Root staging accepts
+binary dependency artifacts only and verifies installed metadata and files
+without importing the candidate application or executing its entry points. A
+branch is resolved once at the start, so a concurrent push cannot change the
+commit being installed. Source builds do not have GitHub Release attestations
+and must not replace the signed-tag release path for production promotion.
 
 The target must be `production`, `staging`, or `developers`. `slg1` and `deg1`
 are intentionally not individual choices because both use
@@ -244,6 +261,13 @@ reference host configuration for periodic stable-channel staging. As with all
 host configuration, an operator must explicitly install and enable the selected
 instance; the package installer does not modify `/etc` or systemd.
 
+The staging process runs as root because the immutable `/opt` application
+roots are root-owned. Its systemd sandbox permits writes only to those roots;
+it never activates a release unless `--activate` is explicit.
+It uses a pinned, root-owned uv executable at `/usr/local/bin/uv`; never run a
+root updater through a service-account-owned executable. Override that audited
+path explicitly with `--uv` if the host layout changes.
+
 Activation is deliberately narrower than staging:
 
 ```bash
@@ -256,10 +280,19 @@ migration path and SHA-256 is identical to the active release. It records which
 target units are active, quiesces only that target, switches `current`
 atomically, restores the previously active long-running units/timers, and
 requires every loopback version endpoint to report the candidate version,
-commit, and instance identity. Failure before health success restores the prior
-release pointer and unit state. A candidate with any migration change remains
-staged and must use the database snapshot/migration transaction in #216; this
-command never modifies a database.
+commit, instance identity, database identity, control mode, scheduler mode, and
+all integration simulator modes. Before stopping anything, it verifies that
+complete active policy, requires every installed unit fragment to match the
+package, and rejects unreviewed systemd drop-ins, so stale host configuration
+fails closed. Failure before health success restores the prior release pointer
+and unit state. A candidate with any migration change remains staged and must
+use the database snapshot/migration transaction in #216; this command never
+modifies a database.
+
+The selected `air-stage` policy is live control with all integration simulator
+flags disabled. Activation preflight rejects future host/source drift; verify
+that the persistent host environment retains this policy rather than weakening
+the preflight or rewriting the environment implicitly.
 
 ## Legacy Make targets
 

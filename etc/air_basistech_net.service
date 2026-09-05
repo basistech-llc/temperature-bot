@@ -6,12 +6,13 @@ After=network.target
 [Service]
 User=temperature_bot
 Group=temperature_bot
-WorkingDirectory=/home/air/temperature-bot
-Environment="PATH=/home/air/temperature-bot/.venv/bin"
+WorkingDirectory=/opt/temperature-bot/current
+Environment="PATH=/opt/temperature-bot/current/venv/bin:/usr/bin:/bin"
+EnvironmentFile=/etc/temperature-bot/runtime.env
 Environment="DB_PATH=/var/db/temperature_bot/temperature-bot.db"
 Environment="TEMPERATURE_BOT_INSTANCE=production"
 Environment="PERFORMANCE_CLIENT_ID=web"
-ExecStart=/bin/bash -c 'gunicorn app.main:app --bind 127.0.0.1:8100 --workers $((2 * $(/usr/bin/nproc) + 1))'
+ExecStart=/bin/bash -c '/opt/temperature-bot/current/venv/bin/gunicorn app.main:app --bind 127.0.0.1:8100 --workers $((2 * $(/usr/bin/nproc) + 1))'
 Restart=always
 RestartSec=2
 

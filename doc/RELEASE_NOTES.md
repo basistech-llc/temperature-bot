@@ -7,6 +7,59 @@ change they completed.
 
 ## Unreleased
 
+- Store pull-request web UI screenshots as 30-day GitHub Actions artifacts
+  instead of creating long-lived prereleases and repository tags.
+- Correct the production web unit to load the reviewed runtime environment and
+  retain system command paths required by relocatable virtual-environment
+  launchers.
+- Made `make fetch-dev-db` wait visibly while a production snapshot is being
+  prepared or another snapshot is in progress, show download progress, and
+  reject invalid size or SHA-256 metadata before opening the fixed snapshot in
+  immutable mode for SQLite validation.
+
+## 1.0.0 - 2026-09-05
+
+- Advanced release workflow and deployment hardening from prior betas into the
+  production `1.0.0` release.
+- Added a production-only, unauthenticated database snapshot endpoint for VPN
+  users. Snapshots use SQLite's backup API, include committed WAL data, pass
+  `quick_check`, and carry size and SHA-256 response headers. `make
+  fetch-dev-db` now downloads and verifies this snapshot without SSH or a copy
+  of the production secrets file. Completed snapshot files are removed after
+  the WSGI response closes, and the per-database lease remains held until then
+  so concurrent slow downloads cannot accumulate database-sized snapshots.
+- Hardened release discovery to ignore unrelated screenshot releases, page
+  through the GitHub release history, and optionally select one exact tag.
+  Explicit staging tests can also reproducibly build a resolved GitHub branch
+  or commit; the build runs unprivileged and records the immutable commit.
+  Installed wheels now provide the `temperature-bot-release-update` command.
+  Root-owned application roots are staged by the tightly sandboxed root
+  updater service without executing candidate code; its service group keeps
+  releases readable by the runtime account and its private uv cache is writable.
+  Source builds now use a root-owned read-only checkout so unprivileged
+  candidate code cannot change packaging inputs. Builder outputs are copied
+  through anchored directory descriptors with no-follow and concurrent-change
+  checks into root-owned storage before trusted package assembly. Activation
+  refuses incomplete runtime policy, changed systemd unit definitions, or
+  unreviewed systemd drop-ins before stopping any unit. Branch heads and the
+  active manifest are revalidated while holding the target update lock, and
+  release status is written before that lock is released, preventing stale
+  candidates or state from racing a concurrent update. Every target unit,
+  including the legacy production units and developer sockets, is packaged for
+  preflight; production services now run from `/opt/temperature-bot/current`.
+- Added concise clean-macOS setup and release/deployment checklists, including
+  the simulator/database boundary and the first staging activation gate.
+- Made clean simulator runs and tests select the checked-in non-secret test
+  configuration, so Deep Dive pages do not depend on an untracked local file.
+- Made `make build-check` build and install exactly one wheel in a disposable
+  directory, independent of stale files under `dist/`.
+- Made CI fetch complete Git history so the source-deployment integration test
+  can clone pull-request merge commits without shallow-root failures.
+- Recorded the validated `air-stage` policy as live control with all integration
+  simulators disabled; activation rejects future host/source drift.
+- Refreshed the DEG handoff with the live-verified immutable deployment state,
+  endpoint inventory, simulator boundary, and remaining deployment issues.
+
 ## 1.0a1 - 2026-08-30
 
 - Restored `slg1` and `deg1` as immutable simulator-only UI instances with a

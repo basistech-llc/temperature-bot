@@ -36,6 +36,10 @@ surface quickly.
 - `doc/operations-new-instance.md`: instance inventory, new-deployment runbook,
   Flyway-before-first-start ordering, per-instance deploy overrides, and
   rollback.
+- `doc/macos-clean-setup.md`: one-page clean Mac clone, setup, database, and
+  simulator instructions.
+- `doc/release-and-deploy.md`: numbered release tagging, staging, activation,
+  and production promotion checklist.
 - `doc/DATABASES.md`: live database-to-consumer inventory for `slg1`, including
   runtime paths, historical copies, backups, symlink aliases, and SQLite safety
   rules.

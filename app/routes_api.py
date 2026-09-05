@@ -8,7 +8,7 @@ import time
 import xml.etree.ElementTree as ET
 from contextlib import contextmanager
 
-from flask import Blueprint, current_app, request, jsonify
+from flask import Blueprint, current_app, request, jsonify, send_file
 from flask_pydantic import validate
 from pydantic import TypeAdapter, ValidationError
 from websockets.exceptions import WebSocketException
@@ -22,7 +22,7 @@ from .api_errors import (
     UpstreamUnavailable,
     register_error_handlers,
 )
-from .instance_policy import InstancePolicy
+from .instance_policy import InstancePolicy, InstanceRole
 from .version import __version__, git_commit, git_sha
 from . import db
 from . import db_alerts
@@ -32,6 +32,7 @@ from . import ae200
 from .display_names import display_device_name
 from . import room_config
 from . import presence
+from .database_snapshot import SnapshotBusy, create_database_snapshot
 from .device_types import HubitatControlDevice
 from .utils.request_utils import parse_device_ids
 from .utils.db_utils import with_db_connection
@@ -83,6 +84,8 @@ logger = logging.getLogger(__name__)
 api_v1 = Blueprint("api_v1", __name__)
 register_error_handlers(api_v1)
 FCU_TEMP_SOURCE_BATCH_ADAPTER = TypeAdapter(FcuTempSourceBatchControl)
+DATABASE_SNAPSHOT_SHA256_HEADER = "X-Database-SHA256"
+DATABASE_SNAPSHOT_SIZE_HEADER = "X-Database-Size"
 
 # Transport-level failures from the AE-200 WebSocket/Modbus adapter. These mean
 # the hub could not be reached or answered unintelligibly, not that the request
@@ -201,6 +204,40 @@ def get_version_json():
             **policy.public_status().model_dump(mode="json"),
         }
     )
+
+
+@api_v1.get("/database-snapshot")
+def get_database_snapshot():
+    """Download a consistent production database snapshot without credentials."""
+    policy: InstancePolicy = current_app.config["INSTANCE_POLICY"]
+    if policy.role is not InstanceRole.PRODUCTION:
+        raise NotFound("Database snapshots are available only from production")
+    try:
+        snapshot = create_database_snapshot(policy.database_path)
+    except SnapshotBusy as error:
+        raise Conflict("A database snapshot is already in progress") from error
+    except (OSError, sqlite3.DatabaseError) as error:
+        logger.exception("Failed to create database snapshot")
+        raise UpstreamUnavailable("Database snapshot failed") from error
+
+    try:
+        response = send_file(
+            snapshot.path,
+            as_attachment=True,
+            download_name="temperature-bot.db",
+            mimetype="application/vnd.sqlite3",
+            conditional=False,
+        )
+    except Exception:
+        snapshot.close()
+        raise
+    response.direct_passthrough = False
+    response.headers["Cache-Control"] = "no-store"
+    response.headers[DATABASE_SNAPSHOT_SHA256_HEADER] = snapshot.sha256
+    response.headers[DATABASE_SNAPSHOT_SIZE_HEADER] = str(snapshot.size)
+    response.set_etag(snapshot.sha256)
+    response.call_on_close(snapshot.close)
+    return response
 
 
 @api_v1.route("/set_fcu_state", methods=["POST"])

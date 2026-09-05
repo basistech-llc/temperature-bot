@@ -37,11 +37,12 @@ FLYWAY_SCHEMA_DUMP := /tmp/temperature-bot-schema-temp.sql
 # Temporary database used by the read-only migration validation gate.
 FLYWAY_VALIDATE_TEMP := /tmp/temperature-bot-flyway-validate.db
 
-# Remote host and paths used by fetch-dev-db (override as needed for your environment)
-FETCH_HOST           ?= air.basistech.net
-FETCH_REMOTE_DB      ?= /var/db/temperature_bot/temperature-bot.db
-FETCH_REMOTE_DB_USER ?= temperature_bot
-FETCH_REMOTE_CONFIG  ?= /home/air/temperature-bot/temperature-bot-config.yaml
+# Production snapshot API used by fetch-dev-db. The host is reachable only on
+# the company VPN; the endpoint deliberately has no application credentials.
+FETCH_HOST   ?= air.basistech.net
+FETCH_DB_URL ?= https://$(FETCH_HOST)/api/v1/database-snapshot
+FETCH_DB_RETRY_DELAY ?= 5
+FETCH_DB_WAIT_TIMEOUT ?= 900
 
 # Deployment defaults. Override only when intentionally targeting a different
 # checked-out installation or database.
@@ -131,23 +132,18 @@ $(DEV_DB):
 	@echo "       Create it with 'make make-dev-db' or fetch it with 'make fetch-dev-db'."
 	@false
 
-# Back up the local database directory, stream a read-only dump from the remote
-# host into a new database, and apply any pending Flyway migrations. A
-# read-only URI includes committed WAL contents without modifying the remote
-# database. SQLite runs as the database owner so it can coordinate through the
-# WAL-index sidecar. This developer fetch is intentionally interactive so SSH
-# can use the configured key or prompt for a password. Timeouts bound lock
-# waits, connection setup, and dead SSH sessions.
-# NOTE: temperature-bot-config.yaml includes production secrets
-#       until we move to better secret management system
+# Back up the local database directory, download a consistent production
+# snapshot over the VPN, verify its server-provided SHA-256, and apply pending
+# Flyway migrations. The API snapshot uses SQLite's backup API so committed WAL
+# contents are included without copying live database files or credentials.
 fetch-dev-db: SHELL := /bin/bash
-fetch-dev-db: ## Fetch the dev DB and config from the remote host
+fetch-dev-db: $(REQ) ## Fetch and migrate a production DB snapshot over the VPN
 	@set -euo pipefail; \
 	db='$(DEV_DB)'; \
 	db_dir="$$(dirname "$$db")"; \
 	case "$$db_dir" in ''|.|/) echo "ERROR: unsafe DEV_DB directory: $$db_dir" >&2; exit 1;; esac; \
 	backup_dir=; \
-	echo "Preparing to refresh $$db from $(FETCH_HOST):$(FETCH_REMOTE_DB)"; \
+	echo "Preparing to refresh $$db from $(FETCH_DB_URL)"; \
 	echo "Ensuring the backup directory exists: $(DEV_DB_BACKUP_DIR)"; \
 	mkdir -p '$(DEV_DB_BACKUP_DIR)'; \
 	if test -d "$$db_dir"; then \
@@ -172,30 +168,25 @@ fetch-dev-db: ## Fetch the dev DB and config from the remote host
 	trap restore EXIT; \
 	echo "Creating the new database directory: $$db_dir"; \
 	mkdir -p "$$db_dir"; \
-	echo "Streaming a read-only SQLite dump from $(FETCH_HOST):$(FETCH_REMOTE_DB)"; \
-	echo "Importing the dump into $$db"; \
-	ssh -o BatchMode=no -o ConnectTimeout=10 -o ServerAliveInterval=15 \
-		-o ServerAliveCountMax=4 $(FETCH_HOST) \
-		"timeout 180 sudo -n -u $(FETCH_REMOTE_DB_USER) \
-		sqlite3 -batch -init /dev/null -cmd '.timeout 30000' \
-		'file:$(FETCH_REMOTE_DB)?mode=ro' .dump" \
-		| sqlite3 -batch -init /dev/null "$$db"; \
+	$(PYTHON) bin/fetch_database_snapshot.py \
+		--retry-delay '$(FETCH_DB_RETRY_DELAY)' \
+		--wait-timeout '$(FETCH_DB_WAIT_TIMEOUT)' \
+		'$(FETCH_DB_URL)' "$$db"; \
 	echo "Checking SQLite integrity"; \
-	test "$$(sqlite3 -batch -noheader -init /dev/null -readonly "$$db" 'PRAGMA quick_check;')" = ok; \
+	test "$$(sqlite3 -batch -noheader -init /dev/null \
+		"file:$$db?immutable=1" 'PRAGMA quick_check;')" = ok; \
 	echo "Checking that the imported database contains the devices table"; \
-	sqlite3 -batch -init /dev/null -readonly "$$db" 'SELECT count(*) FROM devices;' >/dev/null; \
+	sqlite3 -batch -init /dev/null \
+		"file:$$db?immutable=1" 'SELECT count(*) FROM devices;' >/dev/null; \
 	echo "Applying pending Flyway migrations"; \
 	DEV_DB="$$db" $(MAKE) migrate-db; \
-	echo "Fetching $(FETCH_HOST):$(FETCH_REMOTE_CONFIG) into ./temperature-bot-config.yaml"; \
-	rsync --verbose --archive -e 'ssh -o BatchMode=no' \
-		$(FETCH_HOST):$(FETCH_REMOTE_CONFIG) ./temperature-bot-config.yaml; \
 	echo "Files in $$(dirname "$$db"):"; \
 	ls -l "$$(dirname "$$db")"; \
 	echo "Database row counts:"; \
 	sqlite3 "$$db" "select 'devices',count(*) from devices;select 'devlog',count(*) from devlog;select 'changelog',count(*) from changelog;select 'aqi',count(*) from aqi;"; \
 	trap - EXIT; \
 	test -z "$$backup_dir" || echo "Previous database directory retained at $$backup_dir"; \
-	echo "Database refresh, migration, and config fetch completed successfully: $$db"
+	echo "Database refresh and migration completed successfully: $$db"
 
 # Build the etc/schema.sql file by applying all Flyway migrations to a fresh
 # temp database and dumping the resulting schema. This keeps schema.sql in sync
@@ -260,6 +251,7 @@ local-dev-sim: $(REQ) ## Run the web backend locally with simulated hardware dat
 	TEMPERATURE_BOT_INSTANCE=local-dev-sim \
 	TEMPERATURE_BOT_DATABASE_IDENTITY=local-dev-sim \
 	TEMPERATURE_BOT_DATABASE_ROOT="$(LOCAL_DATABASE_ROOT)" \
+	TEMPERATURE_BOT_CONFIG="$(abspath tests/temperature-bot-config-test.yaml)" \
 	TEMPERATURE_BOT_CONTROL_MODE=simulator TEMPERATURE_BOT_SCHEDULER_MODE=disabled \
 	AE200_SIMULATOR=1 HUBITAT_SIMULATOR=1 AIRTHINGS_SIMULATOR=1 AQICN_SIMULATOR=1 \
 	$(MAKE) _local-dev-web
@@ -311,16 +303,32 @@ check: $(REQ) dependency-check ## Run all static analysis checks
 	$(MAKE) djlint
 	$(MAKE) eslint
 	$(MAKE) check-types
+	$(MAKE) fetch-db-code-check
 	$(MAKE) release-code-check
 	$(MAKE) validate-migrations
 
-release-code-check: $(REQ) ## Check release publication and updater code
+fetch-db-code-check: $(REQ) ## Check the developer database snapshot client
 	uv run --locked ruff check \
-		bin/github_release_update.py bin/release_tag.py tests/test_release_update.py
+		bin/fetch_database_snapshot.py tests/test_fetch_database_snapshot.py
 	$(PYTHON) -m pylint --persistent=n --output-format=parseable \
 		--rcfile .pylintrc --fail-under=10.0 \
-		bin/github_release_update.py bin/release_tag.py tests/test_release_update.py
-	uv run --locked mypy bin/github_release_update.py bin/release_tag.py
+		bin/fetch_database_snapshot.py tests/test_fetch_database_snapshot.py
+	uv run --locked mypy bin/fetch_database_snapshot.py
+
+release-code-check: $(REQ) ## Check release publication and updater code
+	uv run --locked ruff check \
+		bin/build_deployment_package.py bin/github_release_update.py \
+		bin/install_deployment_package.py bin/source_deployment.py \
+		bin/release_tag.py tests/test_release_update.py
+	$(PYTHON) -m pylint --persistent=n --output-format=parseable \
+		--rcfile .pylintrc --fail-under=10.0 \
+		bin/build_deployment_package.py bin/github_release_update.py \
+		bin/install_deployment_package.py bin/source_deployment.py \
+		bin/release_tag.py tests/test_release_update.py
+	uv run --locked mypy \
+		bin/build_deployment_package.py bin/github_release_update.py \
+		bin/install_deployment_package.py bin/source_deployment.py \
+		bin/release_tag.py
 
 dependency-check: ## Verify the uv lockfile and reject legacy dependency tooling
 	uv lock --check
@@ -329,11 +337,12 @@ dependency-check: ## Verify the uv lockfile and reject legacy dependency tooling
 build: dependency-check ## Build the source distribution and wheel
 	uv build --no-sources
 
-build-check: build ## Install the wheel in a clean environment and import the app
+build-check: dependency-check ## Build/install only one wheel in a clean environment
 	@build_tmp="$$(mktemp -d)"; \
 	trap 'rm -rf "$$build_tmp"' EXIT; \
+	uv build --no-sources --out-dir "$$build_tmp/dist"; \
 	uv venv --python 3.12 "$$build_tmp/venv"; \
-	uv pip install --python "$$build_tmp/venv/bin/python" dist/*.whl; \
+	uv pip install --python "$$build_tmp/venv/bin/python" "$$build_tmp"/dist/*.whl; \
 	cd "$$build_tmp"; \
 	DB_PATH="$$build_tmp/temperature-bot.db" \
 	TEMPERATURE_BOT_INSTANCE=slg1 \
@@ -381,8 +390,8 @@ deployment-package-check: deployment-package ## Install the package into a dispo
 	echo "Executing the relocated Gunicorn console script"; \
 	"$$install_tmp/opt/temperature-bot/current/venv/bin/gunicorn" --version; \
 	test -f "$$install_tmp/opt/temperature-bot/current/systemd/temperature-bot-minute.timer"; \
-	test -f "$$install_tmp/opt/temperature-bot/current/configuration/slg1_basistech_net.socket"; \
-	test -f "$$install_tmp/opt/temperature-bot/current/configuration/deg1_basistech_net.socket"; \
+	test -f "$$install_tmp/opt/temperature-bot/current/systemd/slg1_basistech_net.socket"; \
+	test -f "$$install_tmp/opt/temperature-bot/current/systemd/deg1_basistech_net.socket"; \
 	test ! -e "$$install_tmp/etc"; \
 	echo "Installed and activated $$package in a disposable root"
 
@@ -477,7 +486,7 @@ outdated: $(REQ) ## Report outdated Python and CDN dependencies
 	@echo "=== CDN libraries (in templates) ==="
 	bash etc/check-cdn-versions.bash
 
-.PHONY: lint check release-code-check dependency-check build build-check deployment-package deployment-package-verify deployment-package-check release-tag-check systemd-verify format pylint ruff-check no-type-ignore pylint-check djlint eslint check-types pytest test-js test playwright-install web-screenshots outdated
+.PHONY: lint check fetch-db-code-check release-code-check dependency-check build build-check deployment-package deployment-package-verify deployment-package-check release-tag-check systemd-verify format pylint ruff-check no-type-ignore pylint-check djlint eslint check-types pytest test-js test playwright-install web-screenshots outdated
 
 ################################################################
 ## Scheduled runner targets
