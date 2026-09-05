@@ -555,8 +555,45 @@ def _check_health(
     raise RuntimeError("release health checks failed: " + "; ".join(errors))
 
 
-def _check_activation_preflight(target: DeploymentTarget) -> None:
-    """Refuse to stop services when the active target policy has drifted."""
+def _unit_fragment(unit: str, systemctl: str) -> Path:
+    result = subprocess.run(
+        [systemctl, "show", unit, "--property=FragmentPath", "--value"],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    fragment = Path(result.stdout.strip())
+    if not fragment.is_absolute() or not fragment.is_file():
+        raise ValueError(f"cannot locate installed systemd unit {unit}")
+    return fragment
+
+
+def _check_activation_preflight(
+    target: DeploymentTarget,
+    candidate_release: Path,
+    candidate: DeploymentManifest,
+    systemctl: str,
+) -> None:
+    """Refuse to stop services when target policy or unit bytes have drifted."""
+    candidate_units = {
+        Path(path).name: candidate_release / path for path in candidate.systemd_units
+    }
+    drifted: list[str] = []
+    for unit in dict.fromkeys((*target.quiesce_units, *target.resume_units)):
+        packaged = candidate_units.get(unit)
+        if packaged is None:
+            drifted.append(f"{unit} (missing from candidate)")
+            continue
+        fragment = _unit_fragment(unit, systemctl)
+        if fragment.read_bytes() != packaged.read_bytes():
+            drifted.append(f"{unit} ({fragment})")
+    if drifted:
+        raise ValueError(
+            "installed systemd unit definitions differ from the candidate; "
+            "install the reviewed host configuration before activation: "
+            + ", ".join(drifted)
+        )
     for endpoint in target.health:
         if endpoint.control_mode is None:
             continue
@@ -593,7 +630,20 @@ def activate_schema_neutral_release(
             "candidate migrations differ from the active release; stage succeeded but "
             "activation requires the transactional migration workflow in issue #216"
         )
-    _check_activation_preflight(target)
+    staged = install_package(
+        package,
+        target.root,
+        uv=options.uv,
+        python=options.python,
+        create_venv=options.create_venv,
+        activate=False,
+    )
+    _check_activation_preflight(
+        target,
+        staged.release_directory,
+        candidate,
+        options.systemctl,
+    )
     old_release = (target.root / "current").resolve(strict=True)
     was_active = {
         unit: _is_active(unit, options.systemctl) for unit in target.resume_units

@@ -21,7 +21,7 @@ change they completed.
   Installed wheels now provide the `temperature-bot-release-update` command.
   Root-owned application roots are staged by the tightly sandboxed root
   updater service, and activation now refuses stale instance/control-mode
-  configuration before stopping any unit.
+  configuration or systemd unit definitions before stopping any unit.
 - Added concise clean-macOS setup and release/deployment checklists, including
   the simulator/database boundary and the first staging activation gate.
 - Made clean simulator runs and tests select the checked-in non-secret test

@@ -99,6 +99,11 @@ def _package(
                 path="migrations/V1.sql",
                 role="migration",
             ),
+            PayloadSource(
+                source=_source(root, "web.service", b"[Service]\nExecStart=true\n"),
+                path="systemd/web.service",
+                role="systemd",
+            ),
         ],
     )
     return package
@@ -110,6 +115,11 @@ def _systemctl(tmp_path: Path, active: bool = True) -> tuple[Path, Path]:
         json.dumps({"web.service": active, "events": []}), encoding="utf-8"
     )
     command = tmp_path / "systemctl"
+    installed_units = tmp_path / "installed-units"
+    installed_units.mkdir()
+    (installed_units / "web.service").write_text(
+        "[Service]\nExecStart=true\n", encoding="utf-8"
+    )
     command.write_text(
         """#!/usr/bin/env python3
 import json
@@ -120,6 +130,9 @@ state_path = Path(sys.argv[0]).with_name("systemd-state.json")
 state = json.loads(state_path.read_text())
 action = sys.argv[1]
 unit = sys.argv[-1]
+if action == "show":
+    print(Path(sys.argv[0]).with_name("installed-units") / sys.argv[2])
+    raise SystemExit(0)
 if action == "is-active":
     raise SystemExit(0 if state.get(unit, False) else 3)
 if action not in {"start", "stop"}:
@@ -543,6 +556,38 @@ def test_activation_refuses_control_mode_drift_before_stopping_units(tmp_path):
         server.shutdown()
         thread.join()
         server.server_close()
+
+    assert (root / "current").resolve() == installed.release_directory
+    assert json.loads(state.read_text())["events"] == []
+
+
+def test_activation_refuses_systemd_unit_drift_before_stopping_units(tmp_path):
+    active_package = _package(tmp_path / "active", "0.9", "a" * 40)
+    candidate_package = _package(tmp_path / "candidate", "1.0", "b" * 40)
+    active = verify_package(active_package)
+    candidate = verify_package(candidate_package)
+    root = tmp_path / "root"
+    installed = install_package(
+        active_package, root, create_venv=False, activate=True
+    )
+    command, state = _systemctl(tmp_path)
+    (tmp_path / "installed-units/web.service").write_text(
+        "[Service]\nExecStart=false\n", encoding="utf-8"
+    )
+
+    with pytest.raises(ValueError, match="systemd unit definitions differ"):
+        activate_schema_neutral_release(
+            candidate_package,
+            _activation_target(root, 1),
+            active,
+            candidate,
+            ActivationOptions(
+                require_root=False,
+                systemctl=str(command),
+                create_venv=False,
+                health_timeout=0.1,
+            ),
+        )
 
     assert (root / "current").resolve() == installed.release_directory
     assert json.loads(state.read_text())["events"] == []
