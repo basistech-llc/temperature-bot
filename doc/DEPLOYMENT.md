@@ -90,8 +90,8 @@ configuration/temperature-bot.env.example
 configuration/slg1.env.example
 configuration/deg1.env.example
 configuration/air-stage.env.example
-configuration/slg1_basistech_net.socket
-configuration/deg1_basistech_net.socket
+systemd/slg1_basistech_net.socket
+systemd/deg1_basistech_net.socket
 nginx/air-stage.basistech.net
 systemd/slg1_basistech_net.service
 systemd/deg1_basistech_net.service
@@ -212,8 +212,8 @@ Pushing a tag whose normalized PEP 440 value matches `VERSION` and
 Linux checks and tests, builds and installs the immutable package in a
 disposable root, verifies clean commit provenance, attests the ZIP and checksum
 sidecar, and creates the GitHub Release. A prerelease project version, such as
-canonical `1.0.0a2`, produces a prerelease even when the tag uses the equivalent
-human spelling `1.0.0-alpha2`.
+canonical `1.0.0b1`, produces a prerelease even when the tag uses the equivalent
+human spelling `1.0.0-beta1`.
 
 The trusted currently installed environment can inspect the release channel and
 stage a newer application for exactly one application root:
@@ -286,9 +286,10 @@ release pointer and unit state. A candidate with any migration change remains
 staged and must use the database snapshot/migration transaction in #216; this
 command never modifies a database.
 
-The currently observed `air-stage` host/source policy mismatch is tracked in
-#252. Resolve the intended control and simulator modes; do not weaken this
-preflight or silently rewrite the host environment to bypass it.
+The selected `air-stage` policy is live control with all integration simulator
+flags disabled. Activation preflight rejects future host/source drift; verify
+that the persistent host environment retains this policy rather than weakening
+the preflight or rewriting the environment implicitly.
 
 ## Legacy Make targets
 

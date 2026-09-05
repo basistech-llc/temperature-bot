@@ -26,9 +26,9 @@ CI.
    the commands will be:
 
    ```bash
-   make release-tag-check GITHUB_REF_NAME=1.0.0a2
-   git tag -s 1.0.0a2 -m "Temperature Bot 1.0.0a2"
-   git push origin 1.0.0a2
+   make release-tag-check GITHUB_REF_NAME=1.0.0b1
+   git tag -s 1.0.0b1 -m "Temperature Bot 1.0.0b1"
+   git push origin 1.0.0b1
    ```
 
 5. Wait for the **Release** workflow. It must publish one
@@ -36,7 +36,7 @@ CI.
 
    ```bash
    gh run list --workflow Release --limit 5
-   gh release view 1.0.0a2
+   gh release view 1.0.0b1
    ```
 
 6. Connect to `air` using a normal maintainer account, never direct root SSH.
@@ -57,7 +57,7 @@ CI.
    ```bash
    ssh air.basistech.net
    sudo /opt/temperature-bot-stage/current/venv/bin/temperature-bot-release-update \
-     staging --channel prerelease --tag 1.0.0a2 --check-only
+     staging --channel prerelease --tag 1.0.0b1 --check-only
    ```
 
    For the first release after the old checkout-based deployment, the active
@@ -67,16 +67,16 @@ CI.
 
    ```bash
    sudo git clone --config core.hooksPath=/dev/null \
-     --branch 1.0.0a2 --single-branch \
+     --branch 1.0.0b1 --single-branch \
      https://github.com/basistech-llc/temperature-bot.git \
-     /opt/temperature-bot-release-tools-1.0.0a2
-   sudo git -C /opt/temperature-bot-release-tools-1.0.0a2 verify-tag 1.0.0a2
-   sudo git -C /opt/temperature-bot-release-tools-1.0.0a2 status --porcelain
+     /opt/temperature-bot-release-tools-1.0.0b1
+   sudo git -C /opt/temperature-bot-release-tools-1.0.0b1 verify-tag 1.0.0b1
+   sudo git -C /opt/temperature-bot-release-tools-1.0.0b1 status --porcelain
    sudo /usr/bin/env \
-     PYTHONPATH=/opt/temperature-bot-release-tools-1.0.0a2 \
+     PYTHONPATH=/opt/temperature-bot-release-tools-1.0.0b1 \
      /opt/temperature-bot/current/venv/bin/python \
      -m bin.github_release_update staging --channel prerelease \
-     --tag 1.0.0a2 --check-only
+     --tag 1.0.0b1 --check-only
    ```
 
    The status command must print nothing. Do not run a root updater from a
@@ -86,14 +86,15 @@ CI.
 7. Stage the verified release, then activate it only after reviewing the
    reported manifest and the staging environment policy:
 
-   The current `air-stage` control-mode drift is tracked in issue #252 and must
-   be resolved by an explicit policy decision before activation.
+   `air-stage` is intentionally live control with every integration simulator
+   flag disabled. Verify that the persistent host environment still matches
+   that selected policy; activation preflight rejects any future drift.
 
    ```bash
    sudo /opt/temperature-bot-stage/current/venv/bin/temperature-bot-release-update \
-     staging --channel prerelease --tag 1.0.0a2
+     staging --channel prerelease --tag 1.0.0b1
    sudo /opt/temperature-bot-stage/current/venv/bin/temperature-bot-release-update \
-     staging --channel prerelease --tag 1.0.0a2 --activate
+     staging --channel prerelease --tag 1.0.0b1 --activate
    curl --fail https://air-stage.basistech.net/api/v1/version
    ```
 

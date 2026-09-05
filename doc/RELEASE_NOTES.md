@@ -7,13 +7,15 @@ change they completed.
 
 ## Unreleased
 
-- Advanced the development version to `1.0.0a2`; no release tag has been
-  created yet.
+## 1.0.0b1 - 2026-09-04
+
+- Advanced the release version to `1.0.0b1`.
 - Added a production-only, unauthenticated database snapshot endpoint for VPN
   users. Snapshots use SQLite's backup API, include committed WAL data, pass
   `quick_check`, and carry size and SHA-256 response headers. `make
   fetch-dev-db` now downloads and verifies this snapshot without SSH or a copy
-  of the production secrets file.
+  of the production secrets file. Completed snapshot files are removed after
+  the WSGI response closes.
 - Hardened release discovery to ignore unrelated screenshot releases, page
   through the GitHub release history, and optionally select one exact tag.
   Explicit staging tests can also reproducibly build a resolved GitHub branch
@@ -22,7 +24,8 @@ change they completed.
   Root-owned application roots are staged by the tightly sandboxed root
   updater service without executing candidate code, and activation now refuses
   stale instance/control-mode configuration or systemd unit definitions before
-  stopping any unit.
+  stopping any unit. Socket units are packaged as systemd units so developer
+  activation preflight can verify them.
 - Added concise clean-macOS setup and release/deployment checklists, including
   the simulator/database boundary and the first staging activation gate.
 - Made clean simulator runs and tests select the checked-in non-secret test
@@ -31,6 +34,8 @@ change they completed.
   directory, independent of stale files under `dist/`.
 - Made CI fetch complete Git history so the source-deployment integration test
   can clone pull-request merge commits without shallow-root failures.
+- Recorded the validated `air-stage` policy as live control with all integration
+  simulators disabled; activation rejects future host/source drift.
 
 ## 1.0a1 - 2026-08-30
 

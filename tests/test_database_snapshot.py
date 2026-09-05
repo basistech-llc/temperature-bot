@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import hashlib
 import sqlite3
+import tempfile
+from pathlib import Path
 
 from app.database_snapshot import create_database_snapshot
 from app.instance_policy import InstancePolicy, load_policy_table
@@ -49,10 +51,21 @@ def test_production_snapshot_endpoint_returns_verified_sqlite(
     application = flask_test_client.application
     previous = application.config["INSTANCE_POLICY"]
     application.config["INSTANCE_POLICY"] = policy
+    snapshots_before = set(
+        Path(tempfile.gettempdir()).glob("temperature-bot-*.db")
+    )
     try:
-        response = flask_test_client.get("/api/v1/database-snapshot")
+        response = flask_test_client.get(
+            "/api/v1/database-snapshot", buffered=False
+        )
     finally:
         application.config["INSTANCE_POLICY"] = previous
+
+    snapshots = set(
+        Path(tempfile.gettempdir()).glob("temperature-bot-*.db")
+    ) - snapshots_before
+    assert len(snapshots) == 1
+    snapshot_path = snapshots.pop()
 
     assert response.status_code == 200
     assert response.headers["Content-Disposition"].endswith(
@@ -68,6 +81,11 @@ def test_production_snapshot_endpoint_returns_verified_sqlite(
     with sqlite3.connect(downloaded) as connection:
         assert connection.execute("PRAGMA quick_check").fetchone() == ("ok",)
         assert connection.execute("SELECT count(*) FROM devices").fetchone()[0] > 0
+    try:
+        response.close()
+        assert not snapshot_path.exists()
+    finally:
+        snapshot_path.unlink(missing_ok=True)
 
 
 def test_nonproduction_snapshot_endpoint_is_not_exposed(flask_test_client):

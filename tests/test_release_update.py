@@ -274,8 +274,8 @@ def release_api(tmp_path):
         server.server_close()
 
 
-def test_alpha_tag_alias_is_legal_for_canonical_version():
-    assert str(validate_tag("1.0.0-alpha2")) == "1.0.0a2"
+def test_beta_tag_alias_is_legal_for_canonical_version():
+    assert str(validate_tag("1.0.0-beta1")) == "1.0.0b1"
 
 
 def test_release_update_downloads_verifies_and_stages(release_api, tmp_path):
