@@ -12,6 +12,10 @@ change they completed.
 - Correct the production web unit to load the reviewed runtime environment and
   retain system command paths required by relocatable virtual-environment
   launchers.
+- Made `make fetch-dev-db` wait visibly while a production snapshot is being
+  prepared or another snapshot is in progress, show download progress, and
+  reject invalid size or SHA-256 metadata before opening the fixed snapshot in
+  immutable mode for SQLite validation.
 
 ## 1.0.0 - 2026-09-05
 

@@ -17,7 +17,9 @@ The response is an `application/vnd.sqlite3` attachment named
 `X-Database-SHA256` headers. The server uses SQLite's backup API, includes
 committed WAL data, and runs `PRAGMA quick_check` before responding. Concurrent
 snapshot creation for the same database answers 409. `make fetch-dev-db` is the
-supported client and verifies the SHA-256 before migration.
+supported client. It announces when the server is preparing a snapshot, waits
+and retries when another snapshot is in progress, shows download progress, and
+verifies the size and SHA-256 before migration.
 
 ## Error envelope
 

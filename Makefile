@@ -41,6 +41,8 @@ FLYWAY_VALIDATE_TEMP := /tmp/temperature-bot-flyway-validate.db
 # the company VPN; the endpoint deliberately has no application credentials.
 FETCH_HOST   ?= air.basistech.net
 FETCH_DB_URL ?= https://$(FETCH_HOST)/api/v1/database-snapshot
+FETCH_DB_RETRY_DELAY ?= 5
+FETCH_DB_WAIT_TIMEOUT ?= 900
 
 # Deployment defaults. Override only when intentionally targeting a different
 # checked-out installation or database.
@@ -141,8 +143,6 @@ fetch-dev-db: $(REQ) ## Fetch and migrate a production DB snapshot over the VPN
 	db_dir="$$(dirname "$$db")"; \
 	case "$$db_dir" in ''|.|/) echo "ERROR: unsafe DEV_DB directory: $$db_dir" >&2; exit 1;; esac; \
 	backup_dir=; \
-	headers="$$(mktemp)"; \
-	cleanup_headers() { /bin/rm -f "$$headers"; }; \
 	echo "Preparing to refresh $$db from $(FETCH_DB_URL)"; \
 	echo "Ensuring the backup directory exists: $(DEV_DB_BACKUP_DIR)"; \
 	mkdir -p '$(DEV_DB_BACKUP_DIR)'; \
@@ -157,7 +157,6 @@ fetch-dev-db: $(REQ) ## Fetch and migrate a production DB snapshot over the VPN
 	restore() { \
 		status=$$?; \
 		trap - EXIT; \
-		cleanup_headers; \
 		echo "Fetch failed; removing the incomplete database directory $$db_dir" >&2; \
 		/bin/rm -rf "$$db_dir"; \
 		if test -n "$$backup_dir"; then \
@@ -169,21 +168,16 @@ fetch-dev-db: $(REQ) ## Fetch and migrate a production DB snapshot over the VPN
 	trap restore EXIT; \
 	echo "Creating the new database directory: $$db_dir"; \
 	mkdir -p "$$db_dir"; \
-	echo "Downloading a consistent SQLite snapshot"; \
-	curl --fail --location --silent --show-error \
-		--connect-timeout 10 --max-time 300 \
-		--dump-header "$$headers" --output "$$db" '$(FETCH_DB_URL)'; \
-	expected="$$(awk 'tolower($$1) == "x-database-sha256:" {print $$2}' "$$headers" \
-		| tr -d '\r' | tail -1)"; \
-	case "$$expected" in (*[!0-9a-f]*|'') echo "ERROR: snapshot response has no valid SHA-256" >&2; exit 1;; esac; \
-	test "$${#expected}" -eq 64; \
-	actual="$$(shasum -a 256 "$$db" | awk '{print $$1}')"; \
-	test "$$actual" = "$$expected"; \
-	cleanup_headers; \
+	$(PYTHON) bin/fetch_database_snapshot.py \
+		--retry-delay '$(FETCH_DB_RETRY_DELAY)' \
+		--wait-timeout '$(FETCH_DB_WAIT_TIMEOUT)' \
+		'$(FETCH_DB_URL)' "$$db"; \
 	echo "Checking SQLite integrity"; \
-	test "$$(sqlite3 -batch -noheader -init /dev/null -readonly "$$db" 'PRAGMA quick_check;')" = ok; \
+	test "$$(sqlite3 -batch -noheader -init /dev/null \
+		"file:$$db?immutable=1" 'PRAGMA quick_check;')" = ok; \
 	echo "Checking that the imported database contains the devices table"; \
-	sqlite3 -batch -init /dev/null -readonly "$$db" 'SELECT count(*) FROM devices;' >/dev/null; \
+	sqlite3 -batch -init /dev/null \
+		"file:$$db?immutable=1" 'SELECT count(*) FROM devices;' >/dev/null; \
 	echo "Applying pending Flyway migrations"; \
 	DEV_DB="$$db" $(MAKE) migrate-db; \
 	echo "Files in $$(dirname "$$db"):"; \
@@ -309,8 +303,17 @@ check: $(REQ) dependency-check ## Run all static analysis checks
 	$(MAKE) djlint
 	$(MAKE) eslint
 	$(MAKE) check-types
+	$(MAKE) fetch-db-code-check
 	$(MAKE) release-code-check
 	$(MAKE) validate-migrations
+
+fetch-db-code-check: $(REQ) ## Check the developer database snapshot client
+	uv run --locked ruff check \
+		bin/fetch_database_snapshot.py tests/test_fetch_database_snapshot.py
+	$(PYTHON) -m pylint --persistent=n --output-format=parseable \
+		--rcfile .pylintrc --fail-under=10.0 \
+		bin/fetch_database_snapshot.py tests/test_fetch_database_snapshot.py
+	uv run --locked mypy bin/fetch_database_snapshot.py
 
 release-code-check: $(REQ) ## Check release publication and updater code
 	uv run --locked ruff check \
@@ -483,7 +486,7 @@ outdated: $(REQ) ## Report outdated Python and CDN dependencies
 	@echo "=== CDN libraries (in templates) ==="
 	bash etc/check-cdn-versions.bash
 
-.PHONY: lint check release-code-check dependency-check build build-check deployment-package deployment-package-verify deployment-package-check release-tag-check systemd-verify format pylint ruff-check no-type-ignore pylint-check djlint eslint check-types pytest test-js test playwright-install web-screenshots outdated
+.PHONY: lint check fetch-db-code-check release-code-check dependency-check build build-check deployment-package deployment-package-verify deployment-package-check release-tag-check systemd-verify format pylint ruff-check no-type-ignore pylint-check djlint eslint check-types pytest test-js test playwright-install web-screenshots outdated
 
 ################################################################
 ## Scheduled runner targets
