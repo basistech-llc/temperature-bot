@@ -150,6 +150,31 @@ def test_production_units_run_from_immutable_release_root():
         assert "/opt/temperature-bot/current" in unit
         assert "/home/air/temperature-bot" not in unit
 
+    web = (etc / "air_basistech_net.service").read_text()
+    assert "EnvironmentFile=/etc/temperature-bot/runtime.env" in web
+    assert 'Environment="PATH=/opt/temperature-bot/current/venv/bin:/usr/bin:/bin"' in web
+
+
+def test_web_screenshot_workflow_uses_ephemeral_artifacts_not_releases():
+    workflow = (
+        Path(__file__).resolve().parents[1]
+        / ".github/workflows/web-ui-screenshots.yml"
+    ).read_text()
+
+    assert "actions/upload-artifact@v7" in workflow
+    assert "steps.upload_screenshots.outputs.artifact-url" in workflow
+    assert "retention-days: 30" in workflow
+    assert "contents: read" in workflow
+    for release_operation in (
+        "getReleaseByTag",
+        "createRelease",
+        "updateRelease",
+        "uploadReleaseAsset",
+        "deleteReleaseAsset",
+        "tag_name:",
+    ):
+        assert release_operation not in workflow
+
 
 def test_air_stage_nginx_routes_only_to_staging_loopback():
     config = (

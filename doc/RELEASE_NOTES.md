@@ -7,6 +7,12 @@ change they completed.
 
 ## Unreleased
 
+- Store pull-request web UI screenshots as 30-day GitHub Actions artifacts
+  instead of creating long-lived prereleases and repository tags.
+- Correct the production web unit to load the reviewed runtime environment and
+  retain system command paths required by relocatable virtual-environment
+  launchers.
+
 ## 1.0.0 - 2026-09-05
 
 - Advanced release workflow and deployment hardening from prior betas into the
