@@ -67,7 +67,9 @@ def _install_environment(release: Path, manifest: DeploymentManifest, uv: str, p
 def _verify_environment(release: Path, manifest: DeploymentManifest) -> None:
     """Verify installed files and metadata without executing candidate code."""
     environment = release / "venv"
-    site_packages = list(environment.glob("lib*/python*/site-packages"))
+    site_packages = sorted(
+        {path.resolve() for path in environment.glob("lib*/python*/site-packages")}
+    )
     if len(site_packages) != 1:
         raise ValueError(f"expected one site-packages directory; found {site_packages}")
     site = site_packages[0]

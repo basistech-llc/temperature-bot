@@ -34,7 +34,7 @@ from bin.github_release_update import (
     run_update,
     update_required,
 )
-from bin.install_deployment_package import install_package
+from bin.install_deployment_package import _verify_environment, install_package
 from bin.release_tag import validate_tag
 from bin.source_deployment import (
     SourceBuildOptions,
@@ -468,7 +468,12 @@ def test_root_staging_does_not_execute_candidate_code(tmp_path):
 
     uv = shutil.which("uv")
     assert uv is not None
-    install_package(package, tmp_path / "root", uv=uv, python="3.12")
+    installed = install_package(package, tmp_path / "root", uv=uv, python="3.12")
+
+    lib64 = installed.release_directory / "venv/lib64"
+    if not lib64.exists():
+        lib64.symlink_to("lib", target_is_directory=True)
+    _verify_environment(installed.release_directory, verify_package(package))
 
     assert not sentinel.exists()
 
