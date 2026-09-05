@@ -44,14 +44,24 @@ available; this document deliberately does not prescribe how to install them.
    make make-dev-db    # empty schema; no historical devices or readings
    ```
 
-   Or, while connected to the company VPN:
+   Or, to use a copy of production history, connect to the company VPN and run:
 
    ```bash
    make fetch-dev-db   # verified production snapshot; no SSH login
    ```
 
-   An existing local database is moved to a timestamped directory under
-   `var/db/backups` before the replacement is downloaded and migrated.
+   This calls the unauthenticated production endpoint
+   `https://air.basistech.net/api/v1/database-snapshot`. It has no application
+   password because `air.basistech.net` is available only at its private VPN
+   address; without the VPN, the request cannot reach the server. The production
+   application creates a temporary, consistent SQLite backup, includes committed
+   WAL data, checks its integrity, and returns its SHA-256 in a response header.
+
+   The Make target moves any existing local database directory to a timestamped
+   directory under `var/db/backups`, downloads the snapshot, verifies its
+   SHA-256 and SQLite integrity, and applies pending migrations. It does not
+   change the production database, contact building hardware, or download the
+   production configuration or secrets.
 
 4. Start the safe simulator and open <http://localhost:8000>:
 
