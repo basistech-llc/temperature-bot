@@ -28,6 +28,8 @@ change they completed.
   configuration, so Deep Dive pages do not depend on an untracked local file.
 - Made `make build-check` build and install exactly one wheel in a disposable
   directory, independent of stale files under `dist/`.
+- Made CI fetch complete Git history so the source-deployment integration test
+  can clone pull-request merge commits without shallow-root failures.
 
 ## 1.0a1 - 2026-08-30
 
