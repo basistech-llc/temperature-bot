@@ -23,6 +23,7 @@ class CheckoutPackageOptions(BaseModel):
 
     flyway_version: str
     commit: str = Field(pattern=r"^[0-9a-f]{7,64}$")
+    built_at: datetime
     dirty: bool
 
 
@@ -122,7 +123,7 @@ def build_checkout_package(
     identity = PackageIdentity(
         version=version,
         commit=options.commit,
-        built_at=datetime.now(timezone.utc),
+        built_at=options.built_at,
         dirty=options.dirty,
         requires_python=project["requires-python"],
         flyway_version=options.flyway_version,
@@ -161,6 +162,7 @@ def main() -> None:
         CheckoutPackageOptions(
             flyway_version=args.flyway_version,
             commit=commit,
+            built_at=datetime.now(timezone.utc),
             dirty=dirty,
         ),
     )

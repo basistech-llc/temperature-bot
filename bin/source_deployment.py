@@ -6,6 +6,7 @@ import os
 import pwd
 import stat
 import subprocess
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal
 
@@ -150,7 +151,7 @@ def _checkout_source(
     options: SourceBuildOptions,
     workspace: Path,
     context: BuilderContext,
-) -> Path:
+) -> tuple[Path, datetime]:
     checkout = workspace / "checkout"
     clone_url = options.clone_url or f"https://github.com/{options.repository}.git"
     _run_builder(
@@ -186,7 +187,12 @@ def _checkout_source(
         )
     if status:
         raise ValueError("source checkout is dirty before build")
-    return checkout
+    commit_epoch = _run_builder(
+        ["/usr/bin/git", "-C", str(checkout), "show", "-s", "--format=%ct", "HEAD"],
+        context,
+        capture_output=True,
+    ).stdout.strip()
+    return checkout, datetime.fromtimestamp(int(commit_epoch), timezone.utc)
 
 
 def _build_inputs(
@@ -202,7 +208,7 @@ def _build_inputs(
         [str(uv_path), "build", "--no-sources", "--out-dir", str(dist)],
         build_context,
     )
-    _run_builder(
+    exported = _run_builder(
         [
             str(uv_path),
             "export",
@@ -211,11 +217,11 @@ def _build_inputs(
             "--no-dev",
             "--no-editable",
             "--no-emit-project",
-            "--output-file",
-            str(requirements),
         ],
         build_context,
+        capture_output=True,
     )
+    requirements.write_text(exported.stdout, encoding="utf-8")
     version = (checkout / "VERSION").read_text(encoding="utf-8").strip()
     wheels = sorted(dist.glob(f"temperature_bot-{version}-*.whl"))
     if len(wheels) != 1:
@@ -230,8 +236,18 @@ def build_source_package(
 ) -> tuple[Path, DeploymentManifest]:
     """Build a selected commit unprivileged, then verify its deployment package."""
     workspace, artifacts, uv_path, context = _prepare_workspace(directory, options)
-    checkout = _checkout_source(selection, options, workspace, context)
-    requirements, wheel = _build_inputs(checkout, artifacts, uv_path, context)
+    checkout, built_at = _checkout_source(selection, options, workspace, context)
+    reproducible_context = context.model_copy(
+        update={
+            "environment": {
+                **context.environment,
+                "SOURCE_DATE_EPOCH": str(int(built_at.timestamp())),
+            }
+        }
+    )
+    requirements, wheel = _build_inputs(
+        checkout, artifacts, uv_path, reproducible_context
+    )
     if os.geteuid() == 0:
         os.chown(directory, 0, 0)
         directory.chmod(0o700)
@@ -243,6 +259,7 @@ def build_source_package(
         CheckoutPackageOptions(
             flyway_version=options.flyway_version,
             commit=selection.commit,
+            built_at=built_at,
             dirty=False,
         ),
     )

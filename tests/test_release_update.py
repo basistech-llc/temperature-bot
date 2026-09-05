@@ -346,9 +346,24 @@ def test_source_commit_is_built_into_verified_deployment_package(tmp_path):
         html_url=f"https://github.com/basistech-llc/temperature-bot/commit/{commit}",
     )
 
+    first = tmp_path / "first"
+    second = tmp_path / "second"
+    first.mkdir()
+    second.mkdir()
     package, manifest = build_source_package(
         selection,
-        tmp_path,
+        first,
+        SourceBuildOptions(
+            repository="basistech-llc/temperature-bot",
+            clone_url=repo_root.as_uri(),
+            uv=uv,
+            python="3.12",
+            build_user=pwd.getpwuid(os.getuid()).pw_name,
+        ),
+    )
+    repeated_package, repeated_manifest = build_source_package(
+        selection,
+        second,
         SourceBuildOptions(
             repository="basistech-llc/temperature-bot",
             clone_url=repo_root.as_uri(),
@@ -362,6 +377,8 @@ def test_source_commit_is_built_into_verified_deployment_package(tmp_path):
     assert package.with_suffix(".zip.sha256").is_file()
     assert manifest.commit == commit
     assert not manifest.dirty
+    assert repeated_manifest == manifest
+    assert repeated_package.read_bytes() == package.read_bytes()
 
 
 def test_activation_refuses_changed_migrations(tmp_path):
