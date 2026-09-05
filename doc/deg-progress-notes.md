@@ -3,7 +3,7 @@
 Looks like I'll be touching this only at the end of each month, so stashing notes, thoughts, and
 open tabs here:
 
-## Current status — verified 2026-09-04 22:46 EDT
+## Current status — refreshed 2026-09-05 06:02 EDT
 
 - Draft [PR #253](https://github.com/basistech-llc/temperature-bot/pull/253)
   prepares the `1.0.0b1` release workflow. Beta implementation commit
@@ -12,18 +12,23 @@ open tabs here:
   drop-ins, and incomplete runtime-policy preflight. The current branch freezes
   a root-owned source checkout before unprivileged builds, rejects drop-ins,
   and verifies database identity, scheduler mode, and every integration mode;
-  its focused updater suite passes, while current-head CI and re-review remain
-  pending.
+  signed commit `12948ff41fb696e7d3dce7ef3c550b4ea8435094` passed all five
+  current-head GitHub checks and has no review threads. A Copilot re-review of
+  that head remains pending, so no beta or stable tag has been created.
 - `air-stage` is live-control staging, not a simulator. It is running
   `1.0.0b1-c3f85599bc8a`, with every integration simulator disabled and its
-  collection scheduler enabled. The installed branch updater built, staged,
-  activated, and health-checked that release successfully.
+  collection scheduler enabled. Its public version endpoint was healthy at the
+  06:00 EDT audit. The installed branch updater built, staged, activated, and
+  health-checked that release successfully.
 - Production remains on `0.11.0` at `7a7d2e53b32b` and was not changed by the
-  staging validation.
+  staging validation; its public version endpoint was healthy at 06:00 EDT.
 - `slg1` and `deg1` share immutable developer release
   `0.11.0-5ffc51e31536`. Both socket-activated services are running in simulator
   mode with all integrations simulated, distinct private database identities,
-  and scheduling disabled. Their ports are 8003 and 8004, respectively.
+  and scheduling disabled. Their ports are 8003 and 8004, respectively. This
+  host-level state was last verified at 22:46 EDT; SSH port 22 remained
+  reachable during the overnight audits, but login did not complete, so repeat
+  the internal service/database checks before the next host operation.
 - There is no periodic release-updater unit installed on the host. Release
   updates begin only when an operator invokes the installed updater command.
 
