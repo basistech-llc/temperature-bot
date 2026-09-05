@@ -173,10 +173,14 @@ def test_legacy_systemd_install_includes_timer_units():
         check=True,
     )
     commands = result.stdout.splitlines()
+    copy_command = next(line for line in commands if line.startswith("sudo cp "))
+    restart_command = next(
+        line for line in commands if line.startswith("sudo systemctl restart ")
+    )
 
     timer = "temperature-bot-performance-monitor.timer"
-    assert timer in commands[0]
-    assert timer in commands[-1]
+    assert timer in copy_command
+    assert timer in restart_command
 
 
 def test_fetch_dev_db_timeout_does_not_pollute_sqlite_dump(tmp_path):
