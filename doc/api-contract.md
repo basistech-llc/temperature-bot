@@ -4,6 +4,21 @@ How every JSON endpoint under `/api/v1` reports success and failure. Written
 for GitHub #185. The implementation lives in `app/api_errors.py`; the request
 and response models live in `app/models.py`.
 
+## Database snapshot download
+
+`GET /api/v1/database-snapshot` is a binary, production-only exception to the
+JSON response convention. It has no application authentication because the
+production hostname is reachable only through the company VPN. Non-production
+instances answer 404 so a staging or developer database cannot be downloaded
+by mistake.
+
+The response is an `application/vnd.sqlite3` attachment named
+`temperature-bot.db`, with `Cache-Control: no-store`, `X-Database-Size`, and
+`X-Database-SHA256` headers. The server uses SQLite's backup API, includes
+committed WAL data, and runs `PRAGMA quick_check` before responding. Concurrent
+snapshot creation for the same database answers 409. `make fetch-dev-db` is the
+supported client and verifies the SHA-256 before migration.
+
 ## Error envelope
 
 Every failure returns the same JSON object:

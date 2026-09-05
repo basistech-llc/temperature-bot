@@ -22,6 +22,7 @@ from app.deployment_package import (
     verify_package,
 )
 from bin.build_deployment_package import collect_payloads
+from bin.github_release_update import TARGETS
 from bin.install_deployment_package import install_package, main as installer_main
 
 
@@ -109,8 +110,9 @@ def test_builder_collects_complete_migrations_units_and_configuration(tmp_path):
     }
     expected_units = {
         f"systemd/{path.name}"
-        for path in (repo_root / "etc/systemd").iterdir()
-        if path.is_file() and path.suffix in {".service", ".timer"}
+        for directory in (repo_root / "etc", repo_root / "etc/systemd")
+        for path in directory.iterdir()
+        if path.is_file() and path.suffix in {".service", ".socket", ".timer"}
     }
 
     assert "configuration/temperature-bot.env.example" in paths
@@ -123,8 +125,8 @@ def test_builder_collects_complete_migrations_units_and_configuration(tmp_path):
     assert "systemd/temperature-bot-stage-minute.service" in paths
     assert "systemd/temperature-bot-stage-minute.timer" in paths
     assert "systemd/temperature-bot-stage-ae200-notifications.service" in paths
-    assert "configuration/slg1_basistech_net.socket" in paths
-    assert "configuration/deg1_basistech_net.socket" in paths
+    assert "systemd/slg1_basistech_net.socket" in paths
+    assert "systemd/deg1_basistech_net.socket" in paths
     assert "nginx/air-stage.basistech.net" in paths
     assert "documentation/DEPLOYMENT.md" in paths
     assert "installer/install_deployment_package.py" in paths
@@ -132,6 +134,21 @@ def test_builder_collects_complete_migrations_units_and_configuration(tmp_path):
         expected_migrations
     )
     assert {payload.path for payload in payloads if payload.role == "systemd"} == expected_units
+    packaged_units = {Path(path).name for path in expected_units}
+    for target in TARGETS.values():
+        assert set((*target.quiesce_units, *target.resume_units)) <= packaged_units
+
+
+def test_production_units_run_from_immutable_release_root():
+    etc = Path(__file__).resolve().parents[1] / "etc"
+    for name in (
+        "air_basistech_net.service",
+        "temperature-bot-ae200-notifications.service",
+        "temperature-bot-performance-monitor.service",
+    ):
+        unit = (etc / name).read_text()
+        assert "/opt/temperature-bot/current" in unit
+        assert "/home/air/temperature-bot" not in unit
 
 
 def test_air_stage_nginx_routes_only_to_staging_loopback():
@@ -184,6 +201,18 @@ def test_stage_units_are_isolated_and_staggered():
     assert "OnCalendar=*-*-* *:*:05" in timer
     assert "RandomizedDelaySec=15s" in timer
     assert "/opt/temperature-bot-stage/current" in notifications
+
+
+def test_release_updater_unit_preserves_access_and_has_writable_uv_cache():
+    unit = (
+        Path(__file__).resolve().parents[1]
+        / "etc/systemd/temperature-bot-release-update@.service"
+    ).read_text()
+
+    assert "User=root" in unit
+    assert "Group=temperature_bot" in unit
+    assert "PrivateTmp=yes" in unit
+    assert "Environment=UV_CACHE_DIR=/tmp/uv-cache" in unit
 
 
 def test_builder_rejects_reserved_manifest_payload(tmp_path):

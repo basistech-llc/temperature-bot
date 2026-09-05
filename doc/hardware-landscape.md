@@ -268,9 +268,10 @@ simulator flags set, serving canned payloads:
 | `AIRTHINGS_SIMULATOR=1` | Airthings cloud |
 | `AQICN_SIMULATOR=1` | Outdoor AQI |
 
-One caveat worth knowing: the Hubitat simulator only simulates *reading*.
-Command helpers still build real Maker API URLs, so a code path that sends a
-switch command is not automatically safe just because the simulator is on.
+The Hubitat simulator keeps command state in memory as well as simulating
+reads, so local switch, fan, and dimmer commands do not reach a Maker API hub.
+The fail-closed instance policy requires every command-bearing integration to
+be simulated in local and developer simulator instances.
 
 ## Troubleshooting Map
 

@@ -1,7 +1,45 @@
-## Notes to self
+# Handoff notes for DEG
 
 Looks like I'll be touching this only at the end of each month, so stashing notes, thoughts, and
 open tabs here:
+
+## Current status — refreshed 2026-09-05 08:35 EDT
+
+- Draft [PR #253](https://github.com/basistech-llc/temperature-bot/pull/253)
+  prepares the `1.0.0b1` release workflow. Copilot's 08:23 EDT review identified
+  four remaining updater boundaries: untrusted build-output handoff, stale
+  same-version branch builds, release-state writes outside the target lock, and
+  production units missing from deployment packages. The current branch copies
+  builder output into root-owned storage with descriptor-anchored no-follow and
+  concurrent-change checks, re-resolves branch heads and records state under
+  the target lock, packages every target unit, and points production services
+  at `/opt/temperature-bot/current`. Repository checks, all 606 Python tests,
+  every JavaScript suite, the focused release/package tests, and package/tag
+  verification pass. A fresh current-head Copilot review and GitHub CI are still
+  required, so no beta or stable tag has been created.
+- `air-stage` is live-control staging, not a simulator. It is running
+  `1.0.0b1-c3f85599bc8a`, with every integration simulator disabled and its
+  collection scheduler enabled. Its public version endpoint was healthy at the
+  06:00 EDT audit. The installed branch updater built, staged, activated, and
+  health-checked that release successfully.
+- Production remains on `0.11.0` at `7a7d2e53b32b` and was not changed by the
+  staging validation; its public version endpoint was healthy at 06:00 EDT.
+- `slg1` and `deg1` share immutable developer release
+  `0.11.0-5ffc51e31536`. Both socket-activated services are running in simulator
+  mode with all integrations simulated, distinct private database identities,
+  and scheduling disabled. Their ports are 8003 and 8004, respectively. This
+  host-level state was last verified at 22:46 EDT; SSH port 22 remained
+  reachable during the overnight audits, but login did not complete, so repeat
+  the internal service/database checks before the next host operation.
+- There is no periodic release-updater unit installed on the host. Release
+  updates begin only when an operator invokes the installed updater command.
+
+Application releases and host configuration are separate transactions. The
+package may carry reviewed systemd, socket, environment, and nginx files for
+verification, but its installer does not write `/etc`, reload systemd/nginx, or
+change enablement. Do not deploy by pulling a server checkout; follow
+[`doc/release-and-deploy.md`](release-and-deploy.md) and
+[`doc/DEPLOYMENT.md`](DEPLOYMENT.md).
 
 - VPN for BasisTech: Tailscale, installed on MacBook deg-mac-2023
 - Site links:
@@ -111,8 +149,8 @@ The SSH password for the server is in Bitwarden (entry: `slg1.basistech.net`). N
 `air.basistech.net` and `slg1.basistech.net` are the **same machine** — the Makefile defaults to
 `air` (`FETCH_HOST`), but either name works.
 
-Easiest way to confirm Tailscale is actually connected: just run `make fetch-dev-db` (next step).
-If it pulls the DB successfully, your connection is good.
+The database snapshot endpoint is reachable only on the company VPN. Running
+`make fetch-dev-db` in the next step checks that path without requiring SSH.
 
 3. **Create local database**:
    ```bash
@@ -129,9 +167,9 @@ If it pulls the DB successfully, your connection is good.
    Clone a snapshot of the live DB locally.
 
 4. **Configure**:
-   - Copy `temperature-bot-config.yaml` and fill in your values (or use existing one)
-   - For simulator mode, you don't need real Hubitat/AE200 credentials
-   - For live mode, you'll need VPN access (Tailscale) and real credentials
+   - Simulator mode does not require `temperature-bot-config.yaml` or live credentials.
+   - Live mode requires separately managed configuration, VPN access, and an
+     intentional decision to reach real hardware.
 
 **Running the Web Server**
 
@@ -186,19 +224,18 @@ To get a copy of the production database with real data:
 ```bash
 make fetch-dev-db
 ```
-This streams a read-only SQLite dump over Tailscale/SSH from the server
-(`air.basistech.net`, aka `slg1.basistech.net`), applies pending Flyway
-migrations, and shows row-count stats. It pulls down **two** things:
-- the database → `var/db/temperature_bot/temperature-bot.db`
-- `temperature-bot-config.yaml` (with production secrets) → repo root
+This downloads a consistent SQLite backup from the unauthenticated production
+snapshot API over the VPN, verifies the response SHA-256, applies pending
+Flyway migrations, and shows row-count stats. It writes only the database at
+`var/db/temperature_bot/temperature-bot.db`; it never downloads the production
+configuration or its secrets.
 
 Before fetching, an existing `var/db/temperature_bot` directory is moved to a
 timestamped directory under `var/db/backups`.
 
-So this single step also covers the "Configure" step above — no separate config copy needed.
-SSH normally uses your key. The `fetch-dev-db` target permits the normal SSH
-password prompt as a fallback; if prompted, the password is in Bitwarden under
-`slg1.basistech.net`.
+The endpoint is intentionally unauthenticated at the application layer because
+`air.basistech.net` resolves to the private VPN address. A VPN connection is
+still required.
 
 **Mitsubishi control panel**
 
@@ -214,13 +251,14 @@ make pytest  # Python tests only
 Tests automatically use `AE200_SIMULATOR=1` via the `[tool.pytest.ini_options]` `env` list in `pyproject.toml` and `tests/conftest.py`.
 
 
-# Progress notes
+# Operations reference
 
-## Config notes
+## Endpoint inventory
 
-- air.basistech.net runs on port 8100
-- slg1.basistech.net runs on port 8003
-- deg1.basistech.net will be on 8004
+- `air.basistech.net`: production on loopback port 8100
+- `air-stage.basistech.net`: live-control staging on loopback port 8101
+- `slg1.basistech.net`: simulator-only developer UI on loopback port 8003
+- `deg1.basistech.net`: simulator-only developer UI on loopback port 8004
 
 ### nginx config
 
@@ -230,33 +268,23 @@ Tests automatically use `AE200_SIMULATOR=1` via the `[tool.pytest.ini_options]` 
 - Restart: `sudo systemctl restart nginx`
 - Test status: `sudo systemctl status nginx`
 
-### deployments config
-
-- `git pull ...`, after setting up .ssh
-- `make install-ubuntu`
-- `<repo>/etc/*.service` has the service control files for each copy
-- Each needs to be copied manually into /etc/systemd/system
-- Start service with, e.g.,
+### Developer service diagnostics
 
 ```bash
-sudo systemctl daemon-reload
-sudo systemctl enable --now deg1_basistech_net.service
-```
-
-- See logs:
-
-```
-sudo systemctl status deg1_basistech_net.service
+curl --fail http://127.0.0.1:8004/api/v1/version
+sudo systemctl status deg1_basistech_net.socket deg1_basistech_net.service
 sudo journalctl -u deg1_basistech_net.service -e -n 200
 ```
 
-## Questions
+## Open deployment work
 
-- in /etc/nginx, what is causing default routing to air.basistech.net (e.g. of deg1, before I
-    configured it). Is this desirable behavior, or more confusing than it is worth?
-- Do we have any automation for deploying `<repo>/etc/*.service` to `/etc/systemd/system/*.service`?
+- [#213](https://github.com/basistech-llc/temperature-bot/issues/213): validated immutable GitHub Releases
+- [#215](https://github.com/basistech-llc/temperature-bot/issues/215): outbound host-side release polling
+- [#216](https://github.com/basistech-llc/temperature-bot/issues/216): transactional migration and rollback activation
+- [#217](https://github.com/basistech-llc/temperature-bot/issues/217): deployment preflight, live smoke tests, and provenance
+- [#218](https://github.com/basistech-llc/temperature-bot/issues/218): production/staging/developer runtime isolation
 
-## Todo
-
-- Move /etc/nginx config files to git in <repo>/etc
-- Write tooling to keep live nginx and systemctl files in sync with repo
+Issue [#252](https://github.com/basistech-llc/temperature-bot/issues/252) is
+closed: the selected `air-stage` policy is live control with all integration
+simulators disabled. Activation must continue to reject future drift from that
+policy.

@@ -6,6 +6,7 @@ import argparse
 import fcntl
 import json
 import os
+import re
 import subprocess
 import tempfile
 import time
@@ -17,8 +18,8 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any, Literal, TypeVar
 
-from packaging.version import Version
-from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
+from packaging.version import InvalidVersion, Version
+from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, model_validator
 
 from app.deployment_package import (
     DeploymentManifest,
@@ -26,13 +27,25 @@ from app.deployment_package import (
     verify_outer_checksum,
     verify_package,
 )
+from app.instance_policy import ControlMode, IntegrationModes, SchedulerMode
 from bin.install_deployment_package import install_package
+from bin.source_deployment import (
+    DEFAULT_BUILD_USER,
+    SourceBuildOptions,
+    SourceSelection,
+    build_source_package,
+)
 
 DEFAULT_REPOSITORY = "basistech-llc/temperature-bot"
 DEFAULT_API = "https://api.github.com"
 DEFAULT_MAX_BYTES = 500 * 1024 * 1024
+DEFAULT_UV = "/usr/local/bin/uv"
+RELEASES_PER_PAGE = 100
+MAX_RELEASE_PAGES = 20
 PACKAGE_PREFIX = "temperature-bot-deployment-"
 STATE_FILE = "release-update-state.json"
+SYSTEMD_FRAGMENT_PROPERTY = "FragmentPath"
+SYSTEMD_DROP_IN_PROPERTY = "DropInPaths"
 ModelT = TypeVar("ModelT", bound=BaseModel)
 
 
@@ -90,6 +103,15 @@ class AnnotatedTag(BaseModel):
     git_object: GitObject = Field(alias="object")
 
 
+class GitHubCommit(BaseModel):
+    """An immutable commit resolved by GitHub from a branch or SHA."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    sha: str = Field(pattern=r"^[0-9a-f]{40}$")
+    html_url: str
+
+
 class HealthEndpoint(BaseModel):
     """One endpoint and expected deployment identity."""
 
@@ -97,6 +119,24 @@ class HealthEndpoint(BaseModel):
 
     url: str
     instance: str
+    control_mode: ControlMode | None = None
+    database_identity: str | None = None
+    scheduler_mode: SchedulerMode | None = None
+    integrations: IntegrationModes | None = None
+
+
+class RuntimeHealth(BaseModel):
+    """Fields used to prove target identity and release health."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    version: str
+    commit: str
+    instance: str
+    control_mode: str | None = None
+    database_identity: str | None = None
+    scheduler_mode: str | None = None
+    integrations: IntegrationModes | None = None
 
 
 class DeploymentTarget(BaseModel):
@@ -119,6 +159,8 @@ class ActivationOptions(BaseModel):
     require_root: bool = True
     systemctl: str = "systemctl"
     create_venv: bool = True
+    uv: str = DEFAULT_UV
+    python: str = "3.12"
     health_timeout: float = Field(default=30, gt=0)
 
 
@@ -130,9 +172,22 @@ class UpdateOptions(BaseModel):
     repository: str = DEFAULT_REPOSITORY
     channel: ReleaseChannel = ReleaseChannel.STABLE
     api_base: str = DEFAULT_API
+    tag: str | None = None
+    branch: str | None = None
+    commit: str | None = None
     check_only: bool = False
     activate: bool = False
     create_venv: bool = True
+    uv: str = DEFAULT_UV
+    python: str = "3.12"
+    build_user: str = DEFAULT_BUILD_USER
+
+    @model_validator(mode="after")
+    def one_source_selector(self) -> "UpdateOptions":
+        selectors = (self.tag, self.branch, self.commit)
+        if sum(value is not None for value in selectors) > 1:
+            raise ValueError("--tag, --branch, and --commit are mutually exclusive")
+        return self
 
 
 TARGETS = {
@@ -161,7 +216,14 @@ TARGETS = {
         ),
         health=(
             HealthEndpoint(
-                url="http://127.0.0.1:8100/api/v1/version", instance="production"
+                url="http://127.0.0.1:8100/api/v1/version",
+                instance="production",
+                control_mode=ControlMode.LIVE,
+                database_identity="production",
+                scheduler_mode=SchedulerMode.ENABLED,
+                integrations=IntegrationModes(
+                    ae200=False, hubitat=False, airthings=False, aqicn=False
+                ),
             ),
         ),
     ),
@@ -181,7 +243,14 @@ TARGETS = {
         ),
         health=(
             HealthEndpoint(
-                url="http://127.0.0.1:8101/api/v1/version", instance="air-stage"
+                url="http://127.0.0.1:8101/api/v1/version",
+                instance="air-stage",
+                control_mode=ControlMode.LIVE,
+                database_identity="air-stage",
+                scheduler_mode=SchedulerMode.ENABLED,
+                integrations=IntegrationModes(
+                    ae200=False, hubitat=False, airthings=False, aqicn=False
+                ),
             ),
         ),
     ),
@@ -201,8 +270,26 @@ TARGETS = {
             "deg1_basistech_net.service",
         ),
         health=(
-            HealthEndpoint(url="http://127.0.0.1:8003/api/v1/version", instance="slg1"),
-            HealthEndpoint(url="http://127.0.0.1:8004/api/v1/version", instance="deg1"),
+            HealthEndpoint(
+                url="http://127.0.0.1:8003/api/v1/version",
+                instance="slg1",
+                control_mode=ControlMode.SIMULATOR,
+                database_identity="slg1",
+                scheduler_mode=SchedulerMode.DISABLED,
+                integrations=IntegrationModes(
+                    ae200=True, hubitat=True, airthings=True, aqicn=True
+                ),
+            ),
+            HealthEndpoint(
+                url="http://127.0.0.1:8004/api/v1/version",
+                instance="deg1",
+                control_mode=ControlMode.SIMULATOR,
+                database_identity="deg1",
+                scheduler_mode=SchedulerMode.DISABLED,
+                integrations=IntegrationModes(
+                    ae200=True, hubitat=True, airthings=True, aqicn=True
+                ),
+            ),
         ),
     ),
 }
@@ -221,6 +308,19 @@ class UpdateResult(BaseModel):
     commit: str
     disposition: Literal["current", "available", "staged", "activated"]
     release_directory: Path | None = None
+
+
+class UpdateCandidate(BaseModel):
+    """Verified candidate plus its discovery provenance."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    package: Path
+    manifest: DeploymentManifest
+    source_url: str
+    source_label: str
+    allow_same_version: bool
+    branch: str | None = None
 
 
 def _request(url: str, *, timeout: float) -> Any:
@@ -248,19 +348,45 @@ def discover_release(
     channel: ReleaseChannel,
     *,
     api_base: str = DEFAULT_API,
+    tag: str | None = None,
     timeout: float = 15,
 ) -> GitHubRelease:
-    """Return the newest non-draft release permitted by *channel*."""
+    """Return an eligible application release permitted by *channel*."""
     encoded_repo = urllib.parse.quote(repository, safe="/")
     base = f"{api_base.rstrip('/')}/repos/{encoded_repo}/releases"
-    if channel is ReleaseChannel.STABLE:
-        return _json(f"{base}/latest", GitHubRelease, timeout=timeout)
-    with _request(f"{base}?per_page=30", timeout=timeout) as response:
-        releases = TypeAdapter(list[GitHubRelease]).validate_json(response.read())
+    if tag:
+        encoded_tag = urllib.parse.quote(tag, safe="")
+        release = _json(
+            f"{base}/tags/{encoded_tag}", GitHubRelease, timeout=timeout
+        )
+        if not _eligible_release(release, channel):
+            raise ValueError(f"release {tag} is not an eligible {channel.value} release")
+        return release
+
+    for page in range(1, MAX_RELEASE_PAGES + 1):
+        url = f"{base}?per_page={RELEASES_PER_PAGE}&page={page}"
+        with _request(url, timeout=timeout) as response:
+            releases = TypeAdapter(list[GitHubRelease]).validate_json(response.read())
+        for release in releases:
+            if _eligible_release(release, channel):
+                return release
+        if len(releases) < RELEASES_PER_PAGE:
+            break
+    raise ValueError(f"GitHub has no eligible {channel.value} application release")
+
+
+def _eligible_release(release: GitHubRelease, channel: ReleaseChannel) -> bool:
+    """Return whether *release* is a publishable Temperature Bot artifact."""
+    if release.draft:
+        return False
     try:
-        return next(release for release in releases if not release.draft)
-    except StopIteration as error:
-        raise ValueError("GitHub has no published releases") from error
+        version = Version(release.tag_name.removeprefix("v"))
+        _release_assets(release)
+    except (InvalidVersion, ValueError):
+        return False
+    if channel is ReleaseChannel.STABLE:
+        return not release.prerelease and not version.is_prerelease
+    return True
 
 
 def resolve_tag_commit(
@@ -282,6 +408,38 @@ def resolve_tag_commit(
         annotated = _json(f"{base}/tags/{git_object.sha}", AnnotatedTag, timeout=timeout)
         git_object = annotated.git_object
     raise ValueError(f"tag {tag} has excessive annotated-tag indirection")
+
+
+def resolve_source_selection(
+    repository: str,
+    kind: Literal["branch", "commit"],
+    value: str,
+    *,
+    api_base: str = DEFAULT_API,
+    timeout: float = 15,
+) -> SourceSelection:
+    """Resolve a branch or commit selector to one immutable GitHub commit."""
+    if not value or value.strip() != value:
+        raise ValueError(f"invalid {kind} selector")
+    if kind == "commit" and not re.fullmatch(r"[0-9a-fA-F]{7,40}", value):
+        raise ValueError("commit must be a 7-to-40-character hexadecimal SHA")
+    encoded_repo = urllib.parse.quote(repository, safe="/")
+    encoded_value = urllib.parse.quote(value, safe="")
+    record = _json(
+        f"{api_base.rstrip('/')}/repos/{encoded_repo}/commits/{encoded_value}",
+        GitHubCommit,
+        timeout=timeout,
+    )
+    if kind == "commit" and not record.sha.startswith(value.lower()):
+        raise ValueError(
+            f"GitHub resolved commit {value} to unexpected SHA {record.sha}"
+        )
+    return SourceSelection(
+        kind=kind,
+        value=value,
+        commit=record.sha,
+        html_url=record.html_url,
+    )
 
 
 def _release_assets(release: GitHubRelease) -> tuple[GitHubAsset, GitHubAsset]:
@@ -355,13 +513,22 @@ def active_manifest(target: DeploymentTarget) -> DeploymentManifest | None:
     return manifest
 
 
-def update_required(active: DeploymentManifest | None, candidate: DeploymentManifest) -> bool:
+def update_required(
+    active: DeploymentManifest | None,
+    candidate: DeploymentManifest,
+    *,
+    allow_same_version: bool = False,
+) -> bool:
     """Return whether *candidate* is newer than the active release."""
     if active is None:
         return True
     if active.commit == candidate.commit and Version(active.version) == Version(candidate.version):
         return False
-    if Version(candidate.version) <= Version(active.version):
+    candidate_version = Version(candidate.version)
+    active_version = Version(active.version)
+    if candidate_version < active_version or (
+        candidate_version == active_version and not allow_same_version
+    ):
         raise ValueError(
             f"refusing non-newer release {candidate.version} over active {active.version}"
         )
@@ -410,19 +577,103 @@ def _check_health(
         for endpoint in target.health:
             try:
                 with urllib.request.urlopen(endpoint.url, timeout=3) as response:
-                    payload: dict[str, Any] = json.load(response)
-                if payload.get("version") != manifest.version:
-                    raise ValueError(f"version is {payload.get('version')}")
-                if payload.get("commit") != manifest.commit:
-                    raise ValueError(f"commit is {payload.get('commit')}")
-                if payload.get("instance") != endpoint.instance:
-                    raise ValueError(f"instance is {payload.get('instance')}")
+                    payload = RuntimeHealth.model_validate_json(response.read())
+                if payload.version != manifest.version:
+                    raise ValueError(f"version is {payload.version}")
+                if payload.commit != manifest.commit:
+                    raise ValueError(f"commit is {payload.commit}")
+                _check_runtime_policy(endpoint, payload)
             except (OSError, ValueError, json.JSONDecodeError) as error:
                 errors.append(f"{endpoint.url}: {error}")
         if not errors:
             return
         time.sleep(1)
     raise RuntimeError("release health checks failed: " + "; ".join(errors))
+
+
+def _check_runtime_policy(
+    endpoint: HealthEndpoint, payload: RuntimeHealth
+) -> None:
+    expected = (
+        ("instance", endpoint.instance, payload.instance),
+        ("control mode", endpoint.control_mode, payload.control_mode),
+        ("database identity", endpoint.database_identity, payload.database_identity),
+        ("scheduler mode", endpoint.scheduler_mode, payload.scheduler_mode),
+        ("integration modes", endpoint.integrations, payload.integrations),
+    )
+    for label, wanted, actual in expected:
+        if wanted is not None and actual != wanted:
+            raise ValueError(f"{label} is {actual}; expected {wanted}")
+
+
+def _unit_fragment(unit: str, systemctl: str) -> Path:
+    result = subprocess.run(
+        [
+            systemctl,
+            "show",
+            unit,
+            f"--property={SYSTEMD_FRAGMENT_PROPERTY}",
+            f"--property={SYSTEMD_DROP_IN_PROPERTY}",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    properties = dict(
+        line.split("=", 1) for line in result.stdout.splitlines() if "=" in line
+    )
+    fragment = Path(properties.get(SYSTEMD_FRAGMENT_PROPERTY, ""))
+    if not fragment.is_absolute() or not fragment.is_file():
+        raise ValueError(f"cannot locate installed systemd unit {unit}")
+    if properties.get(SYSTEMD_DROP_IN_PROPERTY, "").strip():
+        raise ValueError(
+            f"installed systemd unit {unit} has unreviewed drop-ins: "
+            f"{properties[SYSTEMD_DROP_IN_PROPERTY]}"
+        )
+    return fragment
+
+
+def _check_activation_preflight(
+    target: DeploymentTarget,
+    candidate_release: Path,
+    candidate: DeploymentManifest,
+    systemctl: str,
+) -> None:
+    """Refuse to stop services when target policy or unit bytes have drifted."""
+    candidate_units = {
+        Path(path).name: candidate_release / path for path in candidate.systemd_units
+    }
+    drifted: list[str] = []
+    for unit in dict.fromkeys((*target.quiesce_units, *target.resume_units)):
+        packaged = candidate_units.get(unit)
+        if packaged is None:
+            drifted.append(f"{unit} (missing from candidate)")
+            continue
+        fragment = _unit_fragment(unit, systemctl)
+        if fragment.read_bytes() != packaged.read_bytes():
+            drifted.append(f"{unit} ({fragment})")
+    if drifted:
+        raise ValueError(
+            "installed systemd unit definitions differ from the candidate; "
+            "install the reviewed host configuration before activation: "
+            + ", ".join(drifted)
+        )
+    for endpoint in target.health:
+        if endpoint.control_mode is None:
+            continue
+        try:
+            with urllib.request.urlopen(endpoint.url, timeout=3) as response:
+                payload = RuntimeHealth.model_validate_json(response.read())
+        except (OSError, ValueError) as error:
+            raise ValueError(f"cannot verify active target {endpoint.url}: {error}") from error
+        try:
+            _check_runtime_policy(endpoint, payload)
+        except ValueError as error:
+            raise ValueError(
+                f"active target {endpoint.url} policy mismatch: {error}; "
+                "reconcile the reviewed host environment before activation"
+            ) from error
 
 
 def activate_schema_neutral_release(
@@ -440,6 +691,20 @@ def activate_schema_neutral_release(
             "candidate migrations differ from the active release; stage succeeded but "
             "activation requires the transactional migration workflow in issue #216"
         )
+    staged = install_package(
+        package,
+        target.root,
+        uv=options.uv,
+        python=options.python,
+        create_venv=options.create_venv,
+        activate=False,
+    )
+    _check_activation_preflight(
+        target,
+        staged.release_directory,
+        candidate,
+        options.systemctl,
+    )
     old_release = (target.root / "current").resolve(strict=True)
     was_active = {
         unit: _is_active(unit, options.systemctl) for unit in target.resume_units
@@ -451,6 +716,8 @@ def activate_schema_neutral_release(
         installation = install_package(
             package,
             target.root,
+            uv=options.uv,
+            python=options.python,
             create_venv=options.create_venv,
             activate=True,
         )
@@ -483,80 +750,190 @@ def _write_state(target: DeploymentTarget, result: UpdateResult) -> None:
         temporary.unlink(missing_ok=True)
 
 
+def _current_result(
+    target: DeploymentTarget,
+    active: DeploymentManifest,
+    source_url: str,
+    source_label: str,
+) -> UpdateResult:
+    """Describe a candidate that is already active."""
+    return UpdateResult(
+        checked_at=datetime.now(timezone.utc),
+        target=target.name,
+        release_url=source_url,
+        tag=source_label,
+        version=active.version,
+        commit=active.commit,
+        disposition="current",
+        release_directory=(target.root / "current").resolve(),
+    )
+
+
+def _stage_candidate(
+    candidate: UpdateCandidate,
+    target: DeploymentTarget,
+    options: UpdateOptions,
+) -> UpdateResult:
+    """Revalidate and stage one candidate while holding the target lock."""
+    target.root.mkdir(parents=True, exist_ok=True)
+    with (target.root / ".release-update.lock").open("a+b") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        if candidate.branch is not None:
+            current_head = resolve_source_selection(
+                options.repository,
+                "branch",
+                candidate.branch,
+                api_base=options.api_base,
+            )
+            if current_head.commit != candidate.manifest.commit:
+                raise ValueError(
+                    f"branch {candidate.branch} changed from "
+                    f"{candidate.manifest.commit} to {current_head.commit} during build"
+                )
+        active = active_manifest(target)
+        if not update_required(
+            active,
+            candidate.manifest,
+            allow_same_version=candidate.allow_same_version,
+        ):
+            assert active is not None
+            return _current_result(
+                target, active, candidate.source_url, candidate.source_label
+            )
+        installation = install_package(
+            candidate.package,
+            target.root,
+            uv=options.uv,
+            python=options.python,
+            create_venv=options.create_venv,
+            activate=False,
+        )
+        disposition: Literal["staged", "activated"] = "staged"
+        release_directory = installation.release_directory
+        if options.activate:
+            if not activation_is_schema_neutral(active, candidate.manifest):
+                staged = UpdateResult(
+                    checked_at=datetime.now(timezone.utc),
+                    target=target.name,
+                    release_url=candidate.source_url,
+                    tag=candidate.source_label,
+                    version=candidate.manifest.version,
+                    commit=candidate.manifest.commit,
+                    disposition="staged",
+                    release_directory=release_directory,
+                )
+                _write_state(target, staged)
+                raise ValueError(
+                    "candidate migrations differ from the active release; "
+                    "release was staged but activation requires issue #216"
+                )
+            release_directory = activate_schema_neutral_release(
+                candidate.package,
+                target,
+                active,
+                candidate.manifest,
+                ActivationOptions(
+                    create_venv=options.create_venv,
+                    uv=options.uv,
+                    python=options.python,
+                ),
+            )
+            disposition = "activated"
+        result = UpdateResult(
+            checked_at=datetime.now(timezone.utc),
+            target=target.name,
+            release_url=candidate.source_url,
+            tag=candidate.source_label,
+            version=candidate.manifest.version,
+            commit=candidate.manifest.commit,
+            disposition=disposition,
+            release_directory=release_directory,
+        )
+        _write_state(target, result)
+        return result
+
+
 def run_update(
     target: DeploymentTarget, options: UpdateOptions = UpdateOptions()
 ) -> UpdateResult:
     """Run one serialized release check for *target*."""
-    release = discover_release(
-        options.repository, options.channel, api_base=options.api_base
-    )
-    expected_commit = resolve_tag_commit(
-        options.repository, release.tag_name, api_base=options.api_base
-    )
+    if (options.branch or options.commit) and target.name != "staging":
+        raise ValueError("branch and commit sources are restricted to staging")
     active = active_manifest(target)
-    if active and active.commit == expected_commit:
-        return UpdateResult(
-            checked_at=datetime.now(timezone.utc),
-            target=target.name,
-            release_url=release.html_url,
-            tag=release.tag_name,
-            version=active.version,
-            commit=active.commit,
-            disposition="current",
-            release_directory=(target.root / "current").resolve(),
-        )
     with tempfile.TemporaryDirectory(prefix="temperature-bot-release-") as temporary:
-        package, manifest = download_and_verify(
-            release, expected_commit, Path(temporary)
+        temporary_path = Path(temporary)
+        source_selection = None
+        release: GitHubRelease | None = None
+        if options.branch or options.commit:
+            kind: Literal["branch", "commit"] = (
+                "branch" if options.branch else "commit"
+            )
+            value = options.branch or options.commit
+            assert value is not None
+            source_selection = resolve_source_selection(
+                options.repository,
+                kind,
+                value,
+                api_base=options.api_base,
+            )
+            expected_commit = source_selection.commit
+            source_url = source_selection.html_url
+            source_label = f"{kind}:{value}"
+        else:
+            release = discover_release(
+                options.repository,
+                options.channel,
+                api_base=options.api_base,
+                tag=options.tag,
+            )
+            expected_commit = resolve_tag_commit(
+                options.repository, release.tag_name, api_base=options.api_base
+            )
+            source_url = release.html_url
+            source_label = release.tag_name
+        if active and active.commit == expected_commit:
+            return _current_result(target, active, source_url, source_label)
+        if source_selection:
+            package, manifest = build_source_package(
+                source_selection,
+                temporary_path,
+                SourceBuildOptions(
+                    repository=options.repository,
+                    uv=options.uv,
+                    python=options.python,
+                    build_user=options.build_user,
+                ),
+            )
+        else:
+            assert release is not None
+            package, manifest = download_and_verify(
+                release, expected_commit, temporary_path
+            )
+        candidate = UpdateCandidate(
+            package=package,
+            manifest=manifest,
+            source_url=source_url,
+            source_label=source_label,
+            allow_same_version=source_selection is not None,
+            branch=options.branch,
         )
-        update_required(active, manifest)
-        disposition: Literal["available", "staged", "activated"] = "available"
-        release_directory = None
-        if not options.check_only:
-            target.root.mkdir(parents=True, exist_ok=True)
-            with (target.root / ".release-update.lock").open("a+b") as lock:
-                fcntl.flock(lock, fcntl.LOCK_EX)
-                installation = install_package(
-                    package,
-                    target.root,
-                    create_venv=options.create_venv,
-                    activate=False,
-                )
-                disposition = "staged"
-                release_directory = installation.release_directory
-                if options.activate:
-                    if not activation_is_schema_neutral(active, manifest):
-                        staged = UpdateResult(
-                            checked_at=datetime.now(timezone.utc),
-                            target=target.name,
-                            release_url=release.html_url,
-                            tag=release.tag_name,
-                            version=manifest.version,
-                            commit=manifest.commit,
-                            disposition="staged",
-                            release_directory=release_directory,
-                        )
-                        _write_state(target, staged)
-                        raise ValueError(
-                            "candidate migrations differ from the active release; "
-                            "release was staged but activation requires issue #216"
-                        )
-                    release_directory = activate_schema_neutral_release(
-                        package, target, active, manifest
-                    )
-                    disposition = "activated"
-        result = UpdateResult(
-            checked_at=datetime.now(timezone.utc),
-            target=target.name,
-            release_url=release.html_url,
-            tag=release.tag_name,
-            version=manifest.version,
-            commit=manifest.commit,
-            disposition=disposition,
-            release_directory=release_directory,
-        )
-        if not options.check_only:
-            _write_state(target, result)
+        if options.check_only:
+            update_required(
+                active,
+                candidate.manifest,
+                allow_same_version=candidate.allow_same_version,
+            )
+            return UpdateResult(
+                checked_at=datetime.now(timezone.utc),
+                target=target.name,
+                release_url=source_url,
+                tag=source_label,
+                version=manifest.version,
+                commit=manifest.commit,
+                disposition="available",
+                release_directory=None,
+            )
+        result = _stage_candidate(candidate, target, options)
         return result
 
 
@@ -572,6 +949,13 @@ def main(argv: list[str] | None = None) -> None:
     )
     parser.add_argument("--check-only", action="store_true")
     parser.add_argument("--activate", action="store_true")
+    source = parser.add_mutually_exclusive_group()
+    source.add_argument("--tag", help="select one exact published release tag")
+    source.add_argument("--branch", help="build one GitHub branch head")
+    source.add_argument("--commit", help="build one exact GitHub commit SHA")
+    parser.add_argument("--uv", default=DEFAULT_UV)
+    parser.add_argument("--python", default="3.12")
+    parser.add_argument("--build-user", default=DEFAULT_BUILD_USER)
     args = parser.parse_args(argv)
     if args.activate and args.check_only:
         parser.error("--activate cannot be combined with --check-only")
@@ -581,8 +965,14 @@ def main(argv: list[str] | None = None) -> None:
             UpdateOptions(
                 repository=args.repository,
                 channel=args.channel,
+                tag=args.tag,
+                branch=args.branch,
+                commit=args.commit,
                 check_only=args.check_only,
                 activate=args.activate,
+                uv=args.uv,
+                python=args.python,
+                build_user=args.build_user,
             ),
         )
     except (OSError, RuntimeError, ValueError) as error:

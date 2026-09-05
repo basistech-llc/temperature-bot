@@ -128,10 +128,10 @@ class DeploymentManifest(PackageIdentity):
         if len(unit_names) != len(set(unit_names)):
             raise ValueError("systemd unit names are not unique")
         if any(
-            PurePosixPath(path).suffix not in {".service", ".timer"}
+            PurePosixPath(path).suffix not in {".service", ".socket", ".timer"}
             for path in unit_paths
         ):
-            raise ValueError("systemd payload is not a service or timer")
+            raise ValueError("systemd payload is not a service, socket, or timer")
         return self
 
 
