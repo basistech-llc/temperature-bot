@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% from '_outdoor_aqi.html' import outdoor_aqi_widget %}
 {% block title %} Weather {% endblock %}
 
 {% block body %}
@@ -48,10 +49,7 @@
         </table>
       </div>
 
-      <h2>Outdoor Air Quality</h2>
-      <p>AQI <span id="aqi-value">--</span> <span id="aqi-name" class="aqi-pill-table"></span></p>
-
-      <div id="last-refresh" class="last-refresh-inline"></div>
+      {{ outdoor_aqi_widget(widget_id='weather-outdoor-aqi') }}
     </div>
   </div>
 </div>
@@ -92,6 +90,44 @@ function weatherIcon(conditions) {
   return "";
 }
 
+function weatherText(conditions) {
+  const text = conditions || "";
+  const icon = weatherIcon(text);
+  return icon ? icon + " " + text : text;
+}
+
+function textCell(text, className) {
+  const cell = document.createElement("td");
+  if (className) {
+    cell.className = className;
+  }
+  cell.textContent = text || "--";
+  return cell;
+}
+
+function tempCell(tempC, useDisplaySpan) {
+  const cell = document.createElement("td");
+  cell.className = "cell-temp";
+  const numericTemp = Number(tempC);
+  if (!Number.isFinite(numericTemp)) {
+    cell.textContent = "--";
+    return cell;
+  }
+
+  const target = useDisplaySpan ? document.createElement("span") : cell;
+  target.classList.add("temp-display");
+  target.dataset.tempC = String(numericTemp);
+  target.textContent = TemperatureUtils.formatTemperature(numericTemp);
+  if (useDisplaySpan) {
+    cell.appendChild(target);
+  }
+  return cell;
+}
+
+function replaceRows(tbody, rows) {
+  tbody.replaceChildren(...rows);
+}
+
 function displayWeather(weatherInfo) {
   if (!weatherInfo) return;
   currentWeatherData = weatherInfo;
@@ -99,60 +135,44 @@ function displayWeather(weatherInfo) {
   // Current conditions — multiple stations
   const currentBody = document.getElementById("weather-current-body");
   if (currentBody && weatherInfo.stations && weatherInfo.stations.length > 0) {
-    let rows = "";
-    weatherInfo.stations.forEach(function(station) {
-      const icon = weatherIcon(station.conditions);
-      const condText = icon ? icon + " " + station.conditions : station.conditions || "";
-      let tempHtml = "--";
-      if (station.temperature != null) {
-        const formatted = TemperatureUtils.formatTemperature(station.temperature);
-        tempHtml = `<span class="temp-display" data-temp-c="${station.temperature}">${formatted}</span>`;
-      }
-      rows += `<tr>
-        <td class="cell-unit">${station.station_name || "--"}</td>
-        <td class="cell-temp">${tempHtml}</td>
-        <td class="cell-conditions">${condText}</td>
-      </tr>`;
+    const rows = weatherInfo.stations.map(function(station) {
+      const row = document.createElement("tr");
+      row.appendChild(textCell(station.station_name, "cell-unit"));
+      row.appendChild(tempCell(station.temperature, true));
+      row.appendChild(textCell(weatherText(station.conditions), "cell-conditions"));
+      return row;
     });
-    currentBody.innerHTML = rows;
+    replaceRows(currentBody, rows);
   }
 
   // Forecast
   const forecastBody = document.getElementById("weather-forecast-body");
   if (forecastBody && weatherInfo.forecast && weatherInfo.forecast.length > 0) {
-    let rows = "";
-    weatherInfo.forecast.forEach(function(period) {
+    const rows = weatherInfo.forecast.map(function(period) {
       const tempF = parseFloat(period.temperature);
       const tempC = TemperatureUtils.fahrenheitToCelsius(tempF);
-      const formatted = TemperatureUtils.formatTemperature(tempC);
-      const icon = weatherIcon(period.conditions);
-      const condText = icon ? icon + " " + period.conditions : period.conditions || "";
-      rows += `<tr>
-        <td>${period.time}</td>
-        <td class="cell-temp temp-display" data-temp-c="${tempC}">${formatted}</td>
-        <td class="cell-conditions">${condText}</td>
-      </tr>`;
+      const row = document.createElement("tr");
+      row.appendChild(textCell(period.time));
+      row.appendChild(tempCell(tempC, false));
+      row.appendChild(textCell(weatherText(period.conditions), "cell-conditions"));
+      return row;
     });
-    forecastBody.innerHTML = rows;
+    replaceRows(forecastBody, rows);
   }
 
   // Daily forecast
   const dailyBody = document.getElementById("weather-daily-body");
   if (dailyBody && weatherInfo.daily && weatherInfo.daily.length > 0) {
-    let rows = "";
-    weatherInfo.daily.forEach(function(period) {
+    const rows = weatherInfo.daily.map(function(period) {
       const tempF = parseFloat(period.temperature);
       const tempC = TemperatureUtils.fahrenheitToCelsius(tempF);
-      const formatted = TemperatureUtils.formatTemperature(tempC);
-      const icon = weatherIcon(period.conditions);
-      const condText = icon ? icon + " " + period.conditions : period.conditions || "";
-      rows += `<tr>
-        <td>${period.name}</td>
-        <td class="cell-temp temp-display" data-temp-c="${tempC}">${formatted}</td>
-        <td class="cell-conditions">${condText}</td>
-      </tr>`;
+      const row = document.createElement("tr");
+      row.appendChild(textCell(period.name));
+      row.appendChild(tempCell(tempC, false));
+      row.appendChild(textCell(weatherText(period.conditions), "cell-conditions"));
+      return row;
     });
-    dailyBody.innerHTML = rows;
+    replaceRows(dailyBody, rows);
   }
 
   // Update unit labels
@@ -171,34 +191,13 @@ function loadWeather() {
     .then(function(response) { return response.json(); })
     .then(function(data) {
       // AQI
-      const aqiValueEl = document.getElementById("aqi-value");
-      const aqiNameEl = document.getElementById("aqi-name");
-      if (aqiValueEl && aqiNameEl) {
-        if (data.aqi && data.aqi.error) {
-          aqiValueEl.textContent = "Error";
-          aqiNameEl.textContent = data.aqi.error;
-        } else if (data.aqi) {
-          aqiValueEl.textContent = data.aqi.value;
-          aqiNameEl.textContent = data.aqi.name;
-          if (data.aqi.color) {
-            aqiNameEl.style.backgroundColor = data.aqi.color;
-            aqiNameEl.style.color = "#fff";
-          }
-        }
-      }
+      updateOutdoorAqiWidget("weather-outdoor-aqi", data.aqi, data.aqi_observed_at);
 
       // Weather
       if (data.weather) {
         displayWeather(data.weather);
       }
 
-      // Timestamp
-      var lr = document.getElementById("last-refresh");
-      if (lr) {
-        var now = new Date();
-        var pad = function(n) { return String(n).padStart(2, "0"); };
-        lr.textContent = "Data as of: " + now.getFullYear() + "-" + pad(now.getMonth()+1) + "-" + pad(now.getDate()) + " " + pad(now.getHours()) + ":" + pad(now.getMinutes()) + ":" + pad(now.getSeconds());
-      }
     })
     .catch(function(error) {
       console.error("Error loading weather:", error);
@@ -213,5 +212,6 @@ document.addEventListener("DOMContentLoaded", function() {
   loadWeather();
 });
 </script>
+<script src="/static/outdoor_aqi.js"></script>
 
 {% endblock %}

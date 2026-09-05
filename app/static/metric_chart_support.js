@@ -17,6 +17,17 @@ function metricConfig() {
   return window.METRIC_CHART_CONFIG || {};
 }
 
+function metricDataUrl(cfg, start, end, deviceIds) {
+  const params = new URLSearchParams();
+  params.append("metric", cfg.metric);
+  if (start !== null && start !== undefined) params.append("start", start);
+  if (end !== null && end !== undefined) params.append("end", end);
+  if (deviceIds && deviceIds.length > 0) {
+    params.append("device_ids", deviceIds.join(","));
+  }
+  return `${METRIC_ENDPOINT}?${params.toString()}`;
+}
+
 function isRadon() {
   return metricConfig().metric === "radon";
 }
@@ -64,11 +75,12 @@ function updateMetricRecordCount() {
 
 function loadMetricData() {
   const cfg = metricConfig();
-  const params = new URLSearchParams();
-  params.append("metric", cfg.metric);
-  params.append("start", currentStart);
-  params.append("end", currentEnd);
-  const url = `${METRIC_ENDPOINT}?${params.toString()}`;
+  const url = metricDataUrl(
+    cfg,
+    currentStart,
+    currentEnd,
+    preSelectedDeviceIds,
+  );
 
   console.log("Fetch metric ", url);
   return fetch(url)
@@ -149,6 +161,9 @@ function updateMetricChart() {
         let output = `${formatTime(ts)}<br>`;
         for (const p of params) {
           const val = p.value[1];
+          if (typeof val !== "number" || !Number.isFinite(val)) {
+            continue;
+          }
           output += `${p.marker} ${p.seriesName}: ${val.toFixed(decimals)}${unit ? " " + unit : ""}<br>`;
         }
         return output;
@@ -273,6 +288,23 @@ function setupMetricEventListeners() {
     });
   }
 
+  // CSV export
+  setupCsvDownload(() => {
+    const checkboxes = document.querySelectorAll(
+      "#checkboxes input[type=checkbox]",
+    );
+    const visibleSeries = checkedVisibleSeries(
+      checkboxes,
+      allSensors,
+      new Map(metricData.map((s) => [s.device_id, s])),
+    );
+    return {
+      visibleSeries,
+      names: visibleSeries.map((s) => s.name),
+      filename: `${metricConfig().metric || "metric"}_data.csv`,
+    };
+  });
+
   // Radon: re-render when the site-wide temperature-unit toggle flips, so the
   // y-axis label and tooltip unit track the Bq/m³ <-> pCi/L preference.
   if (isRadon()) {
@@ -285,27 +317,33 @@ function setupMetricEventListeners() {
   }
 }
 
-document.addEventListener("DOMContentLoaded", async function () {
-  const chartEl = document.getElementById("metric-chart");
-  if (!chartEl) return;
+if (typeof document !== "undefined") {
+  document.addEventListener("DOMContentLoaded", async function () {
+    const chartEl = document.getElementById("metric-chart");
+    if (!chartEl) return;
 
-  const urlParams = new URLSearchParams(window.location.search);
-  const deviceIdsParam = urlParams.get("device_ids");
-  if (deviceIdsParam) {
-    preSelectedDeviceIds = deviceIdsParam
-      .split(",")
-      .map((id) => parseInt(id.trim(), 10))
-      .filter((n) => !isNaN(n));
-  }
+    const urlParams = new URLSearchParams(window.location.search);
+    const deviceIdsParam = urlParams.get("device_ids");
+    if (deviceIdsParam) {
+      preSelectedDeviceIds = deviceIdsParam
+        .split(",")
+        .map((id) => parseInt(id.trim(), 10))
+        .filter((n) => !isNaN(n));
+    }
 
-  await loadAllSensors();
+    await loadAllSensors();
 
-  setTimePrevDays(7);
-  setTemporalButtonSelection("weekBtn");
+    setTimePrevDays(7);
+    setTemporalButtonSelection("weekBtn");
 
-  metricChart = echarts.init(chartEl);
+    metricChart = echarts.init(chartEl);
 
-  setupMetricEventListeners();
+    setupMetricEventListeners();
 
-  loadMetricData();
-});
+    loadMetricData();
+  });
+}
+
+if (typeof module !== "undefined" && module.exports) {
+  module.exports = { metricDataUrl };
+}

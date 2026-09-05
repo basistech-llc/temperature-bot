@@ -11,9 +11,11 @@
 .playwright
 __pycache__/
 activate
+build/
 config.yaml
 coverage.xml
 debug_page*
+dist/
 image/
 node_modules
 secrets.json
@@ -21,11 +23,15 @@ TAGS
 temperature-bot-config.yaml
 temps.csv
 token.json
+var/web-ui-screenshots/
 venv/
 *secrets*.py
 
-# Dolt database files (added by bd init)
+# Legacy local Dolt/Beads artifacts
 .dolt/
-
-# Beads / Dolt files (added by bd init)
 .beads-credential-key
+devices*.json
+x.json
+slack-token
+var/
+.tmp

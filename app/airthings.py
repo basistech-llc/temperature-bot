@@ -2,11 +2,10 @@
 Interface to the airthings api
 """
 
-import os
 import json
 from pathlib import Path
 import requests
-from app.util import get_secret
+from app.util import env_flag_enabled, get_secret
 from app.paths import TIMEOUT_SECONDS
 
 
@@ -15,7 +14,15 @@ ACCOUNTS_URL = "https://consumer-api.airthings.com/v1/accounts"
 DEVICES_URL = "https://consumer-api.airthings.com/v1/accounts/{accountId}/devices"
 SENSORS_URL = "https://consumer-api.airthings.com/v1/accounts/{accountId}/sensors?{sn_param}"
 
-AIRTHINGS_SIMULATOR = os.getenv('AIRTHINGS_SIMULATOR')
+AIRTHINGS_SIMULATOR_ENV = "AIRTHINGS_SIMULATOR"
+
+
+def airthings_simulator_enabled() -> bool:
+    """Return True when Airthings simulator mode is explicitly enabled."""
+    return env_flag_enabled(AIRTHINGS_SIMULATOR_ENV)
+
+
+AIRTHINGS_SIMULATOR = airthings_simulator_enabled()
 if AIRTHINGS_SIMULATOR:
     AIRTHINGS_SAMPLE_FILE     = Path(__file__).parent.parent / 'etc' / 'airthings_sample.json'
     CLIENT_ID     = None

@@ -5,6 +5,8 @@ test for db.py
 import logging
 import json
 
+import pytest
+
 from app import db
 from app import aq_metrics
 from app.main import app
@@ -12,6 +14,84 @@ from bin import runner
 
 
 logger = logging.getLogger(__name__)
+
+
+@pytest.mark.parametrize(("operator", "order"), [("<", "DESC"), (">", "ASC")])
+def test_temperature_boundary_queries_use_composite_index(
+    test_database_conn, operator, order
+):
+    """Boundary probes filter and order directly from the temperature index."""
+    query = """
+        SELECT logtime FROM devlog INDEXED BY idx_devlog_temperature_logtime_device
+        WHERE device_id IN (?, ?) AND temp10x IS NOT NULL AND logtime {operator} ?
+        ORDER BY logtime {order} LIMIT 1
+    """
+    plan = " ".join(
+        row["detail"]
+        for row in test_database_conn.execute(
+            f"EXPLAIN QUERY PLAN {query.format(operator=operator, order=order)}",
+            (1, 2, 100),
+        ).fetchall()
+    )
+    assert "idx_devlog_temperature_logtime_device" in plan
+    assert "TEMP B-TREE" not in plan
+
+
+def test_temperature_data_availability_checks_selected_devices(test_database_conn):
+    first_id = db.get_or_create_device_id(test_database_conn, "first")
+    second_id = db.get_or_create_device_id(test_database_conn, "second")
+    test_database_conn.executemany(
+        """
+        INSERT INTO devlog (device_id, logtime, duration, temp10x)
+        VALUES (?, ?, 1, 200)
+        """,
+        [(first_id, 100), (first_id, 200), (first_id, 300), (second_id, 220)],
+    )
+
+    assert db.temperature_data_availability(
+        test_database_conn, [first_id], 150, 250
+    ) == (True, True)
+    assert db.temperature_data_availability(
+        test_database_conn, [second_id], 150, 250
+    ) == (False, False)
+    assert db.temperature_data_availability(
+        test_database_conn, [], 150, 250
+    ) == (False, False)
+
+
+def test_temperature_data_availability_uses_direct_all_device_probe(
+    test_database_conn,
+):
+    device_id = db.get_or_create_device_id(test_database_conn, "device")
+    test_database_conn.execute(
+        "INSERT INTO devlog (device_id, logtime, duration, temp10x) VALUES (?, 100, 1, 200)",
+        (device_id,),
+    )
+    statements = []
+    test_database_conn.set_trace_callback(statements.append)
+
+    assert db.temperature_data_availability(
+        test_database_conn, None, 150, 50
+    ) == (True, True)
+
+    test_database_conn.set_trace_callback(None)
+    probes = [sql for sql in statements if "SELECT logtime" in sql]
+    assert len(probes) == 2
+    assert all("device_id" not in sql for sql in probes)
+
+
+def test_temperature_data_availability_uses_device_first_index_for_one_device(
+    test_database_conn,
+):
+    device_id = db.get_or_create_device_id(test_database_conn, "device")
+    statements = []
+    test_database_conn.set_trace_callback(statements.append)
+
+    db.temperature_data_availability(test_database_conn, [device_id], 150, None)
+
+    test_database_conn.set_trace_callback(None)
+    probe = next(sql for sql in statements if "SELECT logtime" in sql)
+    assert "INDEXED BY idx_devlog_temperature_device_logtime" in probe
 
 def test_temperature_insert(test_database_conn_with_test_data):
     conn = test_database_conn_with_test_data[0]
@@ -75,6 +155,152 @@ def test_temperature_insert(test_database_conn_with_test_data):
     assert rows[0]['logtime']==100
     assert rows[0]['duration']==50
     assert rows[0]['temp10x']==210 # 1 seconds at 20, 1 second at 21, 1 second at 22
+
+
+def test_combine_temp_measurements_refuses_duration_over_max(test_database_conn):
+    """Combining should never create rows wider than the devlog duration cap."""
+    with pytest.raises(ValueError, match="MAX_DURATION"):
+        runner.combine_temp_measurements(
+            test_database_conn,
+            100,
+            200,
+            db.MAX_DURATION + 1,
+        )
+
+
+def test_insert_devlog_entry_normalizes_float_logtime(
+    test_database_conn_with_test_data,
+):
+    conn = test_database_conn_with_test_data[0]
+
+    db.insert_devlog_entry(
+        conn,
+        device_name="float-logtime-device",
+        temp=20,
+        logtime=100.75,
+        force=True,
+    )
+
+    device_id = db.get_or_create_device_id(conn, "float-logtime-device")
+    row = conn.execute(
+        "SELECT logtime FROM devlog WHERE device_id=? ORDER BY logtime DESC LIMIT 1",
+        (device_id,),
+    ).fetchone()
+    assert row["logtime"] == 100
+
+    status = db.get_device_status(conn)
+    device = next(item for item in status if item["device_id"] == device_id)
+    assert device["logtime"] == 100
+
+
+def test_insert_devlog_entry_extends_legacy_float_logtime_with_integer_duration(
+    test_database_conn_with_test_data,
+):
+    conn = test_database_conn_with_test_data[0]
+    c = conn.cursor()
+    c.execute("DELETE FROM devlog")
+    c.execute("DELETE FROM devices")
+    conn.commit()
+
+    device_id = db.get_or_create_device_id(conn, "legacy-float-logtime-device")
+    c.execute(
+        "INSERT INTO devlog (device_id, logtime, duration, temp10x) VALUES (?, ?, ?, ?)",
+        (device_id, 100.75, 1.25, 200),
+    )
+    conn.commit()
+
+    db.insert_devlog_entry(
+        conn,
+        device_name="legacy-float-logtime-device",
+        temp=20,
+        logtime=105.9,
+    )
+
+    row = conn.execute(
+        "SELECT duration FROM devlog WHERE device_id=? ORDER BY logtime DESC LIMIT 1",
+        (device_id,),
+    ).fetchone()
+    assert row["duration"] == 6
+
+
+def test_insert_devlog_entry_starts_new_row_after_twenty_minutes(
+    test_database_conn,
+):
+    """Unchanged readings are compressed only up to the 20-minute chart cadence."""
+    conn = test_database_conn
+    c = conn.cursor()
+    c.execute("DELETE FROM devlog")
+    c.execute("DELETE FROM devices")
+    conn.commit()
+
+    db.insert_devlog_entry(
+        conn,
+        device_name="twenty-minute-device",
+        temp=20,
+        logtime=100,
+    )
+    db.insert_devlog_entry(
+        conn,
+        device_name="twenty-minute-device",
+        temp=20,
+        logtime=100 + db.MAX_DURATION - 1,
+    )
+    db.insert_devlog_entry(
+        conn,
+        device_name="twenty-minute-device",
+        temp=20,
+        logtime=100 + db.MAX_DURATION,
+    )
+
+    device_id = db.get_or_create_device_id(conn, "twenty-minute-device")
+    rows = conn.execute(
+        """
+        SELECT logtime, duration, temp10x
+        FROM devlog
+        WHERE device_id=?
+        ORDER BY logtime
+        """,
+        (device_id,),
+    ).fetchall()
+
+    assert [dict(row) for row in rows] == [
+        {"logtime": 100, "duration": db.MAX_DURATION, "temp10x": 200},
+        {
+            "logtime": 100 + db.MAX_DURATION,
+            "duration": 1,
+            "temp10x": 200,
+        },
+    ]
+
+
+def test_time_series_builders_normalize_legacy_float_logtime(
+    test_database_conn_with_test_data,
+):
+    conn = test_database_conn_with_test_data[0]
+    c = conn.cursor()
+    c.execute("DELETE FROM devlog")
+    c.execute("DELETE FROM devices")
+    conn.commit()
+
+    device_id = db.get_or_create_device_id(conn, "Airthings Legacy")
+    payload = {
+        "co2": {"value": 600, "unit": "ppm"},
+        "illuminance": 12.5,
+    }
+    c.execute(
+        "INSERT INTO devlog (device_id, logtime, duration, temp10x, status_json) VALUES (?, ?, ?, ?, ?)",
+        (device_id, 1000.75, 61.25, 219, json.dumps(payload)),
+    )
+    conn.commit()
+
+    with app.test_request_context():
+        temp_series = db.get_temperature_series(conn, [device_id])
+        metric_series = db.get_device_metric_series(conn, "co2", [device_id])
+        lighting_series = db.get_lighting_series(conn, [device_id])
+
+    assert temp_series[0]["data"] == [[1000, 21.9]]
+    assert metric_series[0]["data"] == [[1000, 600.0]]
+    assert lighting_series[0]["data"] == [[1000, 12.5]]
 
 
 def test_get_lighting_series_uses_status_json_illuminance(
@@ -317,6 +543,272 @@ def test_get_device_status_sets_aq_metric_flags(test_database_conn_with_test_dat
     assert hubitat["has_humidity"] is True
     for metric in ("co2", "voc", "radon", "pm25", "pm1", "pressure"):
         assert hubitat[f"has_{metric}"] is False, metric
+
+
+def test_get_device_status_includes_ae200_device_id(test_database_conn):
+    """Status rows should expose the configured AE-200 unit id."""
+    device_id = db.update_devlog_map(
+        test_database_conn,
+        device_name="Broadway Status",
+        ae200_device_id=10,
+    )
+    db.insert_devlog_entry(
+        test_database_conn,
+        device_id=device_id,
+        temp=24,
+        statusdict={"Drive": "ON", "FanSpeed": "LOW", "InletTemp": "24.0"},
+    )
+
+    with app.test_request_context():
+        status = db.get_device_status(test_database_conn)
+
+    row = next(item for item in status if item["device_id"] == device_id)
+    assert row["ae200_device_id"] == 10
+    assert row["device_type"] == "FCU"
+    assert row["rules_enabled"] is True
+
+
+def test_fetch_last_status_uses_latest_reading_index(test_database_conn):
+    """Latest status is deterministic and uses the device-first composite index."""
+    cursor = test_database_conn.execute(
+        """
+        INSERT INTO devices (device_name, device_type, aqi_mon)
+        VALUES ('Indexed latest sensor', 'SENSOR', 1)
+        """
+    )
+    assert cursor.lastrowid is not None
+    device_id = int(cursor.lastrowid)
+    test_database_conn.executemany(
+        """
+        INSERT INTO devlog (device_id, logtime, duration, temp10x, status_json)
+        VALUES (?, ?, 1, ?, '{}')
+        """,
+        [
+            (device_id, 1000, 200),
+            (device_id, 1000, 210),
+            (device_id, 999, 190),
+        ],
+    )
+    test_database_conn.commit()
+
+    latest = next(
+        row for row in db.fetch_last_status(test_database_conn)
+        if row["device_id"] == device_id
+    )
+    air_rows = db.fetch_last_status(test_database_conn, flag=db.AIR_MON_DEVICES)
+    plan = test_database_conn.execute(
+        f"EXPLAIN QUERY PLAN {db.LATEST_DEVICE_STATUS_SQL}",
+        (float("inf"), 0),
+    ).fetchall()
+    details = "\n".join(row["detail"] for row in plan)
+
+    assert latest["temp10x"] == 210
+    assert any(row["device_id"] == device_id for row in air_rows)
+    assert all(row["aqi_mon"] == 1 for row in air_rows)
+    assert "idx_devlog_device_logtime_log_id" in details
+    assert "TEMP B-TREE" not in details
+    assert "SCAN devlog" not in details
+
+
+def test_fcu_discovery_creates_and_assigns_owned_room(test_database_conn):
+    """Creating a typed FCU atomically creates its canonical room."""
+    device_id = db.get_or_create_device_id(
+        test_database_conn,
+        "Broadway FCU",
+        device_type="FCU",
+    )
+
+    row = test_database_conn.execute(
+        """
+        SELECT d.room_id, r.room_name, r.fcu_device_id
+        FROM devices d
+        JOIN rooms r ON r.room_id = d.room_id
+        WHERE d.device_id=?
+        """,
+        (device_id,),
+    ).fetchone()
+    assert row["room_id"] is not None
+    assert row["room_name"] == "Broadway FCU"
+    assert row["fcu_device_id"] == device_id
+
+    repeated_id = db.get_or_create_device_id(
+        test_database_conn,
+        "Broadway FCU",
+        device_type="FCU",
+    )
+    assert repeated_id == device_id
+    assert test_database_conn.execute("SELECT COUNT(*) FROM rooms").fetchone()[0] == 1
+
+
+def test_cached_discovery_fills_metadata_without_reselecting(
+    test_database_conn, monkeypatch
+):
+    monkeypatch.delenv("PYTEST", raising=False)
+    db.DEVICE_MAP.clear()
+    device_id = db.get_or_create_device_id(test_database_conn, "Cached Sensor")
+    statements: list[str] = []
+    test_database_conn.set_trace_callback(statements.append)
+
+    repeated_id = db.get_or_create_device_id(
+        test_database_conn,
+        "Cached Sensor",
+        device_type="SENSOR",
+        device_subtype="AIRTHINGS",
+    )
+    test_database_conn.set_trace_callback(None)
+
+    assert repeated_id == device_id
+    assert not any("INSERT" in statement or "SELECT" in statement for statement in statements)
+    row = test_database_conn.execute(
+        "SELECT device_type, device_subtype FROM devices WHERE device_id=?",
+        (device_id,),
+    ).fetchone()
+    assert tuple(row) == ("SENSOR", "AIRTHINGS")
+    db.DEVICE_MAP.clear()
+
+
+def test_cached_lookup_without_metadata_executes_no_sql(
+    test_database_conn, monkeypatch
+):
+    monkeypatch.delenv("PYTEST", raising=False)
+    db.DEVICE_MAP.clear()
+    device_id = db.get_or_create_device_id(test_database_conn, "Cached Sensor")
+    statements: list[str] = []
+    test_database_conn.set_trace_callback(statements.append)
+
+    repeated_id = db.get_or_create_device_id(test_database_conn, "Cached Sensor")
+    test_database_conn.set_trace_callback(None)
+
+    assert repeated_id == device_id
+    assert not statements
+    db.DEVICE_MAP.clear()
+
+
+def test_cached_discovery_preserves_caller_transaction(
+    test_database_conn, monkeypatch
+):
+    monkeypatch.delenv("PYTEST", raising=False)
+    db.DEVICE_MAP.clear()
+    device_id = db.get_or_create_device_id(test_database_conn, "Cached Sensor")
+    test_database_conn.execute(
+        "UPDATE devices SET display_name='Uncommitted' WHERE device_id=?",
+        (device_id,),
+    )
+
+    repeated_id = db.get_or_create_device_id(
+        test_database_conn,
+        "Cached Sensor",
+        device_type="SENSOR",
+        device_subtype="AIRTHINGS",
+    )
+
+    assert repeated_id == device_id
+    assert test_database_conn.in_transaction is True
+    test_database_conn.rollback()
+    row = test_database_conn.execute(
+        "SELECT display_name, device_type, device_subtype "
+        "FROM devices WHERE device_id=?",
+        (device_id,),
+    ).fetchone()
+    assert tuple(row) == (None, None, None)
+    db.DEVICE_MAP.clear()
+
+
+def test_cached_rejected_fcu_promotion_rolls_back(test_database_conn, monkeypatch):
+    monkeypatch.delenv("PYTEST", raising=False)
+    db.DEVICE_MAP.clear()
+    device_id = db.get_or_create_device_id(
+        test_database_conn, "Cached Sensor", device_type="SENSOR"
+    )
+
+    with pytest.raises(ValueError, match=f"Device {device_id} is not an FCU"):
+        db.get_or_create_device_id(
+            test_database_conn, "Cached Sensor", device_type="FCU"
+        )
+
+    assert test_database_conn.in_transaction is False
+    db.DEVICE_MAP.clear()
+
+
+def test_fcu_discovery_rolls_back_rejected_type_change(test_database_conn):
+    """A rejected FCU promotion must not leave a transaction open."""
+    device_id = db.get_or_create_device_id(
+        test_database_conn,
+        "Existing Sensor",
+        device_type="SENSOR",
+    )
+
+    with pytest.raises(ValueError, match=f"Device {device_id} is not an FCU"):
+        db.get_or_create_device_id(
+            test_database_conn,
+            "Existing Sensor",
+            device_type="FCU",
+        )
+
+    assert test_database_conn.in_transaction is False
+    device = test_database_conn.execute(
+        "SELECT device_type, room_id FROM devices WHERE device_id=?",
+        (device_id,),
+    ).fetchone()
+    assert dict(device) == {"device_type": "SENSOR", "room_id": None}
+    assert test_database_conn.execute("SELECT COUNT(*) FROM rooms").fetchone()[0] == 0
+
+
+def test_reconcile_fcu_rooms_is_idempotent_and_suffixes_duplicate_names(
+    test_database_conn,
+):
+    """Reconciliation preserves assignments and allocates collision-safe names."""
+    cursor = test_database_conn.cursor()
+    cursor.execute("INSERT INTO rooms (room_name) VALUES ('Hickory')")
+    existing_room_id = cursor.lastrowid
+    cursor.execute(
+        """
+        INSERT INTO devices (device_name, display_name, device_type, room_id)
+        VALUES ('Hickory East', 'Hickory', 'FCU', ?)
+        """,
+        (existing_room_id,),
+    )
+    first_fcu_id = cursor.lastrowid
+    cursor.execute(
+        """
+        INSERT INTO devices (device_name, display_name, device_type)
+        VALUES ('Hickory West', 'Hickory', 'FCU')
+        """
+    )
+    second_fcu_id = cursor.lastrowid
+    cursor.execute(
+        "INSERT INTO devices (device_name, device_type) VALUES ('Room Sensor', 'SENSOR')"
+    )
+    sensor_id = cursor.lastrowid
+    cursor.execute(
+        "INSERT INTO devices (device_name, device_type) VALUES ('ERV 1', 'ERV')"
+    )
+    erv_id = cursor.lastrowid
+    test_database_conn.commit()
+
+    summary = db.reconcile_fcu_rooms(test_database_conn)
+    assert summary.fcu_count == 2
+    assert summary.rooms_created == 1
+    assert summary.rooms_claimed == 1
+    assert summary.assignments_changed == 1
+    rooms = test_database_conn.execute(
+        "SELECT room_name, fcu_device_id FROM rooms ORDER BY room_name"
+    ).fetchall()
+    assert [tuple(row) for row in rooms] == [
+        ("Hickory", first_fcu_id),
+        ("Hickory (2)", second_fcu_id),
+    ]
+    unassigned = test_database_conn.execute(
+        "SELECT device_id, room_id FROM devices WHERE device_id IN (?, ?) ORDER BY device_id",
+        (sensor_id, erv_id),
+    ).fetchall()
+    assert [tuple(row) for row in unassigned] == [(sensor_id, None), (erv_id, None)]
+
+    repeated = db.reconcile_fcu_rooms(test_database_conn)
+    assert repeated.fcu_count == 2
+    assert repeated.rooms_created == 0
+    assert repeated.rooms_claimed == 0
+    assert repeated.assignments_changed == 0
 
 
 def test_get_temperature_series_includes_device_id(test_database_conn_with_test_data):

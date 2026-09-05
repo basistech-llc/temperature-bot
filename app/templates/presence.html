@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}Room Presence{% endblock %}
+{% block body %}
+<main class="content">
+  <h1>Room Presence</h1>
+  <p>Observations older than {{ stale_minutes }} minutes are stale and are not used by rules.</p>
+  <table class="pure-table pure-table-bordered" id="presence-table">
+    <thead><tr><th>Room</th><th>Presence</th><th>Last observation</th><th>Sources</th></tr></thead>
+    <tbody>
+    {% for room in rooms %}
+      <tr data-room-id="{{ room.room_id }}">
+        <td><a href="/room/{{ room.room_id }}">{{ room.room_name }}</a></td>
+        <td class="presence-state">{{ room.state.value|title }}</td>
+        <td>{% if room.observed_at is not none %}<time data-unix="{{ room.observed_at }}">{{ room.observed_at }}</time>{% else %}--{% endif %}</td>
+        <td>{{ room.source_device_ids|join(', ') if room.source_device_ids else '--' }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</main>
+{% endblock %}

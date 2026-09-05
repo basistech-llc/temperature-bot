@@ -21,6 +21,7 @@
   <link rel="stylesheet" href="/static/style.css">
   <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
   <script src="/static/temperature_utils.js"></script>
+  <script src="/static/air_quality_coloring.js"></script>
   <script src="/static/popup_menu.js"></script>
   <script src="/static/rules_master.js"></script>
   <script src="/static/clickable_cells.js"></script>
@@ -29,7 +30,20 @@
   {% endblock %}
 
 </head>
-<body>
+<body class="{% if simulator_mode or staging_mode %}has-instance-banner{% endif %}">
+  {% if simulator_mode %}
+  <div class="simulator-banner" role="status" aria-live="polite">
+    SIMULATOR — {{ instance_name }} commands do not reach the AE-200 or building equipment.
+    View <a href="https://air-stage.basistech.net/">staging</a> or
+    <a href="https://air.basistech.net/">production</a>.
+  </div>
+  {% endif %}
+  {% if staging_mode %}
+  <div class="instance-banner staging-banner" role="alert" aria-live="assertive">
+    STAGING ENVIRONMENT — This site is live. All changes will be reflected on the real equipment.
+    View <a href="https://air.basistech.net/">production</a>.
+  </div>
+  {% endif %}
   <header>
   {% if develop %}
   <div class="top-banner">
@@ -42,11 +56,15 @@
   <div class="pure-menu pure-menu-horizontal">
     <a href="." class="pure-menu-heading pure-menu-link{% if current_page == 'home' %} pure-menu-selected{% endif %}">BasisTech HVAC</a>
     <ul class="pure-menu-list">
-      <li class="pure-menu-item{% if current_page in ['kitchen', 'hickory'] %} pure-menu-selected{% endif %}">
+      {# Room dashboards render with hide_nav, so only /map can select this item. #}
+      <li class="pure-menu-item{% if current_page == 'map' %} pure-menu-selected{% endif %}">
         <a href="#" id="rooms-menu-link" class="pure-menu-link">Rooms ▾</a>
         <div id="rooms-popup" class="github-popup">
-          <a href="/kitchen?embedded">Kitchen</a>
-          <a href="/hickory?embedded">Hickory</a>
+          {# Generated from app/room_config.py so a new dashboard needs no edit here. #}
+          {% for dashboard in room_dashboards %}
+          <a href="{{ dashboard.url }}">{{ dashboard.label }}</a>
+          {% endfor %}
+          <a href="/map">Map</a>
         </div>
       </li>
       <li class="pure-menu-item{% if current_page == 'air-quality' %} pure-menu-selected{% endif %}">
@@ -58,16 +76,20 @@
       <li class="pure-menu-item{% if current_page == 'map_view' %} pure-menu-selected{% endif %}">
         <a href="/map-view" class="pure-menu-link">Map View</a>
       </li>
-      <li class="pure-menu-item{% if current_page in ['temperature_chart', 'lighting_chart', 'chart_aqi', 'alerts', 'rules', 'logs_today', 'all_devices'] %} pure-menu-selected{% endif %}">
+      <li class="pure-menu-item{% if current_page in ['temperature_chart', 'lighting_chart', 'chart_aqi', 'performance-monitoring', 'ae200', 'alerts', 'rules', 'logs_today', 'devices', 'all_devices'] %} pure-menu-selected{% endif %}">
         <a href="#" id="deep-dive-menu-link" class="pure-menu-link">Deep Dive ▾</a>
         <div id="deep-dive-popup" class="github-popup">
           <a href="/chart"{% if current_page == 'temperature_chart' %} class="pure-menu-selected"{% endif %}>Temperature Chart</a>
           <a href="/lighting_chart"{% if current_page == 'lighting_chart' %} class="pure-menu-selected"{% endif %}>Lighting Chart</a>
           <a href="/chart_aqi"{% if current_page == 'chart_aqi' %} class="pure-menu-selected"{% endif %}>Air Quality Chart</a>
+          <a href="/performance-monitoring"{% if current_page == 'performance-monitoring' %} class="pure-menu-selected"{% endif %}>Performance Monitoring</a>
+          <a href="/ae200"{% if current_page == 'ae200' %} class="pure-menu-selected"{% endif %}>AE-200</a>
           <a href="/alerts"{% if current_page == 'alerts' %} class="pure-menu-selected"{% endif %}>Alerts</a>
+          <a href="/presence"{% if current_page == 'presence' %} class="pure-menu-selected"{% endif %}>Presence</a>
           <a href="/rules"{% if current_page == 'rules' %} class="pure-menu-selected"{% endif %}>Rules</a>
-          <a href="/logs_today"{% if current_page == 'logs_today' %} class="pure-menu-selected"{% endif %}>Today's Log</a>
-          <a href="/all_devices"{% if current_page == 'all_devices' %} class="pure-menu-selected"{% endif %}>All Devices</a>
+          <a href="/devices"{% if current_page == 'devices' %} class="pure-menu-selected"{% endif %}>Edit Devices</a>
+          <a href="/logs_today"{% if current_page == 'logs_today' %} class="pure-menu-selected"{% endif %}>Activity Log</a>
+          <a href="/all_devices"{% if current_page == 'all_devices' %} class="pure-menu-selected"{% endif %}>Raw Device Details</a>
           <a href="/map-editor"{% if current_page == 'map_editor' %} class="pure-menu-selected"{% endif %}>Map Editor</a>
         </div>
       </li>
@@ -112,12 +134,13 @@
 
   {% block body %}
   {% endblock %}
-  {% if current_page == 'about' %}
   <footer class="pure-u-1 footer">
     <p>
-      © 2025-6 BasisTech LLC.
+      © {{ deployment_year }} BasisTech.
+      Version {{ app_version }}.
+      Deployed {{ deployment_date }}.
+      Git <a href="{{ git_branch_url }}">{{ git_commit }}</a>.
     </p>
   </footer>
-  {% endif %}
 </body>
 </html>

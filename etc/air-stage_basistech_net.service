@@ -1,0 +1,22 @@
+### /etc/systemd/system/air-stage_basistech_net.service ###
+[Unit]
+Description=Temperature Bot live staging UI
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=temperature_bot
+Group=temperature_bot
+WorkingDirectory=/opt/temperature-bot-stage/current
+EnvironmentFile=/etc/temperature-bot/air-stage.env
+Environment=PERFORMANCE_CLIENT_ID=stage-web
+ExecStart=/usr/bin/env /opt/temperature-bot-stage/current/venv/bin/python -m gunicorn app.main:app --bind 127.0.0.1:8101 --workers 2 --access-logfile - --error-logfile - --log-level ${LOG_LEVEL}
+Restart=always
+RestartSec=2
+UMask=0027
+NoNewPrivileges=yes
+PrivateTmp=yes
+
+
+[Install]
+WantedBy=multi-user.target

@@ -133,7 +133,7 @@ class TemperatureTestHelper:
 
     def wait_for_chart_to_load(self):
         """Wait for the chart page to load and be visible"""
-        # Wait for the chart controls and record count (chart.html has #controls, #temp-chart, #record-count)
+        # Wait for the chart controls and record count (temperature_chart.html has #controls, #temp-chart, #record-count)
         self.page.wait_for_selector("#controls", timeout=10000)
         self.page.wait_for_selector("#record-count", timeout=10000)
 

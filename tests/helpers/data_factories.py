@@ -5,7 +5,20 @@ Test data factories for creating consistent test data.
 import json
 import time
 from typing import Dict, Any, Optional
+from pydantic import BaseModel, Field
+
 from app import db
+from app.models import StatusPayload, WeatherData, json_ready
+
+
+class AlertSpec(BaseModel):
+    """Validated alert fixture passed to create_device_with_alert."""
+
+    alert_type: str
+    status_json: StatusPayload
+    alert_start_time: int
+    alert_value: str = "ON"
+    end_time: int | None = Field(default=None)
 
 
 def alert_spec(
@@ -16,14 +29,15 @@ def alert_spec(
     end_time: Optional[int] = None,
 ) -> Dict[str, Any]:
     """Build a dict suitable for create_device_with_alert(conn, device_name, spec)."""
-    out: Dict[str, Any] = {
-        "alert_type": alert_type,
-        "status_json": status_json,
-        "alert_start_time": alert_start_time,
-        "alert_value": alert_value,
-        "end_time": end_time,
-    }
-    return out
+    return json_ready(
+        AlertSpec(
+            alert_type=alert_type,
+            status_json=StatusPayload.model_validate(status_json),
+            alert_start_time=alert_start_time,
+            alert_value=alert_value,
+            end_time=end_time,
+        )
+    )
 
 
 class TestDataFactory:
@@ -63,13 +77,14 @@ class TestDataFactory:
         """Create a device with initial status data."""
         if logtime is None:
             logtime = int(time.time())
+        status_payload = StatusPayload.model_validate(status_dict).model_dump()
 
         device_id = db.get_or_create_device_id(conn, device_name)
         db.insert_devlog_entry(
             conn,
             device_id=device_id,
-            temp=float(status_dict.get("InletTemp", 24.0)),
-            statusdict=status_dict,
+            temp=float(status_payload.get("InletTemp", 24.0)),
+            statusdict=status_payload,
             logtime=logtime,
             force=True,
         )
@@ -78,10 +93,9 @@ class TestDataFactory:
     @staticmethod
     def create_mock_weather_data(temperature: int = 32) -> Dict[str, Any]:
         """Create mock weather data for testing."""
-        return {
-            "current": {"temperature": temperature, "conditions": "Sunny"},
-            "forecast": [],
-        }
+        return json_ready(
+            WeatherData(forecast=[{"temperature": temperature, "conditions": "Sunny"}])
+        )
 
     @staticmethod
     def create_mock_aqi_data() -> int:
@@ -91,12 +105,16 @@ class TestDataFactory:
     @staticmethod
     def create_broadway_south_initial_status() -> Dict[str, Any]:
         """Create initial status data for Broadway Test device."""
-        return {"Drive": "ON", "FanSpeed": "LOW", "InletTemp": "24.0"}
+        return StatusPayload.model_validate(
+            {"Drive": "ON", "FanSpeed": "LOW", "InletTemp": "24.0"}
+        ).model_dump()
 
     @staticmethod
     def create_no_speed_device_status() -> Dict[str, Any]:
         """Create status data for a device without speed control."""
-        return {"Drive": "ON", "InletTemp": "22.0"}
+        return StatusPayload.model_validate(
+            {"Drive": "ON", "InletTemp": "22.0"}
+        ).model_dump()
 
     @staticmethod
     def create_speed_mapping() -> Dict[int, str]:
@@ -118,12 +136,12 @@ class DeviceTestData:
     @staticmethod
     def get_initial_status() -> Dict[str, Any]:
         """Get initial status for Broadway Test."""
-        return {"Drive": "ON", "FanSpeed": "LOW", "InletTemp": "24.0"}
+        return TestDataFactory.create_broadway_south_initial_status()
 
     @staticmethod
     def get_no_speed_status() -> Dict[str, Any]:
         """Get status for device without speed control."""
-        return {"Drive": "ON", "InletTemp": "22.0"}
+        return TestDataFactory.create_no_speed_device_status()
 
     @staticmethod
     def get_speed_names() -> Dict[int, str]:
@@ -144,10 +162,9 @@ class WeatherTestData:
         temperature: int = 32, conditions: str = "Sunny"
     ) -> Dict[str, Any]:
         """Get mock weather data."""
-        return {
-            "current": {"temperature": temperature, "conditions": conditions},
-            "forecast": [],
-        }
+        return json_ready(
+            WeatherData(forecast=[{"temperature": temperature, "conditions": conditions}])
+        )
 
     @staticmethod
     def get_mock_aqi(aqi_value: int = 45) -> int:

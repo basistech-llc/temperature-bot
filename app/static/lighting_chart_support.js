@@ -121,6 +121,9 @@ function updateLightingChart() {
         let output = `${formatTime(ts)}<br>`;
         for (const p of params) {
           const val = p.value[1];
+          if (typeof val !== "number" || !Number.isFinite(val)) {
+            continue;
+          }
           output += `${p.marker} ${p.seriesName}: ${val.toFixed(1)} lx<br>`;
         }
         return output;
@@ -247,6 +250,23 @@ function setupLightingEventListeners() {
       updateLightingChart();
     });
   }
+
+  // CSV export
+  setupCsvDownload(() => {
+    const checkboxes = document.querySelectorAll(
+      "#checkboxes input[type=checkbox]",
+    );
+    const visibleSeries = checkedVisibleSeries(
+      checkboxes,
+      allSensors,
+      new Map(lightingData.map((s) => [s.device_id, s])),
+    );
+    return {
+      visibleSeries,
+      names: visibleSeries.map((s) => s.name),
+      filename: "lighting_data.csv",
+    };
+  });
 }
 
 function reloadLightingData() {
@@ -279,4 +299,3 @@ document.addEventListener("DOMContentLoaded", async function () {
 
   reloadLightingData();
 });
-

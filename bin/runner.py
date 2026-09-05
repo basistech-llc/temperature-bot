@@ -1,7 +1,12 @@
 """
-Runs every minute by cron.
+Runs every minute through the production systemd timer.
  - gets temperature and writes to database
  - runs rules engine
+
+The production minute, hourly, and daily systemd units wrap this process with
+the shared /run/temperature-bot/writer.lock. That advisory lock serializes the
+complete scheduled workflows, not SQLite itself; direct invocations do not
+acquire it and rely on SQLite transaction locking.
 """
 
 import sys
@@ -12,8 +17,9 @@ import csv
 import logging
 import time
 from os.path import dirname, abspath
-import tabulate  # type: ignore
+import tabulate
 import requests
+from pydantic import TypeAdapter
 
 # runner is first to run so it needs to add . to the path
 sys.path.append(dirname(dirname(abspath(__file__))))
@@ -24,34 +30,55 @@ from app import airquality
 from app import ae200
 from app import airthings
 from app import db
-from app import db_alerts
 from app import hubitat
+from app import performance_monitoring
+from app.device_types import (
+    DEVICE_SUBTYPE_AIRTHINGS,
+    DEVICE_TYPE_SENSOR,
+    HubitatDevice,
+    classify_hubitat_device,
+)
+from app.models import (
+    AirthingsDeviceReading,
+    AlertRuleEvaluation,
+    AlertRuleResult,
+    AlertRuleState,
+)
+from app.instance_policy import load_instance_policy
 from app import rules_engine
 
 
-import lib.ctools.lock as clock
-import lib.ctools.clogging as clogging
+from app import clogging
 
 logger = logging.getLogger(__name__)
+AIRTHINGS_READING_BATCH = TypeAdapter(list[AirthingsDeviceReading])
 
 
-def update_from_ae200(conn):
+def update_from_ae200(conn, *, evaluate_alerts: bool = True):
     if ae200.AE200_SIMULATOR:
         # Use simulator functions
         devs = ae200.get_devices()
         for dev in devs:
             data = ae200.get_device_info(dev["id"])
-            process_device_alert_data(conn, dev, data)
+            process_device_alert_data(conn, dev, data, evaluate_alerts=evaluate_alerts)
     else:
         # Use real AE200 device
         d = ae200.AE200Functions()
         devs = d.getDevices()
         for dev in devs:
             data = d.getDeviceInfo(dev["id"])
-            process_device_alert_data(conn, dev, data)
+            process_device_alert_data(conn, dev, data, evaluate_alerts=evaluate_alerts)
 
 
-def process_device_alert_data(conn, dev, data):
+def process_device_alert_data(
+    conn,
+    dev,
+    data,
+    *,
+    observed_at: int | None = None,
+    notifier=None,
+    evaluate_alerts: bool = True,
+):
     """Process device data for both temperature logging and alert collection."""
     # [TODO] Need to add synthetic alert data to simulator
     data["id"] = dev["id"]
@@ -60,14 +87,38 @@ def process_device_alert_data(conn, dev, data):
         conn, device_name=dev["name"], ae200_device_id=dev["id"]
     )
 
-    # Extract alert fields
-    for alert_type in ["ErrorSign", "FilterSign", "CheckWater"]:
-        if alert_type in data:
-            db_alerts.insert_or_update_alert(
+    if evaluate_alerts:
+        alert_time = observed_at if observed_at is not None else int(time.time())
+        for alert_type in ae200.ALERT_FIELDS:
+            value = data.get(alert_type)
+            if value == "ON":
+                state = AlertRuleState.ACTIVE
+            elif value == "OFF":
+                state = AlertRuleState.INACTIVE
+            else:
+                state = AlertRuleState.INDETERMINATE
+            label = ae200.ALERT_LABELS[alert_type]
+            rules_engine.apply_alert_evaluation(
                 conn,
-                device_id=device_id,
-                alert_type=alert_type,
-                alert_value=data[alert_type],
+                AlertRuleEvaluation(
+                    device_id=device_id,
+                    now=alert_time,
+                    commit=True,
+                    result=AlertRuleResult(
+                        alert_type=alert_type,
+                        state=state,
+                        started_at=alert_time,
+                        message=(
+                            f":warning: AE-200 {dev['name']} reports {label}."
+                            if state == AlertRuleState.ACTIVE
+                            else f":warning: AE-200 {dev['name']} {label} cannot be evaluated."
+                        ),
+                        resolved_message=(
+                            f":white_check_mark: AE-200 {dev['name']} cleared {label}."
+                        ),
+                    ),
+                ),
+                notifier=notifier,
             )
 
     db.insert_devlog_entry(conn, device_id=device_id, temp=temp, statusdict=data)
@@ -76,30 +127,96 @@ def process_device_alert_data(conn, dev, data):
 def update_from_hubitat(conn):
     try:
         devices = hubitat.get_all_devices()
+        typed_devices = [HubitatDevice.model_validate(item) for item in devices]
         temps = hubitat.extract_temperatures(devices)
-    except requests.exceptions.ConnectTimeout as e:
-        logger.error("update_from_hubitat: timeout %s", e)
+    except requests.exceptions.RequestException as e:
+        logger.error("update_from_hubitat: request failed: %s", e)
         return
+    except RuntimeError as e:
+        logger.error("update_from_hubitat: %s", e)
+        return
+    device_ids: dict[str, int] = {}
+    observed_at = int(time.time())
+    for device, raw_device in zip(typed_devices, devices):
+        device_type, _evidence = classify_hubitat_device(device)
+        device_id = db.get_or_create_device_id(
+            conn, device.name, device_type=device_type
+        )
+        device_ids[device.name] = device_id
+        motion = (raw_device.get("attributes") or {}).get("motion")
+        if motion in {"active", "inactive"}:
+            db.record_presence_observation(
+                conn,
+                device_id=device_id,
+                present=motion == "active",
+                observed_at=observed_at,
+            )
+    updated_names = []
     for item in temps:
         statusdict = item.get("status") or {}
         db.insert_devlog_entry(
             conn,
-            device_name=item["name"],
+            device_id=device_ids[item["name"]],
             temp=item["temperature"],
             statusdict=statusdict,
         )
+        updated_names.append(item["name"])
+    logger.info(
+        "update_from_hubitat: updated %d temperature devices: %s",
+        len(updated_names),
+        ", ".join(updated_names),
+    )
 
-def update_from_airthings(conn):
+def update_from_airthings(conn) -> bool:
+    """Collect and persist one complete Airthings response.
+
+    Collection and payload failures are integration failures: log them and let
+    the runner continue to monitoring rules. Database failures remain fatal.
+    """
+    try:
+        readings = AIRTHINGS_READING_BATCH.validate_python(
+            airthings.read_airthings_now()
+        )
+    except (
+        requests.exceptions.RequestException,
+        LookupError,
+        RuntimeError,
+        TypeError,
+        ValueError,
+    ) as error:
+        logger.error("update_from_airthings: collection failed: %s", error)
+        return False
+
     logtime = time.time()
-    data = airthings.read_airthings_now()
-    for dev in data:
-        sensors = {sensor['sensorType']:{'value':sensor['value'],'unit':sensor['unit']} for sensor in dev['sensors']}
-        name = "Airthings "+dev['name']
-        temp = sensors['temp']['value']
+    updated_names = []
+    for reading in readings:
+        sensors = reading.status_payload()
+        name = f"Airthings {reading.name}"
+        temp = reading.temperature()
         if conn is None:
-            print("name=",name,"temp=",temp,'status',sensors)
+            print("name=", name, "temp=", temp, "status", sensors)
             continue
-        db.insert_devlog_entry(conn, device_name=name, temp=temp, statusdict=sensors, logtime=logtime)
+        db.get_or_create_device_id(
+            conn,
+            name,
+            device_type=DEVICE_TYPE_SENSOR,
+            device_subtype=DEVICE_SUBTYPE_AIRTHINGS,
+        )
+        db.insert_devlog_entry(
+            conn,
+            device_name=name,
+            temp=temp,
+            statusdict=sensors,
+            logtime=logtime,
+        )
+        updated_names.append(name)
+    if conn is not None:
+        logger.info(
+            "update_from_airthings: updated %d devices: %s",
+            len(updated_names),
+            ", ".join(updated_names),
+        )
+    return True
 
 
 def update_aqi(conn):
@@ -128,6 +245,12 @@ def combine_temp_measurements(conn, start_time, end_time, seconds):
     :param end_time: unix time_t of end of time period.
     :param divisions: number of divisions to create
     """
+    if seconds > db.MAX_DURATION:
+        raise ValueError(
+            f"combine_temp_measurements seconds={seconds} exceeds "
+            f"MAX_DURATION={db.MAX_DURATION}"
+        )
+
     logger.info("combine_temp_measurements(%s,%s,%s", start_time, end_time, seconds)
     conn.isolation_level = None
     c = conn.cursor()
@@ -176,6 +299,11 @@ def daily_cleanup(conn, when):
     """
     print("Daily cleanup")
     c = conn.cursor()
+    deleted_performance_samples = performance_monitoring.delete_expired_samples(conn)
+    conn.commit()
+    logger.info(
+        "Deleted %d expired performance samples", deleted_performance_samples
+    )
 
     # See if there are any in the previous week that need to be
     prev_week_start = (when - datetime.timedelta(weeks=2)).timestamp()
@@ -323,9 +451,18 @@ def setup_parser():
     parser.add_argument("--report", help="report on the database", action="store_true")
     parser.add_argument("--syslog", help="log to syslog", action="store_true")
     parser.add_argument("--daily", help="Run the daily cleanup", action="store_true")
-    parser.add_argument("--rules", choices=["test", "run", "prune"], help="Just run the rules engine" )
+    parser.add_argument(
+        "--rules",
+        choices=["test", "run", "prune"],
+        help="Just run the rules engine.",
+    )
     parser.add_argument("--aqi", help="Save AQI to database", action="store_true")
     parser.add_argument("--airthings", help="debug the airthings", action="store_true")
+    parser.add_argument(
+        "--ae200-stage-collection",
+        help="collect AE-200 state without alerts or HVAC rules",
+        action="store_true",
+    )
     clogging.add_argument(parser)
     return parser
 
@@ -344,39 +481,42 @@ def main():
     if args.airthings:
         update_from_airthings(None)
         sys.exit(0)
+    if args.ae200_stage_collection:
+        load_instance_policy().require_staging_collector()
 
+    db.validate_database_schema_on_startup()
     conn = db.get_db_connection()
     if args.report:
         report(conn)
-    if args.csv:
+    elif args.csv:
         load_csv(conn, args.csv, args.csv_after, unsafe=args.unsafe)
     elif args.aqi:
         update_aqi(conn)
     elif args.daily:
         daily_cleanup(conn, datetime.datetime.now())
+    elif args.ae200_stage_collection:
+        update_from_ae200(conn, evaluate_alerts=False)
     elif args.rules:
-        match args.rules:
-            case "test":
-                print(rules_results(conn))
-            case "prune":
-                rules_engine.prune_rules(conn)
-            case "run":
-                rules_engine.run_rules(conn)
-            case opt:
-                raise RuntimeError(f"Unknown rules option: {opt}")
+        if args.rules == "prune":
+            rules_engine.prune_rules(conn)
+        else:
+            res = rules_engine.run_rules(conn, commit=(args.rules == "run"))
+            print(res)
     else:
         # Run everything
-        clock.lock_script()
         update_from_ae200(conn)
         update_from_hubitat(conn)
         update_from_airthings(conn)
-        rules_engine.prune_rules(conn)
+        compiled_rules = rules_engine.compile_rules()
+        alert_results = rules_engine.run_alert_rules(
+            conn, commit=True, compiled_rules=compiled_rules
+        )
+        if alert_results:
+            logger.info("Alert rules:\n%s", alert_results)
         if not db.get_rules_master_enabled(conn):
-            logger.info("Master rules switch is OFF; skipping all rules execution")
-        elif rules_engine.all_rules_disabled_until(conn) >= time.time():
-            logger.info("all rules disabled (time-limited suspension)")
+            logger.info("Master rules switch is OFF; skipping HVAC rule execution")
         else:
-            run_rules(conn)
+            run_rules(conn, commit=1, compiled_rules=compiled_rules)
 
 
 if __name__ == "__main__":

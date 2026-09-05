@@ -6,6 +6,7 @@
 {% else %}
    <script src="/static/echarts@5"></script>
 {% endif %}
+<script src="/static/time_series_chart_core.js"></script>
 <script src="/static/chart_aqi_support.js"></script>
 {% endblock %}
 {% block body %}
@@ -24,5 +25,6 @@
 </div>
 
 <div class="pure-g"><div id="aqi-chart"></div></div>
+<div class="pure-g"><button id="downloadCsv">Download CSV</button></div>
 
 {% endblock %}

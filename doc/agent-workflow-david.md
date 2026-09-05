@@ -1,0 +1,163 @@
+# Agent Workflow — David's Local Beads Queue
+
+GitHub Issues are the canonical tracker for durable project work in this repo.
+Use `doc/agent-workflow-simson.md` for project issue tracking, including work
+driven by David. For sharing the Beads queue across multiple developers
+(branch/PR flow, `bd dolt` push/pull, JSONL conflict handling), see
+`doc/beads-multi-dev-workflow.md`.
+
+David may still use **bd (Beads)** as a personal/local working queue. Beads
+entries are not authoritative project records. Only use `bd` when the user
+explicitly asks for local Beads housekeeping or asks to inspect/migrate a Beads
+entry.
+
+The `.beads/` directory is intentionally kept in the Git repo so agents can
+read and review David's local queue. Do not add `.beads/` to `.gitignore`, remove
+tracked Beads files, or treat their presence as accidental.
+
+> If a beads SessionStart hook is configured locally, it injects the live,
+> local Beads protocol each session. That protocol does not supersede GitHub
+> Issues as the canonical project tracker.
+
+## Quick Reference
+
+```bash
+bd dolt pull            # Refresh queue state FIRST — stale state double-claims
+bd ready                # Find available work
+bd show <id>            # View issue details
+bd update <id> --claim  # Claim work atomically
+bd close <id>           # Complete work — humans only; see the warning below
+bd dolt push            # Push beads data to remote — needs user authority
+```
+
+> **Agents: do not close beads, and do not push.** The `bd close` and
+> `bd dolt push` lines above are for David working by hand. Whenever code lands
+> via branch -> PR, closing happens at merge — see
+> `doc/beads-multi-dev-workflow.md`, "Rules for agents", which overrides the
+> close/sync steps in this file.
+
+## Why bd?
+
+- Dependency-aware: track blockers and relationships between issues
+- Git-friendly: Dolt-powered version control with native sync
+- Agent-optimized: JSON output, ready-work detection, discovered-from links
+- Useful as David's private queue before durable work is promoted to GitHub
+
+## Quick Start
+
+**Check for ready work:**
+
+```bash
+bd ready --json
+```
+
+**Create new issues:**
+
+```bash
+bd create "Issue title" --description="Detailed context" -t bug|feature|task -p 0-4 --json
+bd create "Issue title" --description="What this issue is about" -p 1 --deps discovered-from:bd-123 --json
+```
+
+**Claim and update:**
+
+```bash
+bd update <id> --claim --json
+bd update bd-42 --priority 1 --json
+```
+
+**Complete work** (David, or an agent he explicitly tells to close — otherwise
+closing is merge-time, see the warning above):
+
+```bash
+bd close bd-42 --reason "Completed" --json
+```
+
+## Issue Types
+
+- `bug` - Something broken
+- `feature` - New functionality
+- `task` - Work item (tests, docs, refactoring)
+- `epic` - Large feature with subtasks
+- `chore` - Maintenance (dependencies, tooling)
+
+## Priorities
+
+- `0` - Critical (security, data loss, broken builds)
+- `1` - High (major features, important bugs)
+- `2` - Medium (default, nice-to-have)
+- `3` - Low (polish, optimization)
+- `4` - Backlog (future ideas)
+
+## Workflow for AI Agents
+
+Use this workflow only when the user explicitly asks for local Beads work:
+
+1. **Check ready work**: `bd ready` shows unblocked issues
+2. **Claim the local item atomically**: `bd update <id> --claim`
+3. **Work on it**: implement, test, document
+4. **Durable follow-up?** Find or create one dedicated GitHub issue, include
+   the Beads id there, and set the Beads `external_ref` to `gh-N`. Use a
+   dedicated issue when this item can complete before a broader umbrella.
+5. **Local-only follow-up?** Create a linked Beads issue:
+   - `bd create "Found bug" --description="Details about what was found" -p 1 --deps discovered-from:<parent-id>`
+6. **Report the item as ready to close** — do not close it yourself. If the work
+   is landing via branch -> PR, it closes at merge
+   (`bin/beads_pr_sweep.py --close`). For a purely local item with no PR, David
+   runs `bd close <id> --reason "Done"`, or explicitly tells you to.
+
+## Quality
+
+- Use `--acceptance` and `--design` fields when creating issues
+- Use `--validate` to check description completeness
+
+## Lifecycle
+
+- `bd defer <id>` / `bd supersede <id>` for issue management
+- `bd stale` / `bd orphans` / `bd lint` for hygiene
+- `bd human <id>` to flag for human decisions
+- `bd formula list` / `bd mol pour <name>` for structured workflows
+
+## Auto-Sync
+
+bd automatically syncs via Dolt:
+
+- Each write auto-commits to Dolt history
+- Use `bd dolt push` / `bd dolt pull` for remote sync
+- No manual export/import needed
+
+## Important Rules
+
+- Use GitHub Issues for durable project tracking.
+- Use bd only for explicit local Beads housekeeping.
+- Keep `.beads/` in the Git repo for read-only review and migration context.
+- Always use `--json` flag for programmatic use
+- Link local-only discovered work with `discovered-from` dependencies.
+- Check `bd ready` only for user-requested local Beads work.
+- Do NOT create markdown TODO lists
+- Do NOT let Beads become a second authoritative tracker.
+- Cross-link Beads ids to GitHub issues when migrating durable work.
+- Every durable Beads item has exactly one `external_ref` in `gh-N` form, and
+  its GitHub issue names the Beads id.
+- Before a durable Beads item closes, its dedicated GitHub issue must contain
+  commit and test evidence and have no unfinished scope. Agents leave closure
+  to the merge-time sweep or to an explicit instruction from David.
+
+## Session Completion
+
+When ending a work session, complete ALL steps below:
+
+1. **File issues for remaining work** - create issues for anything needing follow-up
+2. **Run quality gates** (if code changed) - tests, linters, builds
+3. **Update issue status** - keep in-progress items current. Agents: leave
+   finished-but-unmerged work `in_progress` and report it; do not close
+4. **Sync** - only when the active instructions grant that authority:
+   ```bash
+   git pull --rebase
+   bd dolt push
+   git push
+   git status   # confirm state
+   ```
+5. **Hand off** - provide context for the next session
+
+This is often an ephemeral branch with no upstream. Do not push it unless the
+user or orchestrator explicitly says to.

@@ -1,7 +1,4 @@
-"""
-test Flask endpoints
-"""
-
+"""Test Flask endpoints."""
 import logging
 import sqlite3
 import os
@@ -10,15 +7,15 @@ import time
 from unittest.mock import patch
 
 import pytest
-from conftest import flask_test_client, skip_on_github  # noqa: F401  # pylint: disable=unused-import
+# Pytest discovers the imported fixture even though Python code does not call it.
+from conftest import flask_test_client, skip_on_github  # pylint: disable=unused-import
 from helpers.data_factories import DeviceTestData
 from helpers.mock_helpers import MockHelper
 
-from app import ae200
-from app import db
-from app import rules_engine
-from app.constants import __version__
-
+from app import ae200, db, rules_engine
+from app.constants import RULES_MASTER_DEVICE_NAME
+from app.main import app
+from app.version import __version__, git_commit, git_sha
 logger = logging.getLogger(__name__)
 
 
@@ -29,7 +26,12 @@ def test_get_version(flask_test_client):  # noqa: F811
 
     response = flask_test_client.get("/api/v1/version")
     assert response.status_code == 200
-    assert response.json == {"version": __version__}
+    assert response.json == {
+        "version": __version__,
+        "sha": git_sha(),
+        "commit": git_commit(),
+        **app.config["INSTANCE_POLICY"].public_status().model_dump(mode="json"),
+    }
 
 
 def test_status_endpoint(flask_test_client):  # noqa: F811
@@ -38,6 +40,15 @@ def test_status_endpoint(flask_test_client):  # noqa: F811
     response_json = response.json
     logging.info(" /status: %s", response_json)
     assert "devices" in response_json
+    fcu_device = next(
+        dev for dev in response_json["devices"] if dev.get("status", {}).get("Mode")
+    )
+    assert fcu_device["status"]["Mode"] == "COOL"
+    assert fcu_device["mode"] == "COOL"
+    assert fcu_device["status"]["SetTemp1"] == "24"
+    assert fcu_device["status"]["SetTemp2"] == "19"
+    assert fcu_device["cool_set_temp_c"] == 24.0
+    assert fcu_device["heat_set_temp_c"] == 19.0
 
 
 def test_metric_endpoint_accepts_known_metrics(flask_test_client):  # noqa: F811
@@ -61,6 +72,50 @@ def test_metric_endpoint_rejects_invalid_device_ids(flask_test_client):  # noqa:
     """
     response = flask_test_client.get("/api/v1/metric?metric=co2&device_ids=not-a-number")
     assert response.status_code == 400
+
+
+def test_metric_endpoint_filters_selected_radon_device(flask_test_client):  # noqa: F811
+    """A clicked radon cell should retrieve only that device's radon series."""
+    test_db_path = os.environ.get("TEST_DB_NAME")
+    assert test_db_path
+    conn = sqlite3.connect(test_db_path)
+    conn.row_factory = sqlite3.Row
+    try:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM devlog")
+        cursor.execute("DELETE FROM devices")
+        conn.commit()
+
+        keep_id = db.get_or_create_device_id(conn, "Airthings Bamboo")
+        drop_id = db.get_or_create_device_id(conn, "Airthings Area 51")
+        for logtime, device_id, value in (
+            (1000, keep_id, 123),
+            (1010, drop_id, 99),
+            (1020, keep_id, 125),
+        ):
+            cursor.execute(
+                "INSERT INTO devlog (device_id, logtime, duration, temp10x, status_json) VALUES (?, ?, ?, ?, ?)",
+                (
+                    device_id,
+                    logtime,
+                    1,
+                    None,
+                    json.dumps({"radonShortTermAvg": {"value": value, "unit": "bq"}}),
+                ),
+            )
+        conn.commit()
+    finally:
+        conn.close()
+
+    response = flask_test_client.get(f"/api/v1/metric?metric=radon&device_ids={keep_id}")
+    assert response.status_code == 200
+    assert response.json["series"] == [
+        {
+            "name": "Bamboo",
+            "device_id": keep_id,
+            "data": [[1000, 123.0], [1020, 125.0]],
+        }
+    ]
 
 
 def test_metric_chart_page_renders(flask_test_client):  # noqa: F811
@@ -182,7 +237,10 @@ def test_status_endpoint_with_schema_validation(flask_test_client):  # noqa: F81
         "device_name",
         "ae200_device_id",
         "disabled_until",
+        "display_name",
+        "device_type",
         "notes",
+        "rules_enabled",
     ]
     for expected_col in expected_columns:
         assert expected_col in columns, (
@@ -248,8 +306,20 @@ def test_weather_endpoint(
     assert response.status_code == 200
     response_json = response.json
     logging.info(" /weather: %s", response_json)
-    assert "aqi" in response_json
-    assert "weather" in response_json
+    assert {"aqi", "aqi_observed_at", "weather"} <= response_json.keys()
+
+
+@patch("app.weather.get_weather_data")
+def test_weather_endpoint_preserves_weather_errors(
+    mock_get_weather_data, flask_test_client
+):  # noqa: F811
+    """Weather service errors remain visible in the API response."""
+    mock_get_weather_data.return_value = {"error": "weather offline"}
+
+    response = flask_test_client.get("/api/v1/weather")
+
+    assert response.status_code == 200
+    assert response.json["weather"] == {"error": "weather offline"}
 
 
 # pylint: disable=too-many-arguments, disable=too-many-positional-arguments
@@ -342,6 +412,28 @@ def test_set_fan_speed_endpoint(
             assert cl["agent"].startswith("Werkzeug") or cl["agent"] == "web"
 
         test_conn_verify.close()
+
+
+@patch("app.routes_api.rules_engine.set_body_fan_speed")
+def test_set_fan_speed_endpoint_reports_ae200_failure(
+    mock_set_body_fan_speed, flask_test_client
+):  # noqa: F811
+    """AE-200 connection failures should be reported as upstream failures."""
+    mock_set_body_fan_speed.side_effect = RuntimeError(
+        "timed out during opening handshake"
+    )
+
+    response = flask_test_client.post(
+        "/api/v1/set_fan_speed",
+        json={"device_id": 1, "fan_speed": 2},
+    )
+
+    assert response.status_code == 502
+    assert response.json == {
+        "error": "AE-200 request failed",
+        "code": "upstream_unavailable",
+    }
+    assert "opening handshake" not in response.get_data(as_text=True)
 
 
 @pytest.mark.parametrize(
@@ -721,26 +813,23 @@ def test_debug_hubitat_devices_endpoint_error(mock_get_all_devices, flask_test_c
     mock_get_all_devices.side_effect = RuntimeError("Hubitat connection error")
 
     response = flask_test_client.get("/api/v1/debug/hubitat_devices")
-    assert response.status_code == 500
+    assert response.status_code == 502
     response_json = response.json
-    assert "error" in response_json
+    assert response_json["code"] == "upstream_unavailable"
+    assert "connection error" not in response.get_data(as_text=True)
 
 
-@patch("app.routes_api.ae200.runner.run_async_safely")
+@patch("app.routes_api.ae200.get_device_info")
 @patch("app.routes_api.ae200.get_devices")
 def test_debug_ae200_devices_endpoint(
-    mock_get_devices, mock_run_async, flask_test_client
+    mock_get_devices, mock_get_device_info, flask_test_client
 ):  # noqa: F811
     """Test the /api/v1/debug/ae200_devices endpoint"""
     # Mock AE-200 devices
     mock_get_devices.return_value = [
         {"name": "Test AE200 Device", "id": "10"}
     ]
-    # Mock the async runner: close the coroutine to avoid "coroutine was never awaited"
-    def _mock_run_async(coro):
-        coro.close()
-        return {"10": {"Drive": "ON", "FanSpeed": "LOW"}}
-    mock_run_async.side_effect = _mock_run_async
+    mock_get_device_info.return_value = {"Drive": "ON", "FanSpeed": "LOW"}
 
     response = flask_test_client.get("/api/v1/debug/ae200_devices")
     assert response.status_code == 200
@@ -752,6 +841,8 @@ def test_debug_ae200_devices_endpoint(
     assert isinstance(response_json["devices"], list)
     assert isinstance(response_json["details"], dict)
     assert "Test AE200 Device" in response_json["names"]
+    assert response_json["details"] == {"10": {"Drive": "ON", "FanSpeed": "LOW"}}
+    mock_get_device_info.assert_called_once_with("10")
 
 
 @patch("app.routes_api.ae200.get_devices")
@@ -761,9 +852,13 @@ def test_debug_ae200_devices_endpoint_error(mock_get_devices, flask_test_client)
     mock_get_devices.side_effect = RuntimeError("AE200 connection error")
 
     response = flask_test_client.get("/api/v1/debug/ae200_devices")
-    assert response.status_code == 500
+    assert response.status_code == 502
     response_json = response.json
-    assert "error" in response_json
+    assert response_json == {
+        "error": "AE-200 request failed",
+        "code": "upstream_unavailable",
+    }
+    assert "connection error" not in response.get_data(as_text=True)
 
 
 def test_disable_rules_api_enable_and_disable(
@@ -811,7 +906,8 @@ def test_rules_master_api_default_and_toggle(
     # Verify underlying RULES_MASTER device row has a future disabled_until
     cursor = conn.cursor()
     cursor.execute(
-        "SELECT disabled_until FROM devices WHERE device_name = ?", ("rules_master",)
+        "SELECT disabled_until FROM devices WHERE device_name = ?",
+        (RULES_MASTER_DEVICE_NAME,),
     )
     row = cursor.fetchone()
     assert row is not None
@@ -825,7 +921,8 @@ def test_rules_master_api_default_and_toggle(
     assert db.get_rules_master_enabled(conn) is True
 
     cursor.execute(
-        "SELECT disabled_until FROM devices WHERE device_name = ?", ("rules_master",)
+        "SELECT disabled_until FROM devices WHERE device_name = ?",
+        (RULES_MASTER_DEVICE_NAME,),
     )
     row = cursor.fetchone()
     assert row is not None

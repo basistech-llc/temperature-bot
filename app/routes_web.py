@@ -12,21 +12,36 @@ import logging
 import datetime
 import time
 from flask import render_template, request, redirect, url_for
+from markupsafe import escape
 
-from .constants import __version__
+from .device_types import (
+    DEVICE_TYPE_ERV,
+    DEVICE_TYPE_FCU,
+    DEVICE_TYPE_INTERNAL,
+)
+from .version import __version__
 from . import db
 from . import db_alerts
 from . import rules_engine
-from . import hubitat
 from . import room_config
 from .display_names import display_device_name
+from .dashboard_views import build_dashboard_page
+from .util import github_style_duration
+from .models import (
+    DeviceMetadataControl,
+    Room,
+    RoomConfig,
+    RoomDashboardSensor,
+    RoomDashboardSensorAttributes,
+)
 from .utils.request_utils import parse_device_ids
 from .utils.db_utils import with_db_connection
 from .routes_web_airquality_utils import (
-    annotate_air_quality_cells,
     annotate_staleness,
     format_unix_as_asc,
 )
+from .room_metrics import RoomMetric, select_room_metric_sources
+from .presence import PRESENCE_STALE_SECONDS, get_room_presence
 
 logger = logging.getLogger(__name__)
 
@@ -87,6 +102,38 @@ METRIC_CHART_CONFIG = {
 }
 
 
+def _rules_forecast_table(conn, hour_now: datetime.datetime) -> list[str]:
+    """Build the seven-day forecast with one compiled rules program."""
+    aqi_values = (0, 51, 101, 151)
+    compiled_rules = rules_engine.compile_rules()
+    rows = [
+        "<table class='rules-table'>",
+        "<tr><th>Time</th>"
+        + "".join(f"<th>AQI {aqi}</th>" for aqi in aqi_values)
+        + "</tr>",
+    ]
+    for hour in range(24 * 7):
+        when = hour_now + datetime.timedelta(hours=hour)
+        rows.append(f"<tr><th>{when}</th>")
+        for aqi in aqi_values:
+            results = rules_engine.rules_results(
+                conn,
+                when.timestamp(),
+                aqi=aqi,
+                compiled_rules=compiled_rules,
+            )
+            formatted_results = _format_rules_result(results)
+            rows.append(f"<td class='rule-result'>{formatted_results}</td>")
+        rows.append("</tr>")
+    rows.append("</table>")
+    return rows
+
+
+def _format_rules_result(result: str) -> str:
+    """Escape dynamic rule output while preserving visible line breaks."""
+    return str(escape(result)).replace("\n", "<br>")
+
+
 def _register_core_routes(app):
     """Register core web routes that back the main navigation."""
 
@@ -94,30 +141,18 @@ def _register_core_routes(app):
     @with_db_connection
     def read_index(conn):
         """Main index page"""
-        # Get device data for the template
-        device_data = db.get_device_status(conn)
-
-        # Enrich with Hubitat label for display (Air Quality section).
-        # The central helper handles any display-only transforms so we can
-        # easily tweak naming strategy in one place.
-        name_to_label = hubitat.get_name_to_label()
-        for d in device_data:
-            raw_name = d.get("device_name", "")
-            hub_label = name_to_label.get(raw_name)
-            d["device_label"] = display_device_name(
-                raw_name,
-                hubitat_label=hub_label,
-                source="hubitat",
-            )
-
-        # Add current timestamp for temporal links
-        now = int(time.time())
-
+        page = build_dashboard_page(
+            db.get_device_status(conn),
+            db.get_rooms(conn),
+            db.get_assigned_room_ids(conn),
+        )
         return render_template(
             "index.html",
             develop=False,
-            devices=device_data,
-            now=now,
+            devices=page.devices,
+            now=page.now,
+            table_update_summaries=page.table_update_summaries,
+            room_groups=page.room_groups,
             current_page="home",
         )
 
@@ -130,30 +165,14 @@ def _register_core_routes(app):
     def show_rules(conn):
         """Rules page"""
         # Check if we should run the rules or skip them
-        run_rules = request.args.get("run_rules", "1", type=int)
+        try:
+            run_rules = int(request.args.get("run_rules", "1"))
+        except ValueError:
+            run_rules = 1
         hour_now = datetime.datetime.now().replace(minute=0, second=0, microsecond=0)
 
         # If requests, see how the rules will render for the next seven days
-        rule_table = []
-        AQI_LIST = [0, 51, 101, 151]
-        if run_rules:
-            rule_table.append("<table class='rules-table'>")
-            rule_table.append(
-                "<tr><th>Time</th>"
-                + "".join([f"<th>AQI {aqi}</th>" for aqi in AQI_LIST])
-                + "</tr>"
-            )
-            for hour in range(24 * 7):
-                when = hour_now + datetime.timedelta(hours=hour)
-                rule_table.append(f"<tr><th>{str(when)}</th>")
-                for aqi in AQI_LIST:
-                    new_results = rules_engine.rules_results(
-                        conn, when.timestamp(), aqi=aqi
-                    )
-                    rule_table.append(
-                        f"<td class='rule-result'>{new_results.replace('\n', '<br>')}</td>"
-                    )
-                rule_table.append("</tr>")
+        rule_table = _rules_forecast_table(conn, hour_now) if run_rules else []
 
         rules_disabled_until = rules_engine.all_rules_disabled_until(conn)
         rules_disabled_until_asc = time.asctime(time.localtime(rules_disabled_until))
@@ -176,7 +195,7 @@ def _register_core_routes(app):
 
     @app.route("/logs_today")
     def logs_today():
-        """Today's Log page"""
+        """Activity Log page"""
         return render_template("logs_today.html", current_page="logs_today")
 
     @app.route("/device_log/<device_id>")
@@ -202,6 +221,15 @@ def _register_core_routes(app):
         return render_template(
             "temperature_chart.html",
             device_ids=device_ids,
+            current_page="temperature_chart",
+        )
+
+    @app.get("/fcu_chart")
+    def show_fcu_chart():
+        """Combined FCU inlet, calculated room, and operating-state chart."""
+        return render_template(
+            "fcu_history_chart.html",
+            fcu_device_id=request.args.get("fcu_device_id", type=int),
             current_page="temperature_chart",
         )
 
@@ -252,7 +280,6 @@ def _register_core_routes(app):
     def air_quality(conn):
         """Real-time Air Quality page"""
         airmon = db.get_all_device_aqi(conn)
-        annotate_air_quality_cells(airmon)
 
         # Attach a centralized display name for each row so templates do not
         # need to know about vendor prefixes, " on " suffixes, etc.
@@ -261,6 +288,14 @@ def _register_core_routes(app):
             row["display_name"] = display_device_name(raw_name, source="airthings")
 
         annotate_staleness(airmon)
+        outdoor_aqi = next(
+            (
+                row["status"]["aqi"]
+                for row in airmon
+                if (row.get("status") or {}).get("aqi")
+            ),
+            None,
+        )
 
         # Indoor data timestamp: newest devlog logtime among indoor devices
         indoor_ts = None
@@ -284,6 +319,7 @@ def _register_core_routes(app):
             "air-quality.html",
             current_page="air-quality",
             airmon=airmon,
+            outdoor_aqi=outdoor_aqi,
             indoor_asof=indoor_asof,
             outdoor_asof=outdoor_asof,
         )
@@ -344,36 +380,62 @@ def _filter_speed_control_devices(devices, device_names):
     ]
 
 
-def _get_hubitat_sensors(sensor_names):
-    """Fetch and filter Hubitat temperature sensors by exact name match.
+def _canonical_room_sensors(conn, room_ids: set[int]) -> list[RoomDashboardSensor]:
+    """Build room sensor tiles from persisted assignment and shared freshness.
 
-    Returns an entry for every configured name.  Sensors not found in
-    Hubitat (or unreachable) are represented as placeholder dicts with
-    ``offline=True`` so the template can still render them.
+    A dashboard may span several rooms (Broadway is served by two FCUs, and each
+    FCU owns its own room), so membership is a set. Freshness is still selected
+    per room, because the shared selector answers questions about one room.
     """
-    if not sensor_names:
-        return []
-
-    try:
-        all_hubitat = hubitat.get_all_devices()
-    except (ValueError, RuntimeError, OSError) as e:
-        logger.warning("Failed to fetch Hubitat sensors: %s", e)
-        all_hubitat = []
-
-    found = [
-        dev
-        for dev in all_hubitat
-        if "TemperatureMeasurement" in dev.get("capabilities", [])
-        and dev.get("name") in sensor_names
-    ]
-    found_names = {dev.get("name") for dev in found}
-
-    for name in sensor_names:
-        if name not in found_names:
-            logger.warning("Configured sensor %r not found in Hubitat", name)
-            found.append({"name": name, "label": name, "offline": True, "attributes": {}})
-
-    return found
+    snapshots = db.fetch_latest_room_metric_snapshots(conn)
+    at_time = time.time()
+    temperature_by_device: dict[int, float] = {}
+    humidity_by_device: dict[int, float] = {}
+    for room_id in room_ids:
+        temperatures = select_room_metric_sources(
+            snapshots, room_id=room_id, metric=RoomMetric.TEMPERATURE, at_time=at_time
+        )
+        humidities = select_room_metric_sources(
+            snapshots, room_id=room_id, metric=RoomMetric.HUMIDITY, at_time=at_time
+        )
+        temperature_by_device.update(
+            {source.device_id: source.value for source in temperatures.sources}
+        )
+        humidity_by_device.update(
+            {source.device_id: source.value for source in humidities.sources}
+        )
+    return sorted(
+        [
+            RoomDashboardSensor(
+                id=snapshot.device_id,
+                name=snapshot.device_name,
+                display_name=snapshot.display_name or snapshot.device_name,
+                stale_for=(
+                    None
+                    if snapshot.device_id in temperature_by_device
+                    # The reading stops being valid at logtime + duration, so
+                    # that, not logtime, is the moment we last had current data.
+                    else github_style_duration(
+                        snapshot.logtime + snapshot.duration, now=at_time
+                    )
+                ),
+                attributes=RoomDashboardSensorAttributes(
+                    temperature=temperature_by_device.get(snapshot.device_id),
+                    humidity=(
+                        round(humidity_by_device[snapshot.device_id])
+                        if snapshot.device_id in humidity_by_device
+                        else None
+                    ),
+                ),
+            )
+            for snapshot in snapshots
+            if snapshot.room_id in room_ids
+            and snapshot.device_type
+            not in {DEVICE_TYPE_FCU, DEVICE_TYPE_ERV, DEVICE_TYPE_INTERNAL}
+            and snapshot.temp10x is not None
+        ],
+        key=lambda sensor: (sensor.display_name.casefold(), sensor.id),
+    )
 
 
 def _collect_device_notes(devices):
@@ -386,31 +448,103 @@ def _collect_device_notes(devices):
     return " | ".join(notes) if notes else None
 
 
-def _render_room_dashboard_with_data(conn, location: str):
+def _owning_fcu_name(fcu_names: dict[int, str], room: Room | None) -> str:
+    """Return the casefolded device name of the FCU that owns a room."""
+    if room is None or room.room_id is None:
+        return ""
+    return fcu_names.get(room.room_id, "").casefold()
+
+
+def _room_control_key(
+    fcu_names: dict[int, str], room: Room | None, fallback: str
+) -> str:
+    """Bind configured controls to the room's stable owning FCU identity."""
+    owner_key = _owning_fcu_name(fcu_names, room)
+    if owner_key and room_config.find_room_config(owner_key) is not None:
+        return owner_key
+    return fallback.casefold()
+
+
+def _find_room(
+    rooms: list[Room], fcu_names: dict[int, str], key: str
+) -> Room | None:
+    """Resolve one room key against a room name, then an owning FCU name.
+
+    Both spellings are accepted because neither alone covers the rooms we need
+    to address: an FCU name survives a room rename, but a room with no FCU can
+    only be named directly. Room name wins, so a room deliberately named after
+    another room's FCU still resolves to itself.
+    """
+    wanted = key.casefold()
+    by_name = next(
+        (
+            candidate
+            for candidate in rooms
+            if (candidate.room_name or "").casefold() == wanted
+        ),
+        None,
+    )
+    if by_name is not None:
+        return by_name
+    return next(
+        (
+            candidate
+            for candidate in rooms
+            if _owning_fcu_name(fcu_names, candidate) == wanted
+        ),
+        None,
+    )
+
+
+def _member_room_ids(
+    rooms: list[Room],
+    fcu_names: dict[int, str],
+    config: RoomConfig,
+    addressed: Room | None,
+) -> set[int]:
+    """Resolve a dashboard's member rooms, warning about keys that match nothing.
+
+    Membership is keyed by name, so renaming a member room silently drops it.
+    Log the miss rather than rendering a quietly incomplete dashboard.
+    """
+    if not config.members:
+        return {addressed.room_id} if addressed and addressed.room_id else set()
+    room_ids = set()
+    for key in config.members:
+        member = _find_room(rooms, fcu_names, key)
+        if member is None or member.room_id is None:
+            logger.warning(
+                "Room dashboard member %r matches no room name or FCU name", key
+            )
+            continue
+        room_ids.add(member.room_id)
+    return room_ids
+
+
+def _render_room_dashboard_with_data(conn, location: str, room_id: int | None = None):
     """Render room dashboard with device data filtered by configuration."""
-    room_key = location.lower()
-    config = room_config.ROOM_CONFIGS.get(room_key, {})
+    rooms = db.get_rooms(conn)
+    fcu_names = db.get_room_fcu_names(conn)
+    room = (
+        db.get_room(conn, room_id)
+        if room_id is not None
+        else _find_room(rooms, fcu_names, location)
+    )
+    if room_id is not None and room is None:
+        return "Unknown room", 404
+    control_key = _room_control_key(fcu_names, room, location)
+    config = room_config.get_room_config(control_key)
 
     all_devices = db.get_device_status(conn)
 
     # Filter ERVs and fans
-    erv_devices = _filter_speed_control_devices(all_devices, config.get("ervs", []))
+    erv_devices = _filter_speed_control_devices(all_devices, config.ervs)
 
-    fan_devices = _filter_speed_control_devices(all_devices, config.get("fans", []))
+    fan_devices = _filter_speed_control_devices(all_devices, config.fans)
 
-    # Get Hubitat sensors
-    hubitat_sensors = _get_hubitat_sensors(config.get("sensors", []))
-
-    # Attach display names for sensors using the centralized helper. We prefer
-    # Hubitat labels when available and then apply generic display transforms.
-    for sensor in hubitat_sensors:
-        raw_name = sensor.get("name", "")
-        label = sensor.get("label") or None
-        sensor["display_name"] = display_device_name(
-            raw_name,
-            hubitat_label=label,
-            source="hubitat",
-        )
+    hubitat_sensors = _canonical_room_sensors(
+        conn, _member_room_ids(rooms, fcu_names, config, room)
+    )
 
     # Collect notes
     notes = _collect_device_notes(erv_devices + fan_devices)
@@ -419,17 +553,15 @@ def _render_room_dashboard_with_data(conn, location: str):
 
     return render_template(
         "room_dashboard.html",
-        location=location,
+        location=room.room_name if room and room.room_name else location,
         hide_nav=True,
         embedded=embedded,
         erv_devices=erv_devices,
         fan_devices=fan_devices,
         hubitat_sensors=hubitat_sensors,
         notes=notes,
-        show_tv_control=config.get("tv_control", False),
-        dimmer_id=config.get("dimmer_id"),
-        wall_inner_id=config.get("wall_inner_id"),
-        wall_outer_id=config.get("wall_outer_id"),
+        room_controls=config.controls,
+        room_control_key=control_key,
     )
 
 
@@ -445,6 +577,46 @@ def _register_room_routes(app):
             current_page="all_devices",
         )
 
+    @app.route("/devices", methods=["GET", "POST"])
+    @with_db_connection
+    def edit_devices(conn):
+        """Edit device metadata."""
+        if request.method == "POST":
+            for raw_device_id in request.form.getlist("device_id"):
+                body = DeviceMetadataControl(
+                    device_id=int(raw_device_id),
+                    display_name=request.form.get(f"display_name_{raw_device_id}"),
+                    rules_enabled=f"rules_enabled_{raw_device_id}" in request.form,
+                    notes=request.form.get(f"notes_{raw_device_id}"),
+                )
+                db.update_device_metadata(
+                    conn,
+                    body,
+                    fields={"display_name", "rules_enabled", "notes"},
+                )
+            return redirect(url_for("edit_devices"))
+        return render_template(
+            "devices.html",
+            devices=db.get_device_metadata(conn),
+            current_page="devices",
+        )
+
+    @app.get("/map")
+    def room_map():
+        """Render the canonical room-backed HVAC floor-plan overlay."""
+        return render_template("map.html", current_page="map")
+
+    @app.get("/presence")
+    @with_db_connection
+    def presence_table(conn):
+        """Render room presence with explicit unknown and stale states."""
+        return render_template(
+            "presence.html",
+            current_page="presence",
+            rooms=get_room_presence(conn),
+            stale_minutes=PRESENCE_STALE_SECONDS // 60,
+        )
+
     @app.route("/kitchen")
     @with_db_connection
     def kitchen_dashboard(conn):
@@ -456,6 +628,23 @@ def _register_room_routes(app):
     def hickory_dashboard(conn):
         """Hickory HVAC control dashboard."""
         return _render_room_dashboard_with_data(conn, "Hickory")
+
+    @app.route("/broadway")
+    @with_db_connection
+    def broadway_dashboard(conn):
+        """Broadway dashboard, spanning the rooms its two FCUs own."""
+        return _render_room_dashboard_with_data(conn, "Broadway")
+
+    @app.get("/room/<int:room_id>")
+    @with_db_connection
+    def canonical_room_dashboard(conn, room_id: int):
+        """Render a stable-id room dashboard whose name may change."""
+        room = db.get_room(conn, room_id)
+        if room is None:
+            return "Unknown room", 404
+        return _render_room_dashboard_with_data(
+            conn, room.room_name or "Room", room_id=room_id
+        )
 
     return app
 

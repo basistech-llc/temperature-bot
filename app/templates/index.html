@@ -17,7 +17,8 @@
           <thead>
             <tr>
               <th class="column-unit" rowspan="2">Unit</th>
-              <th class="column-disable-for" rowspan="2" title="Remaining time rules are disabled for this device (H:MM)">Disable<br>for</th>
+              <th class="column-room" rowspan="2">Room</th>
+              <th class="column-disable-for" rowspan="2" title="Remaining time rules are disabled for this device (H:MM)">Rules<br>disabled<br>for</th>
               <th class="column-temp" rowspan="2">Temp<br><small id="erv-temp-unit-label">°C</small></th>
               <th class="column-speed" colspan="5">Fan Speed</th>
               <th class="column-notes" rowspan="2">Notes</th>
@@ -32,12 +33,21 @@
           </thead>
           <tbody>
             {% for device in devices %}
-            {% if device.has_speed_control and device.device_name.lower().startswith('erv') %}
+            {% if device.device_type == 'ERV' %}
                 <tr class="device-row" x-data-device-id="{{ device.device_id }}">
                   <td class="cell-unit">
-                    <span title="{{ device.device_name }}">{{ device.device_label }}</span><span class="rules-disabled-superscript hidden" id="rules-disabled-{{ device.device_id }}" title=""></span>
+                    <span class="device-name-context"
+                          data-device-id="{{ device.device_id }}"
+                          data-device-name="{{ device.device_name }}"
+                          data-display-name="{{ device.device_label }}"
+                          data-device-type="{{ device.device_type or '' }}"
+                          data-air-quality-active="{{ 'true' if device.dashboard_air_quality_active else 'false' }}"
+                          data-rules-enabled="{{ 'true' if device.rules_enabled|default(true) else 'false' }}"
+                          data-device-update="{{ device.device_update_text|default('', true) }}"
+                          title="{{ device.device_update_tooltip|default(device.device_name, true) }}">{{ device.device_label_with_icon }}</span><span class="rules-disabled-superscript hidden" id="rules-disabled-{{ device.device_id }}" title=""></span>
                     <span id="device-{{ device.device_id }}-notes"></span>
                   </td>
+                  <td class="cell-room">{{ device.room_name or '—' }}</td>
                   <td class="cell-disable-for" id="disable-for-{{ device.device_id }}">
                     <span class="disable-thermostat" role="group" aria-label="Adjust rules disable timer">
                       <button type="button"
@@ -87,18 +97,31 @@
             {% endif %}
             {% endfor %}
           </tbody>
+          <tfoot>
+            <tr>
+              <td colspan="10" class="table-update-summary" id="oldest-update-erv">{{ table_update_summaries.erv.label if table_update_summaries.erv else '' }}</td>
+            </tr>
+          </tfoot>
         </table>
 
         <h2>Heating and Cooling - Fan Control Units (FCUs)</h2>
         <table class="pure-table data-table fcu-table">
           <thead>
             <tr>
-              <th class="column-unit" rowspan="2">Unit</th>
-              <th class="column-disable-for" rowspan="2" title="Remaining time rules are disabled for this device (H:MM)">Disable<br>for</th>
-              <th class="column-temp" rowspan="2">Temp<br><small id="fcu-temp-unit-label">°C</small></th>
-              <th class="column-temp column-temp-set" rowspan="2">Set Temp<br><small id="fcu-settemp-unit-label">°C</small></th>
+              <th class="column-unit" rowspan="3">Unit</th>
+              <th class="column-disable-for" rowspan="3" title="Remaining time rules are disabled for this device (H:MM)">Rules<br>disabled<br>for</th>
+              <th class="column-temp" rowspan="3">FCU Temp<br><small id="fcu-temp-unit-label">°C</small></th>
+              <th class="column-computed-room" colspan="2">Computed Room</th>
+              <th class="column-temp column-temp-range" rowspan="3">Rule Set Range<br><small id="fcu-setrange-unit-label">°C</small></th>
+              <th class="column-fcu-set" colspan="7">FCU Set</th>
+              <th class="column-notes" rowspan="3">Notes</th>
+            </tr>
+            <tr>
+              <th class="column-temp column-computed-room-temp" rowspan="2">Temp<br><small id="fcu-room-temp-unit-label">°C</small></th>
+              <th class="column-room-humidity" rowspan="2">Humidity<br><small>%</small></th>
+              <th class="column-temp column-temp-set" rowspan="2">Temp<br><small id="fcu-settemp-unit-label">°C</small></th>
+              <th class="column-mode" rowspan="2">Mode</th>
               <th class="column-speed" colspan="5">Fan Speed</th>
-              <th class="column-notes" rowspan="2">Notes</th>
             </tr>
             <tr>
               <th class="column-speed column-speed-off">Off</th>
@@ -110,10 +133,28 @@
           </thead>
           <tbody>
             {% for device in devices %}
-            {% if device.has_speed_control and not device.device_name.lower().startswith('erv') %}
+            {% if device.device_type == 'FCU' %}
+                {% set current_mode = device.mode|default(device.status.Mode|default('', true), true) %}
+                {% set current_mode_value = current_mode|upper if current_mode else '' %}
                 <tr class="device-row" x-data-device-id="{{ device.device_id }}">
                   <td class="cell-unit">
-                    <span title="{{ device.device_name }}">{{ device.device_label }}</span><span class="rules-disabled-superscript hidden" id="rules-disabled-{{ device.device_id }}" title=""></span>
+                    <span class="device-name-context fcu-temp-sources-trigger"
+                          role="button"
+                          tabindex="0"
+                          data-device-id="{{ device.device_id }}"
+                          data-device-name="{{ device.device_name }}"
+                          data-display-name="{{ device.device_label }}"
+                          data-device-type="{{ device.device_type or '' }}"
+                          data-air-quality-active="{{ 'true' if device.dashboard_air_quality_active else 'false' }}"
+                          data-rules-enabled="{{ 'true' if device.rules_enabled|default(true) else 'false' }}"
+                          data-device-update="{{ device.device_update_text|default('', true) }}"
+                          data-device-update-url="/api/v1/devices/{{ device.device_id }}"
+                          data-room-id="{{ device.room_id or '' }}"
+                          data-fcu-temp-sources-url="/api/v1/fcu_temp_sources?fcu_device_id={{ device.device_id }}"
+                          data-fcu-temp-source-update-url="/api/v1/fcu_temp_source"
+                          data-room-name="{{ device.room_name or '' }}"
+                          aria-label="Edit temperature sources for {{ device.device_label }}"
+                          title="Edit temperature sources for {{ device.device_label }}">{{ device.device_label_with_icon }}</span><span class="rules-disabled-superscript hidden" id="rules-disabled-{{ device.device_id }}" title=""></span>
                     <span id="device-{{ device.device_id }}-notes"></span>
                   </td>
                   <td class="cell-disable-for" id="disable-for-{{ device.device_id }}">
@@ -133,15 +174,45 @@
                               aria-label="Increase disable time">+</button>
                     </span>
                   </td>
-                  {% if device.temp10x %}
-                  <td class="cell-temp cell-temp-link temp-display-no-unit" id="temp-{{ device.device_id }}"
-                      data-chart-url="/chart?device_ids={{ device.device_id }}"
-                      title="Temperature chart for {{ device.device_label }}">--</td>
-                  {% else %}
-                  <td class="cell-temp cell-temp-na">n/a</td>
-                  {% endif %}
+                  {# Always rendered: unit_speed.js fills this cell by id on every
+                     poll, so omitting it would leave the FCU permanently blank even
+                     after the unit resumes reporting. The guard here used to read
+                     `device.temp10x is not none`, which was always true because a
+                     missing temperature meant the dict key was absent (Undefined),
+                     not None -- so the n/a branch never rendered. #}
+                  <td class="cell-temp cell-temp-link cell-fcu-temp temp-display temp-display-no-unit" id="fcu-temp-{{ device.device_id }}"
+                      data-chart-url="/chart?mode=raw&device_ids={{ device.device_id }}"
+                      title="FCU temperature chart for {{ device.device_label }}; click to show graph.">--</td>
+                  <td class="cell-temp cell-temp-link cell-room-temp temp-display temp-display-no-unit" id="room-temp-{{ device.device_id }}"
+                      data-chart-url="/fcu_chart?fcu_device_id={{ device.device_id }}"
+                      title="Combined room temperature and FCU history for {{ device.device_label }}; click to show graph.">--</td>
+                  <td class="cell-room-humidity" id="room-humidity-{{ device.device_id }}">--</td>
+                  <td class="cell-temp cell-temp-range" id="setrange-{{ device.device_id }}">
+                    <div class="setrange-widget"
+                         id="setrange-widget-{{ device.device_id }}"
+                         data-device-id="{{ device.device_id }}"
+                         data-mode="{{ current_mode_value }}"
+                         data-update-url="/api/v1/set_range"
+                         data-min-range-c="{{ device.min_set_range_c|default(3.0, true) }}"
+                         {% if device.set_range_low_c is defined and device.set_range_low_c is not none %}data-set-range-low-c="{{ device.set_range_low_c }}"{% endif %}
+                         {% if device.set_range_high_c is defined and device.set_range_high_c is not none %}data-set-range-high-c="{{ device.set_range_high_c }}"{% endif %}>
+                      <div class="setrange-track" data-role="track">
+                        <div class="setrange-fill" data-role="middle" aria-hidden="true"></div>
+                        <button type="button" class="setrange-handle setrange-handle-low" data-role="low" aria-label="Move lower set range"></button>
+                        <button type="button" class="setrange-handle setrange-handle-high" data-role="high" aria-label="Move upper set range"></button>
+                      </div>
+                      <div class="setrange-values">
+                        <span class="setrange-end-label temp-display temp-display-no-unit" data-role="low-label">--</span>
+                        <span class="setrange-separator">–</span>
+                        <span class="setrange-end-label temp-display temp-display-no-unit" data-role="high-label">--</span>
+                      </div>
+                    </div>
+                  </td>
                   <td class="cell-temp cell-temp-set" id="settemp-{{ device.device_id }}">
-                    <span class="settemp-thermostat" role="group" aria-label="Set temperature">
+                    <span class="settemp-thermostat"
+                          id="settemp-controls-{{ device.device_id }}"
+                          role="group"
+                          aria-label="Set temperature">
                       <button type="button"
                               class="settemp-btn settemp-btn-down"
                               data-device-id="{{ device.device_id }}"
@@ -156,6 +227,47 @@
                               data-delta="0.5"
                               aria-label="Increase set temperature">+</button>
                     </span>
+                    <div class="autosettemp-widget hidden"
+                         id="autosettemp-widget-{{ device.device_id }}"
+                         data-device-id="{{ device.device_id }}"
+                         data-update-url="/api/v1/set_auto_temp"
+                         role="group"
+                         aria-label="Auto heat and cool set temperatures">
+                      <div class="autosettemp-track" data-role="track">
+                        <div class="autosettemp-fill" data-role="auto-range"></div>
+                        <button type="button" class="autosettemp-handle autosettemp-handle-heat" data-role="heat" aria-label="Move Auto heat set temperature"></button>
+                        <button type="button" class="autosettemp-handle autosettemp-handle-cool" data-role="cool" aria-label="Move Auto cool set temperature"></button>
+                      </div>
+                      <div class="autosettemp-values">
+                        <span class="autosettemp-end">
+                          <span class="autosettemp-label">Heat</span>
+                          <span class="autosettemp-end-label temp-display temp-display-no-unit" data-role="heat-label">--</span>
+                        </span>
+                        <span class="autosettemp-end">
+                          <span class="autosettemp-label">Cool</span>
+                          <span class="autosettemp-end-label temp-display temp-display-no-unit" data-role="cool-label">--</span>
+                        </span>
+                      </div>
+                    </div>
+                  </td>
+                  {% set mode_labels = {'LC_AUTO': 'Auto'} %}
+                  <td class="cell-mode">
+                    <select class="mode-select"
+                            id="mode-{{ device.device_id }}"
+                            data-device-id="{{ device.device_id }}"
+                            data-current-mode="{{ current_mode_value }}"
+                            title="Set mode for {{ device.device_label }}">
+                      {% if not current_mode_value %}
+                      <option value="" selected disabled>--</option>
+                      {% elif current_mode_value not in ['FAN', 'COOL', 'DRY', 'HEAT', 'AUTO'] %}
+                      <option value="{{ current_mode_value }}" selected disabled>{{ mode_labels.get(current_mode_value, current_mode_value) }}</option>
+                      {% endif %}
+                      <option value="FAN" {% if current_mode_value == 'FAN' %}selected{% endif %}>Fan</option>
+                      <option value="COOL" {% if current_mode_value == 'COOL' %}selected{% endif %}>Cool</option>
+                      <option value="DRY" {% if current_mode_value == 'DRY' %}selected{% endif %}>Dry</option>
+                      <option value="HEAT" {% if current_mode_value == 'HEAT' %}selected{% endif %}>Heat</option>
+                      <option value="AUTO" {% if current_mode_value == 'AUTO' %}selected{% endif %}>Auto</option>
+                    </select>
                   </td>
                   <td class="cell-speed cell-speed-off">
                     <input type="radio" name="fan_speed-{{ device.device_id }}"
@@ -190,34 +302,89 @@
             {% endif %}
             {% endfor %}
           </tbody>
+          <tfoot>
+            <tr>
+              <td colspan="14" class="table-update-summary" id="oldest-update-fcu">{{ table_update_summaries.fcu.label if table_update_summaries.fcu else '' }}</td>
+            </tr>
+            <tr>
+              <td colspan="14" class="fcu-setrange-note">Auto mode: FCU Set Temp edits the AE-200 Heat/Cool range. Rule Set Range stays editable for local rules.</td>
+            </tr>
+          </tfoot>
         </table>
 
         <!-- Section 3: Air Quality — devices without speed control that have temp -->
-        <h2>Air Quality</h2>
-        <table class="pure-table data-table">
+        <h2>Air Quality and Room Assignments</h2>
+        <table class="pure-table data-table room-matrix" id="room-matrix">
           <thead>
             <tr>
               <th class="column-unit">Unit</th>
-              <th class="column-humidity" title="Relative humidity (%). Elevated: 30–35 or 55–60. Problem: &lt;30 or &gt;60.">Humidity<br><small>%</small></th>
+              <th class="column-humidity" title="Relative humidity (%). Fair: &gt;50. Poor: &lt;30 or &gt;60.">Humidity<br><small>%</small></th>
               <th class="column-temp" title="Temperature. Unit follows site C/F toggle. Elevated: 18–20 or 25–27 °C. Problem: &lt;18 or &gt;27 °C.">Temp<br><small id="aq-index-temp-unit-label">°C</small></th>
               <th class="column-illuminance" title="Illuminance (lux).">Illuminance<br><small>lx</small></th>
-              <th title="Carbon dioxide (ppm). Elevated: 801–1200. Problem: &gt;1200.">CO₂<br><small>ppm</small></th>
-              <th title="Volatile organic compounds (ppb). Elevated: 501–2000. Problem: &gt;2000.">VOC<br><small>ppb</small></th>
-              <th title="Short-term average radon level (Bq/m³). Elevated: 100–150. Problem: &gt;150.">Radon<br><small id="aq-index-radon-unit-label">Bq/m³</small></th>
-              <th title="Fine particles &lt;2.5µm (µg/m³). Elevated: 13–35. Problem: &gt;35.">PM2.5<br><small>µg/m³</small></th>
-              <th title="Fine particles &lt;1µm (µg/m³). Elevated: 13–35. Problem: &gt;35.">PM1<br><small>µg/m³</small></th>
+              <th title="Carbon dioxide (ppm). Fair: &gt;600. Poor: &gt;1000.">CO₂<br><small>ppm</small></th>
+              <th title="Volatile organic compounds (ppb). Fair: &gt;500. Poor: &gt;2000.">VOC<br><small>ppb</small></th>
+              <th title="Short-term average radon level (Bq/m³). Fair: &gt;75. Poor: &gt;150.">Radon<br><small id="aq-index-radon-unit-label">Bq/m³</small></th>
+              <th title="Fine particles &lt;2.5µm (µg/m³). Fair: &gt;9.0. Poor: &gt;35.4.">PM2.5<br><small>µg/m³</small></th>
+              <th title="Fine particles &lt;1µm (µg/m³). Fair: &gt;9.0. Poor: &gt;35.4.">PM1<br><small>µg/m³</small></th>
               <th class="column-notes">Notes</th>
             </tr>
           </thead>
           <tbody>
-            {% for device in devices %}
-            {% if not device.has_speed_control and device.temp10x %}
-                <tr class="device-row" x-data-device-id="{{ device.device_id }}">
+            {% for group in room_groups %}
+              <tr class="room-separator"
+                  data-room-id="{{ group.room_id if group.room_id is not none else '' }}"
+                  data-room-name="{{ group.room_name }}"
+                  data-has-fcu="{{ 'true' if group.fcu_device_id else 'false' }}"
+                  data-can-delete="{{ 'true' if group.can_delete else 'false' }}">
+                <td colspan="10">
+                  <button type="button"
+                          class="room-name{% if group.room_id is none %} room-name-unassigned{% endif %}"
+                          data-room-id="{{ group.room_id if group.room_id is not none else '' }}"
+                          data-room-name="{{ group.room_name }}"
+                          {% if group.room_id is none %}disabled{% else %}aria-label="Manage room {{ group.room_name }}" title="Right-click or long-press to manage room"{% endif %}>{{ group.room_name }}{% if group.fcu_device_id %} 🌀{% endif %}</button>
+                  {% if group.room_id is not none %}
+                  <span class="room-summary"
+                        data-room-id="{{ group.room_id }}"
+                        data-fcu-device-id="{{ group.fcu_device_id or '' }}">
+                    <span class="room-summary-label">Temp</span>
+                    <span class="room-summary-temp temp-display"
+                          id="room-summary-temp-{{ group.room_id }}"
+                          {% if group.calculated_temp10x is not none %}data-temp-c="{{ group.calculated_temp10x / 10 }}"{% endif %}>{% if group.calculated_temp10x is not none %}{{ '%.1f'|format(group.calculated_temp10x / 10) }}°C{% else %}--{% endif %}</span>
+                    <span class="room-summary-separator">·</span>
+                    <span class="room-summary-label">Humidity</span>
+                    <span class="room-summary-humidity"
+                          id="room-summary-humidity-{{ group.room_id }}">{% if group.calculated_humidity is not none %}{{ group.calculated_humidity|round|int }}%{% else %}--{% endif %}</span>
+                  </span>
+                  {% endif %}
+                  <span class="room-drop-hint">Drop sensors here</span>
+                </td>
+              </tr>
+              {% for device in group.devices %}
+                <tr class="device-row room-sensor-row"
+                    data-device-id="{{ device.device_id }}"
+                    data-room-id="{{ group.room_id if group.room_id is not none else '' }}"
+                    x-data-device-id="{{ device.device_id }}">
                   <td class="cell-unit">
-                    <span title="{{ device.device_name }}">{{ device.device_label }}</span><span class="rules-disabled-superscript hidden" id="rules-disabled-{{ device.device_id }}" title=""></span>
+                    <button type="button"
+                            class="room-drag-handle"
+                            aria-grabbed="false"
+                            aria-label="Move {{ device.device_label }}"
+                            title="Drag to move {{ device.device_label }} to another room">
+                      <span class="room-drag-grip" aria-hidden="true"></span>
+                    </button>
+                    <span class="device-name-context"
+                          data-device-id="{{ device.device_id }}"
+                          data-device-name="{{ device.device_name }}"
+                          data-display-name="{{ device.device_label }}"
+                          data-device-type="{{ device.device_type or '' }}"
+                          data-air-quality-active="{{ 'true' if device.dashboard_air_quality_active else 'false' }}"
+                          data-rules-enabled="{{ 'true' if device.rules_enabled|default(true) else 'false' }}"
+                          data-device-update="{{ device.device_update_text|default('', true) }}"
+                          title="{{ device.device_update_tooltip|default(device.device_name, true) }}">{{ device.device_label_with_icon }}</span><span class="rules-disabled-superscript hidden" id="rules-disabled-{{ device.device_id }}" title=""></span>
                     <span id="device-{{ device.device_id }}-notes"></span>
                   </td>
                   <td class="cell-humidity{% if device.has_humidity %} cell-metric-link{% endif %}" id="humidity-{{ device.device_id }}"
+                      data-air-quality-metric="humidity"
                       {% if device.has_humidity %}data-chart-url="/metric_chart?metric=humidity&device_ids={{ device.device_id }}"
                       title="Humidity chart for {{ device.device_label }}"{% endif %}>--</td>
                   <td class="cell-temp cell-temp-link temp-display temp-display-no-unit" id="temp-{{ device.device_id }}"
@@ -226,26 +393,141 @@
                   <td class="cell-illuminance{% if device.has_illuminance %} cell-illuminance-link{% endif %}" id="illuminance-{{ device.device_id }}"
                       {% if device.has_illuminance %}data-chart-url="/lighting_chart?device_ids={{ device.device_id }}"
                       title="Lighting chart for {{ device.device_label }}"{% endif %}>--</td>
-                  <td {% if device.has_co2 %}class="cell-metric-link" data-chart-url="/metric_chart?metric=co2&device_ids={{ device.device_id }}" title="CO₂ chart for {{ device.device_label }}"{% endif %} id="co2-{{ device.device_id }}">--</td>
-                  <td {% if device.has_voc %}class="cell-metric-link" data-chart-url="/metric_chart?metric=voc&device_ids={{ device.device_id }}" title="VOC chart for {{ device.device_label }}"{% endif %} id="voc-{{ device.device_id }}">--</td>
+                  <td {% if device.has_co2 %}class="cell-metric-link" data-chart-url="/metric_chart?metric=co2&device_ids={{ device.device_id }}" title="CO₂ chart for {{ device.device_label }}"{% endif %} data-air-quality-metric="co2" id="co2-{{ device.device_id }}">--</td>
+                  <td {% if device.has_voc %}class="cell-metric-link" data-chart-url="/metric_chart?metric=voc&device_ids={{ device.device_id }}" title="VOC chart for {{ device.device_label }}"{% endif %} data-air-quality-metric="voc" id="voc-{{ device.device_id }}">--</td>
                   <td class="radon-display{% if device.has_radon %} cell-metric-link{% endif %}" id="radon-{{ device.device_id }}"
+                      data-air-quality-metric="radonShortTermAvg"
                       {% if device.has_radon %}data-chart-url="/metric_chart?metric=radon&device_ids={{ device.device_id }}"
                       title="Radon chart for {{ device.device_label }}"{% endif %}>--</td>
-                  <td {% if device.has_pm25 %}class="cell-metric-link" data-chart-url="/metric_chart?metric=pm25&device_ids={{ device.device_id }}" title="PM2.5 chart for {{ device.device_label }}"{% endif %} id="pm25-{{ device.device_id }}">--</td>
-                  <td {% if device.has_pm1 %}class="cell-metric-link" data-chart-url="/metric_chart?metric=pm1&device_ids={{ device.device_id }}" title="PM1 chart for {{ device.device_label }}"{% endif %} id="pm1-{{ device.device_id }}">--</td>
+                  <td {% if device.has_pm25 %}class="cell-metric-link" data-chart-url="/metric_chart?metric=pm25&device_ids={{ device.device_id }}" title="PM2.5 chart for {{ device.device_label }}"{% endif %} data-air-quality-metric="pm25" id="pm25-{{ device.device_id }}">--</td>
+                  <td {% if device.has_pm1 %}class="cell-metric-link" data-chart-url="/metric_chart?metric=pm1&device_ids={{ device.device_id }}" title="PM1 chart for {{ device.device_label }}"{% endif %} data-air-quality-metric="pm1" id="pm1-{{ device.device_id }}">--</td>
                   <td class="cell-notes">
                     <span class="notes editable-notes" id="notes-{{ device.device_id }}" data-device-id="{{ device.device_id }}" title="Click to edit"></span>
                   </td>
                 </tr>
-            {% endif %}
+              {% endfor %}
             {% endfor %}
           </tbody>
+          <tfoot>
+            <tr>
+              <td colspan="10" class="table-update-summary" id="oldest-update-air-quality">{{ table_update_summaries.air_quality.label if table_update_summaries.air_quality else '' }}</td>
+            </tr>
+          </tfoot>
         </table>
+        <div class="room-matrix-actions">
+          <button type="button" class="pure-button pure-button-primary" id="new-room-button">New Room</button>
+        </div>
       </form>
     </div> <!-- main-grid -->
   </div>
 </div>
 
+<form id="device-rename-popup" class="device-rename-popup hidden" role="dialog" aria-modal="true" aria-label="Rename device">
+  <div class="device-rename-row">
+    <label for="device-rename-device-name">device name</label>
+    <input id="device-rename-device-name" type="text" readonly>
+    <button type="button" class="pure-button" data-action="reset-device-name">reset</button>
+  </div>
+  <div class="device-rename-row">
+    <label for="device-rename-display-name">display name</label>
+    <input id="device-rename-display-name" type="text" autocomplete="off">
+    <button type="button" class="pure-button pure-button-primary" data-action="rename-device" disabled>rename</button>
+  </div>
+  <div class="device-rename-message" data-role="message" aria-live="polite"></div>
+  <div class="device-rename-row">
+    <label for="device-rename-device-type">device type</label>
+    <input id="device-rename-device-type" type="text" readonly>
+    <span aria-hidden="true"></span>
+  </div>
+  <div class="device-rename-row">
+    <label for="device-rename-rules-enabled">rules enabled</label>
+    <input id="device-rename-rules-enabled" type="checkbox" disabled>
+    <span aria-hidden="true"></span>
+  </div>
+  <div class="device-rename-row">
+    <label for="device-rename-last-update">last update</label>
+    <input id="device-rename-last-update" type="text" readonly>
+    <span aria-hidden="true"></span>
+  </div>
+  <div class="device-rename-actions">
+    <button type="button" class="pure-button" data-action="cancel-device-rename">cancel</button>
+  </div>
+</form>
+
+<div id="room-rename-dialog" class="room-rename-dialog hidden" role="dialog" aria-modal="true" aria-labelledby="room-rename-title">
+  <form class="room-rename-card">
+    <h3 id="room-rename-title">Rename room</h3>
+    <label for="room-rename-name">Room name</label>
+    <input id="room-rename-name" type="text" maxlength="120" autocomplete="off" required>
+    <div class="room-rename-message" data-role="message" aria-live="polite"></div>
+    <div class="room-rename-actions">
+      <button type="button" class="pure-button room-delete-choice hidden" data-action="request-room-delete">Delete…</button>
+      <button type="submit" class="pure-button pure-button-primary">Rename</button>
+      <button type="button" class="pure-button" data-action="cancel-room-rename">Cancel</button>
+    </div>
+  </form>
+</div>
+
+<div id="room-create-dialog" class="room-rename-dialog hidden" role="dialog" aria-modal="true" aria-labelledby="room-create-title">
+  <form class="room-rename-card">
+    <h3 id="room-create-title">New room</h3>
+    <label for="room-create-name">Room name</label>
+    <input id="room-create-name" type="text" maxlength="120" autocomplete="off" required>
+    <div class="room-rename-message" data-role="message" aria-live="polite"></div>
+    <div class="room-rename-actions">
+      <button type="submit" class="pure-button pure-button-primary">Create</button>
+      <button type="button" class="pure-button" data-action="cancel-room-create">Cancel</button>
+    </div>
+  </form>
+</div>
+
+<div id="room-delete-dialog" class="room-rename-dialog hidden" role="dialog" aria-modal="true" aria-labelledby="room-delete-title">
+  <div class="room-rename-card">
+    <h3 id="room-delete-title">Delete empty room</h3>
+    <p>Delete <strong data-role="room-name"></strong>? This cannot be undone.</p>
+    <div class="room-rename-message" data-role="message" aria-live="polite"></div>
+    <div class="room-rename-actions">
+      <button type="button" class="pure-button pure-button-primary" data-action="confirm-room-delete" disabled>OK (5)</button>
+      <button type="button" class="pure-button" data-action="cancel-room-delete">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<div id="room-matrix-message" class="room-matrix-message hidden" role="status" aria-live="polite"></div>
+
+<div id="fcu-temp-sources-popup" class="fcu-temp-sources-popup hidden" role="dialog" aria-modal="true" aria-labelledby="fcu-temp-sources-title">
+  <div class="fcu-temp-sources-dialog">
+    <div class="fcu-temp-sources-header">
+      <h3 id="fcu-temp-sources-title" data-role="title">FCU Temperature Sources</h3>
+      <div class="fcu-temp-sources-actions">
+        <button type="button" class="pure-button pure-button-primary" data-action="save-fcu-temp-sources">Save</button>
+        <button type="button" class="pure-button" data-action="revert-fcu-temp-sources">Revert</button>
+        <button type="button" class="pure-button" data-action="cancel-fcu-temp-sources">Cancel</button>
+      </div>
+    </div>
+    <div class="fcu-room-editor-row">
+      <span>Room</span>
+      <strong data-role="room-name">Unassigned</strong>
+    </div>
+    <p class="fcu-temp-sources-note">Readings older than 10 minutes are ignored.</p>
+    <div class="fcu-temp-sources-message" data-role="message" aria-live="polite"></div>
+    <table class="pure-table pure-table-horizontal fcu-temp-sources-table">
+      <thead>
+        <tr>
+          <th>Source</th>
+          <th>Temp</th>
+          <th>Age</th>
+          <th>Weight</th>
+        </tr>
+      </thead>
+      <tbody data-role="sources-body">
+        <tr><td colspan="4">Loading...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
 <script src="/static/unit_speed.js"></script>
+<script src="/static/room_matrix.js"></script>
 
 {% endblock %}

@@ -1,0 +1,13 @@
+### /etc/systemd/system/temperature-bot-performance-monitor.timer ###
+[Unit]
+Description=Run the AE-200 network performance probe once per minute
+
+[Timer]
+# Deterministic observational probe; no RandomizedDelaySec.
+OnCalendar=*-*-* *:*:30
+AccuracySec=1s
+Persistent=true
+Unit=temperature-bot-performance-monitor.service
+
+[Install]
+WantedBy=timers.target

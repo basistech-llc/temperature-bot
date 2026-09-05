@@ -1,41 +1,161 @@
+"""Configuration for room dashboards.
+
+Sensor tiles are not configured here. They come from canonical
+``devices.room_id`` assignments; ``members`` only selects which rooms' sensors a
+dashboard gathers. What is configured here is deliberate presentation: which
+AE-200 units and which Hubitat actuators a dashboard offers.
+
+A ``members`` entry is matched against a room name or against the device name of
+the FCU that owns the room. Prefer the FCU name where one exists: FCU names are
+hardware identity and survive a room rename, while a room with no FCU (Garage,
+Data Closet) can only be named directly.
+
+Every ``device_id`` here is a device id **on hub 10.2.3.51**, the hub configured
+in ``temperature-bot-config.yaml``. Ids are per hub and are not interchangeable:
+the same physical sensor carries different ids on each hub it is meshed onto, so
+an id copied from another hub's dashboard is at best dead and at worst names a
+different device. ``doc/hardware-landscape.md`` has the commands for reading
+ids off that hub, and for telling "the hub does not have this device" apart
+from "Maker API does not expose it", which are different problems with
+different fixes.
 """
-Configuration for room dashboards (kitchen/hickory).
 
-Each room specifies which ERVs, fans, and sensors to display.
-All device names must match exactly with names in the database or Hubitat.
-"""
+from .models import RoomConfig, RoomControl, RoomControlKind
 
-from typing import Dict, Any
+EMPTY_ROOM_CONFIG = RoomConfig(url="")
 
-RoomConfig = Dict[str, Any]
-"""Type alias for room configuration dict.
-Keys: 'url' (str), 'ervs' (list[str]), 'fans' (list[str]), 'sensors' (list[str]),
-'tv_control' (bool), 'dimmer_id' (str), 'wall_inner_id' (str), 'wall_outer_id' (str)
-"""
-
-ROOM_CONFIGS: Dict[str, RoomConfig] = {
-    "kitchen": {
-        "url": "/kitchen",
-        "ervs": ["ERV Kitchen"],
-        "fans": ["Kitchen"],
-        "sensors": [
-            "Lobby Sensor on Somerville Broadway",
-            "Broadway Sensor Center on Somerville Broadway",
-            "Broadway Sensor North on Somerville Broadway",
-            "Broadway Sensor South on Somerville Broadway",
+ROOM_CONFIGS: dict[str, RoomConfig] = {
+    "kitchen": RoomConfig(
+        url="/kitchen",
+        label="Kitchen",
+        members=["kitchen"],
+        ervs=["ERV Kitchen"],
+        fans=["Kitchen"],
+    ),
+    "hickory": RoomConfig(
+        url="/hickory",
+        label="Hickory",
+        members=["hickory"],
+        ervs=["ERV Restrooms"],
+        fans=["Restrooms/BOH", "Dungeon"],
+        controls=[
+            RoomControl(
+                key="tv",
+                kind=RoomControlKind.TV,
+                label="TV",
+                up_label="TV Up",
+                down_label="TV Down",
+            ),
+            RoomControl(
+                key="main",
+                kind=RoomControlKind.DIMMER,
+                label="Main Lights",
+                device_id="581",
+            ),
+            # Keyed "inner"/"outer" because that is what the wall-light request
+            # body has always sent as its control key.
+            RoomControl(
+                key="inner",
+                kind=RoomControlKind.SWITCH,
+                label="Green Wall - Inner",
+                device_id="454",
+            ),
+            RoomControl(
+                key="outer",
+                kind=RoomControlKind.SWITCH,
+                label="Green Wall - Outer",
+                device_id="550",
+            ),
         ],
-    },
-    "hickory": {
-        "url": "/hickory",
-        "ervs": ["ERV Restrooms"],
-        "fans": ["Restrooms/BOH", "Dungeon"],
-        "sensors": [
-            "Hickory Sensor",
-            "Dungeon Cage",
+    ),
+    # Broadway spans four canonical rooms: the space is served by two FCUs, and
+    # each FCU owns its own room, so there is deliberately no single "Broadway"
+    # room to address. The Garage and Sidewalk switches are just outside the
+    # space and are driven from here on purpose.
+    #
+    # These ids came originally from the Hubitat dashboard on hub 10.2.3.52 and
+    # were wrong: device ids are per hub, and three of them named unrelated
+    # devices here (.52's 291 "Broadway Pendant Lights" is 291 "Kitchen Counter
+    # Lights" on .51). They are now the ids on 10.2.3.51, the only hub we reach.
+    # The two TV Cart switches were the last to arrive: they were meshed onto
+    # .51 as 618 and 619 and then exposed through Maker API 520, so every
+    # control on this dashboard now names a device this hub will answer for.
+    "broadway": RoomConfig(
+        url="/broadway",
+        label="Broadway",
+        members=["Broadway North", "Broadway South", "Data Closet", "Garage"],
+        fans=["Broadway North", "Broadway South"],
+        controls=[
+            RoomControl(
+                key="tv-cart-left",
+                kind=RoomControlKind.SWITCH,
+                label="TV Cart Left",
+                device_id="618",
+            ),
+            RoomControl(
+                key="tv-cart-right",
+                kind=RoomControlKind.SWITCH,
+                label="TV Cart Right",
+                device_id="619",
+            ),
+            RoomControl(
+                key="pendant-lights",
+                kind=RoomControlKind.SWITCH,
+                label="Pendant Lights",
+                device_id="260",
+            ),
+            RoomControl(
+                key="spot-lights",
+                kind=RoomControlKind.SWITCH,
+                label="Spot Lights",
+                device_id="616",
+            ),
+            RoomControl(
+                key="whiteboard-washer",
+                kind=RoomControlKind.SWITCH,
+                label="Whiteboard Washer",
+                device_id="356",
+            ),
+            RoomControl(
+                key="sidewalk-washer-north",
+                kind=RoomControlKind.SWITCH,
+                label="Sidewalk Washer North",
+                device_id="354",
+            ),
+            RoomControl(
+                key="sidewalk-washer-south",
+                kind=RoomControlKind.SWITCH,
+                label="Sidewalk Washer South",
+                device_id="355",
+            ),
+            RoomControl(
+                key="garage-washer-north",
+                kind=RoomControlKind.SWITCH,
+                label="Garage Washer North",
+                device_id="360",
+            ),
+            RoomControl(
+                key="garage-washer-south",
+                kind=RoomControlKind.SWITCH,
+                label="Garage Washer South",
+                device_id="361",
+            ),
+            RoomControl(
+                key="data-closet-fan",
+                kind=RoomControlKind.FAN,
+                label="Data Closet Fan",
+                device_id="359",
+            ),
         ],
-        "tv_control": True,
-        "dimmer_id": "581",
-        "wall_inner_id": "454",
-        "wall_outer_id": "550",
-    },
+    ),
 }
+
+
+def get_room_config(room_key: str) -> RoomConfig:
+    """Return room dashboard configuration, or an empty config for unknown rooms."""
+    return ROOM_CONFIGS.get(room_key, EMPTY_ROOM_CONFIG)
+
+
+def find_room_config(room_key: str) -> RoomConfig | None:
+    """Return an explicitly configured room, preserving unknown-room identity."""
+    return ROOM_CONFIGS.get(room_key)

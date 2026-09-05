@@ -1,7 +1,9 @@
 """
 Integration tests for AE200 device communication.
 """
+import asyncio
 import socket
+
 import pytest
 from app import ae200
 from app.util import get_config
@@ -75,3 +77,69 @@ def test_friendly_fan_speed_label_unknown_and_none():
     None stays None so callers can distinguish 'no data'."""
     assert ae200.friendly_fan_speed_label("ERV Restrooms", "BOGUS") == "BOGUS"
     assert ae200.friendly_fan_speed_label("Restrooms/BOH", None) is None
+
+
+def test_extract_drive_and_fan_speed_promotes_mode():
+    """AE-200 Mode should be convenient at the JSON API boundary."""
+    status = {"Drive": "ON", "FanSpeed": "LOW", "Mode": "COOL"}
+    extracted = ae200.extract_drive_and_fan_speed(status)
+    assert extracted["mode"] == "COOL"
+    assert extracted["drive"] == 1
+    assert extracted["fan_speed"] == 1
+    assert extracted["has_speed_control"] is True
+
+
+def test_extract_drive_and_fan_speed_keeps_mode_without_speed_control():
+    """Mode is useful diagnostic data even when speed control is absent."""
+    extracted = ae200.extract_drive_and_fan_speed({"Mode": "HEAT"})
+    assert extracted == {"mode": "HEAT", "has_speed_control": False}
+
+
+def test_extract_set_temperatures_promotes_auto_dual_setpoints():
+    """AE-200 dual-setpoint Auto values should be convenient at the API boundary."""
+    status = {
+        "SetTemp": "24",
+        "SetTemp1": "25",
+        "SetTemp2": "19",
+        "AutoMin": "18",
+        "AutoMax": "27",
+    }
+    extracted = ae200.extract_set_temperatures(status)
+    assert extracted == {
+        "set_temp_c": 24.0,
+        "cool_set_temp_c": 25.0,
+        "heat_set_temp_c": 19.0,
+        "auto_min_c": 18.0,
+        "auto_max_c": 27.0,
+    }
+
+
+async def _async_value(value):
+    return value
+
+
+def test_async_runner_runs_without_current_event_loop():
+    """Synchronous AE-200 callers should get a fresh event loop per request."""
+    assert ae200.AsyncRunner().run_async_safely(_async_value("ok")) == "ok"
+
+
+def test_async_runner_runs_inside_current_event_loop():
+    """Async callers should not reuse or nest the currently running loop."""
+    async def call_runner():
+        return ae200.AsyncRunner().run_async_safely(_async_value("ok"))
+
+    assert asyncio.run(call_runner()) == "ok"
+
+
+def test_set_mode_updates_simulator_and_rejects_unknown():
+    """The AE-200 simulator should reflect commanded operation modes."""
+    device_id = 10
+    original_mode = ae200.get_device_info(device_id).get(ae200.AE200_MODE_KEY)
+    try:
+        ae200.set_mode(device_id, "DRY")
+        assert ae200.get_device_info(device_id)[ae200.AE200_MODE_KEY] == "DRY"
+        with pytest.raises(ValueError):
+            ae200.set_mode(device_id, "SETBACK")
+    finally:
+        if original_mode in ae200.AE200_ALLOWED_SET_MODES:
+            ae200.set_mode(device_id, original_mode)

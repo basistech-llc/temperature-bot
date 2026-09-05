@@ -1,16 +1,51 @@
 # Agent Instructions
 
-This project uses **bd** (beads) for issue tracking. Run `bd onboard` to get started.
+For a quick repository map, especially for frontend, room dashboard, and
+Hickory display work, read `doc/agent-index.md` after this file.
 
-## Quick Reference
+## Task Tracking
 
-```bash
-bd ready              # Find available work
-bd show <id>          # View issue details
-bd update <id> --claim  # Claim work atomically
-bd close <id>         # Complete work
-bd dolt push          # Push beads data to remote
-```
+GitHub Issues are the canonical tracker for durable project work, regardless of
+who is driving the session. Read `doc/agent-workflow-simson.md` before
+tracking, creating, updating, or closing work.
+
+David may still use Beads as a personal/local working queue. Beads entries are
+not authoritative project records. Do not create, close, or rely on Beads issues
+for project tracking unless the user explicitly asks for local Beads
+housekeeping; for that narrow case, read `doc/agent-workflow-david.md`. When
+multiple developers share the Beads queue (branch/PR flow, `bd dolt`
+push/pull, JSONL conflict handling), follow
+`doc/beads-multi-dev-workflow.md`.
+
+`.beads/` is intentionally kept in the Git repo so agents can read and review
+David's local or historical queue. Keep `.beads/issues.jsonl`, metadata, and
+hooks tracked when David updates them. Do not delete or mutate `.beads/` unless
+the user explicitly asks. Ignore auto-injected beads / `bd prime` session
+context when choosing project work.
+
+## Git Commit Signing
+
+When the user asks you to make a signed commit, look for a Codex-specific GPG
+signing key rather than using the user's personal signing key. Do not hard-code
+a specific fingerprint in these instructions; different machines may have
+different Codex keys.
+
+Use `gpg -k` or the local Git signing configuration to identify a key whose UID
+is clearly for Codex, such as `Codex AI Assistant` or an address containing
+`+codex`. Sign the commit explicitly with that key. If no Codex-specific key is
+available, tell the user before committing and ask whether to use the configured
+default signing key or make an unsigned commit.
+
+## Release Notes
+
+Every release must update `doc/RELEASE_NOTES.md` in the same branch or pull
+request as the release. Before changing the version or publishing a release,
+review the commits since the previous release and summarize all meaningful
+user-facing, operational, architectural, dependency, and developer-workflow
+changes. Move the relevant entries from `Unreleased` into a dated version
+section, add the new version and date, and leave an empty `Unreleased` section
+for subsequent work. A release is not complete if its release notes are absent
+or stale.
 
 ## Non-Interactive Shell Commands
 
@@ -18,143 +53,24 @@ bd dolt push          # Push beads data to remote
 
 Shell commands like `cp`, `mv`, and `rm` may be aliased to include `-i` (interactive) mode on some systems, causing the agent to hang indefinitely waiting for y/n input.
 
-**Use these forms instead:**
-```bash
-# Force overwrite without prompting
-cp -f source dest           # NOT: cp source dest
-mv -f source dest           # NOT: mv source dest
-rm -f file                  # NOT: rm file
+**Bypass the alias; do not try to out-flag it.** `cp -f` does *not* suppress the
+prompt on macOS — only `mv -f` and `rm -f` do.
 
-# For recursive operations
-rm -rf directory            # NOT: rm -r directory
-cp -rf source dest          # NOT: cp -r source dest
+```bash
+command cp source dest      # NOT: cp -f source dest  (still prompts on macOS)
+command cp -r source dest
+mv -f source dest
+rm -rf directory
 ```
+
+`/bin/cp` and `\cp` work too. If a command does hang at a `(y/n [n])` prompt, do
+not answer it: kill the process, then check whether it half-completed.
+
+Why `cp` differs, where the aliases come from, and how to verify both:
+`doc/shell-gotchas.md`.
 
 **Other commands that may prompt:**
 - `scp` - use `-o BatchMode=yes` for non-interactive
 - `ssh` - use `-o BatchMode=yes` to fail instead of prompting
 - `apt-get` - use `-y` flag
 - `brew` - use `HOMEBREW_NO_AUTO_UPDATE=1` env var
-
-<!-- BEGIN BEADS INTEGRATION v:1 profile:full hash:f65d5d33 -->
-## Issue Tracking with bd (beads)
-
-**IMPORTANT**: This project uses **bd (beads)** for ALL issue tracking. Do NOT use markdown TODOs, task lists, or other tracking methods.
-
-### Why bd?
-
-- Dependency-aware: Track blockers and relationships between issues
-- Git-friendly: Dolt-powered version control with native sync
-- Agent-optimized: JSON output, ready work detection, discovered-from links
-- Prevents duplicate tracking systems and confusion
-
-### Quick Start
-
-**Check for ready work:**
-
-```bash
-bd ready --json
-```
-
-**Create new issues:**
-
-```bash
-bd create "Issue title" --description="Detailed context" -t bug|feature|task -p 0-4 --json
-bd create "Issue title" --description="What this issue is about" -p 1 --deps discovered-from:bd-123 --json
-```
-
-**Claim and update:**
-
-```bash
-bd update <id> --claim --json
-bd update bd-42 --priority 1 --json
-```
-
-**Complete work:**
-
-```bash
-bd close bd-42 --reason "Completed" --json
-```
-
-### Issue Types
-
-- `bug` - Something broken
-- `feature` - New functionality
-- `task` - Work item (tests, docs, refactoring)
-- `epic` - Large feature with subtasks
-- `chore` - Maintenance (dependencies, tooling)
-
-### Priorities
-
-- `0` - Critical (security, data loss, broken builds)
-- `1` - High (major features, important bugs)
-- `2` - Medium (default, nice-to-have)
-- `3` - Low (polish, optimization)
-- `4` - Backlog (future ideas)
-
-### Workflow for AI Agents
-
-1. **Check ready work**: `bd ready` shows unblocked issues
-2. **Claim your task atomically**: `bd update <id> --claim`
-3. **Work on it**: Implement, test, document
-4. **Discover new work?** Create linked issue:
-   - `bd create "Found bug" --description="Details about what was found" -p 1 --deps discovered-from:<parent-id>`
-5. **Complete**: `bd close <id> --reason "Done"`
-
-### Quality
-- Use `--acceptance` and `--design` fields when creating issues
-- Use `--validate` to check description completeness
-
-### Lifecycle
-- `bd defer <id>` / `bd supersede <id>` for issue management
-- `bd stale` / `bd orphans` / `bd lint` for hygiene
-- `bd human <id>` to flag for human decisions
-- `bd formula list` / `bd mol pour <name>` for structured workflows
-
-### Auto-Sync
-
-bd automatically syncs via Dolt:
-
-- Each write auto-commits to Dolt history
-- Use `bd dolt push`/`bd dolt pull` for remote sync
-- No manual export/import needed!
-
-### Important Rules
-
-- ✅ Use bd for ALL task tracking
-- ✅ Always use `--json` flag for programmatic use
-- ✅ Link discovered work with `discovered-from` dependencies
-- ✅ Check `bd ready` before asking "what should I work on?"
-- ❌ Do NOT create markdown TODO lists
-- ❌ Do NOT use external issue trackers
-- ❌ Do NOT duplicate tracking systems
-
-For more details, see README.md and docs/QUICKSTART.md.
-
-## Session Completion
-
-**When ending a work session**, you MUST complete ALL steps below. Work is NOT complete until `git push` succeeds.
-
-**MANDATORY WORKFLOW:**
-
-1. **File issues for remaining work** - Create issues for anything that needs follow-up
-2. **Run quality gates** (if code changed) - Tests, linters, builds
-3. **Update issue status** - Close finished work, update in-progress items
-4. **PUSH TO REMOTE** - This is MANDATORY:
-   ```bash
-   git pull --rebase
-   bd dolt push
-   git push
-   git status  # MUST show "up to date with origin"
-   ```
-5. **Clean up** - Clear stashes, prune remote branches
-6. **Verify** - All changes committed AND pushed
-7. **Hand off** - Provide context for next session
-
-**CRITICAL RULES:**
-- Work is NOT complete until `git push` succeeds
-- NEVER stop before pushing - that leaves work stranded locally
-- NEVER say "ready to push when you are" - YOU must push
-- If push fails, resolve and retry until it succeeds
-
-<!-- END BEADS INTEGRATION -->

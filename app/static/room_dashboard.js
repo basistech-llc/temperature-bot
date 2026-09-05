@@ -4,13 +4,9 @@ const REFRESH_INTERVAL = 10; // seconds between refreshes
 const FAN_SPEED_AUTO = -1; // Auto speed value
 
 // Optimistic UI: when the user changes a unit we reflect the intended state
-// immediately rather than waiting for a poll. The backend re-reads the AE200
-// right after issuing the command, and on real hardware that read-back can
-// still show the old state, so /status would otherwise stay stale until a
-// later poll settles. We hold the optimistic state until a poll confirms it
-// (the common case, within ~one REFRESH_INTERVAL) or until this backstop
-// elapses — covering a silently-dropped command (up to ~one runner cron cycle)
-// without pinning a wrong state indefinitely. Keyed by device_id.
+// immediately rather than waiting for a poll. The backend verifies the AE-200
+// read-back before returning success. We hold the optimistic state until a poll
+// confirms it or until this backstop elapses. Keyed by device_id.
 const PENDING_RECONCILE_MS = 60000;
 const pendingChanges = {};   // device_id -> {drive, fan_speed, expiresAt}
 const lastDeviceSpeed = {};  // device_id -> last known fan speed (for the "was …" note)
@@ -30,6 +26,9 @@ async function apiCall(endpoint, body, errorMessage) {
             body: JSON.stringify(body)
         });
         const result = await response.json();
+        if (!response.ok) {
+            throw new Error(result.error || `Request failed (${response.status})`);
+        }
         if (DEBUG) {
             console.log(`${endpoint} result:`, result);
         }
@@ -68,6 +67,26 @@ async function setFanSpeed(device_id, fan_speed) {
         { device_id, fan_speed },
         'Error setting fan speed.'
     );
+}
+
+/** Set drive and fan speed through one verified AE-200 operation. */
+async function setFcuState(deviceId, speed) {
+    return apiCall(
+        '/api/v1/set_fcu_state',
+        fcuStateRequestBody(deviceId, speed),
+        'The AE-200 did not confirm the requested state.'
+    );
+}
+
+function fcuStateRequestBody(deviceId, speed) {
+    const body = {
+        device_id: deviceId,
+        drive: speed === 0 ? 0 : 1,
+    };
+    if (speed !== 0) {
+        body.fan_speed = speed;
+    }
+    return body;
 }
 
 /**
@@ -164,21 +183,9 @@ function handleSpeedButton(button) {
         refreshStatus();
     };
 
-    // Off button: turn off motor
-    if (speed === 0) {
-        setDrive(deviceId, 0)
-            .then(handleSuccess)
-            .catch(handleError);
-    }
-    // Speed buttons: set speed (and turn on motor if it's off)
-    else {
-        Promise.all([
-            setDrive(deviceId, 1),
-            setFanSpeed(deviceId, speed)
-        ])
-            .then(handleSuccess)
-            .catch(handleError);
-    }
+    setFcuState(deviceId, speed)
+        .then(handleSuccess)
+        .catch(handleError);
 }
 
 /**
@@ -372,22 +379,44 @@ function updateSensorTemperatures() {
     });
 }
 
-/**
- * Refresh device status from API.
- */
-function refreshStatus() {
-    fetch('/api/v1/status')
-        .then(response => response.json())
-        .then(data => {
+/** Wrap an async operation so calls made while it is running are skipped. */
+function createSingleFlight(operation) {
+    let inFlight = false;
+    return async function runSingleFlight() {
+        if (inFlight) {
+            return false;
+        }
+        inFlight = true;
+        try {
+            return await operation();
+        } finally {
+            inFlight = false;
+        }
+    };
+}
+
+/** Create a status refresher that permits only one request at a time. */
+function createStatusRefresher(request = fetch, update = updateDeviceStatus) {
+    return createSingleFlight(async () => {
+        try {
+            const response = await request('/api/v1/status');
+            if (!response.ok) {
+                throw new Error(`Status request failed (${response.status})`);
+            }
+            const data = await response.json();
             if (DEBUG) {
                 console.log('Status data received:', data);
             }
-            updateDeviceStatus(data.devices);
-        })
-        .catch(error => {
+            update(data.devices);
+            return true;
+        } catch (error) {
             console.error('Failed to refresh status:', error);
-        });
+            return false;
+        }
+    });
 }
+
+const refreshStatus = createStatusRefresher();
 
 /**
  * Initialize sensor temperatures from template data.
@@ -436,14 +465,26 @@ function debounce(fn, delay) {
     };
 }
 
+/** Build a configured-room control endpoint from the dashboard contract. */
+function roomControlEndpoint(action, roomKeyOverride = null) {
+    const wrapper = typeof document === 'undefined'
+        ? null
+        : document.getElementById('room-scale-wrap');
+    const roomKey = roomKeyOverride === null
+        ? (wrapper ? wrapper.dataset.roomControlKey : '')
+        : roomKeyOverride;
+    return `/api/v1/room/${encodeURIComponent(roomKey)}/${action}`;
+}
+
 /**
- * Set the dimmer level via API.
+ * Set a dimmer's level via API.
+ * @param {string} control - Configured control key
  * @param {number} level - 0-100
  */
-function setDimmerLevel(level) {
+function setDimmerLevel(control, level) {
     apiCall(
-        '/api/v1/hickory/dimmer',
-        { level },
+        roomControlEndpoint('dimmer'),
+        { control, level },
         'Error setting dimmer.'
     );
 }
@@ -451,63 +492,237 @@ function setDimmerLevel(level) {
 /**
  * Fetch room control status and update UI.
  */
-function refreshRoomStatus() {
-    fetch('/api/v1/hickory/room_status')
-        .then(response => response.json())
-        .then(data => {
-            if (data.dimmer) {
-                const slider = document.getElementById('dimmer-slider');
-                const valueEl = document.getElementById('dimmer-value');
-                if (slider && !slider.matches(':active')) {
-                    slider.value = data.dimmer.level;
-                }
-                if (valueEl) {
-                    valueEl.textContent = data.dimmer.level + '%';
-                }
-            }
-            if (data.wall_inner) {
-                updateWallButton('inner', data.wall_inner.switch);
-            }
-            if (data.wall_outer) {
-                updateWallButton('outer', data.wall_outer.switch);
-            }
-        })
-        .catch(error => {
-            if (DEBUG) {
-                console.error('Failed to refresh room status:', error);
-            }
-        });
+function requestRoomStatus(endpoint, request = fetch) {
+    return request(endpoint).then(response => {
+        if (!response.ok) {
+            throw new Error(`Room status request failed: ${response.status}`);
+        }
+        return response.json();
+    });
+}
+
+// Optimistic control state, mirroring the AE-200 speed buttons above: a command
+// is reflected the moment it is sent, and the poll loop is not allowed to revert
+// it until the backend catches up or this backstop elapses. Hubitat read-back
+// can lag a command, which would otherwise bounce a button back and forth for a
+// poll or two. Keyed by control key.
+const CONTROL_RECONCILE_MS = 60000;
+const pendingControlChanges = {};
+
+/**
+ * Record the state a control was just commanded into.
+ * @param {string} key - Configured control key
+ * @param {Object} intent - {state} for a switch, {speed} for a fan
+ */
+function recordPendingControl(key, intent) {
+    pendingControlChanges[key] = {
+        ...intent,
+        expiresAt: Date.now() + CONTROL_RECONCILE_MS,
+    };
+}
+
+/** Which fan speed button a polled state should light. */
+function activeFanSpeed(state) {
+    // A stopped fan still reports the speed it last ran at, so an explicit
+    // "off" wins over `speed`. A state with no `switch` at all is a device that
+    // did not report one, which is not the same as reporting off.
+    return state.switch === 'off' ? 'off' : state.speed;
 }
 
 /**
- * Set up dimmer slider interaction.
+ * Whether a polled state has caught up with the command we last sent.
+ * @param {Object} state - One entry from the room_status controls list
+ * @param {Object} pending - Recorded intent
+ * @returns {boolean}
  */
-function setupDimmer() {
-    const slider = document.getElementById('dimmer-slider');
-    if (!slider) {
-        return;
+function controlStateMatchesPending(state, pending) {
+    if (pending.state !== undefined) {
+        return state.switch === pending.state;
+    }
+    if (pending.speed !== undefined) {
+        return activeFanSpeed(state) === pending.speed;
+    }
+    return true;
+}
+
+/**
+ * Apply one control's polled state to its tile.
+ *
+ * Controls the server could not read are absent from the response entirely, so
+ * their tiles keep whatever they last showed rather than being told a state the
+ * device never reported. Individual attributes may also be absent, and are
+ * likewise left alone rather than defaulted.
+ * @param {Document} pageDocument - Document to update
+ * @param {Object} state - One entry from the room_status controls list
+ */
+function applyControlState(pageDocument, state) {
+    const pending = pendingControlChanges[state.key];
+    if (pending) {
+        if (Date.now() < pending.expiresAt && !controlStateMatchesPending(state, pending)) {
+            return;  // Backend hasn't caught up; hold the commanded state.
+        }
+        delete pendingControlChanges[state.key];
     }
 
-    const valueEl = document.getElementById('dimmer-value');
-    const debouncedSet = debounce(setDimmerLevel, 300);
-
-    slider.addEventListener('input', () => {
-        const level = parseInt(slider.value);
-        if (valueEl) {
-            valueEl.textContent = level + '%';
+    const scope = `[data-control-key="${state.key}"]`;
+    if (state.kind === 'dimmer') {
+        if (state.level == null) {
+            return;
         }
-        debouncedSet(level);
+        const slider = pageDocument.querySelector(`input.dimmer-slider${scope}`);
+        const valueEl = pageDocument.querySelector(`.dimmer-value${scope}`);
+        // Don't yank the handle out from under a finger mid-drag.
+        if (slider && !slider.matches(':active')) {
+            slider.value = state.level;
+        }
+        if (valueEl) {
+            valueEl.textContent = state.level + '%';
+        }
+        return;
+    }
+    if (state.kind === 'fan') {
+        const active = activeFanSpeed(state);
+        pageDocument.querySelectorAll(`button.fan-btn${scope}`).forEach(button => {
+            button.classList.toggle(
+                'is-on', button.getAttribute('data-speed') === active);
+        });
+        return;
+    }
+    updateSwitchButton(state.key, state.switch, pageDocument);
+}
+
+// Every interactive element a control tile can hold. Kept document-scoped (like
+// applyControlState) so availability is decided by the same selector contract.
+const CONTROL_INPUT_SELECTORS = [
+    'button.wall-btn',
+    'button.fan-btn',
+    'button.tv-btn',
+    'input.dimmer-slider',
+];
+
+/**
+ * Mark one control as readable or not, and disable its inputs when it is not.
+ * @param {Document} pageDocument - Document to update
+ * @param {string} key - Configured control key
+ * @param {boolean} available - Whether the server could read the device
+ */
+function setControlAvailability(pageDocument, key, available) {
+    const scope = `[data-control-key="${key}"]`;
+    const tile = pageDocument.querySelector(`.room-control-tile${scope}`);
+    const wasUnavailable = tile ? tile.classList.contains('control-unavailable') : false;
+    // Only act on a change. Writing `disabled` on every poll would re-enable a
+    // button that a click handler had disabled for the duration of its command,
+    // letting a second command reach the hub while the first is still in
+    // flight.
+    if (available !== wasUnavailable) {
+        return;
+    }
+    if (tile) {
+        tile.classList.toggle('control-unavailable', !available);
+    }
+    CONTROL_INPUT_SELECTORS.forEach(selector => {
+        pageDocument.querySelectorAll(`${selector}${scope}`).forEach(element => {
+            element.disabled = !available;
+        });
+    });
+    if (!available) {
+        const button = pageDocument.querySelector(`button.wall-btn${scope}`);
+        if (button) {
+            button.textContent = 'Unavailable';
+        }
+    }
+}
+
+/**
+ * Reconcile every rendered control against the controls the server could read.
+ *
+ * Called only after a *successful* poll. A failed request means we cannot tell
+ * whether the devices are reachable, which is not the same as knowing they are
+ * not, so it must leave the tiles alone rather than greying out the whole page
+ * on a momentary network blip.
+ *
+ * TV lifts are momentary and deliberately report no state, so they are never in
+ * the response and must not be judged by their absence from it.
+ * @param {Document} pageDocument - Document to update
+ * @param {Array<Object>} states - The controls list from room_status
+ */
+function reconcileControlAvailability(pageDocument, states) {
+    const readable = new Set(states.map(state => state.key));
+    pageDocument
+        .querySelectorAll('.room-control-tile[data-control-key]')
+        .forEach(tile => {
+            if (tile.getAttribute('data-control-kind') === 'tv') {
+                return;
+            }
+            const key = tile.getAttribute('data-control-key');
+            setControlAvailability(pageDocument, key, readable.has(key));
+        });
+}
+
+function createRoomStatusRefresher(request = fetch, documentRef) {
+    const pageDocument = documentRef ?? document;
+    return createSingleFlight(async () => {
+        if (!pageDocument.querySelector('.room-controls-card')) {
+            return false;
+        }
+        try {
+            const data = await requestRoomStatus(
+                roomControlEndpoint('room_status'),
+                request,
+            );
+            const states = data.controls || [];
+            states.forEach(state => applyControlState(pageDocument, state));
+            reconcileControlAvailability(pageDocument, states);
+            return true;
+        } catch (error) {
+            if (DEBUG) {
+                console.error('Failed to refresh room status:', error);
+            }
+            return false;
+        }
+    });
+}
+
+const refreshRoomStatus = typeof document === 'undefined'
+    ? async () => false
+    : createRoomStatusRefresher();
+
+/**
+ * Set up every dimmer slider on the page, each addressing its own control.
+ */
+function setupDimmers() {
+    document.querySelectorAll('input.dimmer-slider[data-control-key]').forEach(slider => {
+        const control = slider.getAttribute('data-control-key');
+        const valueEl = document.querySelector(
+            `.dimmer-value[data-control-key="${control}"]`);
+        const debouncedSet = debounce(level => setDimmerLevel(control, level), 300);
+
+        slider.addEventListener('input', () => {
+            const level = parseInt(slider.value);
+            if (valueEl) {
+                valueEl.textContent = level + '%';
+            }
+            debouncedSet(level);
+        });
     });
 }
 
 /**
- * Update a wall light button to reflect current state.
- * @param {string} light - 'inner' or 'outer'
+ * Update a switch button to reflect current state.
+ * @param {string} control - Configured control key
  * @param {string} state - 'on' or 'off'
+ * @param {Document} pageDocument - Document to update
  */
-function updateWallButton(light, state) {
-    const btn = document.getElementById('wall-' + light + '-btn');
+function updateSwitchButton(control, state, pageDocument = document) {
+    const btn = pageDocument.querySelector(`button.wall-btn[data-control-key="${control}"]`);
     if (!btn) {
+        return;
+    }
+    if (state !== 'on' && state !== 'off') {
+        // Readable device that reported no switch attribute. Saying nothing
+        // beats asserting OFF for something that may well be on.
+        btn.textContent = '—';
+        btn.classList.remove('is-on');
         return;
     }
     const isOn = state === 'on';
@@ -516,24 +731,59 @@ function updateWallButton(light, state) {
 }
 
 /**
- * Handle wall light button click — toggle on/off.
+ * Handle switch button click — toggle on/off.
  * @param {HTMLElement} button - Clicked button element
  */
-function handleWallButton(button) {
-    const light = button.getAttribute('data-light');
+function handleSwitchButton(button) {
+    const control = button.getAttribute('data-control-key');
     const isOn = button.classList.contains('is-on');
     const newState = isOn ? 'off' : 'on';
 
+    // Show the commanded state at once and hold it against the poll loop until
+    // the hub's read-back agrees.
+    recordPendingControl(control, { state: newState });
+    updateSwitchButton(control, newState);
+
     button.disabled = true;
     apiCall(
-        '/api/v1/hickory/wall_light',
-        { light, state: newState },
-        'Error toggling wall light.'
+        roomControlEndpoint('switch'),
+        { control, state: newState },
+        'Error toggling switch.'
     ).then(() => {
-        updateWallButton(light, newState);
         button.disabled = false;
     }).catch(() => {
+        // The command failed, so stop holding a state the device never took;
+        // the next poll restores the truth.
+        delete pendingControlChanges[control];
         button.disabled = false;
+    });
+}
+
+/**
+ * Handle fan speed button click.
+ * @param {HTMLElement} button - Clicked button element
+ */
+function handleFanButton(button) {
+    const control = button.getAttribute('data-control-key');
+    const speed = button.getAttribute('data-speed');
+    const siblings = document.querySelectorAll(
+        `button.fan-btn[data-control-key="${control}"]`);
+
+    recordPendingControl(control, { speed });
+    siblings.forEach(b => {
+        b.classList.toggle('is-on', b === button);
+        b.disabled = true;
+    });
+
+    apiCall(
+        roomControlEndpoint('fan'),
+        { control, speed },
+        'Error setting fan speed.'
+    ).then(() => {
+        siblings.forEach(b => { b.disabled = false; });
+    }).catch(() => {
+        delete pendingControlChanges[control];
+        siblings.forEach(b => { b.disabled = false; });
     });
 }
 
@@ -542,13 +792,15 @@ function handleWallButton(button) {
  * @param {HTMLElement} button - Clicked button element
  */
 function handleTvButton(button) {
+    const control = button.getAttribute('data-control-key');
     const direction = button.getAttribute('data-direction');
-    const buttons = document.querySelectorAll('.tv-btn');
+    const buttons = document.querySelectorAll(
+        `.tv-btn[data-control-key="${control}"]`);
     buttons.forEach(b => { b.disabled = true; });
 
     apiCall(
-        '/api/v1/hickory/tv',
-        { direction },
+        roomControlEndpoint('tv'),
+        { control, direction },
         'Error controlling TV.'
     ).then(() => {
         buttons.forEach(b => { b.disabled = false; });
@@ -612,6 +864,72 @@ async function setDeviceSetTemp(deviceId, setTempC) {
 }
 
 /**
+ * Largest scale factor <= 1 that fits content (contentW x contentH) inside the
+ * available box (availW x availH). Capped at 1 because the scaler only ever
+ * shrinks -- enlarging to fill big screens is the responsive CSS's job, and
+ * uniform enlargement looks awkward. Returns 1 when content hasn't been measured
+ * yet (non-positive dimensions) so we never divide by zero or blow it up.
+ *
+ * Extracted as a pure function so the shrink-only invariant is unit-testable
+ * without a DOM.
+ */
+function computeFitScale(contentW, contentH, availW, availH) {
+    // Bail on any non-positive dimension. Non-positive *available* space happens
+    // when content above the wrapper (header + rules banner) is taller than the
+    // viewport: availH goes negative, which without this guard would yield a
+    // negative scale (flipped content) or scale(0) (invisible). Returning 1
+    // leaves the page unscaled; the ResizeObserver refires and self-heals once
+    // there is room again.
+    if (contentW <= 0 || contentH <= 0 || availW <= 0 || availH <= 0) return 1;
+    return Math.min(1, availH / contentH, availW / contentW);
+}
+
+/**
+ * Scale-to-fit safety: the per-room page must never show scrollbars at any
+ * viewport size. Responsive clamp() sizing in the template keeps things
+ * attractive across the common range; this scaler is the guarantee that catches
+ * the overflow cases (many cards/sensors, very short windows). It only ever
+ * shrinks (scale <= 1) -- growing to fill large screens is the CSS's job.
+ */
+function setupScaleToFit() {
+    const wrap = document.getElementById('room-scale-wrap');
+    const content = document.getElementById('room-scale-content');
+    if (!wrap || !content) return;
+
+    function fit() {
+        // CSS transforms don't affect layout, so scrollHeight/scrollWidth always
+        // report the natural (unscaled) size regardless of the current transform.
+        const contentH = content.scrollHeight;
+        const contentW = content.scrollWidth;
+        if (!contentH || !contentW) return;
+        // Available height: viewport below the wrapper's top edge (which already
+        // accounts for any banners/padding above it), minus a small safety margin
+        // so sub-pixel rounding never trips a scrollbar.
+        const margin = 8;
+        const availH = window.innerHeight - wrap.getBoundingClientRect().top - margin;
+        const availW = wrap.clientWidth;
+        const scale = computeFitScale(contentW, contentH, availW, availH);
+        content.style.transform = scale < 1 ? `scale(${scale})` : 'none';
+        // Reserve only the scaled height so the page itself doesn't overflow.
+        wrap.style.height = (contentH * scale) + 'px';
+    }
+
+    window.addEventListener('resize', fit);
+    window.addEventListener('orientationchange', fit);
+    if (typeof ResizeObserver !== 'undefined') {
+        const ro = new ResizeObserver(fit);
+        // Live data (status text, sensor tiles) resizing the content.
+        ro.observe(content);
+        // A banner above the wrapper toggling (the rules-off banner in base.html
+        // shows/hides post-load) shifts the wrapper down and changes availH, so
+        // it must retrigger fit() too.
+        const banner = document.getElementById('rules-master-banner');
+        if (banner) ro.observe(banner);
+    }
+    fit();
+}
+
+/**
  * Initialize room dashboard functionality.
  */
 function setupRoomDashboard() {
@@ -628,16 +946,22 @@ function setupRoomDashboard() {
     // Set up set temperature controls
     setupSetTempControls();
 
-    // Set up dimmer
-    setupDimmer();
+    // Set up dimmers
+    setupDimmers();
 
-    // Set up wall light buttons
-    document.querySelectorAll('.wall-btn[data-light]').forEach(button => {
-        button.addEventListener('click', () => handleWallButton(button));
+    // Set up switch buttons
+    document.querySelectorAll('.wall-btn[data-control-key]').forEach(button => {
+        button.addEventListener('click', () => handleSwitchButton(button));
+    });
+
+    // Set up fan speed buttons
+    document.querySelectorAll('.fan-btn[data-control-key][data-speed]').forEach(button => {
+        button.addEventListener('click', () => handleFanButton(button));
     });
 
     initializeSensorTemperatures();
     setupTemperatureToggle();
+    setupScaleToFit();
 
     // Initial status refresh
     refreshStatus();
@@ -648,4 +972,25 @@ function setupRoomDashboard() {
     setInterval(refreshRoomStatus, REFRESH_INTERVAL * 1000);
 }
 
-window.addEventListener('DOMContentLoaded', setupRoomDashboard);
+// Browser-only wiring (skipped under the Node.js test environment).
+if (typeof window !== 'undefined') {
+    window.addEventListener('DOMContentLoaded', setupRoomDashboard);
+}
+
+// Node.js export for testing.
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = {
+        applyControlState,
+        computeFitScale,
+        pendingControlChanges,
+        reconcileControlAvailability,
+        recordPendingControl,
+        setControlAvailability,
+        createRoomStatusRefresher,
+        createStatusRefresher,
+        fcuStateRequestBody,
+        refreshRoomStatus,
+        requestRoomStatus,
+        roomControlEndpoint,
+    };
+}

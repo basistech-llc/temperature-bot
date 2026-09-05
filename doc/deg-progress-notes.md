@@ -42,12 +42,12 @@ open tabs here:
    - Web routes (`routes_web.py`): HTML pages (index, rules, logs, device details)
    - API routes (`routes_api.py`): JSON endpoints for status, temperature series, fan/drive control
    - Runs via `wsgi.py`/gunicorn (production) or `flask --app app.main:app run` (dev, auto-reload —
-     see `make live-dev-web` / `make local-dev`)
+     see `make local-live-dev` / `make local-dev`)
 
 2. **SQLite Database** (`app/db.py`): Central data store
    - **Run-length encoding**: Temperature data stored with `(logtime, duration)` to avoid bloat when values don't change
    - **Tables**: `devices`, `devlog` (temperature logs), `aqi` (air quality), `alerts`, `changelog`
-   - Schema auto-applied from `etc/schema.sql` on connection
+   - Flyway migrations in `etc/flyway/sql/` are canonical. `etc/schema.sql` is a generated compatibility schema; use `make schema`, `make validate-migrations`, and `make migrate-db` rather than hand-editing schema SQL.
 
 3. **Rules Engine** (`app/rules_engine.py` + `bin/rules.py`):
    - Python code in `bin/rules.py` executed dynamically
@@ -88,7 +88,7 @@ open tabs here:
 
 - **Testing**: pytest with `AE200_SIMULATOR=1` environment variable
 - **Linting**: ruff, mypy, pylint configured in `pyproject.toml`
-- **Dependencies**: Poetry-managed (Python 3.12+)
+- **Dependencies**: uv-managed (Python 3.12+)
 
 The system runs continuously: `runner.py` collects data every minute, rules adjust fan speeds based on AQI/time, and the web interface provides monitoring and manual control.
 
@@ -100,9 +100,9 @@ The system runs continuously: `runner.py` collects data every minute, rules adju
    ```bash
    make install-macos  # or install-ubuntu on Linux
    ```
-   This installs Poetry, creates a virtual environment, and installs all dependencies.
-   
-   
+   This installs uv, creates a virtual environment, and installs all dependencies from `uv.lock`.
+
+
 2. **Connect**
 
 To do anything with the live system, you will need to first login with Tailscale for access.
@@ -118,14 +118,14 @@ If it pulls the DB successfully, your connection is good.
    ```bash
    make make-dev-db
    ```
-   Creates a fresh `var/db/temperature-bot.db` from the schema.
-   
+   Creates a fresh `var/db/temperature_bot/temperature-bot.db` from the schema.
+
    Or, and usually preferred, clone the live database
-   
+
    ```bash
    make fetch-dev-db
    ```
-   
+
    Clone a snapshot of the live DB locally.
 
 4. **Configure**:
@@ -139,8 +139,10 @@ Two flavors, both serve Flask on `http://localhost:8000` with `FLASK_DEBUG=True`
 
 | Command | AE200 data | Needs Tailscale | Use when |
 |---------|-----------|-----------------|----------|
-| `make local-dev`    | simulated (`AE200_SIMULATOR=1`) | no  | UI work, no hardware needed |
-| `make live-dev-web` | live hardware                   | yes | seeing real device data |
+| `make local-dev-sim`  | simulated (`AE200_SIMULATOR=1`) | no  | UI work, no hardware needed |
+| `make local-dev-live` | live hardware                   | yes | seeing real device data |
+
+`make local-dev` remains an alias for `make local-dev-sim`.
 
 The web interface needs a populated DB to show anything useful (see `make fetch-dev-db`).
 
@@ -159,20 +161,22 @@ make live-dev-runner   # runs bin/runner.py, no simulator
 
 Against the **simulator** (no hardware/Tailscale needed):
 ```bash
-AE200_SIMULATOR=1 poetry run python bin/runner.py
+AQICN_SIMULATOR=1 AE200_SIMULATOR=1 make every-minute
 ```
-Note: AQI is always a real API call even in simulator mode.
+`make every-minute` runs `python -m bin.runner` with Makefile defaults (e.g. `DB_PATH`)
+already set, which is why it is preferred over invoking `bin/runner.py` directly.
+Note: set `AQICN_SIMULATOR=1` to avoid a live AQICN API call.
 
 **Environment Variables**:
 
-- `DB_PATH`: Database file path. The Makefile defaults it to `var/db/temperature-bot.db` via
+- `DB_PATH`: Database file path. The Makefile defaults it to `var/db/temperature_bot/temperature-bot.db` via
   `export DB_PATH ?= ...`, so the `make` targets already have it set. Only set it explicitly to point
   at a *different* DB, or when running the app/flask/python directly (bypassing make).
 - `AE200_SIMULATOR`: Set to `1` to use simulated AE200 devices instead of real hardware
 - `TEMPERATURE_BOT_CONFIG`: Path to config YAML (default: `temperature-bot-config.yaml` in repo root)
 - `LOG_LEVEL`: Logging level (DEBUG, INFO, etc.)
 
-**Note**: For the default DB location, the `DB_PATH=var/db/temperature-bot.db` prefix on `make`
+**Note**: For the default DB location, the `DB_PATH=var/db/temperature_bot/temperature-bot.db` prefix on `make`
 commands is redundant — the Makefile already exports that default (`Makefile:23`). Prefixing it
 anyway is harmless; it just re-sets the same value.
 
@@ -182,13 +186,19 @@ To get a copy of the production database with real data:
 ```bash
 make fetch-dev-db
 ```
-This rsyncs (over Tailscale/SSH) from the server (`air.basistech.net`, aka `slg1.basistech.net`)
-and shows row-count stats. It pulls down **two** things:
-- the database → `var/db/`
+This streams a read-only SQLite dump over Tailscale/SSH from the server
+(`air.basistech.net`, aka `slg1.basistech.net`), applies pending Flyway
+migrations, and shows row-count stats. It pulls down **two** things:
+- the database → `var/db/temperature_bot/temperature-bot.db`
 - `temperature-bot-config.yaml` (with production secrets) → repo root
 
+Before fetching, an existing `var/db/temperature_bot` directory is moved to a
+timestamped directory under `var/db/backups`.
+
 So this single step also covers the "Configure" step above — no separate config copy needed.
-SSH normally uses your key; if prompted for a password, it's in Bitwarden under `slg1.basistech.net`.
+SSH normally uses your key. The `fetch-dev-db` target permits the normal SSH
+password prompt as a fallback; if prompted, the password is in Bitwarden under
+`slg1.basistech.net`.
 
 **Mitsubishi control panel**
 
@@ -201,7 +211,7 @@ make test  # Runs both Python and JavaScript tests
 make pytest  # Python tests only
 ```
 
-Tests automatically use `AE200_SIMULATOR=1` via `tests/conftest.py`.
+Tests automatically use `AE200_SIMULATOR=1` via the `[tool.pytest.ini_options]` `env` list in `pyproject.toml` and `tests/conftest.py`.
 
 
 # Progress notes

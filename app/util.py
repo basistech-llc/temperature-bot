@@ -6,11 +6,18 @@ import time
 import os
 import functools
 import logging
-import yaml  # type: ignore
+import yaml
 
 from app.paths import CONFIG_YAML_PATH
 
 logger = logging.getLogger(__name__)
+TRUE_ENV_VALUES = frozenset({"1", "true", "yes", "on"})
+
+
+def env_flag_enabled(name: str) -> bool:
+    """Return whether an environment flag contains an explicit true value."""
+    return os.getenv(name, "").strip().lower() in TRUE_ENV_VALUES
+
 
 @functools.lru_cache(maxsize=1)
 def get_config():

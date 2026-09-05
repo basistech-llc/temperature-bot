@@ -11,14 +11,26 @@ from pathlib import Path
 
 import pytest
 
+# Set environment variables before importing the application. The module-level
+# Flask app validates the instance policy during import.
+os.environ["TEMPERATURE_BOT_INSTANCE"] = "slg1"
+os.environ["AE200_SIMULATOR"] = "1"
+os.environ["HUBITAT_SIMULATOR"] = "1"
+os.environ["AIRTHINGS_SIMULATOR"] = "1"
+os.environ["AQICN_SIMULATOR"] = "1"
+os.environ["TEMPERATURE_BOT_DATABASE_ROOT"] = str(Path(__file__).parent)
+os.environ["DB_PATH"] = str(Path(__file__).parent / "temperature-bot.db")
+
+# pylint: disable=wrong-import-position
+from app import hubitat, routes_api
 from app.main import app as flask_app
 from app.paths import SCHEMA_FILE_PATH
+# pylint: enable=wrong-import-position
 
 DEFAULT_AQI_VALUE = 45
 TEST_DEVICE_NAME = "Broadway Test"
 
 # Set environment variables for all tests
-os.environ["AE200_SIMULATOR"] = "1"
 os.environ["PLAYWRIGHT_BROWSERS_PATH"] = str(
     Path(__file__).resolve().parents[0].parents[0] / ".playwright"
 )
@@ -56,6 +68,31 @@ def db_path(conn):
 def reduce_websockets_logging():
     """Reduce websockets debug logging for tests."""
     logging.getLogger("websockets.client").setLevel(logging.INFO)
+
+
+@pytest.fixture(autouse=True)
+def reset_hubitat_simulator():
+    """Give every test a deterministic, simulator-backed Hubitat state."""
+    if not hubitat.hubitat_simulator_enabled():
+        raise AssertionError("tests must never run with live Hubitat commands enabled")
+    hubitat.reset_simulator()
+    yield
+    hubitat.reset_simulator()
+
+
+@pytest.fixture(autouse=True)
+def reset_failed_control_devices():
+    """Clear the warn-once set that room control status reads share.
+
+    ``routes_api`` remembers which control devices it has already warned about
+    so an unreachable hub does not log ten lines every ten-second poll. That set
+    is process-global, so without this a test that drove a device into failure
+    would silently decide whether a later test sees a warning at all.
+    """
+    # pylint: disable=protected-access
+    routes_api._failed_control_devices.clear()
+    yield
+    routes_api._failed_control_devices.clear()
 
 
 ################################################################
@@ -152,7 +189,11 @@ def test_database_conn_with_test_data(test_database_conn):
                 record_time,
                 60,
                 240,
-                '{"Drive": "ON", "FanSpeed": "LOW", "InletTemp": "24.0"}',
+                (
+                    '{"AutoMax": "27", "AutoMin": "18", "Drive": "ON", '
+                    '"FanSpeed": "LOW", "Mode": "COOL", "InletTemp": "24.0", '
+                    '"SetTemp": "24", "SetTemp1": "24", "SetTemp2": "19"}'
+                ),
             ),
         )
 

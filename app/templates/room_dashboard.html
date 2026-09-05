@@ -1,7 +1,11 @@
 {% extends 'base.html' %}
 {% set hide_nav = True %}
-{% block title %}{{ location }} HVAC Control{% endblock %}
+{% block title %}{{ location }}{% endblock %}
 {% block head %}
+{# These panels are long-lived kiosk pages. A full hourly reload picks up
+   deployments and server-rendered configuration that the 10-second status
+   polling cannot update. #}
+<meta http-equiv="refresh" content="3600">
 <link rel="stylesheet" href="/static/slider.css">
 <style>
 /* CSS Variables for maintainability */
@@ -19,6 +23,15 @@
 body {
   padding: 0.5em;
   background: #f5f5f5;
+}
+
+/* Scale-to-fit: room_dashboard.js uniformly shrinks #room-scale-content (never
+   enlarges) so the whole page always fits the viewport with no scrollbars at
+   any tablet/window size. The responsive clamp() sizing below keeps it
+   attractive across the common range; the scaler is the guarantee for the
+   overflow cases. transform-origin keeps it anchored top and centered. */
+#room-scale-content {
+  transform-origin: top center;
 }
 
 .notes-banner {
@@ -40,24 +53,18 @@ body {
   color: #333;
 }
 
-.dashboard-header h1 {
-  margin: 0;
-  font-size: 1.4em;
-}
-
-.dashboard-header .title-group {
-  flex: 1;
-  text-align: center;
-}
-
 .dashboard-header .main-link-back {
   flex-shrink: 0;
 }
 
+/* The room-name header was removed (Carl: "Hickory" is obvious), so the
+   date/time is now the primary header text: moved to the left and enlarged.
+   margin-right:auto pins it left even in embedded mode, where the "← Main"
+   link is a third flex sibling that would otherwise center it. */
 .live-clock {
-  font: 500 0.9em sans-serif;
-  color: #666;
-  margin-top: 0.2em;
+  font: 600 1.3em sans-serif;
+  color: #444;
+  margin-right: auto;
 }
 
 
@@ -112,24 +119,23 @@ body {
 .speed-controls {
   display: flex;
   gap: 1em;
-  justify-content: center;
   align-items: center;
   flex-wrap: nowrap;
   width: 100%;
 }
 
 .speed-btn {
-  width: 110px;
-  height: 110px;
+  flex: 1 1 0;
+  min-width: 0;
+  height: clamp(60px, 12vh, 110px);
   padding: 0;
   border: 3px solid transparent;
   border-radius: 12px;
-  font: bold 1.4em sans-serif;
+  font: bold clamp(1.05em, 2.4vh, 1.4em) sans-serif;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  flex-shrink: 0;
   transition: all 0.15s ease;
   color: white;
   box-shadow: 0 2px 4px rgba(0,0,0,0.15);
@@ -271,12 +277,6 @@ body {
   line-height: 1.2;
 }
 
-.sensor-room {
-  font: italic 0.75em sans-serif;
-  color: #666;
-  margin-top: 0.2em;
-}
-
 .sensor-temp {
   font: bold 1.5em sans-serif;
   color: #d32f2f;
@@ -313,23 +313,53 @@ body {
   text-align: center;
 }
 
+/* Grid stretches every tile in a row to the same height, but a label that wraps
+   to two lines would otherwise push only its own button down. Pinning the
+   control area to the bottom of the tile keeps a row's buttons on one line
+   whatever the labels do. */
+.room-control-buttons,
+.dimmer-control {
+  margin-top: auto;
+}
+
 .room-control-buttons {
   display: flex;
   gap: 0.5em;
   width: 100%;
 }
 
+/* A control whose Hubitat device could not be read. Distinct from "still
+   loading": the tile is legible but visibly inert, so an operator can see the
+   device is missing rather than tapping a button that will never answer. */
+.room-control-tile.control-unavailable {
+  opacity: 0.55;
+}
+
+.room-control-tile.control-unavailable .room-control-tile-label {
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+}
+
 .tv-btn {
-  flex: 1;
-  height: 54px;
+  flex: 1 1 0;
+  min-width: 0;
+  width: auto;
+  box-sizing: border-box;
+  height: clamp(44px, 7vh, 54px);
+  padding: 0 0.35em;
   border: 3px solid transparent;
   border-radius: 10px;
-  font: bold 1.2em sans-serif;
+  font: bold clamp(0.72rem, 1.7vw, 1.2em) sans-serif;
+  line-height: 1;
   cursor: pointer;
   color: white;
   background: #5c6bc0;
   box-shadow: 0 2px 4px rgba(0,0,0,0.15);
   transition: all 0.15s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
 }
 
 .tv-btn:hover:not(:disabled) {
@@ -370,19 +400,64 @@ body {
 
 .wall-btn {
   width: 100%;
-  height: 54px;
+  box-sizing: border-box;
+  height: clamp(44px, 7vh, 54px);
+  padding: 0 0.35em;
   border: 3px solid transparent;
   border-radius: 10px;
-  font: bold 1.2em sans-serif;
+  font: bold clamp(0.72rem, 1.7vw, 1.2em) sans-serif;
+  line-height: 1;
   cursor: pointer;
   color: white;
   background: #bdbdbd;
   box-shadow: 0 2px 4px rgba(0,0,0,0.12);
   transition: all 0.15s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
 }
 
 .wall-btn.is-on {
   background: #66bb6a;
+}
+
+/* Fan speeds share the wall-light button shape but sit in a row, and mark the
+   selected speed the way the AE-200 speed buttons do. */
+.fan-btn {
+  flex: 1 1 0;
+  min-width: 0;
+  box-sizing: border-box;
+  height: clamp(44px, 7vh, 54px);
+  padding: 0 0.25em;
+  border: 3px solid transparent;
+  border-radius: 10px;
+  font: bold clamp(0.65rem, 1.4vw, 1em) sans-serif;
+  line-height: 1;
+  cursor: pointer;
+  color: white;
+  background: #90a4ae;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.12);
+  transition: all 0.15s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+}
+
+.fan-btn.is-on {
+  background: #66bb6a;
+  border-color: var(--color-yellow-border);
+}
+
+.fan-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(0,0,0,0.18);
+}
+
+.fan-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .wall-btn:hover:not(:disabled) {
@@ -453,43 +528,39 @@ body {
   text-align: center;
 }
 
-.sensor-offline {
+.sensor-stale {
   opacity: 0.5;
   border-left-color: #999;
 }
 
-.offline-label {
+/* "No data for 2h" is several times longer than the reading it replaces, so it
+   sizes down and is allowed to wrap rather than overflow a narrow tile. */
+.stale-label {
   color: #999;
-  font-size: 1.1em;
+  font: 600 0.95em sans-serif;
+  line-height: 1.25;
 }
 
 /* Responsive */
 @media (max-width: 768px) {
-  .speed-btn {
-    width: 90px;
-    height: 90px;
-    font-size: 1.4em;
-  }
+  /* Button heights/fonts come from the clamp() continuum above; this query only
+     tightens spacing and grid density on narrow viewports. */
   .speed-controls { gap: 0.5em; }
   .temp-display { font-size: 1.3em; }
   .device-card, .sensors-card { padding: 0.6em 0.8em; }
   .sensors-grid { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0.5em; }
   .sensor-tile { padding: 0.6em; min-height: 60px; }
   .sensor-temp { font-size: 1.3em; }
-  .tv-btn, .wall-btn { height: 46px; font-size: 1em; }
+  .room-control-buttons { gap: 0.35em; }
+  .tv-btn, .wall-btn, .fan-btn { padding: 0 0.2em; }
   .room-controls-grid { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
 }
 
-@media (min-width: 769px) {
-  .speed-controls {
-    max-width: 600px;
-    margin: 0 auto;
-  }
-}
 </style>
 {% endblock %}
 
 {% block body %}
+<div id="room-scale-wrap" data-room-control-key="{{ room_control_key }}"><div id="room-scale-content">
 {% if notes %}
 <div class="notes-banner">{{ notes }}</div>
 {% endif %}
@@ -498,10 +569,7 @@ body {
   {% if embedded %}
   <a href="/" class="pure-button pure-button-primary main-link-back" id="main-link">← Main</a>
   {% endif %}
-  <div class="title-group">
-    <h1>{{ location }} HVAC Control</h1>
-    <div class="live-clock" id="live-clock"></div>
-  </div>
+  <div class="live-clock" id="live-clock"></div>
   <div class="temperature-toggle">
     <span class="temp-unit-label">°C</span>
     <div class="toggle-switch">
@@ -541,7 +609,7 @@ body {
 {% macro device_control_card(device, device_type) %}
 <div class="device-card">
   <div class="device-header">
-    <h2>{{ device.device_name }}</h2>
+    <h2>{{ device.display_name or device.device_name }}</h2>
     <div class="status-value" id="{{ device_type }}-{{ device.device_id }}-status">--</div>
     <div class="temp-display" id="{{ device_type }}-{{ device.device_id }}-temp" data-temp-c="">--</div>
   </div>
@@ -579,6 +647,56 @@ body {
 </div>
 {% endmacro %}
 
+<!-- Room Controls — moved above the device cards per Carl; caption removed since
+     the per-tile labels are self-evident. Rendered from the room's configured
+     control list, so a new control is a config entry rather than more markup. -->
+{% if room_controls %}
+<div class="device-card room-controls-card">
+  <div class="room-controls-grid">
+    {% for control in room_controls %}
+    <div class="room-control-tile{% if control.unavailable_note %} control-unavailable{% endif %}"
+         data-control-key="{{ control.key }}" data-control-kind="{{ control.kind }}"
+         {% if control.unavailable_note %}title="{{ control.unavailable_note }}"{% endif %}>
+      <div class="room-control-tile-label">{{ control.label }}</div>
+      {% if control.unavailable_note %}
+      {# Known to have no reachable device, so say so at render time rather
+         than waiting for a poll that will never report it. #}
+      <div class="room-control-buttons">
+        <button class="wall-btn" data-control-key="{{ control.key }}" disabled>Unavailable</button>
+      </div>
+      {% elif control.kind == 'tv' %}
+      <div class="room-control-buttons">
+        <button class="tv-btn" data-control-key="{{ control.key }}" data-direction="up">▲ Up</button>
+        <button class="tv-btn" data-control-key="{{ control.key }}" data-direction="down">▼ Down</button>
+      </div>
+      {% elif control.kind == 'dimmer' %}
+      <div class="dimmer-control">
+        <input type="range" class="dimmer-slider" data-control-key="{{ control.key }}"
+               min="0" max="100" value="0">
+        <span class="dimmer-value" data-control-key="{{ control.key }}">--%</span>
+      </div>
+      {% elif control.kind == 'fan' %}
+      {# Abbreviated to match the AE-200 speed buttons below; the wire values
+         stay off/low/medium/high. #}
+      <div class="room-control-buttons">
+        {% for speed, caption in [('off', 'OFF'), ('low', 'LO'), ('medium', 'MED'), ('high', 'HI')] %}
+        <button class="fan-btn" data-control-key="{{ control.key }}" data-speed="{{ speed }}">
+          {{ caption }}
+        </button>
+        {% endfor %}
+      </div>
+      {% else %}
+      {# Wrapped like the other kinds so one rule bottom-aligns every control. #}
+      <div class="room-control-buttons">
+        <button class="wall-btn" data-control-key="{{ control.key }}">…</button>
+      </div>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
 {% if erv_devices %}
 {% for device in erv_devices %}
 {{ device_control_card(device, 'erv') }}
@@ -591,58 +709,20 @@ body {
 {% endfor %}
 {% endif %}
 
-<!-- Room Controls (TV, Lights) -->
-{% if show_tv_control %}
-<div class="device-card room-controls-card">
-  <h2>Room Controls</h2>
-  <div class="room-controls-grid">
-    <div class="room-control-tile">
-      <div class="room-control-tile-label">TV</div>
-      <div class="room-control-buttons">
-        <button class="tv-btn" id="tv-up-btn" data-direction="up">▲ Up</button>
-        <button class="tv-btn" id="tv-down-btn" data-direction="down">▼ Down</button>
-      </div>
-    </div>
-    {% if dimmer_id %}
-    <div class="room-control-tile">
-      <div class="room-control-tile-label">Main Lights</div>
-      <div class="dimmer-control">
-        <input type="range" id="dimmer-slider" class="dimmer-slider" min="0" max="100" value="0">
-        <span class="dimmer-value" id="dimmer-value">--%</span>
-      </div>
-    </div>
-    {% endif %}
-    {% if wall_inner_id %}
-    <div class="room-control-tile">
-      <div class="room-control-tile-label">Green Wall - Inner</div>
-      <button class="wall-btn" id="wall-inner-btn" data-light="inner">...</button>
-    </div>
-    {% endif %}
-    {% if wall_outer_id %}
-    <div class="room-control-tile">
-      <div class="room-control-tile-label">Green Wall - Outer</div>
-      <button class="wall-btn" id="wall-outer-btn" data-light="outer">...</button>
-    </div>
-    {% endif %}
-  </div>
-</div>
-{% endif %}
-
-<!-- Temperature Sensors -->
+<!-- Temperature Sensors — caption removed per Carl; the tiles are self-explanatory. -->
 {% if hubitat_sensors %}
 <div class="sensors-card">
-  <h2>Temperature Sensors</h2>
   <div class="sensors-grid">
     {% for sensor in hubitat_sensors %}
-    <div class="sensor-tile{% if sensor.offline %} sensor-offline{% endif %}">
+    <div class="sensor-tile{% if sensor.stale_for %} sensor-stale{% endif %}">
       <div class="sensor-header">
-        <div>
-          <div class="sensor-name" title="{{ sensor.name }}">{{ sensor.display_name or sensor.label or sensor.name }}</div>
-          <div class="sensor-room">{{ sensor.room or 'N/A' }}</div>
-        </div>
+        <div class="sensor-name" title="{{ sensor.name }}">{{ sensor.display_name or sensor.label or sensor.name }}</div>
       </div>
-      {% if sensor.offline %}
-      <div class="sensor-temp offline-label">Offline</div>
+      {% if sensor.stale_for %}
+      {# Say how long we have been without data rather than calling the sensor
+         offline: the runner or the hub may be what stopped, and the duration
+         separates a brief hiccup from a device silent for days. #}
+      <div class="sensor-temp stale-label">No data for {{ sensor.stale_for }}</div>
       {% else %}
       <div class="sensor-temp" id="sensor-{{ sensor.id }}-temp" data-temp-c="{% if sensor.attributes and sensor.attributes.temperature %}{{ sensor.attributes.temperature }}{% endif %}">
         {% if sensor.attributes and sensor.attributes.temperature %}
@@ -660,6 +740,7 @@ body {
   </div>
 </div>
 {% endif %}
+</div></div>
 
 <script>
 (function() {
@@ -684,4 +765,7 @@ body {
 <!-- temperature_utils.js is already loaded by base.html; re-including it here
      redeclared USE_FAHRENHEIT (SyntaxError) and double-bound its listeners. -->
 <script src="/static/room_dashboard.js"></script>
+{% if location == 'Hickory' %}
+<script src="/static/hickory_life.js"></script>
+{% endif %}
 {% endblock %}
