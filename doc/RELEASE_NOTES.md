@@ -7,7 +7,7 @@ change they completed.
 
 ## Unreleased
 
-## 1.0.0b1 - 2026-09-04
+## 1.0.0b1 - Unreleased
 
 - Advanced the release version to `1.0.0b1`.
 - Added a production-only, unauthenticated database snapshot endpoint for VPN
@@ -15,19 +15,24 @@ change they completed.
   `quick_check`, and carry size and SHA-256 response headers. `make
   fetch-dev-db` now downloads and verifies this snapshot without SSH or a copy
   of the production secrets file. Completed snapshot files are removed after
-  the WSGI response closes.
+  the WSGI response closes, and the per-database lease remains held until then
+  so concurrent slow downloads cannot accumulate database-sized snapshots.
 - Hardened release discovery to ignore unrelated screenshot releases, page
   through the GitHub release history, and optionally select one exact tag.
   Explicit staging tests can also reproducibly build a resolved GitHub branch
   or commit; the build runs unprivileged and records the immutable commit.
   Installed wheels now provide the `temperature-bot-release-update` command.
   Root-owned application roots are staged by the tightly sandboxed root
-  updater service without executing candidate code. Source builds now use a
+  updater service without executing candidate code; its service group keeps
+  releases readable by the runtime account and its private uv cache is writable.
+  Source builds now use a
   root-owned read-only checkout so unprivileged candidate code cannot change
   packaging inputs. Activation refuses incomplete runtime policy, changed
   systemd unit definitions, or unreviewed systemd drop-ins before stopping any
-  unit. Socket units are packaged as systemd units so developer activation
-  preflight can verify them.
+  unit. The active manifest is revalidated while holding the target update lock,
+  preventing a downloaded stale candidate from racing a concurrent update.
+  Socket units are packaged as systemd units so developer activation preflight
+  can verify them.
 - Added concise clean-macOS setup and release/deployment checklists, including
   the simulator/database boundary and the first staging activation gate.
 - Made clean simulator runs and tests select the checked-in non-secret test

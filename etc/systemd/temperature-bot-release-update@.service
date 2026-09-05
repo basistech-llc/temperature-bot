@@ -6,12 +6,13 @@ Wants=network-online.target
 [Service]
 Type=oneshot
 User=root
-Group=root
+Group=temperature_bot
 WorkingDirectory=/opt/temperature-bot/current
 ExecStart=/usr/bin/env /opt/temperature-bot/current/venv/bin/python -m bin.github_release_update %i --uv /usr/local/bin/uv
 UMask=0027
 NoNewPrivileges=yes
 PrivateTmp=yes
+Environment=UV_CACHE_DIR=/tmp/uv-cache
 ProtectSystem=strict
 ReadWritePaths=-/opt/temperature-bot -/opt/temperature-bot-stage -/opt/temperature-bot-dev
 ProtectHome=read-only

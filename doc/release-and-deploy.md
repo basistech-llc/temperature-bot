@@ -6,8 +6,9 @@ CI.
 
 1. On a branch from current `main`, set the same canonical PEP 440 version in
    `VERSION` and `pyproject.toml`, refresh `uv.lock`, and move all meaningful
-   entries from **Unreleased** into a dated version section in
-   `doc/RELEASE_NOTES.md`.
+   entries from **Unreleased** into a version section in
+   `doc/RELEASE_NOTES.md`. Keep that section marked **Unreleased** until the
+   publication day, then replace the marker with that day's date before tagging.
 
 2. Validate the proposed release through the Makefile:
 

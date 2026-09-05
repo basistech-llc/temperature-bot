@@ -186,6 +186,18 @@ def test_stage_units_are_isolated_and_staggered():
     assert "/opt/temperature-bot-stage/current" in notifications
 
 
+def test_release_updater_unit_preserves_access_and_has_writable_uv_cache():
+    unit = (
+        Path(__file__).resolve().parents[1]
+        / "etc/systemd/temperature-bot-release-update@.service"
+    ).read_text()
+
+    assert "User=root" in unit
+    assert "Group=temperature_bot" in unit
+    assert "PrivateTmp=yes" in unit
+    assert "Environment=UV_CACHE_DIR=/tmp/uv-cache" in unit
+
+
 def test_builder_rejects_reserved_manifest_payload(tmp_path):
     package = tmp_path / "temperature-bot.zip"
     payloads = [

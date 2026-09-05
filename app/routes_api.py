@@ -229,14 +229,14 @@ def get_database_snapshot():
             conditional=False,
         )
     except Exception:
-        snapshot.path.unlink(missing_ok=True)
+        snapshot.close()
         raise
     response.direct_passthrough = False
     response.headers["Cache-Control"] = "no-store"
     response.headers[DATABASE_SNAPSHOT_SHA256_HEADER] = snapshot.sha256
     response.headers[DATABASE_SNAPSHOT_SIZE_HEADER] = str(snapshot.size)
     response.set_etag(snapshot.sha256)
-    response.call_on_close(lambda: snapshot.path.unlink(missing_ok=True))
+    response.call_on_close(snapshot.close)
     return response
 
 

@@ -310,6 +310,18 @@ class UpdateResult(BaseModel):
     release_directory: Path | None = None
 
 
+class UpdateCandidate(BaseModel):
+    """Verified candidate plus its discovery provenance."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    package: Path
+    manifest: DeploymentManifest
+    source_url: str
+    source_label: str
+    allow_same_version: bool
+
+
 def _request(url: str, *, timeout: float) -> Any:
     request = urllib.request.Request(
         url,
@@ -737,6 +749,95 @@ def _write_state(target: DeploymentTarget, result: UpdateResult) -> None:
         temporary.unlink(missing_ok=True)
 
 
+def _current_result(
+    target: DeploymentTarget,
+    active: DeploymentManifest,
+    source_url: str,
+    source_label: str,
+) -> UpdateResult:
+    """Describe a candidate that is already active."""
+    return UpdateResult(
+        checked_at=datetime.now(timezone.utc),
+        target=target.name,
+        release_url=source_url,
+        tag=source_label,
+        version=active.version,
+        commit=active.commit,
+        disposition="current",
+        release_directory=(target.root / "current").resolve(),
+    )
+
+
+def _stage_candidate(
+    candidate: UpdateCandidate,
+    target: DeploymentTarget,
+    options: UpdateOptions,
+) -> UpdateResult:
+    """Revalidate and stage one candidate while holding the target lock."""
+    target.root.mkdir(parents=True, exist_ok=True)
+    with (target.root / ".release-update.lock").open("a+b") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        active = active_manifest(target)
+        if not update_required(
+            active,
+            candidate.manifest,
+            allow_same_version=candidate.allow_same_version,
+        ):
+            assert active is not None
+            return _current_result(
+                target, active, candidate.source_url, candidate.source_label
+            )
+        installation = install_package(
+            candidate.package,
+            target.root,
+            uv=options.uv,
+            python=options.python,
+            create_venv=options.create_venv,
+            activate=False,
+        )
+        disposition: Literal["staged", "activated"] = "staged"
+        release_directory = installation.release_directory
+        if options.activate:
+            if not activation_is_schema_neutral(active, candidate.manifest):
+                staged = UpdateResult(
+                    checked_at=datetime.now(timezone.utc),
+                    target=target.name,
+                    release_url=candidate.source_url,
+                    tag=candidate.source_label,
+                    version=candidate.manifest.version,
+                    commit=candidate.manifest.commit,
+                    disposition="staged",
+                    release_directory=release_directory,
+                )
+                _write_state(target, staged)
+                raise ValueError(
+                    "candidate migrations differ from the active release; "
+                    "release was staged but activation requires issue #216"
+                )
+            release_directory = activate_schema_neutral_release(
+                candidate.package,
+                target,
+                active,
+                candidate.manifest,
+                ActivationOptions(
+                    create_venv=options.create_venv,
+                    uv=options.uv,
+                    python=options.python,
+                ),
+            )
+            disposition = "activated"
+    return UpdateResult(
+        checked_at=datetime.now(timezone.utc),
+        target=target.name,
+        release_url=candidate.source_url,
+        tag=candidate.source_label,
+        version=candidate.manifest.version,
+        commit=candidate.manifest.commit,
+        disposition=disposition,
+        release_directory=release_directory,
+    )
+
+
 def run_update(
     target: DeploymentTarget, options: UpdateOptions = UpdateOptions()
 ) -> UpdateResult:
@@ -776,16 +877,7 @@ def run_update(
             source_url = release.html_url
             source_label = release.tag_name
         if active and active.commit == expected_commit:
-            return UpdateResult(
-                checked_at=datetime.now(timezone.utc),
-                target=target.name,
-                release_url=source_url,
-                tag=source_label,
-                version=active.version,
-                commit=active.commit,
-                disposition="current",
-                release_directory=(target.root / "current").resolve(),
-            )
+            return _current_result(target, active, source_url, source_label)
         if source_selection:
             package, manifest = build_source_package(
                 source_selection,
@@ -802,67 +894,31 @@ def run_update(
             package, manifest = download_and_verify(
                 release, expected_commit, temporary_path
             )
-        update_required(
-            active,
-            manifest,
+        candidate = UpdateCandidate(
+            package=package,
+            manifest=manifest,
+            source_url=source_url,
+            source_label=source_label,
             allow_same_version=source_selection is not None,
         )
-        disposition: Literal["available", "staged", "activated"] = "available"
-        release_directory = None
-        if not options.check_only:
-            target.root.mkdir(parents=True, exist_ok=True)
-            with (target.root / ".release-update.lock").open("a+b") as lock:
-                fcntl.flock(lock, fcntl.LOCK_EX)
-                installation = install_package(
-                    package,
-                    target.root,
-                    uv=options.uv,
-                    python=options.python,
-                    create_venv=options.create_venv,
-                    activate=False,
-                )
-                disposition = "staged"
-                release_directory = installation.release_directory
-                if options.activate:
-                    if not activation_is_schema_neutral(active, manifest):
-                        staged = UpdateResult(
-                            checked_at=datetime.now(timezone.utc),
-                            target=target.name,
-                            release_url=source_url,
-                            tag=source_label,
-                            version=manifest.version,
-                            commit=manifest.commit,
-                            disposition="staged",
-                            release_directory=release_directory,
-                        )
-                        _write_state(target, staged)
-                        raise ValueError(
-                            "candidate migrations differ from the active release; "
-                            "release was staged but activation requires issue #216"
-                        )
-                    release_directory = activate_schema_neutral_release(
-                        package,
-                        target,
-                        active,
-                        manifest,
-                        ActivationOptions(
-                            create_venv=options.create_venv,
-                            uv=options.uv,
-                            python=options.python,
-                        ),
-                    )
-                    disposition = "activated"
-        result = UpdateResult(
-            checked_at=datetime.now(timezone.utc),
-            target=target.name,
-            release_url=source_url,
-            tag=source_label,
-            version=manifest.version,
-            commit=manifest.commit,
-            disposition=disposition,
-            release_directory=release_directory,
-        )
-        if not options.check_only:
+        if options.check_only:
+            update_required(
+                active,
+                candidate.manifest,
+                allow_same_version=candidate.allow_same_version,
+            )
+            return UpdateResult(
+                checked_at=datetime.now(timezone.utc),
+                target=target.name,
+                release_url=source_url,
+                tag=source_label,
+                version=manifest.version,
+                commit=manifest.commit,
+                disposition="available",
+                release_directory=None,
+            )
+        result = _stage_candidate(candidate, target, options)
+        if result.disposition != "current":
             _write_state(target, result)
         return result
 

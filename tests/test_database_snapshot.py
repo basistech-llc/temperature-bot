@@ -7,7 +7,8 @@ import sqlite3
 import tempfile
 from pathlib import Path
 
-from app.database_snapshot import create_database_snapshot
+import pytest
+from app.database_snapshot import SnapshotBusy, create_database_snapshot
 from app.instance_policy import InstancePolicy, load_policy_table
 
 
@@ -27,7 +28,23 @@ def test_snapshot_includes_committed_wal_data(tmp_path):
         assert snapshot.size == snapshot.path.stat().st_size
         assert snapshot.sha256 == hashlib.sha256(snapshot.path.read_bytes()).hexdigest()
     finally:
-        snapshot.path.unlink(missing_ok=True)
+        snapshot.close()
+
+
+def test_snapshot_lock_is_held_until_snapshot_closes(tmp_path):
+    source = tmp_path / "source.db"
+    with sqlite3.connect(source) as connection:
+        connection.execute("CREATE TABLE readings(value INTEGER NOT NULL)")
+
+    first = create_database_snapshot(source)
+    try:
+        with pytest.raises(SnapshotBusy):
+            create_database_snapshot(source)
+    finally:
+        first.close()
+
+    second = create_database_snapshot(source)
+    second.close()
 
 
 def test_production_snapshot_endpoint_returns_verified_sqlite(

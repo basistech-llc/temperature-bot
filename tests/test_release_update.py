@@ -9,6 +9,7 @@ import shutil
 import subprocess
 import threading
 import zipfile
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -30,6 +31,7 @@ from bin.github_release_update import (
     UpdateResult,
     UpdateOptions,
     _check_runtime_policy,
+    active_manifest,
     activate_schema_neutral_release,
     activation_is_schema_neutral,
     discover_release,
@@ -50,8 +52,18 @@ class ReleaseServer(BaseHTTPRequestHandler):
     """Serve deterministic GitHub API and release-asset responses."""
 
     routes: dict[str, tuple[str, bytes]] = {}
+    block_path: str | None = None
+    request_started: threading.Event | None = None
+    continue_response: threading.Event | None = None
 
     def do_GET(self):  # noqa: N802
+        if self.path == self.block_path:
+            assert self.request_started is not None
+            assert self.continue_response is not None
+            self.request_started.set()
+            if not self.continue_response.wait(timeout=10):
+                self.send_error(504)
+                return
         try:
             content_type, body = self.routes[self.path]
         except KeyError:
@@ -309,6 +321,53 @@ def test_release_update_downloads_verifies_and_stages(release_api, tmp_path):
         (target.root / "release-update-state.json").read_bytes()
     )
     assert state == result
+
+
+def test_concurrent_newer_release_rejects_stale_candidate(release_api, tmp_path):
+    api_base, _commit = release_api
+    target = DeploymentTarget(
+        name="test",
+        root=tmp_path / "install",
+        quiesce_units=(),
+        resume_units=(),
+        health=(),
+    )
+    initial = _package(tmp_path / "initial", "0.9", "0" * 40)
+    install_package(initial, target.root, create_venv=False, activate=True)
+    package_path = next(
+        path
+        for path, (content_type, _body) in ReleaseServer.routes.items()
+        if content_type == "application/zip"
+    )
+    ReleaseServer.block_path = package_path
+    ReleaseServer.request_started = threading.Event()
+    ReleaseServer.continue_response = threading.Event()
+    options = UpdateOptions(
+        channel=ReleaseChannel.PRERELEASE,
+        api_base=api_base,
+        create_venv=False,
+    )
+
+    try:
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(run_update, target, options)
+            assert ReleaseServer.request_started.wait(timeout=5)
+            newer = _package(tmp_path / "newer", "2.0", "b" * 40)
+            install_package(newer, target.root, create_venv=False, activate=True)
+            ReleaseServer.continue_response.set()
+            with pytest.raises(ValueError, match="refusing non-newer release"):
+                future.result(timeout=10)
+    finally:
+        assert ReleaseServer.continue_response is not None
+        ReleaseServer.continue_response.set()
+        ReleaseServer.block_path = None
+        ReleaseServer.request_started = None
+        ReleaseServer.continue_response = None
+
+    current = active_manifest(target)
+    assert current is not None
+    assert current.version == "2.0"
+    assert not (target.root / "releases/1.0a1-aaaaaaaaaaaa").exists()
 
 
 def test_release_discovery_skips_unrelated_screenshot_releases(release_api):
