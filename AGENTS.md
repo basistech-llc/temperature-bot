@@ -36,6 +36,14 @@ is clearly for Codex, such as `Codex AI Assistant` or an address containing
 available, tell the user before committing and ask whether to use the configured
 default signing key or make an unsigned commit.
 
+## Pull Request Review Comments
+
+When addressing an inline pull request review comment, reply directly in that
+review thread with the fixing commit and validation evidence. A general pull
+request comment is not a substitute for the required inline reply. Do not
+resolve the review thread automatically; leave resolution to the reviewer or
+pull request owner.
+
 ## Release Notes
 
 Every release must update `doc/RELEASE_NOTES.md` in the same branch or pull
