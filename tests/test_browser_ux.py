@@ -181,7 +181,11 @@ def test_aqi_chart_first_render_and_selected_axis(
                 else None,
             )
             page.goto(f"{base_url}/chart_aqi", wait_until="networkidle")
-            page.wait_for_function("aqiChart && aqiChart.getOption().series")
+            page.wait_for_function(
+                "typeof aqiChart !== 'undefined'"
+                " && Array.isArray(aqiChart?.getOption()?.series)"
+                " && aqiChart.getOption().series.length > 0"
+            )
             chart_box = page.locator("#aqi-chart").bounding_box()
             assert chart_box is not None
             for name in ["PM2.5", "PM10", "O₃", "NO₂", "CO"]:
