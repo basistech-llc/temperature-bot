@@ -24,10 +24,7 @@ from .models import ApplicationMetadata, json_ready
 from .version import __version__, git_branch, git_sha
 
 DEV = "/home/simsong" in abspath(__file__)
-DEFAULT_LOG_LEVEL = "DEBUG"
 LOGGING_CONFIG = "%(asctime)s  %(filename)s:%(lineno)d %(levelname)s: %(message)s"
-LOG_LEVEL = os.getenv("LOG_LEVEL", DEFAULT_LOG_LEVEL).upper()
-LOG_LEVEL = "DEBUG"
 APP_DIR = Path(__file__).resolve().parent
 REPO_DIR = APP_DIR.parent
 GITHUB_REPO_URL = "https://github.com/basistech-llc/temperature-bot"

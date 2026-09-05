@@ -161,6 +161,24 @@ def test_fetch_dev_db_allows_interactive_ssh_authentication():
     assert "BatchMode=yes" not in makefile
 
 
+def test_legacy_systemd_install_includes_timer_units():
+    """The legacy installer must copy and restart its paired timer units."""
+    etc_dir = Path(__file__).resolve().parents[1] / "etc"
+    result = subprocess.run(
+        ["make", "-n", "install"],
+        cwd=etc_dir,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=True,
+    )
+    commands = result.stdout.splitlines()
+
+    timer = "temperature-bot-performance-monitor.timer"
+    assert timer in commands[0]
+    assert timer in commands[-1]
+
+
 def test_fetch_dev_db_timeout_does_not_pollute_sqlite_dump(tmp_path):
     """The fetch timeout must not write its value into the dump stream."""
     makefile = (Path(__file__).resolve().parents[1] / "Makefile").read_text(

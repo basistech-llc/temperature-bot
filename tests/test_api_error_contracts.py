@@ -45,6 +45,12 @@ ERROR_CASES = [
     ("GET", "/api/v1/disable-rules", None, 400, "validation_error"),
     ("GET", "/api/v1/fcu_history", None, 400, "bad_request"),
     ("GET", "/api/v1/fcu_temp_sources", None, 400, "bad_request"),
+    ("GET", "/api/v1/performance_samples?start_ms=not-a-number", None, 400,
+     "bad_request"),
+    ("GET", "/api/v1/performance_samples?start_ms=2&end_ms=1", None, 400,
+     "bad_request"),
+    ("GET", "/api/v1/performance_samples?limit=0", None, 400,
+     "validation_error"),
     # Not-found paths
     ("GET", "/api/v1/rooms/999999", None, 404, "not_found"),
     ("GET", "/api/v1/presence/history?room_id=999999", None, 404, "not_found"),

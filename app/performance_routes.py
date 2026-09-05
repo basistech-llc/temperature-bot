@@ -6,9 +6,15 @@ from flask import Blueprint, jsonify, render_template, request
 from pydantic import ValidationError
 
 from . import performance_monitoring
+from .api_errors import (
+    BadRequest,
+    register_error_handlers,
+    validation_failed_from_pydantic,
+)
 from .utils.db_utils import with_db_connection
 
 performance_routes = Blueprint("performance_monitoring", __name__)
+register_error_handlers(performance_routes)
 
 
 def _integer_query_arg(name: str, default: int) -> int:
@@ -43,19 +49,11 @@ def performance_samples(conn):
                 "limit", performance_monitoring.DEFAULT_QUERY_LIMIT
             ),
         )
-    except (ValidationError, ValueError) as error:
-        details: list[dict[str, object]]
-        if isinstance(error, ValidationError):
-            details = [
-                dict(item)
-                for item in error.errors(include_context=False)
-            ]
-        else:
-            details = [{"msg": str(error)}]
-        return jsonify(
-            {"error": "validation error", "details": details}
-        ), 400
+    except ValidationError as error:
+        raise validation_failed_from_pydantic(error, "query") from error
+    except ValueError as error:
+        raise BadRequest(str(error)) from error
     if query.end_ms < query.start_ms:
-        return jsonify({"error": "end_ms must not precede start_ms"}), 400
+        raise BadRequest("end_ms must not precede start_ms")
     page = performance_monitoring.fetch_sample_page(conn, query)
     return jsonify(page.model_dump(mode="json"))
