@@ -144,7 +144,8 @@ def test_makefile_local_targets_control_sensor_simulators():
     assert "TEMPERATURE_BOT_DATABASE_IDENTITY=local-dev-sim" in makefile
     assert "TEMPERATURE_BOT_DATABASE_IDENTITY=local-dev-live" in makefile
     assert "TEMPERATURE_BOT_DATABASE_ROOT=\"$(LOCAL_DATABASE_ROOT)\"" in makefile
-    assert 'TEMPERATURE_BOT_CONFIG="$(abspath etc/temperature-bot-config-local-dev.yaml)"' in makefile
+    local_dev_config = '$(abspath etc/temperature-bot-config-local-dev.yaml)'
+    assert f'TEMPERATURE_BOT_CONFIG="{local_dev_config}"' in makefile
     assert "TEMPERATURE_BOT_CONTROL_MODE=simulator" in makefile
     assert "TEMPERATURE_BOT_CONTROL_MODE=live" in makefile
     assert "TEMPERATURE_BOT_SCHEDULER_MODE=disabled" in makefile
