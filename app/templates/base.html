@@ -73,6 +73,9 @@
       <li class="pure-menu-item{% if current_page == 'weather' %} pure-menu-selected{% endif %}">
         <a href="/weather" class="pure-menu-link">Weather</a>
       </li>
+      <li class="pure-menu-item{% if current_page == 'map_view' %} pure-menu-selected{% endif %}">
+        <a href="/map-view" class="pure-menu-link">Map View</a>
+      </li>
       <li class="pure-menu-item{% if current_page in ['temperature_chart', 'lighting_chart', 'chart_aqi', 'performance-monitoring', 'ae200', 'alerts', 'rules', 'logs_today', 'devices', 'all_devices'] %} pure-menu-selected{% endif %}">
         <a href="#" id="deep-dive-menu-link" class="pure-menu-link">Deep Dive ▾</a>
         <div id="deep-dive-popup" class="github-popup">
@@ -87,6 +90,7 @@
           <a href="/devices"{% if current_page == 'devices' %} class="pure-menu-selected"{% endif %}>Edit Devices</a>
           <a href="/logs_today"{% if current_page == 'logs_today' %} class="pure-menu-selected"{% endif %}>Activity Log</a>
           <a href="/all_devices"{% if current_page == 'all_devices' %} class="pure-menu-selected"{% endif %}>Raw Device Details</a>
+          <a href="/map-editor"{% if current_page == 'map_editor' %} class="pure-menu-selected"{% endif %}>Map Editor</a>
         </div>
       </li>
       <li class="pure-menu-item{% if current_page == 'about' %} pure-menu-selected{% endif %}">

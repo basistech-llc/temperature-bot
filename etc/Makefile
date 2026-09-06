@@ -1,7 +1,7 @@
-SERVICE_UNITS ?= *.service
+SYSTEMD_UNITS ?= $(wildcard *.service *.timer)
 
 .PHONY: install
 install:
-	sudo cp -f $(SERVICE_UNITS) /etc/systemd/system/
+	sudo cp -f $(SYSTEMD_UNITS) /etc/systemd/system/
 	sudo systemctl daemon-reload
-	sudo systemctl restart $(SERVICE_UNITS)
+	sudo systemctl restart $(SYSTEMD_UNITS)

@@ -1857,6 +1857,11 @@ li.pure-menu-item > .rules-master-toggle {
   padding: 1rem;
 }
 
+.office-map-frame {
+  border: 0;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+}
+
 .room-map-layout {
   display: grid;
   grid-template-columns: minmax(0, 4fr) minmax(14rem, 1fr);

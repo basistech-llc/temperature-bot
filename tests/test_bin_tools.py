@@ -152,6 +152,85 @@ def test_makefile_local_targets_control_sensor_simulators():
     assert "AE200_SIMULATOR= HUBITAT_SIMULATOR= AIRTHINGS_SIMULATOR= AQICN_SIMULATOR=" in makefile
 
 
+def test_fetch_dev_db_allows_interactive_ssh_authentication():
+    """The developer database fetch must allow SSH password fallback."""
+    makefile = (Path(__file__).resolve().parents[1] / "Makefile").read_text(
+        encoding="utf-8"
+    )
+
+    assert makefile.count("BatchMode=no") == 2
+    assert "BatchMode=yes" not in makefile
+
+
+def test_legacy_systemd_install_includes_timer_units():
+    """The legacy installer must copy and restart its paired timer units."""
+    etc_dir = Path(__file__).resolve().parents[1] / "etc"
+    result = subprocess.run(
+        ["make", "-n", "install"],
+        cwd=etc_dir,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=True,
+    )
+    commands = result.stdout.splitlines()
+    copy_command = next(line for line in commands if line.startswith("sudo cp "))
+    restart_command = next(
+        line for line in commands if line.startswith("sudo systemctl restart ")
+    )
+
+    timer = "temperature-bot-performance-monitor.timer"
+    assert timer in copy_command
+    assert timer in restart_command
+
+
+def test_fetch_dev_db_timeout_does_not_pollute_sqlite_dump(tmp_path):
+    """The fetch timeout must not write its value into the dump stream."""
+    makefile = (Path(__file__).resolve().parents[1] / "Makefile").read_text(
+        encoding="utf-8"
+    )
+    assert "-cmd '.timeout 30000'" in makefile
+    assert "-cmd 'PRAGMA busy_timeout=30000;'" not in makefile
+    assert "FETCH_REMOTE_DB_USER ?= temperature_bot" in makefile
+    assert "timeout 180 sudo -n -u $(FETCH_REMOTE_DB_USER)" in makefile
+
+    source_db = tmp_path / "source.db"
+    imported_db = tmp_path / "imported.db"
+    with sqlite3.connect(source_db) as connection:
+        connection.execute("CREATE TABLE devices (device_id INTEGER PRIMARY KEY)")
+        connection.execute("INSERT INTO devices (device_id) VALUES (7)")
+
+    dump = subprocess.run(
+        [
+            "sqlite3",
+            "-batch",
+            "-init",
+            "/dev/null",
+            "-cmd",
+            ".timeout 30000",
+            f"file:{source_db}?mode=ro",
+            ".dump",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert dump.returncode == 0, dump.stderr
+    assert dump.stdout.startswith("PRAGMA foreign_keys=OFF;\n")
+    assert "30000" not in dump.stdout
+
+    import_result = subprocess.run(
+        ["sqlite3", "-batch", "-init", "/dev/null", str(imported_db)],
+        input=dump.stdout,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert import_result.returncode == 0, import_result.stderr
+    with sqlite3.connect(imported_db) as connection:
+        assert connection.execute("SELECT device_id FROM devices").fetchone() == (7,)
+
+
 def test_update_from_airthings_persists_sensor_status(monkeypatch, test_database_conn):
     """Airthings updater should write both temperature and rich air-quality payloads."""
     monkeypatch.setattr(

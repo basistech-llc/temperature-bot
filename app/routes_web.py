@@ -329,6 +329,16 @@ def _register_core_routes(app):
         """Weather page"""
         return render_template("weather.html", current_page="weather")
 
+    @app.route("/map-view")
+    def map_view():
+        """View-only office floor plan (no editing)."""
+        return render_template("map_view.html", current_page="map_view")
+
+    @app.route("/map-editor")
+    def map_editor():
+        """Interactive office floor plan / map editor page"""
+        return render_template("office_map.html", current_page="map_editor")
+
     @app.route("/about")
     def about():
         """About page"""
