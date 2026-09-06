@@ -253,7 +253,7 @@ local-dev-sim: $(REQ) ## Run the web backend locally with simulated hardware dat
 	TEMPERATURE_BOT_INSTANCE=local-dev-sim \
 	TEMPERATURE_BOT_DATABASE_IDENTITY=local-dev-sim \
 	TEMPERATURE_BOT_DATABASE_ROOT="$(LOCAL_DATABASE_ROOT)" \
-	TEMPERATURE_BOT_CONFIG="$(abspath tests/temperature-bot-config-test.yaml)" \
+	TEMPERATURE_BOT_CONFIG="$(abspath etc/temperature-bot-config-local-dev.yaml)" \
 	TEMPERATURE_BOT_CONTROL_MODE=simulator TEMPERATURE_BOT_SCHEDULER_MODE=disabled \
 	AE200_SIMULATOR=1 HUBITAT_SIMULATOR=1 AIRTHINGS_SIMULATOR=1 AQICN_SIMULATOR=1 \
 	$(MAKE) _local-dev-web
@@ -357,7 +357,7 @@ build-check: dependency-check ## Build/install only one wheel in a clean environ
 	DB_PATH="$$build_tmp/temperature-bot.db" \
 	TEMPERATURE_BOT_INSTANCE=slg1 \
 	TEMPERATURE_BOT_DATABASE_ROOT="$$build_tmp" \
-	TEMPERATURE_BOT_CONFIG="$(abspath tests/temperature-bot-config-test.yaml)" \
+	TEMPERATURE_BOT_CONFIG="$(abspath etc/temperature-bot-config-local-dev.yaml)" \
 	AE200_SIMULATOR=1 HUBITAT_SIMULATOR=1 AIRTHINGS_SIMULATOR=1 AQICN_SIMULATOR=1 \
 	"$$build_tmp/venv/bin/python" -c 'from wsgi import app; assert app.name == "app.main"'
 
@@ -393,7 +393,7 @@ deployment-package-check: deployment-package ## Install the package into a dispo
 	DB_PATH="$$install_tmp/opt/temperature-bot/temperature-bot.db" \
 	TEMPERATURE_BOT_INSTANCE=slg1 \
 	TEMPERATURE_BOT_DATABASE_ROOT="$$install_tmp/opt/temperature-bot" \
-	TEMPERATURE_BOT_CONFIG="$(abspath tests/temperature-bot-config-test.yaml)" \
+	TEMPERATURE_BOT_CONFIG="$(abspath etc/temperature-bot-config-local-dev.yaml)" \
 	AE200_SIMULATOR=1 HUBITAT_SIMULATOR=1 AIRTHINGS_SIMULATOR=1 AQICN_SIMULATOR=1 \
 	"$$install_tmp/opt/temperature-bot/current/venv/bin/python" -I -c \
 	    'import bin.runner; import app.clogging'; \

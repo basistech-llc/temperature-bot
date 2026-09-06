@@ -1,3 +1,8 @@
+# Config for every non-production run: `make local-dev`, pytest, CI, and the
+# build/install verification targets. Not just a test fixture: the app reads it
+# at runtime in simulator mode, so keys here must match what app/ reads
+# (e.g. location.latitude / location.longitude in app/weather.py).
+#
 location:
   latitude: 42.40183172533366
   longitude: -71.12495183944704
