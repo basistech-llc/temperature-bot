@@ -8,12 +8,11 @@ from conftest import flask_test_client  # noqa: F401  # pylint: disable=unused-i
 
 from app import version
 from app.main import app
+from bin.check_project_metadata import project_version
 
 
-def test_version_file_is_source_of_truth():
-    assert version.__version__ == version.VERSION_FILE.read_text(
-        encoding="utf-8"
-    ).strip()
+def test_installed_version_comes_from_project_metadata():
+    assert version.__version__ == project_version()
 
 
 def test_git_sha_returns_current_checkout():

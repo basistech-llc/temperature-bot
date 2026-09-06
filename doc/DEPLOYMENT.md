@@ -109,7 +109,6 @@ systemd/temperature-bot-release-update@.service
 systemd/temperature-bot-release-update@.timer
 installer/install_deployment_package.py
 documentation/DEPLOYMENT.md
-metadata/VERSION
 metadata/pyproject.toml
 ```
 
@@ -207,8 +206,8 @@ must validate that package before candidate code is executed.
 
 ## GitHub Releases and target-aware updates
 
-Pushing a tag whose normalized PEP 440 value matches `VERSION` and
-`pyproject.toml` runs `.github/workflows/release.yml`. The workflow repeats the
+Pushing a tag whose normalized PEP 440 value matches `pyproject.toml` runs
+`.github/workflows/release.yml`. The workflow repeats the
 Linux checks and tests, builds and installs the immutable package in a
 disposable root, verifies clean commit provenance, attests the ZIP and checksum
 sidecar, and creates the GitHub Release. A prerelease project version, such as

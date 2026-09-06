@@ -336,7 +336,7 @@ release-code-check: $(REQ) ## Check release publication and updater code
 		bin/install_deployment_package.py bin/source_deployment.py \
 		bin/release_tag.py
 
-project-metadata-check: ## Verify VERSION, pyproject.toml, and uv.lock before install
+project-metadata-check: ## Verify canonical pyproject.toml metadata and uv.lock
 	python3 -m bin.check_project_metadata
 	uv lock --check
 

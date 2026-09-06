@@ -48,7 +48,6 @@ packages = ["app", "bin"]
 
 [tool.hatch.build.targets.wheel.force-include]
 "etc/schema.sql" = "etc/schema.sql"
-"VERSION" = "VERSION"
 "wsgi.py" = "wsgi.py"
 
 [dependency-groups]

@@ -4,8 +4,8 @@ This checklist is for maintainers. A release is an immutable GitHub Release,
 not a server-side `git pull`. Never tag a commit that has not passed review and
 CI.
 
-1. On a branch from current `main`, set the same canonical PEP 440 version in
-   `VERSION` and `pyproject.toml`, refresh `uv.lock`, and move all meaningful
+1. On a branch from current `main`, set the canonical PEP 440 version in
+   `pyproject.toml`, refresh `uv.lock`, and move all meaningful
    entries from **Unreleased** into a version section in
    `doc/RELEASE_NOTES.md`. Keep that section marked **Unreleased** until the
    publication day, then replace the marker with that day's date before tagging.
