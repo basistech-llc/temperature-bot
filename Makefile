@@ -62,6 +62,7 @@ STAGE_SERVICE     ?= air-stage_basistech_net.service
 
 REQ := .venv/pyvenv.cfg
 PYTHON := .venv/bin/python
+METADATA_PYTHON = $(if $(wildcard $(PYTHON)),$(PYTHON),python3)
 TEMPLATE_DIR := app/templates
 
 # Centralize the Playwright cache path so CI can cache it
@@ -337,7 +338,7 @@ release-code-check: $(REQ) ## Check release publication and updater code
 		bin/release_tag.py
 
 project-metadata-check: ## Verify canonical pyproject.toml metadata and uv.lock
-	python3 -m bin.check_project_metadata
+	$(METADATA_PYTHON) -m bin.check_project_metadata
 	uv lock --check
 
 dependency-check: project-metadata-check ## Reject legacy dependency tooling

@@ -13,12 +13,27 @@ REQUIRES_PYTHON_KEY = "requires-python"
 
 def project_field(field: str, repo_root: Path = REPO_ROOT) -> str:
     """Return one required string field from ``[project]``."""
-    pyproject = tomllib.loads(
-        (repo_root / "pyproject.toml").read_text(encoding="utf-8")
-    )
-    value = pyproject[PROJECT_KEY][field]
+    path = repo_root / "pyproject.toml"
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError as error:
+        raise ValueError(f"cannot read {path}: {error}") from error
+    try:
+        pyproject = tomllib.loads(text)
+    except tomllib.TOMLDecodeError as error:
+        raise ValueError(f"invalid TOML in {path}: {error}") from error
+    try:
+        project = pyproject[PROJECT_KEY]
+    except KeyError as error:
+        raise ValueError(f"{path} is missing [project]") from error
+    if not isinstance(project, dict):
+        raise ValueError(f"{path} [project] must be a table")
+    try:
+        value = project[field]
+    except KeyError as error:
+        raise ValueError(f"{path} is missing [project].{field}") from error
     if not isinstance(value, str) or not value:
-        raise ValueError(f"pyproject.toml [project].{field} must be a nonempty string")
+        raise ValueError(f"{path} [project].{field} must be a nonempty string")
     return value
 
 
@@ -36,7 +51,7 @@ def main() -> None:
     """Report the canonical project version or exit with a useful error."""
     try:
         version = project_version()
-    except (KeyError, ValueError) as error:
+    except ValueError as error:
         raise SystemExit(str(error)) from error
     print(f"Project version: {version} (pyproject.toml)")
 
