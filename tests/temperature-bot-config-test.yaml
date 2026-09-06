@@ -1,6 +1,6 @@
 location:
-  lat: 42.40183172533366
-  lon: -71.12495183944704
+  latitude: 42.40183172533366
+  longitude: -71.12495183944704
   zipcode: 02144
   city: somerville
 hubitat:

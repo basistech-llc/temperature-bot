@@ -256,6 +256,23 @@ def test_get_weather_data_http_error(mock_svc_cls):
     assert "error" in result
 
 
+# ── WeatherService config defaults ────────────────────────────────
+
+def test_weather_service_reads_location_from_config():
+    """With no arguments, WeatherService takes its coordinates from the config file.
+
+    This is the path the web UI uses. It regressed silently when the config keys
+    were renamed from lat/lon to latitude/longitude, because every other test
+    passes coordinates explicitly.
+    """
+    svc = WeatherService()
+
+    assert isinstance(svc.latitude, float)
+    assert isinstance(svc.longitude, float)
+    assert -90 <= svc.latitude <= 90
+    assert -180 <= svc.longitude <= 180
+
+
 # ── WeatherService.close ──────────────────────────────────────────
 
 def test_close_without_session():
