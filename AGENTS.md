@@ -3,6 +3,27 @@
 For a quick repository map, especially for frontend, room dashboard, and
 Hickory display work, read `doc/agent-index.md` after this file.
 
+## Engineering Completion Standard
+
+Fix the root cause, not only the observed failure. Prefer making an invalid
+state unrepresentable over adding checks that merely detect duplicated or
+contradictory state. Configuration and metadata must have one manually edited
+source of truth; other representations must be generated from it.
+
+Before editing, search for every producer, consumer, copy, test, build step,
+artifact, and document related to the affected value or behavior. Before every
+commit and again before every push, perform two explicit review passes:
+
+1. Re-read the user's request and verify that the design satisfies the intended
+   invariant and removes the underlying failure mode.
+2. Review the complete diff and status, then exercise the affected behavior
+   through its real Makefile entrypoints and inspect generated or installed
+   artifacts where applicable.
+
+Do not describe a prevention as complete when a required repository setting,
+deployment, permission change, or other external gate has not actually been
+applied. State that gate plainly and stop short of claiming completion.
+
 ## Task Tracking
 
 GitHub Issues are the canonical tracker for durable project work, regardless of
