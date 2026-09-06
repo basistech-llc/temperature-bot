@@ -21,7 +21,7 @@ os.environ["AQICN_SIMULATOR"] = "1"
 os.environ["TEMPERATURE_BOT_DATABASE_ROOT"] = str(Path(__file__).parent)
 os.environ["DB_PATH"] = str(Path(__file__).parent / "temperature-bot.db")
 os.environ["TEMPERATURE_BOT_CONFIG"] = str(
-    Path(__file__).parent / "temperature-bot-config-test.yaml"
+    Path(__file__).parents[1] / "etc" / "temperature-bot-config-local-dev.yaml"
 )
 
 # pylint: disable=wrong-import-position

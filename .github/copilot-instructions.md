@@ -156,6 +156,9 @@ Important environment variables:
 
 `temperature-bot-config.yaml` can contain production secrets and must not be
 committed.
+`etc/temperature-bot-config-local-dev.yaml` is the checked-in config that
+`make local-dev`, pytest, and CI run against; the app reads it at runtime in
+simulator mode, so its keys must match what `app/` reads.
 
 ## Task Tracking
 

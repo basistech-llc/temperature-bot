@@ -30,7 +30,7 @@ from pydantic import BaseModel, Field
 ROOT_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT_DIR))
 DEFAULT_OUTPUT_DIR = ROOT_DIR / "var" / "web-ui-screenshots"
-DEFAULT_CONFIG = ROOT_DIR / "tests" / "temperature-bot-config-test.yaml"
+DEFAULT_CONFIG = ROOT_DIR / "etc" / "temperature-bot-config-local-dev.yaml"
 DEFAULT_VIEWPORT_WIDTH = 1440
 DEFAULT_VIEWPORT_HEIGHT = 1200
 DEFAULT_TIMEOUT_MS = 20_000

@@ -19,6 +19,12 @@ change they completed.
   prepared or another snapshot is in progress, show download progress, and
   reject invalid size or SHA-256 metadata before opening the fixed snapshot in
   immutable mode for SQLite validation.
+- Fixed the Weather page under `make local-dev`, which failed with
+  `KeyError: 'latitude'` because the checked-in simulator config still used
+  the `lat`/`lon` keys that `app/weather.py` stopped reading in July 2025.
+  Added a test for the config-driven default path, and moved the file from
+  `tests/` to `etc/temperature-bot-config-local-dev.yaml` so its runtime role
+  is clear.
 
 ## 1.0.0 - 2026-09-05
 
