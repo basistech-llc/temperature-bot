@@ -47,6 +47,9 @@ jobs:
           enable-cache: true
           cache-dependency-glob: uv.lock
 
+      - name: Verify project metadata
+        run: make project-metadata-check
+
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:
@@ -154,6 +157,9 @@ jobs:
           version: ${{ env.UV_VERSION }}
           enable-cache: true
           cache-dependency-glob: uv.lock
+
+      - name: Verify project metadata
+        run: make project-metadata-check
 
       - name: Build and install deployment package in a disposable root
         run: make deployment-package-check

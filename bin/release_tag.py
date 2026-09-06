@@ -4,25 +4,18 @@ from __future__ import annotations
 
 import argparse
 import os
-import tomllib
 from pathlib import Path
 
 from packaging.version import Version
+
+from bin.check_project_metadata import project_version as project_version_text
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 def project_version() -> Version:
-    """Return the canonical, matching VERSION and project version."""
-    version_text = (REPO_ROOT / "VERSION").read_text(encoding="utf-8").strip()
-    project = tomllib.loads(
-        (REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")
-    )
-    project_text = project["project"]["version"]
-    if project_text != version_text:
-        raise ValueError(
-            f"VERSION ({version_text}) does not match pyproject.toml ({project_text})"
-        )
+    """Return the canonical project version."""
+    version_text = project_version_text(REPO_ROOT)
     version = Version(version_text)
     if str(version) != version_text:
         raise ValueError(f"project version is not canonical PEP 440: {version_text}")

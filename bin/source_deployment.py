@@ -21,6 +21,7 @@ from bin.build_deployment_package import (
     CheckoutPackageOptions,
     build_checkout_package,
 )
+from bin.check_project_metadata import project_version
 
 DEFAULT_BUILD_USER = "nobody"
 DEFAULT_FLYWAY_VERSION = "12.8.1"
@@ -253,7 +254,7 @@ def _build_inputs(
     )
     requirements = output.trusted / "runtime.txt"
     _write_trusted_output(requirements, exported.stdout.encode("utf-8"))
-    version = (checkout / "VERSION").read_text(encoding="utf-8").strip()
+    version = project_version(checkout)
     directory_flags = os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0)
     dist_fd = os.open("dist", directory_flags, dir_fd=output.artifacts_fd)
     try:
