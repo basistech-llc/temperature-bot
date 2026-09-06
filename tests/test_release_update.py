@@ -42,7 +42,7 @@ from bin.github_release_update import (
     update_required,
 )
 from bin.install_deployment_package import _verify_environment, install_package
-from bin.release_tag import validate_tag
+from bin.release_tag import project_version, validate_tag
 from bin.source_deployment import (
     SourceBuildOptions,
     SourceSelection,
@@ -293,11 +293,13 @@ def release_api(tmp_path):
         server.server_close()
 
 
-def test_beta_tag_alias_rejected_for_final_release():
-    with pytest.raises(ValueError, match="does not identify project version 1.0.0"):
-        validate_tag("1.0.0-beta1")
+def test_tag_must_identify_current_project_version():
+    version = project_version()
+    with pytest.raises(ValueError) as raised:
+        validate_tag("999.0.0")
+    assert f"does not identify project version {version}" in str(raised.value)
 
-    assert str(validate_tag("1.0.0")) == "1.0.0"
+    assert validate_tag(f"v{version}") == version
 
 
 def test_release_update_downloads_verifies_and_stages(release_api, tmp_path):

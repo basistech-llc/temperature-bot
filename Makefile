@@ -62,6 +62,7 @@ STAGE_SERVICE     ?= air-stage_basistech_net.service
 
 REQ := .venv/pyvenv.cfg
 PYTHON := .venv/bin/python
+METADATA_PYTHON = $(if $(wildcard $(PYTHON)),$(PYTHON),python3)
 TEMPLATE_DIR := app/templates
 
 # Centralize the Playwright cache path so CI can cache it
@@ -103,6 +104,7 @@ help: ## Show this help message
 .venv/pyvenv.cfg:
 	@echo install venv for the development environment
 	echo $$PATH
+	$(MAKE) project-metadata-check
 	uv sync --locked
 
 ################################################################
@@ -317,21 +319,29 @@ fetch-db-code-check: $(REQ) ## Check the developer database snapshot client
 
 release-code-check: $(REQ) ## Check release publication and updater code
 	uv run --locked ruff check \
-		bin/build_deployment_package.py bin/github_release_update.py \
+		bin/build_deployment_package.py bin/check_project_metadata.py \
+		bin/github_release_update.py \
 		bin/install_deployment_package.py bin/source_deployment.py \
-		bin/release_tag.py tests/test_release_update.py
+		bin/release_tag.py tests/test_project_metadata.py \
+		tests/test_release_update.py
 	$(PYTHON) -m pylint --persistent=n --output-format=parseable \
 		--rcfile .pylintrc --fail-under=10.0 \
-		bin/build_deployment_package.py bin/github_release_update.py \
+		bin/build_deployment_package.py bin/check_project_metadata.py \
+		bin/github_release_update.py \
 		bin/install_deployment_package.py bin/source_deployment.py \
-		bin/release_tag.py tests/test_release_update.py
+		bin/release_tag.py tests/test_project_metadata.py \
+		tests/test_release_update.py
 	uv run --locked mypy \
-		bin/build_deployment_package.py bin/github_release_update.py \
+		bin/build_deployment_package.py bin/check_project_metadata.py \
+		bin/github_release_update.py \
 		bin/install_deployment_package.py bin/source_deployment.py \
 		bin/release_tag.py
 
-dependency-check: ## Verify the uv lockfile and reject legacy dependency tooling
+project-metadata-check: ## Verify canonical pyproject.toml metadata and uv.lock
+	$(METADATA_PYTHON) -m bin.check_project_metadata
 	uv lock --check
+
+dependency-check: project-metadata-check ## Reject legacy dependency tooling
 	@! git grep -n -i 'poe''try' -- ':!.beads/**' ':!doc/RELEASE_NOTES.md'
 
 build: dependency-check ## Build the source distribution and wheel
@@ -486,7 +496,7 @@ outdated: $(REQ) ## Report outdated Python and CDN dependencies
 	@echo "=== CDN libraries (in templates) ==="
 	bash etc/check-cdn-versions.bash
 
-.PHONY: lint check fetch-db-code-check release-code-check dependency-check build build-check deployment-package deployment-package-verify deployment-package-check release-tag-check systemd-verify format pylint ruff-check no-type-ignore pylint-check djlint eslint check-types pytest test-js test playwright-install web-screenshots outdated
+.PHONY: lint check fetch-db-code-check release-code-check project-metadata-check dependency-check build build-check deployment-package deployment-package-verify deployment-package-check release-tag-check systemd-verify format pylint ruff-check no-type-ignore pylint-check djlint eslint check-types pytest test-js test playwright-install web-screenshots outdated
 
 ################################################################
 ## Scheduled runner targets
@@ -525,6 +535,7 @@ install-either: ## Shared install steps for macOS and Ubuntu
 	@if ! command -v uv >/dev/null 2>&1 || [ "$$(uv --version | awk '{print $$2}')" != "$(UV_VERSION)" ]; then \
 		pipx install --force uv==$(UV_VERSION); \
 	fi
+	$(MAKE) project-metadata-check
 	uv sync --locked
 	uv run --locked playwright install --with-deps # This will be fast if CI restored .playwright
 

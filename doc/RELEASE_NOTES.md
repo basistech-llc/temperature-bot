@@ -7,6 +7,9 @@ change they completed.
 
 ## Unreleased
 
+- Make `pyproject.toml` the sole source-coded application version; runtime,
+  release, source-build, and deployment-package tooling now derive from its
+  generated distribution metadata or read it directly.
 - Store pull-request web UI screenshots as 30-day GitHub Actions artifacts
   instead of creating long-lived prereleases and repository tags.
 - Correct the production web unit to load the reviewed runtime environment and

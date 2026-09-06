@@ -1,21 +1,18 @@
-"""Application version helpers.
-
-The top-level VERSION file is the source of truth for the version number. Git
-metadata is reported separately so the UI and API can show what checkout is
-deployed without mixing that into the semantic version string.
-"""
+"""Application version and source-control provenance helpers."""
 
 import functools
 import json
 import os
 import subprocess
+from importlib.metadata import version as distribution_version
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-VERSION_FILE = REPO_ROOT / "VERSION"
 UNKNOWN_SHA = "unknown"
 
-__version__ = VERSION_FILE.read_text(encoding="utf-8").strip()
+# Packaging derives this installed distribution metadata from pyproject.toml,
+# the sole source-coded application version.
+__version__ = distribution_version("temperature-bot")
 
 
 def _deployment_commit() -> str | None:

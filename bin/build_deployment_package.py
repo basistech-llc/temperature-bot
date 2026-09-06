@@ -5,13 +5,13 @@ from __future__ import annotations
 import argparse
 import os
 import subprocess
-import tomllib
 from datetime import datetime, timezone
 from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.deployment_package import PackageIdentity, PayloadSource, build_package
+from bin.check_project_metadata import project_requires_python, project_version
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -57,9 +57,6 @@ def collect_payloads(
             source=repo_root / "doc/DEPLOYMENT.md",
             path="documentation/DEPLOYMENT.md",
             role="documentation",
-        ),
-        PayloadSource(
-            source=repo_root / "VERSION", path="metadata/VERSION", role="metadata"
         ),
         PayloadSource(
             source=repo_root / "pyproject.toml",
@@ -128,14 +125,7 @@ def build_checkout_package(
     options: CheckoutPackageOptions,
 ) -> Path:
     """Build a deployment ZIP from explicit, already-built checkout inputs."""
-    project = tomllib.loads((repo_root / "pyproject.toml").read_text(encoding="utf-8"))[
-        "project"
-    ]
-    version = (repo_root / "VERSION").read_text(encoding="utf-8").strip()
-    if project["version"] != version:
-        raise ValueError(
-            f"VERSION ({version}) does not match pyproject.toml ({project['version']})"
-        )
+    version = project_version(repo_root)
     expected_wheel_prefix = f"temperature_bot-{version}-"
     if not wheel.name.startswith(expected_wheel_prefix) or wheel.suffix != ".whl":
         raise ValueError(f"wheel does not match checkout version {version}: {wheel.name}")
@@ -144,7 +134,7 @@ def build_checkout_package(
         commit=options.commit,
         built_at=options.built_at,
         dirty=options.dirty,
-        requires_python=project["requires-python"],
+        requires_python=project_requires_python(repo_root),
         flyway_version=options.flyway_version,
     )
     output = (
@@ -166,7 +156,7 @@ def main() -> None:
     parser.add_argument("--flyway-version", required=True)
     args = parser.parse_args()
 
-    version = (REPO_ROOT / "VERSION").read_text(encoding="utf-8").strip()
+    version = project_version(REPO_ROOT)
     wheels = sorted((REPO_ROOT / "dist").glob(f"temperature_bot-{version}-*.whl"))
     if len(wheels) != 1:
         raise SystemExit(f"expected one wheel for {version}, found {len(wheels)}")

@@ -69,6 +69,10 @@ jobs:
           enable-cache: true
           cache-dependency-glob: uv.lock
 
+      - name: Verify project metadata
+        if: steps.resolve_pr.outputs.number != '' && steps.resolve_pr.outputs.same_repo == 'true'
+        run: make project-metadata-check
+
       - name: Set up Node.js
         if: steps.resolve_pr.outputs.number != '' && steps.resolve_pr.outputs.same_repo == 'true'
         uses: actions/setup-node@v7
